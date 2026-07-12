@@ -21,19 +21,22 @@ export async function GET(request) {
 
 export async function POST(request) {
     try {
-        const { text, imageData, sender, color } = await request.json();
+        const { text, imageUrl: providedUrl, imageData, sender, color } = await request.json();
 
         if (!sender?.trim()) {
             return Response.json({ error: "Sender is required" }, { status: 400 });
         }
-        if (!text?.trim() && !imageData) {
+        if (!text?.trim() && !providedUrl && !imageData) {
             return Response.json({ error: "Post must have text or an image" }, { status: 400 });
         }
 
         await connectDB();
 
-        let imageUrl = "";
-        if (imageData) imageUrl = await uploadImage(imageData);
+        // Support both: pre-uploaded URL (from browser direct upload) or base64 fallback
+        let imageUrl = providedUrl ?? "";
+        if (!imageUrl && imageData) {
+            imageUrl = await uploadImage(imageData);
+        }
 
         const hashtags = extractHashtags(text ?? "");
         const mentions  = extractMentions(text ?? "", sender);
