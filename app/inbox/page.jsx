@@ -1,7 +1,5 @@
-export const dynamic = "force-dynamic";
-
-import InboxClient from "@/components/Inbox/InboxClient";
+import InboxNoSSR from "@/components/Inbox/InboxNoSSR";
 
 export default function Page() {
-    return <InboxClient />;
+    return <InboxNoSSR />;
 }

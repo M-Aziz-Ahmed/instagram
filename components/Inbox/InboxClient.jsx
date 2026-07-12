@@ -29,7 +29,6 @@ export default function InboxClient() {
     const { user, ready } = useUser();
     const [view, setView] = useState("list");
 
-    // Don't render anything until localStorage has been read
     if (!ready) {
         return (
             <div className="flex h-dvh items-center justify-center bg-white">
