@@ -1,14 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
+
+const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
 export default function EditProfileModal({ onClose }) {
     const { user, reloadUser, AVATAR_COLORS } = useUser();
-    const [bio, setBio]         = useState(user?.bio ?? "");
-    const [color, setColor]     = useState(user?.avatarColor ?? AVATAR_COLORS[0]);
-    const [saving, setSaving]   = useState(false);
-    const [error, setError]     = useState("");
+    const [bio, setBio]             = useState(user?.bio ?? "");
+    const [color, setColor]         = useState(user?.avatarColor ?? AVATAR_COLORS[0]);
+    const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl ?? "");
+    const [saving, setSaving]       = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [error, setError]         = useState("");
+    const fileRef                   = useRef(null);
+
+    const handleAvatarChange = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 10 * 1024 * 1024) { setError("Image must be under 10 MB"); return; }
+        setUploading(true);
+        setError("");
+        try {
+            const fd = new FormData();
+            fd.append("file", file);
+            fd.append("upload_preset", UPLOAD_PRESET);
+            fd.append("folder", "anon-avatars");
+            const res  = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: fd });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error?.message ?? "Upload failed");
+            setAvatarUrl(json.secure_url);
+        } catch (err) {
+            setError(err.message ?? "Upload failed.");
+        } finally {
+            setUploading(false);
+        }
+    };
 
     const handleSave = async (e) => {
         e.preventDefault();
@@ -18,7 +46,7 @@ export default function EditProfileModal({ onClose }) {
             const res = await fetch("/api/auth/profile", {
                 method:  "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body:    JSON.stringify({ bio: bio.trim(), avatarColor: color }),
+                body:    JSON.stringify({ bio: bio.trim(), avatarColor: color, avatarUrl }),
             });
             const data = await res.json();
             if (!res.ok) { setError(data.error); return; }
@@ -31,12 +59,14 @@ export default function EditProfileModal({ onClose }) {
         }
     };
 
+    const displayColor = avatarUrl ? "#3b82f6" : color;
+
     return (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
             <div className="bg-white rounded-2xl w-full max-w-sm p-6 flex flex-col gap-5" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
                     <h2 className="font-bold text-lg">Edit profile</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-1">
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-1" aria-label="Close">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                             strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -44,17 +74,56 @@ export default function EditProfileModal({ onClose }) {
                     </button>
                 </div>
 
-                {/* Avatar preview */}
+                {/* Avatar preview + upload */}
                 <div className="flex items-center gap-4">
-                    <div
-                        className="w-14 h-14 rounded-full flex items-center justify-center text-white font-black text-xl select-none"
-                        style={{ backgroundColor: color }}
-                    >
-                        {user?.username?.[0]?.toUpperCase()}
+                    <div className="relative shrink-0">
+                        {avatarUrl ? (
+                            <img src={avatarUrl} alt={user?.username}
+                                className="w-14 h-14 rounded-full object-cover border-2 border-gray-100" />
+                        ) : (
+                            <div
+                                className="w-14 h-14 rounded-full flex items-center justify-center text-white font-black text-xl select-none"
+                                style={{ backgroundColor: color }}
+                            >
+                                {user?.username?.[0]?.toUpperCase()}
+                            </div>
+                        )}
+                        {/* Camera overlay */}
+                        <button
+                            type="button"
+                            onClick={() => fileRef.current?.click()}
+                            disabled={uploading}
+                            title="Change photo"
+                            aria-label="Change profile photo"
+                            className="absolute inset-0 rounded-full bg-black/35 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity disabled:cursor-wait"
+                        >
+                            {uploading
+                                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="white" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+                                  </svg>}
+                        </button>
+                        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
                     </div>
                     <div>
                         <p className="font-semibold text-sm">{user?.username}</p>
-                        <p className="text-xs text-gray-400">{user?.email}</p>
+                        <button
+                            type="button"
+                            onClick={() => fileRef.current?.click()}
+                            className="text-xs text-blue-500 hover:underline mt-0.5"
+                        >
+                            {uploading ? "Uploading…" : "Change profile photo"}
+                        </button>
+                        {avatarUrl && (
+                            <button
+                                type="button"
+                                onClick={() => setAvatarUrl("")}
+                                className="block text-xs text-red-400 hover:underline mt-0.5"
+                            >
+                                Remove photo
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -69,22 +138,26 @@ export default function EditProfileModal({ onClose }) {
                             rows={3}
                             className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-black transition-colors resize-none"
                         />
+                        <p className="text-right text-[10px] text-gray-400 mt-0.5">{bio.length}/160</p>
                     </div>
 
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Avatar color</label>
-                        <div className="flex gap-2 flex-wrap">
-                            {AVATAR_COLORS.map((c) => (
-                                <button key={c} type="button" onClick={() => setColor(c)}
-                                    className="w-8 h-8 rounded-full hover:scale-110 transition-transform"
-                                    style={{ backgroundColor: c, boxShadow: color === c ? `0 0 0 3px white, 0 0 0 5px ${c}` : "none" }} />
-                            ))}
+                    {!avatarUrl && (
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Avatar color</label>
+                            <div className="flex gap-2 flex-wrap">
+                                {AVATAR_COLORS.map((c) => (
+                                    <button key={c} type="button" onClick={() => setColor(c)}
+                                        className="w-8 h-8 rounded-full hover:scale-110 transition-transform"
+                                        aria-label={`Color ${c}`}
+                                        style={{ backgroundColor: c, boxShadow: color === c ? `0 0 0 3px white, 0 0 0 5px ${c}` : "none" }} />
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     {error && <p className="text-xs text-red-500">{error}</p>}
 
-                    <button type="submit" disabled={saving}
+                    <button type="submit" disabled={saving || uploading}
                         className="w-full bg-black text-white font-bold py-2.5 rounded-xl disabled:opacity-40 hover:bg-gray-800 transition-colors">
                         {saving ? "Saving…" : "Save changes"}
                     </button>

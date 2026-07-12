@@ -1,13 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import PostCard from "@/components/Feed/PostCard";
 import UserBadges from "@/components/shared/UserBadges";
+import EditProfileModal from "@/components/Auth/EditProfileModal";
 import Link from "next/link";
-
-const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
 function colorFromUsername(name = "") {
     const palette = ["#f97316","#ec4899","#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444","#3b82f6"];
@@ -33,16 +31,16 @@ function Avatar({ username, avatarUrl, color, size = "lg" }) {
 }
 
 export default function ProfileClient({ username }) {
-    const { user, reloadUser } = useUser();
-    const [data, setData]         = useState(null);
-    const [loading, setLoading]   = useState(true);
-    const [expanded, setExpanded] = useState(null);
-    const [uploading, setUploading] = useState(false);
-    const fileRef = useRef(null);
+    const { user } = useUser();
+    const [data, setData]                     = useState(null);
+    const [loading, setLoading]               = useState(true);
+    const [expanded, setExpanded]             = useState(null);
+    const [editingProfile, setEditingProfile] = useState(false);
 
     const isOwn = user?.username === username;
 
     const fetchProfile = useCallback(async () => {
+        setLoading(true);
         try {
             const res = await fetch(`/api/posts/user/${encodeURIComponent(username)}`);
             if (res.ok) setData(await res.json());
@@ -52,39 +50,24 @@ export default function ProfileClient({ username }) {
 
     useEffect(() => { fetchProfile(); }, [fetchProfile]);
 
-    // Use the public profile data for other users, own session data for self
+    // For own profile use live session data; for others use fetched data
     const profile = isOwn
-        ? { username, bio: user?.bio, avatarColor: user?.avatarColor ?? user?.color, avatarUrl: user?.avatarUrl,
-            isVerified: user?.isVerified, roles: user?.roles ?? [] }
+        ? {
+            username,
+            bio:         user?.bio ?? "",
+            avatarColor: user?.avatarColor ?? user?.color,
+            avatarUrl:   user?.avatarUrl ?? "",
+            isVerified:  user?.isVerified ?? false,
+            roles:       user?.roles ?? [],
+          }
         : (data?.profile ?? {
-            username, bio: "", avatarColor: colorFromUsername(username), avatarUrl: "",
-            isVerified: false, roles: [],
+            username,
+            bio:         "",
+            avatarColor: colorFromUsername(username),
+            avatarUrl:   "",
+            isVerified:  false,
+            roles:       [],
           });
-
-    // ── Profile pic upload ────────────────────────────────────────────────────
-    const handleAvatarChange = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file || !isOwn) return;
-        if (file.size > 10 * 1024 * 1024) { alert("Image must be under 10 MB"); return; }
-
-        setUploading(true);
-        try {
-            const fd = new FormData();
-            fd.append("file", file);
-            fd.append("upload_preset", UPLOAD_PRESET);
-            fd.append("folder", "anon-avatars");
-            const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: fd });
-            const { secure_url } = await res.json();
-
-            await fetch("/api/auth/profile", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ bio: user?.bio, avatarColor: user?.avatarColor, avatarUrl: secure_url }),
-            });
-            await reloadUser();
-        } catch (err) { console.error(err); alert("Upload failed."); }
-        finally { setUploading(false); }
-    };
 
     const expandedPost = expanded ? data?.posts?.find((p) => p._id === expanded) : null;
 
@@ -111,26 +94,21 @@ export default function ProfileClient({ username }) {
                     <>
                         {/* Profile header */}
                         <div className="flex items-start gap-5 mb-6">
-                            {/* Avatar — clickable to upload if own */}
+                            {/* Avatar — hover overlay opens edit modal for own profile */}
                             <div className="relative shrink-0">
                                 <Avatar username={username} avatarUrl={profile.avatarUrl} color={profile.avatarColor} size="lg" />
                                 {isOwn && (
-                                    <>
-                                        <button
-                                            onClick={() => fileRef.current?.click()}
-                                            disabled={uploading}
-                                            title="Change photo"
-                                            className="absolute inset-0 rounded-full bg-black/30 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity disabled:cursor-wait"
-                                        >
-                                            {uploading
-                                                ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                                : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="white" className="w-6 h-6">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
-                                                  </svg>}
-                                        </button>
-                                        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-                                    </>
+                                    <button
+                                        onClick={() => setEditingProfile(true)}
+                                        title="Change photo"
+                                        aria-label="Change profile photo"
+                                        className="absolute inset-0 rounded-full bg-black/30 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="white" className="w-6 h-6">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+                                        </svg>
+                                    </button>
                                 )}
                             </div>
 
@@ -140,9 +118,12 @@ export default function ProfileClient({ username }) {
                                     <h1 className="font-black text-xl text-gray-900">@{username}</h1>
                                     <UserBadges isVerified={profile.isVerified} roles={profile.roles} />
                                     {isOwn && (
-                                        <Link href="/" className="ml-1 text-xs border border-gray-300 rounded-full px-3 py-1 hover:bg-gray-50 transition-colors text-gray-600">
+                                        <button
+                                            onClick={() => setEditingProfile(true)}
+                                            className="ml-1 text-xs border border-gray-300 rounded-full px-3 py-1 hover:bg-gray-50 transition-colors text-gray-600"
+                                        >
                                             Edit profile
-                                        </Link>
+                                        </button>
                                     )}
                                     {user?.isAdmin && !isOwn && (
                                         <Link href="/admin" className="text-xs text-purple-600 border border-purple-200 rounded-full px-3 py-1 hover:bg-purple-50 transition-colors">
@@ -151,7 +132,7 @@ export default function ProfileClient({ username }) {
                                     )}
                                 </div>
 
-                                {/* Bio — single render */}
+                                {/* Bio */}
                                 {profile.bio && (
                                     <p className="text-sm text-gray-700 leading-relaxed mb-3">{profile.bio}</p>
                                 )}
@@ -170,7 +151,7 @@ export default function ProfileClient({ username }) {
                             </div>
                         </div>
 
-                        {/* Posts */}
+                        {/* Posts grid + list */}
                         {!data?.posts?.length ? (
                             <div className="flex flex-col items-center py-20 text-gray-400 select-none">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 mb-3 opacity-40">
@@ -208,13 +189,13 @@ export default function ProfileClient({ username }) {
                 )}
             </main>
 
-            {/* Image modal */}
+            {/* Expanded image modal */}
             {expandedPost && (
                 <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setExpanded(null)}>
                     <div className="bg-white rounded-2xl overflow-hidden max-w-lg w-full max-h-[90dvh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                             <span className="font-bold text-sm">{expandedPost.sender}</span>
-                            <button onClick={() => setExpanded(null)} className="text-gray-400 hover:text-gray-700 p-1">
+                            <button onClick={() => setExpanded(null)} className="text-gray-400 hover:text-gray-700 p-1" aria-label="Close">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                 </svg>
@@ -224,6 +205,11 @@ export default function ProfileClient({ username }) {
                             onHashtag={(tag) => { setExpanded(null); window.location.href = `/?tag=${tag}`; }} />
                     </div>
                 </div>
+            )}
+
+            {/* Edit profile modal */}
+            {editingProfile && (
+                <EditProfileModal onClose={() => { setEditingProfile(false); fetchProfile(); }} />
             )}
         </div>
     );
