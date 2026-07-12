@@ -26,9 +26,17 @@ function ComposeIcon() {
 }
 
 export default function InboxClient() {
-    const { user } = useUser();
-    // On mobile we show either "list" (sidebar) or "chat"
+    const { user, ready } = useUser();
     const [view, setView] = useState("list");
+
+    // Don't render anything until localStorage has been read
+    if (!ready) {
+        return (
+            <div className="flex h-dvh items-center justify-center bg-white">
+                <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-dvh bg-white overflow-hidden">
@@ -62,7 +70,7 @@ export default function InboxClient() {
                                 className="w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-xl select-none shrink-0"
                                 style={{ backgroundColor: user.color }}
                             >
-                                {user.username[0].toUpperCase()}
+                                {user.username?.[0]?.toUpperCase() ?? "?"}
                             </div>
                         ) : (
                             <div className="w-14 h-14 rounded-full bg-gray-200 shrink-0 animate-pulse" />

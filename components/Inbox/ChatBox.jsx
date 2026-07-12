@@ -48,7 +48,7 @@ export default function ChatBox({ onBack }) {
                     className="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center text-white font-bold text-sm md:text-base select-none shrink-0"
                     style={{ backgroundColor: user.color }}
                 >
-                    {user.username[0].toUpperCase()}
+                    {user.username?.[0]?.toUpperCase() ?? "?"}
                 </div>
 
                 {/* Name */}
