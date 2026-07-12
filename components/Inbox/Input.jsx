@@ -1,49 +1,47 @@
 "use client";
 
 import { useState } from "react";
+import { useUser } from "@/context/UserContext";
 
-const Input = ({ onMessageSent }) => {
-    const [text, setText] = useState("");
+export default function Input({ onMessageSent }) {
+    const { user } = useUser();
+    const [text, setText]       = useState("");
     const [sending, setSending] = useState(false);
 
     const handleSend = async () => {
-        if (!text.trim() || sending) return;
+        if (!text.trim() || sending || !user) return;
 
+        // Optimistic UI — caller (ChatBox) will also receive the SSE echo,
+        // so we just clear the input and let SSE append the bubble.
+        const snapshot = text.trim();
+        setText("");
         setSending(true);
+
         try {
-            const res = await fetch("/api/messages", {
+            await fetch("/api/messages", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text: text.trim() }),
+                body: JSON.stringify({ text: snapshot, sender: user.username, color: user.color }),
             });
-
-            if (res.ok) {
-                setText("");
-                if (onMessageSent) onMessageSent();
-            }
-        } catch (error) {
-            console.error("Failed to send message:", error);
+            if (onMessageSent) onMessageSent();
+        } catch (err) {
+            console.error("Failed to send:", err);
+            setText(snapshot); // restore on error
         } finally {
             setSending(false);
         }
     };
 
     const handleKeyDown = (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            handleSend();
-        }
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
     };
 
     const hasText = text.trim().length > 0;
 
     return (
         <div className="flex items-center gap-2">
-            {/* Emoji button */}
-            <button
-                aria-label="Emoji"
-                className="shrink-0 text-gray-500 hover:text-gray-800 transition-colors"
-            >
+            {/* Emoji */}
+            <button aria-label="Emoji" className="shrink-0 text-gray-500 hover:text-gray-800 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                     strokeWidth={1.8} stroke="currentColor" className="w-6 h-6">
                     <path strokeLinecap="round" strokeLinejoin="round"
@@ -51,18 +49,18 @@ const Input = ({ onMessageSent }) => {
                 </svg>
             </button>
 
-            {/* Text input */}
-            <div className="flex-1 flex items-center bg-transparent border border-gray-300 rounded-full px-4 py-2 focus-within:border-gray-400 transition-colors">
+            {/* Input field */}
+            <div className="flex-1 flex items-center border border-gray-300 rounded-full px-4 py-2 focus-within:border-gray-400 transition-colors">
                 <input
                     type="text"
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Message…"
-                    className="flex-1 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none"
+                    disabled={!user}
+                    className="flex-1 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none disabled:cursor-not-allowed"
                 />
                 {!hasText && (
-                    /* Mic icon when no text */
                     <button aria-label="Voice message" className="shrink-0 ml-2 text-gray-500 hover:text-gray-800 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                             strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
@@ -73,7 +71,7 @@ const Input = ({ onMessageSent }) => {
                 )}
             </div>
 
-            {/* Send / Like button */}
+            {/* Send / Like */}
             {hasText ? (
                 <button
                     onClick={handleSend}
@@ -81,11 +79,10 @@ const Input = ({ onMessageSent }) => {
                     aria-label="Send"
                     className="shrink-0 text-blue-500 hover:text-blue-600 disabled:opacity-50 transition-colors font-semibold text-sm"
                 >
-                    {sending ? (
-                        <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                        "Send"
-                    )}
+                    {sending
+                        ? <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                        : "Send"
+                    }
                 </button>
             ) : (
                 <button aria-label="Like" className="shrink-0 text-gray-500 hover:text-gray-800 transition-colors">
@@ -98,6 +95,4 @@ const Input = ({ onMessageSent }) => {
             )}
         </div>
     );
-};
-
-export default Input;
+}
