@@ -140,7 +140,7 @@ export default function Chat({ refreshTrigger }) {
                                 </div>
                             )}
 
-                            <div className="flex flex-col max-w-xs lg:max-w-md">
+                            <div className="flex flex-col max-w-[72vw] sm:max-w-xs lg:max-w-md">
                                 {/* Sender name above first bubble in a group (received only) */}
                                 {!isMine && !sameAsPrev && (
                                     <span className="text-xs text-gray-500 mb-1 ml-1">{msg.sender}</span>

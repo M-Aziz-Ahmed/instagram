@@ -20,9 +20,9 @@ export default function ProfileSetup({ onDone }) {
     const initial = username.trim() ? username.trim()[0].toUpperCase() : "?";
 
     return (
-        /* Full-screen overlay */
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white">
-            <div className="w-full max-w-sm px-8 py-10 flex flex-col items-center gap-6">
+        /* Full-screen overlay — scrollable on short/small screens */
+        <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-white overflow-y-auto">
+            <div className="w-full max-w-sm px-6 md:px-8 py-8 md:py-10 flex flex-col items-center gap-5 md:gap-6 min-h-full md:min-h-0 justify-center">
 
                 {/* Logo */}
                 <svg viewBox="0 0 24 24" fill="none" className="w-12 h-12 text-gray-900" stroke="currentColor" strokeWidth={1.5}>
