@@ -38,23 +38,37 @@ export default function Chat({ refreshTrigger }) {
 
     // ── SSE real-time stream ───────────────────────────────────────────────────
     useEffect(() => {
-        const es = new EventSource("/api/messages/stream");
-        esRef.current = es;
+        let es;
+        let reconnectTimeout;
 
-        es.onmessage = (e) => {
-            try {
-                const msg = JSON.parse(e.data);
-                setMessages((prev) => {
-                    // avoid duplicates if our own POST already optimistically added it
-                    if (prev.some((m) => m._id === msg._id)) return prev;
-                    return [...prev, msg];
-                });
-            } catch { /* ignore malformed */ }
+        const connect = () => {
+            es = new EventSource("/api/messages/stream");
+            esRef.current = es;
+
+            es.onmessage = (e) => {
+                try {
+                    const msg = JSON.parse(e.data);
+                    setMessages((prev) => {
+                        if (prev.some((m) => m._id === msg._id)) return prev;
+                        return [...prev, msg];
+                    });
+                } catch { /* ignore malformed or heartbeat comments */ }
+            };
+
+            es.onerror = () => {
+                es.close();
+                // Reconnect after 3s
+                reconnectTimeout = setTimeout(connect, 3000);
+            };
         };
 
-        es.onerror = () => es.close();
+        connect();
 
-        return () => { es.close(); esRef.current = null; };
+        return () => {
+            clearTimeout(reconnectTimeout);
+            es?.close();
+            esRef.current = null;
+        };
     }, []);
 
     // ── auto-scroll ───────────────────────────────────────────────────────────
