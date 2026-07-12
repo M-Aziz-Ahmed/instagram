@@ -1,9 +1,5 @@
-import Image from "next/image";
+import FeedNoSSR from "@/components/Feed/FeedNoSSR";
 
 export default function Home() {
-  return (
-   <>
-   "This is Our Starting Point"
-   </>
-  );
+    return <FeedNoSSR />;
 }

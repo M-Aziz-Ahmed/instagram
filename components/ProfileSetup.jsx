@@ -25,11 +25,7 @@ export default function ProfileSetup({ onDone }) {
             <div className="w-full max-w-sm px-6 md:px-8 py-8 md:py-10 flex flex-col items-center gap-5 md:gap-6 min-h-full md:min-h-0 justify-center">
 
                 {/* Logo */}
-                <svg viewBox="0 0 24 24" fill="none" className="w-12 h-12 text-gray-900" stroke="currentColor" strokeWidth={1.5}>
-                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
-                    <circle cx="12" cy="12" r="4.5"/>
-                    <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
-                </svg>
+                <span className="font-black text-2xl tracking-tight text-gray-900">AnonFeed</span>
 
                 <div className="text-center">
                     <h1 className="text-xl font-semibold text-gray-900">Set up your profile</h1>

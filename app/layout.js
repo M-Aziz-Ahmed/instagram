@@ -8,8 +8,8 @@ const geistSans = Geist({
 });
 
 export const metadata = {
-  title: "Instagram",
-  description: "Instagram Clone",
+  title: "AnonFeed",
+  description: "Say anything. Anonymously.",
 };
 
 export const viewport = {
