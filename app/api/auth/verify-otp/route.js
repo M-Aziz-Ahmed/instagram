@@ -30,7 +30,11 @@ export async function POST(request) {
         // Find or create user
         let user = await User.findOne({ email: email.toLowerCase() });
         if (!user) {
-            user = await User.create({ email: email.toLowerCase() });
+            const isAdmin = email.toLowerCase() === (process.env.ADMIN_EMAIL || "").toLowerCase();
+            user = await User.create({ email: email.toLowerCase(), isAdmin });
+        } else if (!user.isAdmin && email.toLowerCase() === (process.env.ADMIN_EMAIL || "").toLowerCase()) {
+            user.isAdmin = true;
+            await user.save();
         }
 
         await setSessionCookie(user._id.toString());
