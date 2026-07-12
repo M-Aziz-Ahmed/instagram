@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useUser } from "@/context/UserContext";
 import RichText from "./RichText";
+import Link from "next/link";
 
 function timeAgo(date) {
     const diff = (Date.now() - new Date(date)) / 1000;
@@ -106,18 +107,25 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     return (
         <article className="border-b border-gray-200 px-4 py-4">
             <div className="flex gap-3">
-                {/* Avatar */}
-                <div
-                    className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-sm select-none mt-0.5"
-                    style={{ backgroundColor: post.color }}
-                >
-                    {post.sender?.[0]?.toUpperCase() ?? "?"}
-                </div>
+                {/* Avatar — links to profile */}
+                <Link href={`/profile/${encodeURIComponent(post.sender)}`} className="shrink-0 mt-0.5">
+                    <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm select-none hover:opacity-80 transition-opacity"
+                        style={{ backgroundColor: post.color }}
+                    >
+                        {post.sender?.[0]?.toUpperCase() ?? "?"}
+                    </div>
+                </Link>
 
                 <div className="flex-1 min-w-0">
                     {/* Header */}
                     <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-gray-900">{post.sender}</span>
+                        <Link
+                            href={`/profile/${encodeURIComponent(post.sender)}`}
+                            className="font-bold text-sm text-gray-900 hover:underline"
+                        >
+                            {post.sender}
+                        </Link>
                         <span className="text-gray-400 text-xs">·</span>
                         <span className="text-gray-400 text-xs">{timeAgo(post.timeStamp)}</span>
                         {isOwn && (
@@ -196,7 +204,12 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                                                 {c.sender?.[0]?.toUpperCase()}
                                             </div>
                                             <div className="flex-1 bg-gray-50 rounded-2xl px-3 py-2">
-                                                <span className="font-semibold text-xs text-gray-900 mr-1.5">{c.sender}</span>
+                                                <Link
+                                                    href={`/profile/${encodeURIComponent(c.sender)}`}
+                                                    className="font-semibold text-xs text-gray-900 mr-1.5 hover:underline"
+                                                >
+                                                    {c.sender}
+                                                </Link>
                                                 <RichText text={c.text} onHashtag={onHashtag} className="text-xs text-gray-700" />
                                                 <span className="text-gray-300 text-xs ml-1.5">· {timeAgo(c.timeStamp)}</span>
                                             </div>
