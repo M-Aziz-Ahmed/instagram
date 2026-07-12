@@ -1,7 +1,8 @@
 import connectDB from "@/utils/db";
 import Post from "@/models/post";
+import Notification from "@/models/notification";
+import { extractMentions } from "@/utils/parseText";
 
-// PATCH /api/posts/:id  — toggle like
 export async function PATCH(request, { params }) {
     try {
         const { id } = await params;
@@ -16,17 +17,60 @@ export async function PATCH(request, { params }) {
         if (!post) return Response.json({ error: "Not found" }, { status: 404 });
 
         if (action === "comment") {
-            // Add a comment
-            if (!text?.trim()) return Response.json({ error: "Comment text required" }, { status: 400 });
+            if (!text?.trim()) {
+                return Response.json({ error: "Comment text required" }, { status: 400 });
+            }
             post.comments.push({ text: text.trim(), sender: username, color: color || "#3b82f6" });
+            await post.save();
+
+            // Notify post owner (not self)
+            if (post.sender !== username) {
+                await Notification.create({
+                    recipient: post.sender,
+                    type:      "comment",
+                    fromUser:  username,
+                    fromColor: color || "#3b82f6",
+                    postId:    id,
+                    text:      text.trim(),
+                });
+            }
+
+            // Notify @mentions in the comment (excluding commenter + post owner already notified)
+            const mentions = extractMentions(text, username).filter((u) => u !== post.sender);
+            if (mentions.length > 0) {
+                await Notification.insertMany(mentions.map((recipient) => ({
+                    recipient,
+                    type:      "mention",
+                    fromUser:  username,
+                    fromColor: color || "#3b82f6",
+                    postId:    id,
+                    text:      text.trim(),
+                })));
+            }
         } else {
-            // Default: toggle like
+            // Toggle like
             const idx = post.likes.indexOf(username);
-            if (idx === -1) post.likes.push(username);
-            else            post.likes.splice(idx, 1);
+            const isLiking = idx === -1;
+
+            if (isLiking) {
+                post.likes.push(username);
+                // Notify post owner (not self)
+                if (post.sender !== username) {
+                    await Notification.create({
+                        recipient: post.sender,
+                        type:      "like",
+                        fromUser:  username,
+                        fromColor: color || "#3b82f6",
+                        postId:    id,
+                        text:      post.text?.slice(0, 80) ?? "",
+                    });
+                }
+            } else {
+                post.likes.splice(idx, 1);
+            }
+            await post.save();
         }
 
-        await post.save();
         return Response.json(post);
     } catch (error) {
         console.error(error);
@@ -34,7 +78,6 @@ export async function PATCH(request, { params }) {
     }
 }
 
-// DELETE /api/posts/:id
 export async function DELETE(request, { params }) {
     try {
         const { id } = await params;
@@ -48,6 +91,8 @@ export async function DELETE(request, { params }) {
         }
 
         await Post.findByIdAndDelete(id);
+        // Clean up notifications for this post
+        await Notification.deleteMany({ postId: id });
         return Response.json({ ok: true });
     } catch (error) {
         console.error(error);

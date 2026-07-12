@@ -14,6 +14,7 @@ const postSchema = new mongoose.Schema({
     color:     { type: String, default: "#3b82f6" },
     likes:     { type: [String], default: [] },
     comments:  { type: [commentSchema], default: [] },
+    hashtags:  { type: [String], default: [] },  // extracted #tags, lowercase
     timeStamp: { type: Date, default: Date.now },
 });
 

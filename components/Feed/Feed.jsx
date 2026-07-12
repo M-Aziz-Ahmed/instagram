@@ -3,25 +3,29 @@
 import { useCallback, useEffect, useState } from "react";
 import PostCard from "./PostCard";
 
-export default function Feed({ refreshTrigger }) {
-    const [posts, setPosts]   = useState([]);
+export default function Feed({ refreshTrigger, activeTag, onHashtag }) {
+    const [posts, setPosts]     = useState([]);
     const [loading, setLoading] = useState(true);
 
     const fetchPosts = useCallback(async () => {
         try {
-            const res = await fetch("/api/posts");
+            const url = activeTag
+                ? `/api/posts?tag=${encodeURIComponent(activeTag)}`
+                : "/api/posts";
+            const res = await fetch(url);
             if (res.ok) setPosts(await res.json());
         } catch (err) {
             console.error(err);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [activeTag]);
 
-    // Initial load + re-fetch when a post is created
-    useEffect(() => { fetchPosts(); }, [fetchPosts, refreshTrigger]);
+    useEffect(() => {
+        setLoading(true);
+        fetchPosts();
+    }, [fetchPosts, refreshTrigger]);
 
-    // Poll every 10s for new posts from others
     useEffect(() => {
         const id = setInterval(fetchPosts, 10000);
         return () => clearInterval(id);
@@ -43,19 +47,33 @@ export default function Feed({ refreshTrigger }) {
                     <path strokeLinecap="round" strokeLinejoin="round"
                         d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785A5.969 5.969 0 0 0 6 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337Z" />
                 </svg>
-                <p className="text-sm">Nothing here yet. Be the first to post!</p>
+                <p className="text-sm">
+                    {activeTag ? `No posts with #${activeTag} yet.` : "Nothing here yet. Be the first to post!"}
+                </p>
             </div>
         );
     }
 
     return (
         <div>
+            {activeTag && (
+                <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
+                    <span className="text-sm font-bold text-blue-600">#{activeTag}</span>
+                    <span className="text-xs text-gray-400">{posts.length} post{posts.length !== 1 ? "s" : ""}</span>
+                    <button
+                        onClick={() => onHashtag(null)}
+                        className="ml-auto text-xs text-gray-400 hover:text-gray-600"
+                    >
+                        ✕ Clear
+                    </button>
+                </div>
+            )}
             {posts.map((post) => (
                 <PostCard
                     key={post._id}
                     post={post}
                     onDeleted={fetchPosts}
-                    onLiked={fetchPosts}
+                    onHashtag={onHashtag}
                 />
             ))}
         </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useUser } from "@/context/UserContext";
+import RichText from "./RichText";
 
 function timeAgo(date) {
     const diff = (Date.now() - new Date(date)) / 1000;
@@ -31,7 +32,7 @@ function CommentIcon() {
     );
 }
 
-export default function PostCard({ post: initialPost, onDeleted, onRefresh }) {
+export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     const { user } = useUser();
     const [post, setPost]           = useState(initialPost);
     const [liking, setLiking]       = useState(false);
@@ -138,7 +139,7 @@ export default function PostCard({ post: initialPost, onDeleted, onRefresh }) {
                     {/* Text */}
                     {post.text && (
                         <p className="text-sm text-gray-900 mt-1 leading-relaxed whitespace-pre-wrap">
-                            {post.text}
+                            <RichText text={post.text} onHashtag={onHashtag} />
                         </p>
                     )}
 
@@ -196,7 +197,7 @@ export default function PostCard({ post: initialPost, onDeleted, onRefresh }) {
                                             </div>
                                             <div className="flex-1 bg-gray-50 rounded-2xl px-3 py-2">
                                                 <span className="font-semibold text-xs text-gray-900 mr-1.5">{c.sender}</span>
-                                                <span className="text-xs text-gray-700">{c.text}</span>
+                                                <RichText text={c.text} onHashtag={onHashtag} className="text-xs text-gray-700" />
                                                 <span className="text-gray-300 text-xs ml-1.5">· {timeAgo(c.timeStamp)}</span>
                                             </div>
                                         </div>
