@@ -48,9 +48,9 @@ export default function ProfileClient({ username }) {
 
     useEffect(() => { fetchProfile(); }, [fetchProfile]);
 
-    // Pick avatar color: own user's saved color, or derive from username
+    // Pick avatar color: own user's saved color (avatarColor), or derive from username
     const avatarColor = isOwn
-        ? user?.color
+        ? (user?.avatarColor ?? user?.color)
         : (data?.posts?.[0]?.color ?? colorFromUsername(username));
 
     const expandedPost = expanded
@@ -81,28 +81,39 @@ export default function ProfileClient({ username }) {
                 ) : (
                     <>
                         {/* ── Profile header ─────────────────────────── */}
-                        <div className="flex items-center gap-6 mb-8">
+                        <div className="flex items-start gap-6 mb-6">
                             <Avatar username={username} color={avatarColor} size="lg" />
 
                             <div className="flex-1 min-w-0">
-                                <h1 className="font-black text-xl text-gray-900 truncate">{username}</h1>
-                                {isOwn && (
-                                    <p className="text-xs text-gray-400 mt-0.5">That's you 👋</p>
+                                <div className="flex items-center gap-3 flex-wrap">
+                                    <h1 className="font-black text-xl text-gray-900">@{username}</h1>
+                                    {isOwn && (
+                                        <Link href="/"
+                                            className="text-xs border border-gray-300 rounded-full px-3 py-1 hover:bg-gray-50 transition-colors text-gray-600">
+                                            Edit profile
+                                        </Link>
+                                    )}
+                                </div>
+
+                                {/* Bio */}
+                                {(isOwn ? user?.bio : data?.posts?.[0]?.bio) && (
+                                    <p className="text-sm text-gray-700 mt-2 leading-relaxed">
+                                        {isOwn ? user?.bio : ""}
+                                    </p>
+                                )}
+                                {isOwn && user?.bio && (
+                                    <p className="text-sm text-gray-700 mt-2 leading-relaxed">{user.bio}</p>
                                 )}
 
                                 {/* Stats */}
                                 <div className="flex gap-6 mt-3">
-                                    <div className="text-center">
-                                        <p className="font-black text-lg text-gray-900 leading-none">
-                                            {data?.postCount ?? 0}
-                                        </p>
-                                        <p className="text-xs text-gray-500 mt-0.5">posts</p>
+                                    <div>
+                                        <span className="font-black text-gray-900">{data?.postCount ?? 0}</span>
+                                        <span className="text-sm text-gray-500 ml-1">posts</span>
                                     </div>
-                                    <div className="text-center">
-                                        <p className="font-black text-lg text-gray-900 leading-none">
-                                            {data?.totalLikes ?? 0}
-                                        </p>
-                                        <p className="text-xs text-gray-500 mt-0.5">likes</p>
+                                    <div>
+                                        <span className="font-black text-gray-900">{data?.totalLikes ?? 0}</span>
+                                        <span className="text-sm text-gray-500 ml-1">likes</span>
                                     </div>
                                 </div>
                             </div>

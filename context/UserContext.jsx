@@ -1,66 +1,56 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-const STORAGE_KEY = "ig_clone_user";
-
-// A small palette of avatar background colors
 export const AVATAR_COLORS = [
-    "#f97316", // orange
-    "#ec4899", // pink
-    "#8b5cf6", // violet
-    "#06b6d4", // cyan
-    "#10b981", // emerald
-    "#f59e0b", // amber
-    "#ef4444", // red
-    "#3b82f6", // blue
+    "#f97316", "#ec4899", "#8b5cf6", "#06b6d4",
+    "#10b981", "#f59e0b", "#ef4444", "#3b82f6",
 ];
 
-function randomColor() {
-    return AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
-}
-
 const defaultValue = {
-    user: null,
-    ready: false,
-    saveUser: () => {},
-    clearUser: () => {},
+    user:        null,
+    ready:       false,
+    reloadUser:  () => {},
+    logout:      async () => {},
     AVATAR_COLORS,
 };
 
 const UserContext = createContext(defaultValue);
 
 export function UserProvider({ children }) {
-    const [user, setUser] = useState(null);   // { username, color }
+    const [user, setUser]   = useState(null);
     const [ready, setReady] = useState(false);
 
-    // Hydrate from localStorage on mount
-    useEffect(() => {
+    const reloadUser = useCallback(async () => {
         try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (raw) setUser(JSON.parse(raw));
-        } catch { /* ignore */ }
+            const res = await fetch("/api/auth/me");
+            if (res.ok) {
+                const data = await res.json();
+                setUser(data.user ?? null);
+            }
+        } catch { /* silent */ }
         setReady(true);
     }, []);
 
-    const saveUser = (username, color) => {
-        const u = { username: username.trim(), color: color || randomColor() };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
-        setUser(u);
-    };
+    useEffect(() => { reloadUser(); }, [reloadUser]);
 
-    const clearUser = () => {
-        localStorage.removeItem(STORAGE_KEY);
+    const logout = async () => {
+        await fetch("/api/auth/logout", { method: "POST" });
         setUser(null);
     };
 
     return (
-        <UserContext.Provider value={{ user, ready, saveUser, clearUser, AVATAR_COLORS }}>
+        <UserContext.Provider value={{ user, ready, reloadUser, logout, AVATAR_COLORS }}>
             {children}
         </UserContext.Provider>
     );
 }
 
 export function useUser() {
-    return useContext(UserContext);
+    const ctx = useContext(UserContext);
+    // Backwards-compat shim: expose user.color = user.avatarColor
+    if (ctx.user && ctx.user.avatarColor && !ctx.user.color) {
+        ctx.user = { ...ctx.user, color: ctx.user.avatarColor };
+    }
+    return ctx;
 }
