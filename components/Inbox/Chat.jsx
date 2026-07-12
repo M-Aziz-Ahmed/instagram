@@ -3,11 +3,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 
-function Avatar({ sender, color, size = "sm" }) {
-    const dim = size === "sm" ? "w-7 h-7 text-xs" : "w-20 h-20 text-3xl";
+function Avatar({ sender, color }) {
     return (
         <div
-            className={`${dim} rounded-full flex items-center justify-center text-white font-bold select-none shrink-0`}
+            className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold select-none shrink-0"
             style={{ backgroundColor: color }}
         >
             {sender[0].toUpperCase()}
@@ -17,16 +16,19 @@ function Avatar({ sender, color, size = "sm" }) {
 
 export default function Chat({ refreshTrigger }) {
     const { user } = useUser();
-    const [messages, setMessages] = useState([]);
-    const [loading, setLoading]   = useState(true);
-    const bottomRef = useRef(null);
-    const esRef     = useRef(null);
+    const [messages, setMessages]   = useState([]);
+    const [loading, setLoading]     = useState(true);
+    const bottomRef                  = useRef(null);
+    const latestIdRef                = useRef(null); // track last known message _id
 
-    // ── initial load ──────────────────────────────────────────────────────────
+    // ── fetch (initial + poll) ────────────────────────────────────────────────
     const fetchMessages = useCallback(async () => {
         try {
             const res = await fetch("/api/messages");
-            if (res.ok) setMessages(await res.json());
+            if (!res.ok) return;
+            const data = await res.json();
+            setMessages(data);
+            if (data.length > 0) latestIdRef.current = data[data.length - 1]._id;
         } catch (err) {
             console.error("Failed to fetch messages:", err);
         } finally {
@@ -34,49 +36,21 @@ export default function Chat({ refreshTrigger }) {
         }
     }, []);
 
+    // Initial load
     useEffect(() => { fetchMessages(); }, [fetchMessages, refreshTrigger]);
 
-    // ── SSE real-time stream ───────────────────────────────────────────────────
+    // Poll every 2 seconds — works on Vercel serverless
     useEffect(() => {
-        let es;
-        let reconnectTimeout;
+        const interval = setInterval(fetchMessages, 2000);
+        return () => clearInterval(interval);
+    }, [fetchMessages]);
 
-        const connect = () => {
-            es = new EventSource("/api/messages/stream");
-            esRef.current = es;
-
-            es.onmessage = (e) => {
-                try {
-                    const msg = JSON.parse(e.data);
-                    setMessages((prev) => {
-                        if (prev.some((m) => m._id === msg._id)) return prev;
-                        return [...prev, msg];
-                    });
-                } catch { /* ignore malformed or heartbeat comments */ }
-            };
-
-            es.onerror = () => {
-                es.close();
-                // Reconnect after 3s
-                reconnectTimeout = setTimeout(connect, 3000);
-            };
-        };
-
-        connect();
-
-        return () => {
-            clearTimeout(reconnectTimeout);
-            es?.close();
-            esRef.current = null;
-        };
-    }, []);
-
-    // ── auto-scroll ───────────────────────────────────────────────────────────
+    // Auto-scroll when messages change
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
-    // ── states ────────────────────────────────────────────────────────────────
+    // ── render states ─────────────────────────────────────────────────────────
     if (loading) {
         return (
             <div className="flex flex-col items-center justify-center h-full gap-2 text-gray-400">
@@ -104,22 +78,19 @@ export default function Chat({ refreshTrigger }) {
     return (
         <div className="flex flex-col gap-0.5 w-full">
             {messages.map((msg, i) => {
-                const isMine   = msg.sender === user?.username;
-                const isFirst  = i === 0;
-                const prev     = isFirst ? null : messages[i - 1];
-                const next     = i < messages.length - 1 ? messages[i + 1] : null;
+                const isMine  = msg.sender === user?.username;
+                const isFirst = i === 0;
+                const prev    = isFirst ? null : messages[i - 1];
+                const next    = i < messages.length - 1 ? messages[i + 1] : null;
 
-                // Show timestamp divider when gap > 5 min
                 const showTime =
                     isFirst ||
                     new Date(msg.timeStamp) - new Date(prev.timeStamp) > 5 * 60 * 1000;
 
-                // Group consecutive same-sender messages for tighter bubbles
                 const sameAsPrev = prev && prev.sender === msg.sender && !showTime;
                 const sameAsNext = next && next.sender === msg.sender &&
                     new Date(next.timeStamp) - new Date(msg.timeStamp) <= 5 * 60 * 1000;
 
-                // Rounding: pill on solo, flatten middle/edges of group
                 let rounding;
                 if (isMine) {
                     if (!sameAsPrev && !sameAsNext) rounding = "rounded-3xl";
@@ -147,7 +118,6 @@ export default function Chat({ refreshTrigger }) {
                         )}
 
                         <div className={`flex items-end gap-2 mt-0.5 ${isMine ? "justify-end" : "justify-start"}`}>
-                            {/* Received: show avatar only on last in group */}
                             {!isMine && (
                                 <div className="w-7 shrink-0">
                                     {!sameAsNext && <Avatar sender={msg.sender} color={msg.color} />}
@@ -155,7 +125,6 @@ export default function Chat({ refreshTrigger }) {
                             )}
 
                             <div className="flex flex-col max-w-[72vw] sm:max-w-xs lg:max-w-md">
-                                {/* Sender name above first bubble in a group (received only) */}
                                 {!isMine && !sameAsPrev && (
                                     <span className="text-xs text-gray-500 mb-1 ml-1">{msg.sender}</span>
                                 )}

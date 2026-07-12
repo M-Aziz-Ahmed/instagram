@@ -25,24 +25,8 @@ export async function POST(request) {
             color:  color || "#3b82f6",
         });
 
-        // Broadcast to all SSE listeners
-        broadcastMessage(message.toObject());
-
         return Response.json(message, { status: 201 });
     } catch (error) {
         return Response.json({ error: "Failed to send message" }, { status: 500 });
-    }
-}
-
-// ─── SSE broadcast registry ──────────────────────────────────────────────────
-// Global set of active SSE controllers (survives hot-reload via globalThis)
-if (!globalThis._sseClients) globalThis._sseClients = new Set();
-const sseClients = globalThis._sseClients;
-
-export function broadcastMessage(message) {
-    const data = `data: ${JSON.stringify(message)}\n\n`;
-    for (const controller of sseClients) {
-        try { controller.enqueue(new TextEncoder().encode(data)); }
-        catch { sseClients.delete(controller); }
     }
 }
