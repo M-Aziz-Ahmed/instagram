@@ -20,7 +20,15 @@ function randomColor() {
     return AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
 }
 
-const UserContext = createContext(null);
+const defaultValue = {
+    user: null,
+    ready: false,
+    saveUser: () => {},
+    clearUser: () => {},
+    AVATAR_COLORS,
+};
+
+const UserContext = createContext(defaultValue);
 
 export function UserProvider({ children }) {
     const [user, setUser] = useState(null);   // { username, color }
@@ -54,7 +62,5 @@ export function UserProvider({ children }) {
 }
 
 export function useUser() {
-    const ctx = useContext(UserContext);
-    if (!ctx) throw new Error("useUser must be used inside <UserProvider>");
-    return ctx;
+    return useContext(UserContext);
 }
