@@ -23,7 +23,7 @@ export async function GET() {
             user = user.toObject();
         }
 
-        const response = Response.json({
+        const payload = {
             user: {
                 id:          user._id.toString(),
                 email:       user.email,
@@ -41,9 +41,13 @@ export async function GET() {
                 })),
                 needsSetup: !user.username,
             },
-            },
-            ...(process.env.DEBUG_COOKIES === "1" ? { _debugCookie: rawCookie } : {}),
-        });
+        };
+
+        if (process.env.DEBUG_COOKIES === "1") {
+            payload._debugCookie = rawCookie ?? null;
+        }
+
+        const response = Response.json(payload);
 
         if (session.exp) {
             const now = Math.floor(Date.now() / 1000);
