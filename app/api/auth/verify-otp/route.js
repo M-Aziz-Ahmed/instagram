@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import connectDB from "@/utils/db";
 import OTP from "@/models/otp";
 import User from "@/models/user";
+import Role from "@/models/role";
 import { signToken } from "@/utils/session";
 
 const COOKIE = "af_session";
@@ -32,11 +33,10 @@ export async function POST(request) {
         await otp.save();
 
         // Find or create user
-        let user = await User.findOne({ email: email.toLowerCase() }).populate("roles");
+        let user = await User.findOne({ email: email.toLowerCase() });
         if (!user) {
             const isAdmin = email.toLowerCase() === (process.env.ADMIN_EMAIL || "").toLowerCase();
             user = await User.create({ email: email.toLowerCase(), isAdmin });
-            user = await User.findById(user._id).populate("roles");
         } else if (!user.isAdmin && email.toLowerCase() === (process.env.ADMIN_EMAIL || "").toLowerCase()) {
             user.isAdmin = true;
             await user.save();
@@ -45,23 +45,27 @@ export async function POST(request) {
         const token = await signToken({ userId: user._id.toString() });
         const needsSetup = !user.username;
 
-        const userData = needsSetup ? null : {
-            id:          user._id.toString(),
-            email:       user.email,
-            username:    user.username,
-            bio:         user.bio,
-            avatarColor: user.avatarColor,
-            avatarUrl:   user.avatarUrl || "",
-            isVerified:  user.isVerified || false,
-            isAdmin:     user.isAdmin || false,
-            roles:       (user.roles || []).map((r) => ({
-                id:    r._id.toString(),
-                name:  r.name,
-                badge: r.badge,
-                color: r.color,
-            })),
-            needsSetup:  false,
-        };
+        let userData = null;
+        if (!needsSetup) {
+            await user.populate("roles");
+            userData = {
+                id:          user._id.toString(),
+                email:       user.email,
+                username:    user.username,
+                bio:         user.bio,
+                avatarColor: user.avatarColor,
+                avatarUrl:   user.avatarUrl || "",
+                isVerified:  user.isVerified || false,
+                isAdmin:     user.isAdmin || false,
+                roles:       (user.roles || []).filter(Boolean).map((r) => ({
+                    id:    r._id?.toString() ?? "",
+                    name:  r.name  ?? "",
+                    badge: r.badge ?? "",
+                    color: r.color ?? "",
+                })),
+                needsSetup:  false,
+            };
+        }
 
         const response = NextResponse.json({ ok: true, needsSetup, userId: user._id, user: userData });
         response.cookies.set(COOKIE, token, {
