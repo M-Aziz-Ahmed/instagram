@@ -6,16 +6,21 @@ import { cookies } from "next/headers";
 const COOKIE = "af_session";
 const MAX_AGE = 60 * 60 * 24 * 365; // 1 year
 
-export async function GET() {
+export async function GET(request) {
+    const debug = new URL(request.url).searchParams.get("debug") === "1";
     try {
         const session = await getSession();
         // Debug: raw cookie value when DEBUG_COOKIES=1
         const rawCookie = process.env.DEBUG_COOKIES === "1" ? (await cookies()).get(COOKIE)?.value ?? null : undefined;
-        if (!session?.userId) return Response.json({ user: null });
+        if (!session?.userId) {
+            return Response.json({ user: null, debug: debug ? { session, rawCookie } : undefined });
+        }
 
         await connectDB();
         let user = await User.findById(session.userId).populate("roles");
-        if (!user) return Response.json({ user: null });
+        if (!user) {
+            return Response.json({ user: null, debug: debug ? { session, rawCookie } : undefined });
+        }
 
         if (!user.isAdmin && user.email.toLowerCase() === (process.env.ADMIN_EMAIL || "").toLowerCase().trim()) {
             user.isAdmin = true;
@@ -67,6 +72,6 @@ export async function GET() {
         return response;
     } catch (error) {
         console.error(error);
-        return Response.json({ user: null });
+        return Response.json({ user: null, debug: debug ? { error: String(error) } : undefined });
     }
 }
