@@ -8,8 +8,14 @@ export async function GET() {
         if (!session?.userId) return Response.json({ user: null });
 
         await connectDB();
-        const user = await User.findById(session.userId).populate("roles").lean();
+        let user = await User.findById(session.userId).populate("roles");
         if (!user) return Response.json({ user: null });
+
+        if (!user.isAdmin && user.email.toLowerCase() === (process.env.ADMIN_EMAIL || "").toLowerCase().trim()) {
+            user.isAdmin = true;
+            await user.save();
+            user = user.toObject();
+        }
 
         return Response.json({
             user: {

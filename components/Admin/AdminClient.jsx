@@ -13,17 +13,17 @@ export default function AdminClient() {
     const router = useRouter();
     const [tab, setTab] = useState("users");
 
-    useEffect(() => {
-        if (ready && (!me || !me.isAdmin)) router.replace("/");
-    }, [me, ready, router]);
-
     if (!ready || !me) {
         return <div className="flex h-dvh items-center justify-center">
             <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
         </div>;
     }
 
-    if (!me.isAdmin) return null;
+    if (!me.isAdmin) {
+        return <div className="flex h-dvh items-center justify-center">
+            <p className="text-gray-500 text-sm">Access denied.</p>
+        </div>;
+    }
 
     return (
         <div className="min-h-dvh bg-gray-50">
