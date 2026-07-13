@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
-import { getJwtSecret } from "@/utils/jwt";
 
-const SECRET = getJwtSecret();
+const SECRET = new TextEncoder().encode(
+    process.env.JWT_SECRET || "anonfeed_jwt_secret_change_in_production_32chars"
+);
 
 const PUBLIC_PATHS = ["/login", "/api/auth/send-otp", "/api/auth/verify-otp"];
 
@@ -10,7 +11,7 @@ function isApiPath(pathname) {
     return pathname.startsWith("/api/");
 }
 
-export async function middleware(request) {
+export async function proxy(request) {
     const { pathname } = request.nextUrl;
 
     if (
