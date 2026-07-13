@@ -8,6 +8,39 @@ function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 }
 
+async function enrichPost(post) {
+    const allUsernames = new Set();
+    allUsernames.add(post.sender);
+    (post.comments || []).forEach((c) => allUsernames.add(c.sender));
+
+    const users = await User.find({ username: { $in: [...allUsernames] } })
+        .select("username avatarUrl isVerified roles")
+        .populate("roles", "name badge color")
+        .lean();
+
+    const userMap = {};
+    users.forEach((u) => {
+        userMap[u.username] = {
+            avatarUrl:  u.avatarUrl || "",
+            isVerified: u.isVerified || false,
+            roles:      (u.roles || []).map((r) => ({
+                id:    r._id?.toString() ?? "",
+                name:  r.name  ?? "",
+                badge: r.badge ?? "",
+                color: r.color ?? "",
+            })),
+        };
+    });
+
+    const obj = post.toObject ? post.toObject() : { ...post };
+    obj._author = userMap[post.sender] || null;
+    obj.comments = (obj.comments || []).map((c) => ({
+        ...c,
+        _author: userMap[c.sender] || null,
+    }));
+    return obj;
+}
+
 export async function PATCH(request, { params }) {
     try {
         const { id } = await params;
@@ -28,7 +61,7 @@ export async function PATCH(request, { params }) {
                 return Response.json({ error: "Comment must have text or an image" }, { status: 400 });
             }
 
-            const commenter = await User.findOne({ username }).select("avatarUrl").lean();
+            const commenter = await User.findOne({ username }).select("avatarUrl isVerified roles").populate("roles", "name badge color").lean();
 
             const comment = {
                 commentId: uid(),
@@ -65,7 +98,8 @@ export async function PATCH(request, { params }) {
                 })));
             }
 
-            return Response.json(post);
+            const enriched = await enrichPost(post);
+            return Response.json(enriched);
         }
 
         if (action === "deleteComment") {
@@ -73,7 +107,8 @@ export async function PATCH(request, { params }) {
             post.comments = post.comments.filter((c) => c.commentId !== commentId);
             post.comments = post.comments.filter((c) => c.parentId !== commentId);
             await post.save();
-            return Response.json(post);
+            const enriched = await enrichPost(post);
+            return Response.json(enriched);
         }
 
         const idx = post.likes.indexOf(username);
@@ -96,7 +131,8 @@ export async function PATCH(request, { params }) {
         }
         await post.save();
 
-        return Response.json(post);
+        const enriched = await enrichPost(post);
+        return Response.json(enriched);
     } catch (error) {
         console.error(error);
         return Response.json({ error: "Failed to update post" }, { status: 500 });

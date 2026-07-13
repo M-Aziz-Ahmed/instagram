@@ -5,6 +5,44 @@ import Notification from "@/models/notification";
 import { uploadImage } from "@/utils/cloudinary";
 import { extractHashtags, extractMentions } from "@/utils/parseText";
 
+async function enrichPosts(posts) {
+    const allUsernames = new Set();
+    posts.forEach((p) => {
+        allUsernames.add(p.sender);
+        (p.comments || []).forEach((c) => allUsernames.add(c.sender));
+    });
+
+    if (allUsernames.size === 0) return posts;
+
+    const users = await User.find({ username: { $in: [...allUsernames] } })
+        .select("username avatarUrl isVerified roles")
+        .populate("roles", "name badge color")
+        .lean();
+
+    const userMap = {};
+    users.forEach((u) => {
+        userMap[u.username] = {
+            avatarUrl:  u.avatarUrl || "",
+            isVerified: u.isVerified || false,
+            roles:      (u.roles || []).map((r) => ({
+                id:    r._id?.toString() ?? "",
+                name:  r.name  ?? "",
+                badge: r.badge ?? "",
+                color: r.color ?? "",
+            })),
+        };
+    });
+
+    return posts.map((p) => ({
+        ...p,
+        _author: userMap[p.sender] || null,
+        comments: (p.comments || []).map((c) => ({
+            ...c,
+            _author: userMap[c.sender] || null,
+        })),
+    }));
+}
+
 export async function GET(request) {
     try {
         await connectDB();
@@ -12,7 +50,8 @@ export async function GET(request) {
         const tag = searchParams.get("tag");
 
         const query = tag ? { hashtags: tag.toLowerCase() } : {};
-        const posts = await Post.find(query).sort({ timeStamp: -1 }).lean();
+        let posts = await Post.find(query).sort({ timeStamp: -1 }).lean();
+        posts = await enrichPosts(posts);
         return Response.json(posts);
     } catch (error) {
         console.error(error);

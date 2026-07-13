@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import RichText from "./RichText";
+import UserBadges from "@/components/shared/UserBadges";
 import Link from "next/link";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -33,6 +34,25 @@ function CommentIcon() {
             <path strokeLinecap="round" strokeLinejoin="round"
                 d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785A5.969 5.969 0 0 0 6 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337Z" />
         </svg>
+    );
+}
+
+function PostAvatar({ sender, color, avatarUrl, author, size = "md" }) {
+    const dims = size === "sm" ? "w-6 h-6 text-[10px]" : "w-10 h-10 text-sm";
+    const img = author?.avatarUrl || avatarUrl;
+    return (
+        <Link href={`/profile/${encodeURIComponent(sender)}`} className="shrink-0 mt-0.5">
+            <div
+                className={`${dims} rounded-full flex items-center justify-center text-white font-bold select-none hover:opacity-80 transition-opacity overflow-hidden`}
+                style={{ backgroundColor: color }}
+            >
+                {img ? (
+                    <img src={img} alt="" className="w-full h-full object-cover" />
+                ) : (
+                    sender?.[0]?.toUpperCase() ?? "?"
+                )}
+            </div>
+        </Link>
     );
 }
 
@@ -78,10 +98,14 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
     return (
         <div className="flex gap-2 items-start mt-2">
             <div
-                className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold select-none"
+                className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold select-none overflow-hidden"
                 style={{ backgroundColor: user.color }}
             >
-                {user.username?.[0]?.toUpperCase()}
+                {user.avatarUrl ? (
+                    <img src={user.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                ) : (
+                    user.username?.[0]?.toUpperCase()
+                )}
             </div>
             <div className="flex-1">
                 <div className="flex items-center border border-gray-200 rounded-2xl px-3 py-2 focus-within:border-gray-400 transition-colors bg-gray-50">
@@ -90,7 +114,7 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
                         value={text}
                         onChange={(e) => setText(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
-                        placeholder={placeholder || "Write a reply…"}
+                        placeholder={placeholder || "Write a reply\u2026"}
                         maxLength={300}
                         className="flex-1 bg-transparent text-xs text-gray-900 placeholder-gray-400 outline-none"
                     />
@@ -111,7 +135,7 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
                                 disabled={submitting || uploading}
                                 className="text-xs font-bold text-blue-500 hover:text-blue-600 disabled:opacity-50"
                             >
-                                {submitting ? "…" : "Post"}
+                                {submitting ? "\u2026" : "Post"}
                             </button>
                         )}
                     </div>
@@ -122,7 +146,7 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
                         <img src={imageUrl} alt="" className="h-16 rounded-lg object-cover border border-gray-200" />
                         <button onClick={() => setImageUrl("")}
                             className="absolute -top-1.5 -right-1.5 bg-black/60 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] hover:bg-black/80">
-                            ✕
+                            &#x2715;
                         </button>
                     </div>
                 )}
@@ -143,29 +167,21 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
         [allComments, comment.commentId]
     );
 
+    const author = comment._author || null;
+    const avatarUrl = author?.avatarUrl || comment.avatarUrl;
+
     return (
         <div className={depth > 0 ? "ml-6 border-l-2 border-gray-100 pl-3" : ""}>
             <div className="flex gap-2 items-start py-1.5">
-                <Link href={`/profile/${encodeURIComponent(comment.sender)}`} className="shrink-0">
-                    <div
-                        className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold select-none hover:opacity-80 transition-opacity"
-                        style={{ backgroundColor: comment.color }}
-                    >
-                        {comment.avatarUrl ? (
-                            <img src={comment.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
-                        ) : (
-                            comment.sender?.[0]?.toUpperCase()
-                        )}
-                    </div>
-                </Link>
+                <PostAvatar sender={comment.sender} color={comment.color} avatarUrl={avatarUrl} author={author} size="sm" />
                 <div className="flex-1 min-w-0">
                     <div className="bg-gray-50 rounded-2xl px-3 py-1.5 inline-block max-w-full">
-                        <Link
-                            href={`/profile/${encodeURIComponent(comment.sender)}`}
-                            className="font-semibold text-xs text-gray-900 mr-1.5 hover:underline"
-                        >
-                            {comment.sender}
-                        </Link>
+                        <span className="font-semibold text-xs text-gray-900 mr-1 inline-flex items-center gap-1">
+                            <Link href={`/profile/${encodeURIComponent(comment.sender)}`} className="hover:underline">
+                                {comment.sender}
+                            </Link>
+                            <UserBadges isVerified={author?.isVerified} roles={author?.roles || []} size="sm" />
+                        </span>
                         {comment.text && (
                             <RichText text={comment.text} onHashtag={onHashtag} className="text-xs text-gray-700" />
                         )}
@@ -227,6 +243,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
 
     const liked = user ? post.likes.includes(user.username) : false;
     const isOwn = user?.username === post.sender;
+    const author = post._author || null;
 
     const topLevelComments = useMemo(
         () => (post.comments || []).filter((c) => !c.parentId),
@@ -316,28 +333,20 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     return (
         <article className="border-b border-gray-200 px-4 py-4">
             <div className="flex gap-3">
-                <Link href={`/profile/${encodeURIComponent(post.sender)}`} className="shrink-0 mt-0.5">
-                    <div
-                        className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm select-none hover:opacity-80 transition-opacity"
-                        style={{ backgroundColor: post.color }}
-                    >
-                        {post.avatarUrl ? (
-                            <img src={post.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
-                        ) : (
-                            post.sender?.[0]?.toUpperCase() ?? "?"
-                        )}
-                    </div>
-                </Link>
+                <PostAvatar sender={post.sender} color={post.color} avatarUrl={post.avatarUrl} author={author} />
 
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                        <Link
-                            href={`/profile/${encodeURIComponent(post.sender)}`}
-                            className="font-bold text-sm text-gray-900 hover:underline"
-                        >
-                            {post.sender}
-                        </Link>
-                        <span className="text-gray-400 text-xs">·</span>
+                        <span className="inline-flex items-center gap-1">
+                            <Link
+                                href={`/profile/${encodeURIComponent(post.sender)}`}
+                                className="font-bold text-sm text-gray-900 hover:underline"
+                            >
+                                {post.sender}
+                            </Link>
+                            <UserBadges isVerified={author?.isVerified} roles={author?.roles || []} size="sm" />
+                        </span>
+                        <span className="text-gray-400 text-xs">&middot;</span>
                         <span className="text-gray-400 text-xs">{timeAgo(post.timeStamp)}</span>
                         {isOwn && (
                             <button
@@ -421,14 +430,14 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                                         <p className="text-[11px] text-gray-400 mb-1 ml-8">
                                             Replying to <span className="font-medium text-gray-500">@{replyToName}</span>
                                             <button onClick={() => { setReplyTo(null); setReplyToName(""); }}
-                                                className="ml-1 text-gray-400 hover:text-gray-600">✕</button>
+                                                className="ml-1 text-gray-400 hover:text-gray-600">&#x2715;</button>
                                         </p>
                                     )}
                                     <CommentComposer
                                         user={user}
                                         onSubmit={handleComment}
                                         onCancel={replyTo ? () => { setReplyTo(null); setReplyToName(""); } : undefined}
-                                        placeholder={replyTo ? `Reply to @${replyToName}…` : "Add a comment…"}
+                                        placeholder={replyTo ? `Reply to @${replyToName}\u2026` : "Add a comment\u2026"}
                                         submitting={submitting}
                                     />
                                 </div>
