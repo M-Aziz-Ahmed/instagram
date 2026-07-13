@@ -39,7 +39,7 @@ export async function POST(request) {
         };
         if (avatarUrl) update.avatarUrl = avatarUrl;
 
-        const user = await User.findByIdAndUpdate(session.userId, update, { new: true });
+        const user = await User.findByIdAndUpdate(session.userId, update, { new: true }).populate("roles");
 
         return Response.json({
             user: {
@@ -48,6 +48,15 @@ export async function POST(request) {
                 username:    user.username,
                 bio:         user.bio,
                 avatarColor: user.avatarColor,
+                avatarUrl:   user.avatarUrl || "",
+                isVerified:  user.isVerified || false,
+                isAdmin:     user.isAdmin || false,
+                roles:       (user.roles || []).filter(Boolean).map((r) => ({
+                    id:    r._id?.toString() ?? "",
+                    name:  r.name  ?? "",
+                    badge: r.badge ?? "",
+                    color: r.color ?? "",
+                })),
                 needsSetup:  false,
             },
         });
