@@ -7,6 +7,7 @@ const messagesSchema = new mongoose.Schema({
     color:     { type: String, default: "#3b82f6" }, // avatar bg color
     timeStamp: { type: Date, default: Date.now },
     isRead:    { type: Boolean, default: false },
+    delivered: { type: Boolean, default: false },
 });
 
 messagesSchema.index({ sender: 1, recipient: 1, timeStamp: -1 });

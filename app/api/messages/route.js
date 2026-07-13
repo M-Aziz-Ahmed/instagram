@@ -17,6 +17,12 @@ export async function GET(request) {
                     { sender: user2, recipient: user1 },
                 ],
             }).sort({ timeStamp: 1 }).lean();
+
+            await Message.updateMany(
+                { sender: user2, recipient: user1, delivered: false },
+                { $set: { delivered: true } }
+            );
+
             return Response.json(messages);
         }
 
@@ -89,7 +95,7 @@ export async function POST(request) {
             color:     color || "#3b82f6",
         });
 
-        return Response.json(message, { status: 201 });
+        return Response.json(message.toObject(), { status: 201 });
     } catch (error) {
         return Response.json({ error: "Failed to send message" }, { status: 500 });
     }

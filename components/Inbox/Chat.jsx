@@ -14,12 +14,57 @@ function Avatar({ sender, color }) {
     );
 }
 
-export default function Chat({ refreshTrigger, recipient }) {
+function TickIcon({ status }) {
+    if (status === "sending") {
+        return (
+            <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="50" strokeDashoffset="10" />
+            </svg>
+        );
+    }
+
+    if (status === "sent") {
+        return (
+            <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M12.354 4.354a.5.5 0 0 0-.708-.708L6 9.293 3.854 7.146a.5.5 0 1 0-.708.708l2.5 2.5a.5.5 0 0 0 .708 0l6-6z" />
+            </svg>
+        );
+    }
+
+    if (status === "delivered") {
+        return (
+            <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" viewBox="0 0 20 16" fill="currentColor">
+                <path d="M1.354 4.354a.5.5 0 0 0-.708-.708l-1 1a.5.5 0 0 0 .708.708L1.354 4.354zM5.5 5.646a.5.5 0 0 0-.708-.708l-3 3a.5.5 0 0 0 .708.708l3-3zM7 9.293l1.646-1.647a.5.5 0 0 0-.708-.708L7 8.586 4.854 6.44a.5.5 0 1 0-.708.708l2.5 2.5a.5.5 0 0 0 .708 0l3.5-3.5a.5.5 0 0 0-.708-.708L7 9.293zM13.5 4.354a.5.5 0 0 0-.708-.708l-1 1a.5.5 0 0 0 .708.708l1-1zM17.646 5.646a.5.5 0 0 0-.708-.708l-3 3a.5.5 0 0 0 .708.708l3-3z" />
+                <path d="M12.5 9.293l1.646-1.647a.5.5 0 0 0-.708-.708L12.5 8.586l-2.146-2.146a.5.5 0 0 0-.708.708l3 3a.5.5 0 0 0 .354.146.5.5 0 0 0 .146-.354l-3.5-3.5a.5.5 0 0 0-.708-.708L12.5 9.293z" />
+            </svg>
+        );
+    }
+
+    if (status === "read") {
+        return (
+            <svg className="w-4 h-4 text-blue-500" viewBox="0 0 20 16" fill="currentColor">
+                <path d="M1.354 4.354a.5.5 0 0 0-.708-.708l-1 1a.5.5 0 0 0 .708.708L1.354 4.354zM5.5 5.646a.5.5 0 0 0-.708-.708l-3 3a.5.5 0 0 0 .708.708l3-3zM7 9.293l1.646-1.647a.5.5 0 0 0-.708-.708L7 8.586 4.854 6.44a.5.5 0 1 0-.708.708l2.5 2.5a.5.5 0 0 0 .708 0l3.5-3.5a.5.5 0 0 0-.708-.708L7 9.293zM13.5 4.354a.5.5 0 0 0-.708-.708l-1 1a.5.5 0 0 0 .708.708l1-1zM17.646 5.646a.5.5 0 0 0-.708-.708l-3 3a.5.5 0 0 0 .708.708l3-3z" />
+                <path d="M12.5 9.293l1.646-1.647a.5.5 0 0 0-.708-.708L12.5 8.586l-2.146-2.146a.5.5 0 0 0-.708.708l3 3a.5.5 0 0 0 .354.146.5.5 0 0 0 .146-.354l-3.5-3.5a.5.5 0 0 0-.708-.708L12.5 9.293z" />
+            </svg>
+        );
+    }
+
+    return null;
+}
+
+function getMessageStatus(msg) {
+    if (msg._sending) return "sending";
+    if (msg.isRead) return "read";
+    if (msg.delivered) return "delivered";
+    return "sent";
+}
+
+export default function Chat({ pendingMessage, recipient }) {
     const { user } = useUser();
     const [messages, setMessages]   = useState([]);
     const [loading, setLoading]     = useState(true);
     const bottomRef                  = useRef(null);
-    const latestIdRef                = useRef(null);
+    const pendingIdRef               = useRef(null);
 
     const fetchMessages = useCallback(async () => {
         if (!user || !recipient) return;
@@ -27,13 +72,16 @@ export default function Chat({ refreshTrigger, recipient }) {
             const res = await fetch(`/api/messages?user1=${encodeURIComponent(user.username)}&user2=${encodeURIComponent(recipient)}`);
             if (!res.ok) return;
             const data = await res.json();
-            setMessages(data);
-            if (data.length > 0) latestIdRef.current = data[data.length - 1]._id;
 
-            await fetch("/api/messages", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ sender: user.username, recipient }),
+            setMessages(prev => {
+                const prevMap = new Map(prev.map(m => [m._id, m]));
+                return data.map(m => {
+                    const local = prevMap.get(m._id);
+                    if (local) {
+                        return { ...m, _sending: local._sending };
+                    }
+                    return m;
+                });
             });
         } catch (err) {
             console.error("Failed to fetch messages:", err);
@@ -50,13 +98,40 @@ export default function Chat({ refreshTrigger, recipient }) {
         }
         setLoading(true);
         fetchMessages();
-    }, [fetchMessages, refreshTrigger, recipient]);
+    }, [fetchMessages, recipient]);
 
     useEffect(() => {
         if (!recipient) return;
         const interval = setInterval(fetchMessages, 2000);
         return () => clearInterval(interval);
     }, [fetchMessages, recipient]);
+
+    useEffect(() => {
+        if (!pendingMessage) return;
+        const pm = pendingMessage;
+
+        setMessages(prev => {
+            if (pm._remove) {
+                return prev.filter(m => m._id !== pm._id && m._tempId !== pm._tempId);
+            }
+
+            if (pm._id && !pm._sending) {
+                const exists = prev.some(m => m._id === pm._id);
+                if (exists) {
+                    return prev.map(m => m._id === pm._id ? { ...m, _sending: false } : m);
+                }
+                return [...prev, pm];
+            }
+
+            const existsTemp = prev.some(m => m._tempId === pm._tempId);
+            if (existsTemp) {
+                return prev.map(m => m._tempId === pm._tempId ? pm : m);
+            }
+            return [...prev, pm];
+        });
+
+        if (pm._tempId) pendingIdRef.current = pm._tempId;
+    }, [pendingMessage]);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -129,8 +204,10 @@ export default function Chat({ refreshTrigger, recipient }) {
                     else                            rounding = "rounded-3xl rounded-l-md";
                 }
 
+                const tickStatus = isMine ? getMessageStatus(msg) : null;
+
                 return (
-                    <div key={msg._id}>
+                    <div key={msg._id || msg._tempId}>
                         {showTime && (
                             <div className="flex justify-center my-4">
                                 <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-full">
@@ -162,6 +239,14 @@ export default function Chat({ refreshTrigger, recipient }) {
                                 >
                                     {msg.text}
                                 </div>
+                                {isMine && (
+                                    <div className="flex items-center justify-end gap-0.5 mt-0.5 mr-1">
+                                        <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                                            {new Date(msg.timeStamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                        </span>
+                                        <TickIcon status={tickStatus} />
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

@@ -15,16 +15,35 @@ export default function Input({ onMessageSent, recipient }) {
         setText("");
         setSending(true);
 
+        const tempId = `temp_${Date.now()}_${Math.random()}`;
+
+        if (onMessageSent) {
+            onMessageSent({
+                _tempId: tempId,
+                text: snapshot,
+                sender: user.username,
+                recipient,
+                color: user.color,
+                timeStamp: new Date().toISOString(),
+                isRead: false,
+                delivered: false,
+                _sending: true,
+            });
+        }
+
         try {
-            await fetch("/api/messages", {
+            const res = await fetch("/api/messages", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ text: snapshot, sender: user.username, recipient, color: user.color }),
             });
-            if (onMessageSent) onMessageSent();
+            if (!res.ok) throw new Error("Send failed");
+            const msg = await res.json();
+            if (onMessageSent) onMessageSent({ ...msg, _sending: false });
         } catch (err) {
             console.error("Failed to send:", err);
             setText(snapshot);
+            if (onMessageSent) onMessageSent({ _tempId: tempId, _remove: true });
         } finally {
             setSending(false);
         }

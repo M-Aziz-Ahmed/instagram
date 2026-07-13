@@ -8,7 +8,7 @@ import ProfileSetup from "@/components/ProfileSetup";
 
 export default function ChatBox({ onBack, recipient, recipientUser }) {
     const { user, ready } = useUser();
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [pendingMessage, setPendingMessage] = useState(null);
     const [editingProfile, setEditingProfile] = useState(false);
 
     if (!ready) {
@@ -91,12 +91,12 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
 
             {/* ── Messages ────────────────────────────────────────────────── */}
             <div className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-4">
-                <Chat refreshTrigger={refreshTrigger} recipient={recipient} />
+                <Chat pendingMessage={pendingMessage} recipient={recipient} />
             </div>
 
             {/* ── Input ───────────────────────────────────────────────────── */}
             <div className="px-3 md:px-4 py-2.5 md:py-3 border-t border-gray-200 dark:border-gray-800 shrink-0">
-                <Input onMessageSent={() => setRefreshTrigger((n) => n + 1)} recipient={recipient} />
+                <Input onMessageSent={(msg) => setPendingMessage(msg)} recipient={recipient} />
             </div>
         </div>
     );
