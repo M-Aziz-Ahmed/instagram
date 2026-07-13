@@ -22,6 +22,7 @@ export default function LoginForm({ onSuccess }) {
         try {
             const res = await fetch("/api/auth/send-otp", {
                 method:  "POST",
+                credentials: "same-origin",
                 headers: { "Content-Type": "application/json" },
                 body:    JSON.stringify({ email: email.trim() }),
             });
@@ -77,6 +78,7 @@ export default function LoginForm({ onSuccess }) {
         try {
             const res = await fetch("/api/auth/verify-otp", {
                 method:  "POST",
+                credentials: "same-origin",
                 headers: { "Content-Type": "application/json" },
                 body:    JSON.stringify({ email: email.trim(), code }),
             });
