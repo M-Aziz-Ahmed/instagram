@@ -9,7 +9,7 @@ export async function POST(request) {
             return Response.json({ error: "Not authenticated" }, { status: 401 });
         }
 
-        const { username, bio, avatarColor } = await request.json();
+        const { username, bio, avatarColor, avatarUrl } = await request.json();
 
         if (!username?.trim()) {
             return Response.json({ error: "Username required" }, { status: 400 });
@@ -32,15 +32,14 @@ export async function POST(request) {
             return Response.json({ error: "Username already taken" }, { status: 409 });
         }
 
-        const user = await User.findByIdAndUpdate(
-            session.userId,
-            {
-                username:    username.trim(),
-                bio:         bio?.trim() ?? "",
-                avatarColor: avatarColor || "#3b82f6",
-            },
-            { new: true }
-        );
+        const update = {
+            username:    username.trim(),
+            bio:         bio?.trim() ?? "",
+            avatarColor: avatarColor || "#3b82f6",
+        };
+        if (avatarUrl) update.avatarUrl = avatarUrl;
+
+        const user = await User.findByIdAndUpdate(session.userId, update, { new: true });
 
         return Response.json({
             user: {
