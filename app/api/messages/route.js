@@ -82,19 +82,22 @@ export async function GET(request) {
 
 export async function POST(request) {
     try {
-        const { text, sender, recipient, color } = await request.json();
+        const { text, imageUrl, sender, recipient, color } = await request.json();
 
-        if (!text?.trim())     return Response.json({ error: "Message text is required" }, { status: 400 });
         if (!sender?.trim())   return Response.json({ error: "Sender is required" }, { status: 400 });
         if (!recipient?.trim()) return Response.json({ error: "Recipient is required" }, { status: 400 });
+        if (!text?.trim() && !imageUrl) return Response.json({ error: "Message text or image is required" }, { status: 400 });
 
         await connectDB();
         const message = await Message.create({
-            text:      text.trim(),
+            text:      text?.trim() || "",
+            imageUrl:  imageUrl || "",
             sender:    sender.trim(),
             recipient: recipient.trim(),
             color:     color || "#3b82f6",
         });
+
+        const preview = text?.trim() ? text.trim().slice(0, 120) : "📷 Image";
 
         Notification.create({
             recipient: recipient.trim(),
@@ -102,7 +105,7 @@ export async function POST(request) {
             fromUser: sender.trim(),
             fromColor: color || "#3b82f6",
             postId: message._id.toString(),
-            text: text.trim().slice(0, 120),
+            text: preview,
         }).catch(() => {});
 
         return Response.json(message.toObject(), { status: 201 });

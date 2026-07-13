@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
+import ImageLightbox from "@/components/shared/ImageLightbox";
 
 function Avatar({ sender, color }) {
     return (
@@ -66,6 +67,7 @@ export default function Chat({ pendingMessage, recipient }) {
     const bottomRef                  = useRef(null);
     const pendingIdRef               = useRef(null);
     const username                   = user?.username;
+    const [lightboxSrc, setLightboxSrc] = useState(null);
 
     const fetchMessages = useCallback(async () => {
         if (!username || !recipient) return;
@@ -186,6 +188,7 @@ export default function Chat({ pendingMessage, recipient }) {
     }
 
     return (
+        <>
         <div className="flex flex-col gap-0.5 w-full">
             {messages.map((msg, i) => {
                 const isMine  = msg.sender === user?.username;
@@ -241,13 +244,26 @@ export default function Chat({ pendingMessage, recipient }) {
                                     <span className="text-xs text-gray-500 dark:text-gray-400 mb-1 ml-1">{msg.sender}</span>
                                 )}
                                 <div
-                                    className={`px-4 py-2.5 text-sm leading-snug wrap-break-word ${rounding} ${
+                                    className={`overflow-hidden ${rounding} ${
                                         isMine
                                             ? "bg-blue-500 text-white"
                                             : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                                     }`}
                                 >
-                                    {msg.text}
+                                    {msg.imageUrl && (
+                                        <img
+                                            src={msg.imageUrl}
+                                            alt="Photo"
+                                            className={`block w-full ${msg.text ? "" : "max-w-[300px]"} object-cover cursor-pointer`}
+                                            onClick={() => setLightboxSrc(msg.imageUrl)}
+                                            loading="lazy"
+                                        />
+                                    )}
+                                    {msg.text && (
+                                        <div className={`px-4 py-2.5 text-sm leading-snug wrap-break-word ${msg.imageUrl ? "border-t border-white/20" : ""}`}>
+                                            {msg.text}
+                                        </div>
+                                    )}
                                 </div>
                                 {isMine && (
                                     <div className="flex items-center justify-end gap-0.5 mt-0.5 mr-1">
@@ -264,5 +280,10 @@ export default function Chat({ pendingMessage, recipient }) {
             })}
             <div ref={bottomRef} />
         </div>
+
+        {lightboxSrc && (
+            <ImageLightbox src={lightboxSrc} alt="Photo" onClose={() => setLightboxSrc(null)} />
+        )}
+        </>
     );
 }

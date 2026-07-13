@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 
 const messagesSchema = new mongoose.Schema({
-    text:      { type: String, required: true },
+    text:      { type: String, default: "" },
+    imageUrl:  { type: String, default: "" },
     sender:    { type: String, required: true },   // username
     recipient: { type: String, required: true },   // username
     color:     { type: String, default: "#3b82f6" }, // avatar bg color
