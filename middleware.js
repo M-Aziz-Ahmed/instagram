@@ -29,9 +29,7 @@ export async function middleware(request) {
         return NextResponse.next();
     } catch {
         const loginUrl = new URL("/login", request.url);
-        const res = NextResponse.redirect(loginUrl);
-        res.cookies.delete("af_session");
-        return res;
+        return NextResponse.redirect(loginUrl);
     }
 }
 

@@ -1,6 +1,9 @@
 import connectDB from "@/utils/db";
 import User from "@/models/user";
-import { getSession } from "@/utils/session";
+import { getSession, signToken } from "@/utils/session";
+
+const COOKIE = "af_session";
+const MAX_AGE = 60 * 60 * 24 * 30;
 
 export async function GET() {
     try {
@@ -17,7 +20,7 @@ export async function GET() {
             user = user.toObject();
         }
 
-        return Response.json({
+        const response = Response.json({
             user: {
                 id:          user._id.toString(),
                 email:       user.email,
@@ -36,6 +39,20 @@ export async function GET() {
                 needsSetup: !user.username,
             },
         });
+
+        if (session.exp) {
+            const now = Math.floor(Date.now() / 1000);
+            const remaining = session.exp - now;
+            if (remaining < MAX_AGE / 2) {
+                const newToken = await signToken({ userId: user._id.toString() });
+                response.headers.set(
+                    "Set-Cookie",
+                    `${COOKIE}=${newToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${MAX_AGE}`
+                );
+            }
+        }
+
+        return response;
     } catch (error) {
         console.error(error);
         return Response.json({ user: null });
