@@ -1,12 +1,13 @@
 import { Resend } from "resend";
 
+console.log('RESEND_API_KEY:', process.env.RESEND_API_KEY);
+
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendOTPEmail(email, code) {
     await resend.emails.send({
         from:    "AnonFeed <onboarding@resend.dev>",
         to:      email,
-        subject: `${code} is your AnonFeed code`,
         html: `
             <div style="font-family:sans-serif;max-width:400px;margin:0 auto;padding:32px">
                 <h1 style="font-size:24px;font-weight:900;margin:0 0 8px">AnonFeed</h1>
@@ -21,3 +22,4 @@ export async function sendOTPEmail(email, code) {
         `,
     });
 }
+
