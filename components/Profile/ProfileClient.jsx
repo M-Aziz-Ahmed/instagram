@@ -74,7 +74,7 @@ export default function ProfileClient({ username }) {
     const expandedPost = expanded ? data?.posts?.find((p) => p._id === expanded) : null;
 
     return (
-        <div className="min-h-dvh bg-white">
+        <div className="min-h-dvh bg-white lg:pl-72">
             {/* Nav */}
             <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-200">
                 <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3">

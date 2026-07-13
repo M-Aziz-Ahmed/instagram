@@ -79,7 +79,7 @@ export default function InboxClient() {
     }
 
     return (
-        <div className="flex h-dvh bg-white overflow-hidden">
+        <div className="flex h-dvh bg-white overflow-hidden lg:pl-72">
             <aside className={`
                 flex flex-col shrink-0 border-r border-gray-200 bg-white
                 w-full md:w-80

@@ -55,7 +55,7 @@ export default function FeedClient() {
     }, [logout, router]);
 
     return (
-        <div className="min-h-dvh bg-white">
+        <div className="min-h-dvh bg-white lg:pl-72">
             {/* ── Top nav ──────────────────────────────────────────────── */}
             <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-200 safe-top">
                 <div className="max-w-4xl mx-auto px-3 sm:px-4 h-12 sm:h-14 flex items-center justify-between gap-2 sm:gap-4">

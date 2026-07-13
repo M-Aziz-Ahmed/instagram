@@ -112,7 +112,7 @@ export default function Sidebar({ open, onClose }) {
 
             {/* Sidebar panel */}
             <aside
-                className={`fixed top-0 left-0 h-full w-72 bg-white z-50 shadow-xl transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:shadow-none lg:border-r lg:border-gray-200 ${
+                className={`fixed top-0 left-0 h-full w-72 bg-white z-50 shadow-xl transition-transform duration-300 ease-in-out lg:translate-x-0 lg:shadow-none lg:border-r lg:border-gray-200 ${
                     open ? "translate-x-0" : "-translate-x-full"
                 }`}
             >
