@@ -1,13 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import PostCard from "./PostCard";
 
-export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError, feedType, username }) {
-    const [posts, setPosts]     = useState([]);
-    const [loading, setLoading] = useState(true);
+const PAGE_SIZE = 10;
 
-    const fetchPosts = useCallback(async () => {
+export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError, feedType, username }) {
+    const [posts, setPosts]             = useState([]);
+    const [loading, setLoading]         = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore]         = useState(true);
+    const sentinelRef                   = useRef(null);
+    const lastRefreshRef                = useRef(0);
+
+    const fetchPosts = useCallback(async ({ append = false } = {}) => {
         try {
             const params = new URLSearchParams();
             if (activeTag) params.set("tag", activeTag);
@@ -15,6 +21,15 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                 params.set("feed", "following");
                 params.set("username", username);
             }
+
+            if (append) {
+                const oldest = posts[posts.length - 1];
+                if (oldest?.timeStamp) params.set("before", oldest.timeStamp);
+                params.set("limit", String(PAGE_SIZE));
+            } else {
+                params.set("limit", String(PAGE_SIZE));
+            }
+
             const url = `/api/posts${params.toString() ? `?${params}` : ""}`;
             const res = await fetch(url, { cache: "no-store" });
             if (res.status === 401) {
@@ -23,24 +38,86 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             }
             if (res.ok) {
                 const data = await res.json();
-                setPosts(data);
+                if (append) {
+                    setPosts((prev) => {
+                        const ids = new Set(prev.map((p) => p._id));
+                        const fresh = data.posts.filter((p) => !ids.has(p._id));
+                        return [...prev, ...fresh];
+                    });
+                } else {
+                    setPosts(data.posts);
+                }
+                setHasMore(data.hasMore);
             }
         } catch (err) {
             console.error(err);
         } finally {
             setLoading(false);
+            setLoadingMore(false);
         }
-    }, [activeTag, onAuthError, feedType, username]);
+    }, [activeTag, onAuthError, feedType, username, posts]);
 
+    // Reset + initial load when feed params change
     useEffect(() => {
+        setPosts([]);
+        setHasMore(true);
         setLoading(true);
-        fetchPosts();
-    }, [fetchPosts, refreshTrigger]);
+        lastRefreshRef.current = 0;
+    }, [activeTag, feedType, username]);
 
     useEffect(() => {
-        const id = setInterval(fetchPosts, 10000);
+        if (loading) fetchPosts();
+    }, [fetchPosts, loading]);
+
+    // Refresh new posts every 10s (prepend only, no reset)
+    useEffect(() => {
+        const id = setInterval(() => {
+            const now = Date.now();
+            if (now - lastRefreshRef.current < 8000) return;
+            lastRefreshRef.current = now;
+
+            const params = new URLSearchParams();
+            if (activeTag) params.set("tag", activeTag);
+            if (feedType === "following" && username) {
+                params.set("feed", "following");
+                params.set("username", username);
+            }
+            params.set("limit", "5");
+
+            fetch(`/api/posts?${params}`, { cache: "no-store" })
+                .then((r) => r.ok ? r.json() : null)
+                .then((data) => {
+                    if (!data?.posts) return;
+                    setPosts((prev) => {
+                        const ids = new Set(prev.map((p) => p._id));
+                        const fresh = data.posts.filter((p) => !ids.has(p._id));
+                        if (fresh.length === 0) return prev;
+                        return [...fresh, ...prev];
+                    });
+                })
+                .catch(() => {});
+        }, 10000);
         return () => clearInterval(id);
-    }, [fetchPosts]);
+    }, [activeTag, feedType, username]);
+
+    // Infinite scroll sentinel
+    useEffect(() => {
+        const sentinel = sentinelRef.current;
+        if (!sentinel) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+                    setLoadingMore(true);
+                    fetchPosts({ append: true });
+                }
+            },
+            { rootMargin: "400px" }
+        );
+
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [hasMore, loadingMore, loading, fetchPosts]);
 
     if (loading) {
         return (
@@ -83,10 +160,19 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                 <PostCard
                     key={post._id}
                     post={post}
-                    onDeleted={fetchPosts}
+                    onDeleted={() => setPosts((prev) => prev.filter((p) => p._id !== post._id))}
                     onHashtag={onHashtag}
                 />
             ))}
+            <div ref={sentinelRef} className="h-1" />
+            {loadingMore && (
+                <div className="flex justify-center py-8">
+                    <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                </div>
+            )}
+            {!hasMore && posts.length > 0 && (
+                <p className="text-center text-xs text-gray-400 dark:text-gray-500 py-6">You're all caught up</p>
+            )}
         </div>
     );
 }

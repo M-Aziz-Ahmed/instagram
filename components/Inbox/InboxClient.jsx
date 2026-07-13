@@ -134,7 +134,7 @@ export default function InboxClient() {
                                     <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{convo.username}</p>
                                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                                         {convo.lastMessage?.sender === user?.username ? "You: " : ""}
-                                        {convo.lastMessage?.text?.slice(0, 30) || "Image"} · {timeAgo(convo.lastMessage?.timeStamp)}
+                                        {convo.lastMessage?.imageUrl && !convo.lastMessage?.text ? "📷 Photo" : convo.lastMessage?.text?.slice(0, 30) || "Message"} · {timeAgo(convo.lastMessage?.timeStamp)}
                                     </p>
                                 </div>
 
