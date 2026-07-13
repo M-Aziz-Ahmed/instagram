@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 
 const SECRET = new TextEncoder().encode(
-    process.env.JWT_SECRET || "anonfeed_fallback_secret_32chars!!"
+    process.env.JWT_SECRET || "anonfeed_jwt_secret_change_in_production_32chars"
 );
 
 const PUBLIC_PATHS = ["/login", "/api/auth/send-otp", "/api/auth/verify-otp"];

@@ -67,10 +67,11 @@ export async function POST(request) {
             };
         }
 
+        const isSecure = request.url.startsWith("https");
         const response = NextResponse.json({ ok: true, needsSetup, userId: user._id, user: userData });
         response.cookies.set(COOKIE, token, {
             httpOnly: true,
-            secure:   process.env.NODE_ENV === "production",
+            secure:   isSecure,
             sameSite: "lax",
             maxAge:   MAX_AGE,
             path:     "/",
