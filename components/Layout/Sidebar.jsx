@@ -13,20 +13,20 @@ function NavItem({ href, icon, label, active, onClick }) {
             : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
     }`;
 
-    if (onClick) {
+    if (href) {
         return (
-            <button onClick={onClick} className={`${classes} w-full text-left`}>
+            <Link href={href} onClick={onClick} className={classes}>
                 {icon}
                 <span>{label}</span>
-            </button>
+            </Link>
         );
     }
 
     return (
-        <Link href={href} className={classes}>
+        <button onClick={onClick} className={`${classes} w-full text-left`}>
             {icon}
             <span>{label}</span>
-        </Link>
+        </button>
     );
 }
 
