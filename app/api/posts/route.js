@@ -1,5 +1,6 @@
 import connectDB from "@/utils/db";
 import Post from "@/models/post";
+import User from "@/models/user";
 import Notification from "@/models/notification";
 import { uploadImage } from "@/utils/cloudinary";
 import { extractHashtags, extractMentions } from "@/utils/parseText";
@@ -32,7 +33,6 @@ export async function POST(request) {
 
         await connectDB();
 
-        // Support both: pre-uploaded URL (from browser direct upload) or base64 fallback
         let imageUrl = providedUrl ?? "";
         if (!imageUrl && imageData) {
             imageUrl = await uploadImage(imageData);
@@ -41,15 +41,18 @@ export async function POST(request) {
         const hashtags = extractHashtags(text ?? "");
         const mentions  = extractMentions(text ?? "", sender);
 
+        const user = await User.findOne({ username: sender }).select("avatarUrl").lean();
+
         const post = await Post.create({
             text:     text?.trim() ?? "",
             imageUrl,
             sender:   sender.trim(),
             color:    color || "#3b82f6",
+            avatarUrl: user?.avatarUrl || "",
             hashtags,
+            mentions,
         });
 
-        // Notify @mentioned users
         if (mentions.length > 0) {
             const notifs = mentions.map((recipient) => ({
                 recipient,

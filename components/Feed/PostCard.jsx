@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import RichText from "./RichText";
 import Link from "next/link";
+
+const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
 function timeAgo(date) {
     const diff = (Date.now() - new Date(date)) / 1000;
@@ -33,19 +36,203 @@ function CommentIcon() {
     );
 }
 
+function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) {
+    const [text, setText]       = useState("");
+    const [imageUrl, setImageUrl] = useState("");
+    const [uploading, setUploading] = useState(false);
+    const fileRef = useRef(null);
+
+    const uploadToCloudinary = (file) =>
+        new Promise((resolve, reject) => {
+            const fd = new FormData();
+            fd.append("file", file);
+            fd.append("upload_preset", UPLOAD_PRESET);
+            fd.append("folder", "anon-feed");
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`);
+            xhr.onload = () => xhr.status === 200
+                ? resolve(JSON.parse(xhr.responseText).secure_url)
+                : reject(new Error("Upload failed"));
+            xhr.onerror = () => reject(new Error("Network error"));
+            xhr.send(fd);
+        });
+
+    const handleFile = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file || file.size > 10 * 1024 * 1024) return;
+        setUploading(true);
+        try {
+            const url = await uploadToCloudinary(file);
+            setImageUrl(url);
+        } catch { /* silent */ }
+        setUploading(false);
+    };
+
+    const handleSubmit = () => {
+        if ((!text.trim() && !imageUrl) || submitting) return;
+        onSubmit({ text: text.trim(), imageUrl });
+        setText("");
+        setImageUrl("");
+    };
+
+    return (
+        <div className="flex gap-2 items-start mt-2">
+            <div
+                className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold select-none"
+                style={{ backgroundColor: user.color }}
+            >
+                {user.username?.[0]?.toUpperCase()}
+            </div>
+            <div className="flex-1">
+                <div className="flex items-center border border-gray-200 rounded-2xl px-3 py-2 focus-within:border-gray-400 transition-colors bg-gray-50">
+                    <input
+                        type="text"
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
+                        placeholder={placeholder || "Write a reply…"}
+                        maxLength={300}
+                        className="flex-1 bg-transparent text-xs text-gray-900 placeholder-gray-400 outline-none"
+                    />
+                    <div className="flex items-center gap-1 ml-2">
+                        <button type="button" onClick={() => fileRef.current?.click()}
+                            disabled={uploading}
+                            className="text-gray-400 hover:text-blue-500 transition-colors p-0.5"
+                            title="Add image">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                                <path strokeLinecap="round" strokeLinejoin="round"
+                                    d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                            </svg>
+                        </button>
+                        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+                        {(text.trim() || imageUrl) && (
+                            <button
+                                onClick={handleSubmit}
+                                disabled={submitting || uploading}
+                                className="text-xs font-bold text-blue-500 hover:text-blue-600 disabled:opacity-50"
+                            >
+                                {submitting ? "…" : "Post"}
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {imageUrl && (
+                    <div className="relative mt-1.5 inline-block">
+                        <img src={imageUrl} alt="" className="h-16 rounded-lg object-cover border border-gray-200" />
+                        <button onClick={() => setImageUrl("")}
+                            className="absolute -top-1.5 -right-1.5 bg-black/60 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] hover:bg-black/80">
+                            ✕
+                        </button>
+                    </div>
+                )}
+
+                {onCancel && (
+                    <button onClick={onCancel} className="text-xs text-gray-400 hover:text-gray-600 mt-1">
+                        Cancel
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, postId, onDelete }) {
+    const replies = useMemo(
+        () => allComments.filter((c) => c.parentId === comment.commentId),
+        [allComments, comment.commentId]
+    );
+
+    return (
+        <div className={depth > 0 ? "ml-6 border-l-2 border-gray-100 pl-3" : ""}>
+            <div className="flex gap-2 items-start py-1.5">
+                <Link href={`/profile/${encodeURIComponent(comment.sender)}`} className="shrink-0">
+                    <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold select-none hover:opacity-80 transition-opacity"
+                        style={{ backgroundColor: comment.color }}
+                    >
+                        {comment.avatarUrl ? (
+                            <img src={comment.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                        ) : (
+                            comment.sender?.[0]?.toUpperCase()
+                        )}
+                    </div>
+                </Link>
+                <div className="flex-1 min-w-0">
+                    <div className="bg-gray-50 rounded-2xl px-3 py-1.5 inline-block max-w-full">
+                        <Link
+                            href={`/profile/${encodeURIComponent(comment.sender)}`}
+                            className="font-semibold text-xs text-gray-900 mr-1.5 hover:underline"
+                        >
+                            {comment.sender}
+                        </Link>
+                        {comment.text && (
+                            <RichText text={comment.text} onHashtag={onHashtag} className="text-xs text-gray-700" />
+                        )}
+                    </div>
+                    {comment.imageUrl && (
+                        <div className="mt-1 rounded-xl overflow-hidden border border-gray-200 max-w-xs">
+                            <img src={comment.imageUrl} alt="Comment image" className="w-full h-auto block" loading="lazy" />
+                        </div>
+                    )}
+                    <div className="flex items-center gap-3 mt-0.5 px-1">
+                        <span className="text-gray-300 text-[11px]">{timeAgo(comment.timeStamp)}</span>
+                        {user && (
+                            <button
+                                onClick={() => onReply(comment.commentId, comment.sender)}
+                                className="text-[11px] text-gray-400 hover:text-blue-500 font-medium transition-colors"
+                            >
+                                Reply
+                            </button>
+                        )}
+                        {user?.username === comment.sender && (
+                            <button
+                                onClick={() => onDelete(comment.commentId)}
+                                className="text-[11px] text-gray-400 hover:text-red-500 font-medium transition-colors"
+                            >
+                                Delete
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {replies.map((reply) => (
+                <ThreadComment
+                    key={reply.commentId}
+                    comment={reply}
+                    allComments={allComments}
+                    depth={depth + 1}
+                    onReply={onReply}
+                    onHashtag={onHashtag}
+                    user={user}
+                    postId={postId}
+                    onDelete={onDelete}
+                />
+            ))}
+        </div>
+    );
+}
+
 export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     const { user } = useUser();
-    const [post, setPost]           = useState(initialPost);
-    const [liking, setLiking]       = useState(false);
-    const [deleting, setDeleting]   = useState(false);
-    const [showComments, setShowComments] = useState(false);
-    const [commentText, setCommentText]   = useState("");
-    const [submitting, setSubmitting]     = useState(false);
+    const [post, setPost]                     = useState(initialPost);
+    const [liking, setLiking]                 = useState(false);
+    const [deleting, setDeleting]             = useState(false);
+    const [showComments, setShowComments]     = useState(false);
+    const [commentText, setCommentText]       = useState("");
+    const [submitting, setSubmitting]         = useState(false);
+    const [replyTo, setReplyTo]               = useState(null);
+    const [replyToName, setReplyToName]       = useState("");
 
     const liked = user ? post.likes.includes(user.username) : false;
     const isOwn = user?.username === post.sender;
 
-    // ── Like ──────────────────────────────────────────────────────────────────
+    const topLevelComments = useMemo(
+        () => (post.comments || []).filter((c) => !c.parentId),
+        [post.comments]
+    );
+
     const handleLike = async () => {
         if (!user || liking) return;
         setLiking(true);
@@ -61,10 +248,8 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
         }
     };
 
-    // ── Comment ───────────────────────────────────────────────────────────────
-    const handleComment = async (e) => {
-        e.preventDefault();
-        if (!user || !commentText.trim() || submitting) return;
+    const handleComment = async ({ text, imageUrl }) => {
+        if ((!text && !imageUrl) || submitting || !user) return;
         setSubmitting(true);
         try {
             const res = await fetch(`/api/posts/${post._id}`, {
@@ -74,12 +259,16 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                     action:   "comment",
                     username: user.username,
                     color:    user.color,
-                    text:     commentText.trim(),
+                    text:     text || "",
+                    imageUrl: imageUrl || "",
+                    parentId: replyTo || null,
                 }),
             });
             if (res.ok) {
                 setPost(await res.json());
                 setCommentText("");
+                setReplyTo(null);
+                setReplyToName("");
                 setShowComments(true);
             }
         } finally {
@@ -87,7 +276,27 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
         }
     };
 
-    // ── Delete ────────────────────────────────────────────────────────────────
+    const handleDeleteComment = async (commentId) => {
+        if (!confirm("Delete this comment?")) return;
+        try {
+            const res = await fetch(`/api/posts/${post._id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "deleteComment",
+                    username: user.username,
+                    commentId,
+                }),
+            });
+            if (res.ok) setPost(await res.json());
+        } catch { /* silent */ }
+    };
+
+    const handleReply = (commentId, senderName) => {
+        setReplyTo(commentId);
+        setReplyToName(senderName);
+    };
+
     const handleDelete = async () => {
         if (!user || deleting) return;
         if (!confirm("Delete this post?")) return;
@@ -107,18 +316,20 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     return (
         <article className="border-b border-gray-200 px-4 py-4">
             <div className="flex gap-3">
-                {/* Avatar — links to profile */}
                 <Link href={`/profile/${encodeURIComponent(post.sender)}`} className="shrink-0 mt-0.5">
                     <div
                         className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm select-none hover:opacity-80 transition-opacity"
                         style={{ backgroundColor: post.color }}
                     >
-                        {post.sender?.[0]?.toUpperCase() ?? "?"}
+                        {post.avatarUrl ? (
+                            <img src={post.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                        ) : (
+                            post.sender?.[0]?.toUpperCase() ?? "?"
+                        )}
                     </div>
                 </Link>
 
                 <div className="flex-1 min-w-0">
-                    {/* Header */}
                     <div className="flex items-center gap-2">
                         <Link
                             href={`/profile/${encodeURIComponent(post.sender)}`}
@@ -144,14 +355,12 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                         )}
                     </div>
 
-                    {/* Text */}
                     {post.text && (
                         <p className="text-sm text-gray-900 mt-1 leading-relaxed whitespace-pre-wrap">
                             <RichText text={post.text} onHashtag={onHashtag} />
                         </p>
                     )}
 
-                    {/* Image — full natural height, no cropping */}
                     {post.imageUrl && (
                         <div className="mt-3 rounded-2xl overflow-hidden border border-gray-200 bg-gray-50">
                             <img
@@ -163,9 +372,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                         </div>
                     )}
 
-                    {/* Action bar */}
                     <div className="flex items-center gap-5 mt-3">
-                        {/* Like */}
                         <button
                             onClick={handleLike}
                             disabled={liking || !user}
@@ -178,75 +385,53 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                             {post.likes.length > 0 && <span>{post.likes.length}</span>}
                         </button>
 
-                        {/* Comment toggle */}
                         <button
                             onClick={() => setShowComments((v) => !v)}
                             aria-label="Comments"
                             className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-blue-500 transition-colors"
                         >
                             <CommentIcon />
-                            {post.comments?.length > 0 && <span>{post.comments.length}</span>}
+                            {(post.comments?.length || 0) > 0 && <span>{post.comments.length}</span>}
                         </button>
                     </div>
 
-                    {/* Comments section */}
                     {showComments && (
-                        <div className="mt-3 flex flex-col gap-3">
-                            {/* Existing comments */}
-                            {post.comments?.length > 0 && (
-                                <div className="flex flex-col gap-2">
-                                    {post.comments.map((c, i) => (
-                                        <div key={i} className="flex gap-2 items-start">
-                                            <div
-                                                className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold select-none mt-0.5"
-                                                style={{ backgroundColor: c.color }}
-                                            >
-                                                {c.sender?.[0]?.toUpperCase()}
-                                            </div>
-                                            <div className="flex-1 bg-gray-50 rounded-2xl px-3 py-2">
-                                                <Link
-                                                    href={`/profile/${encodeURIComponent(c.sender)}`}
-                                                    className="font-semibold text-xs text-gray-900 mr-1.5 hover:underline"
-                                                >
-                                                    {c.sender}
-                                                </Link>
-                                                <RichText text={c.text} onHashtag={onHashtag} className="text-xs text-gray-700" />
-                                                <span className="text-gray-300 text-xs ml-1.5">· {timeAgo(c.timeStamp)}</span>
-                                            </div>
-                                        </div>
+                        <div className="mt-3 flex flex-col gap-2">
+                            {topLevelComments.length > 0 && (
+                                <div className="flex flex-col">
+                                    {topLevelComments.map((c) => (
+                                        <ThreadComment
+                                            key={c.commentId}
+                                            comment={c}
+                                            allComments={post.comments || []}
+                                            depth={0}
+                                            onReply={handleReply}
+                                            onHashtag={onHashtag}
+                                            user={user}
+                                            postId={post._id}
+                                            onDelete={handleDeleteComment}
+                                        />
                                     ))}
                                 </div>
                             )}
 
-                            {/* Add comment */}
                             {user && (
-                                <form onSubmit={handleComment} className="flex gap-2 items-center">
-                                    <div
-                                        className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold select-none"
-                                        style={{ backgroundColor: user.color }}
-                                    >
-                                        {user.username?.[0]?.toUpperCase()}
-                                    </div>
-                                    <div className="flex-1 flex items-center border border-gray-200 rounded-full px-3 py-1.5 focus-within:border-gray-400 transition-colors bg-gray-50">
-                                        <input
-                                            type="text"
-                                            value={commentText}
-                                            onChange={(e) => setCommentText(e.target.value)}
-                                            placeholder="Add a comment…"
-                                            maxLength={300}
-                                            className="flex-1 bg-transparent text-xs text-gray-900 placeholder-gray-400 outline-none"
-                                        />
-                                        {commentText.trim() && (
-                                            <button
-                                                type="submit"
-                                                disabled={submitting}
-                                                className="ml-2 text-xs font-bold text-blue-500 hover:text-blue-600 disabled:opacity-50"
-                                            >
-                                                {submitting ? "…" : "Post"}
-                                            </button>
-                                        )}
-                                    </div>
-                                </form>
+                                <div>
+                                    {replyToName && (
+                                        <p className="text-[11px] text-gray-400 mb-1 ml-8">
+                                            Replying to <span className="font-medium text-gray-500">@{replyToName}</span>
+                                            <button onClick={() => { setReplyTo(null); setReplyToName(""); }}
+                                                className="ml-1 text-gray-400 hover:text-gray-600">✕</button>
+                                        </p>
+                                    )}
+                                    <CommentComposer
+                                        user={user}
+                                        onSubmit={handleComment}
+                                        onCancel={replyTo ? () => { setReplyTo(null); setReplyToName(""); } : undefined}
+                                        placeholder={replyTo ? `Reply to @${replyToName}…` : "Add a comment…"}
+                                        submitting={submitting}
+                                    />
+                                </div>
                             )}
                         </div>
                     )}

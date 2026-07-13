@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
+import MentionInput from "@/components/shared/MentionInput";
 
 const CLOUD_NAME     = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET  = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
@@ -35,7 +36,6 @@ export default function Compose({ onPosted }) {
         if (fileRef.current) fileRef.current.value = "";
     };
 
-    // Upload directly from browser → Cloudinary (avoids Vercel 4.5 MB body limit)
     const uploadToCloudinary = (file) =>
         new Promise((resolve, reject) => {
             const fd = new FormData();
@@ -100,7 +100,6 @@ export default function Compose({ onPosted }) {
     return (
         <div className="border-b border-gray-200 px-4 py-4">
             <div className="flex gap-3">
-                {/* Avatar */}
                 <div
                     className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-sm select-none mt-0.5"
                     style={{ backgroundColor: user?.color ?? "#94a3b8" }}
@@ -109,21 +108,15 @@ export default function Compose({ onPosted }) {
                 </div>
 
                 <div className="flex-1 flex flex-col gap-3">
-                    <textarea
+                    <MentionInput
                         value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        placeholder="What's happening?"
-                        rows={2}
+                        onChange={setText}
+                        onSubmit={handlePost}
+                        placeholder="What's happening? Use @ to mention someone"
                         maxLength={500}
-                        disabled={!user}
-                        className="w-full resize-none text-gray-900 placeholder-gray-400 text-base outline-none bg-transparent disabled:cursor-not-allowed"
-                        onInput={(e) => {
-                            e.target.style.height = "auto";
-                            e.target.style.height = e.target.scrollHeight + "px";
-                        }}
+                        submitting={posting}
                     />
 
-                    {/* Image preview */}
                     {preview && (
                         <div className="relative w-full rounded-2xl overflow-hidden border border-gray-200">
                             <img src={preview} alt="Preview" className="w-full max-h-80 object-contain bg-gray-50" />
@@ -152,29 +145,20 @@ export default function Compose({ onPosted }) {
 
                     {error && <p className="text-xs text-red-500">{error}</p>}
 
-                    {/* Toolbar */}
                     <div className="flex items-center justify-between pt-1 border-t border-gray-100">
-                        <div className="flex items-center gap-1">
-                            <button
-                                onClick={() => fileRef.current?.click()}
-                                aria-label="Add image"
-                                disabled={!user || posting}
-                                className="p-2 text-blue-500 hover:bg-blue-50 rounded-full transition-colors disabled:opacity-40"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                    strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-                                    <path strokeLinecap="round" strokeLinejoin="round"
-                                        d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-                                </svg>
-                            </button>
-                            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
-
-                            {text.length > 400 && (
-                                <span className={`text-xs ml-1 ${text.length >= 500 ? "text-red-500" : "text-gray-400"}`}>
-                                    {500 - text.length}
-                                </span>
-                            )}
-                        </div>
+                        <button
+                            onClick={() => fileRef.current?.click()}
+                            aria-label="Add image"
+                            disabled={!user || posting}
+                            className="p-2 text-blue-500 hover:bg-blue-50 rounded-full transition-colors disabled:opacity-40"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round"
+                                    d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                            </svg>
+                        </button>
+                        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
 
                         <button
                             onClick={handlePost}

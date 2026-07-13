@@ -1,14 +1,10 @@
 "use client";
 
-/**
- * Renders post/comment text with:
- * - #hashtag → blue clickable tag (calls onHashtag)
- * - @mention → bold blue text
- */
+import Link from "next/link";
+
 export default function RichText({ text, onHashtag, className = "" }) {
     if (!text) return null;
 
-    // Split on hashtags and mentions
     const parts = text.split(/(#[a-zA-Z0-9_]+|@[a-zA-Z0-9_]+)/g);
 
     return (
@@ -27,10 +23,15 @@ export default function RichText({ text, onHashtag, className = "" }) {
                     );
                 }
                 if (/^@[a-zA-Z0-9_]+$/.test(part)) {
+                    const username = part.slice(1);
                     return (
-                        <span key={i} className="text-blue-500 font-semibold">
+                        <Link
+                            key={i}
+                            href={`/profile/${encodeURIComponent(username)}`}
+                            className="text-blue-500 font-semibold hover:underline"
+                        >
                             {part}
-                        </span>
+                        </Link>
                     );
                 }
                 return <span key={i}>{part}</span>;

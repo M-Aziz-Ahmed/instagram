@@ -6,6 +6,7 @@ import { useUser } from "@/context/UserContext";
 import Compose from "./Compose";
 import Feed from "./Feed";
 import TrendingTags from "./TrendingTags";
+import SearchBar from "./SearchBar";
 import NotificationBell from "@/components/Notifications/NotificationBell";
 import EditProfileModal from "@/components/Auth/EditProfileModal";
 import Link from "next/link";
@@ -61,6 +62,8 @@ export default function FeedClient() {
                             ? <span className="text-blue-600">#{activeTag}</span>
                             : "AnonFeed"}
                     </button>
+
+                    <SearchBar />
 
                     <div className="flex items-center gap-1">
                         <NotificationBell />
