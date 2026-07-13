@@ -17,7 +17,7 @@ export async function GET(request) {
 
         const fromUsernames = [...new Set(notifs.map(n => n.fromUser))];
         const users = await User.find({ username: { $in: fromUsernames } })
-            .select("username isVerified roles")
+            .select("username isVerified isAdmin roles")
             .populate("roles", "name badge color")
             .lean();
         const userMap = Object.fromEntries(users.map(u => [u.username, u]));

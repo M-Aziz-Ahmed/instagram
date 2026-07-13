@@ -15,7 +15,7 @@ async function enrichPosts(posts) {
     if (allUsernames.size === 0) return posts;
 
     const users = await User.find({ username: { $in: [...allUsernames] } })
-        .select("username avatarUrl isVerified roles")
+        .select("username avatarUrl isVerified isAdmin roles")
         .populate("roles", "name badge color")
         .lean();
 
@@ -24,6 +24,7 @@ async function enrichPosts(posts) {
         userMap[u.username] = {
             avatarUrl:  u.avatarUrl || "",
             isVerified: u.isVerified || false,
+            isAdmin:    u.isAdmin || false,
             roles:      (u.roles || []).map((r) => ({
                 id:    r._id?.toString() ?? "",
                 name:  r.name  ?? "",

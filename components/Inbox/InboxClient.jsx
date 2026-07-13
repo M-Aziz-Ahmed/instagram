@@ -134,7 +134,7 @@ export default function InboxClient() {
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-1.5">
                                         <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{convo.username}</p>
-                                        <UserBadges isVerified={convo.user?.isVerified} roles={convo.user?.roles || []} size="sm" />
+                                        <UserBadges isVerified={convo.user?.isVerified} isAdmin={convo.user?.isAdmin} roles={convo.user?.roles || []} size="sm" />
                                     </div>
                                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                                         {convo.lastMessage?.sender === user?.username ? "You: " : ""}

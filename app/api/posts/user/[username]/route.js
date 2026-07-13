@@ -32,6 +32,7 @@ export async function GET(request, { params }) {
         const authorData = profile ? {
             avatarUrl:  profile.avatarUrl,
             isVerified: profile.isVerified,
+            isAdmin:    profile.isAdmin,
             roles:      profile.roles,
         } : null;
 

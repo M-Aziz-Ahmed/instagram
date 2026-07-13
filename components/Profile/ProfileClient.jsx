@@ -61,6 +61,7 @@ export default function ProfileClient({ username }) {
             avatarColor: user?.avatarColor ?? user?.color,
             avatarUrl:   user?.avatarUrl ?? "",
             isVerified:  user?.isVerified ?? false,
+            isAdmin:     user?.isAdmin ?? false,
             roles:       user?.roles ?? [],
           }
         : (data?.profile ?? {
@@ -69,6 +70,7 @@ export default function ProfileClient({ username }) {
             avatarColor: colorFromUsername(username),
             avatarUrl:   "",
             isVerified:  false,
+            isAdmin:     false,
             roles:       [],
           });
 
@@ -126,7 +128,7 @@ export default function ProfileClient({ username }) {
                             <div className="flex-1 min-w-0 pt-1">
                                 <div className="flex items-center gap-2 flex-wrap mb-1">
                                     <h1 className="font-black text-xl text-gray-900 dark:text-gray-100">@{username}</h1>
-                                    <UserBadges isVerified={profile.isVerified} roles={profile.roles} />
+                                    <UserBadges isVerified={profile.isVerified} isAdmin={profile.isAdmin} roles={profile.roles} />
                                     {!isOwn && user && (
                                         <Link
                                             href={`/inbox?user=${encodeURIComponent(username)}`}

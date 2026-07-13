@@ -59,7 +59,7 @@ export async function GET(request) {
                 conversations.map(async (conv) => {
                     const User = (await import("@/models/user")).default;
                     const user = await User.findOne({ username: conv._id })
-                        .select("username avatarUrl color isVerified roles")
+                        .select("username avatarUrl color isVerified isAdmin roles")
                         .populate("roles", "name badge color")
                         .lean();
                     return {

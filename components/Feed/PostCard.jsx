@@ -185,7 +185,7 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                             <Link href={`/profile/${encodeURIComponent(comment.sender)}`} className="hover:underline">
                                 {comment.sender}
                             </Link>
-                            <UserBadges isVerified={author?.isVerified} roles={author?.roles || []} size="sm" />
+                            <UserBadges isVerified={author?.isVerified} isAdmin={author?.isAdmin} roles={author?.roles || []} size="sm" />
                         </span>
                         {comment.text && (
                             <RichText text={comment.text} onHashtag={onHashtag} className="text-xs text-gray-700 dark:text-gray-300" />
@@ -417,7 +417,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                             >
                                 {post.sender}
                             </Link>
-                            <UserBadges isVerified={author?.isVerified} roles={author?.roles || []} size="sm" />
+                            <UserBadges isVerified={author?.isVerified} isAdmin={author?.isAdmin} roles={author?.roles || []} size="sm" />
                         </span>
                         <span className="text-gray-400 dark:text-gray-500 text-xs">&middot;</span>
                         <span className="text-gray-400 dark:text-gray-500 text-xs">{timeAgo(post.timeStamp)}</span>

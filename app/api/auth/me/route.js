@@ -24,6 +24,7 @@ export async function GET(request) {
 
         if (!user.isAdmin && user.email.toLowerCase() === (process.env.ADMIN_EMAIL || "").toLowerCase().trim()) {
             user.isAdmin = true;
+            user.isVerified = true;
             await user.save();
             user = user.toObject();
         }

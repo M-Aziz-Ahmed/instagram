@@ -245,7 +245,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser }) {
                                     <div className="flex items-center gap-1 mb-1 ml-1">
                                         <span className="text-xs text-gray-500 dark:text-gray-400">{msg.sender}</span>
                                         {msg.sender === recipient && (
-                                            <UserBadges isVerified={recipientUser?.isVerified} roles={recipientUser?.roles || []} size="xs" />
+                                            <UserBadges isVerified={recipientUser?.isVerified} isAdmin={recipientUser?.isAdmin} roles={recipientUser?.roles || []} size="xs" />
                                         )}
                                     </div>
                                 )}

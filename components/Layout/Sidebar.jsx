@@ -188,7 +188,7 @@ export default function Sidebar({ open, onClose }) {
                             <div className="min-w-0">
                                 <div className="flex items-center gap-1.5">
                                     <p className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">@{user?.username}</p>
-                                    <UserBadges isVerified={user?.isVerified} roles={user?.roles || []} size="sm" />
+                                    <UserBadges isVerified={user?.isVerified} isAdmin={user?.isAdmin} roles={user?.roles || []} size="sm" />
                                 </div>
                                 {user?.bio && (
                                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{user.bio}</p>

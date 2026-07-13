@@ -32,11 +32,20 @@ export function RoleBadge({ role }) {
 }
 
 /** Shows verified + all role badges for a user */
-export default function UserBadges({ isVerified, roles = [], size = "sm" }) {
-    if (!isVerified && roles.length === 0) return null;
+export default function UserBadges({ isVerified, isAdmin, roles = [], size = "sm" }) {
+    const hasVerified = isVerified || isAdmin;
+    if (!hasVerified && roles.length === 0) return null;
     return (
         <span className="inline-flex items-center gap-1 flex-wrap">
-            {isVerified && <VerifiedBadge />}
+            {hasVerified && <VerifiedBadge />}
+            {isAdmin && (
+                <span
+                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-bold select-none shrink-0"
+                    title="Admin"
+                >
+                    ★ Admin
+                </span>
+            )}
             {roles.map((r) => <RoleBadge key={r.id} role={r} />)}
         </span>
     );

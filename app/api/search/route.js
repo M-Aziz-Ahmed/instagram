@@ -13,7 +13,7 @@ export async function GET(request) {
         const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
 
         const users = await User.find({ username: regex })
-            .select("username avatarColor avatarUrl isVerified roles")
+            .select("username avatarColor avatarUrl isVerified isAdmin roles")
             .populate("roles", "name badge color")
             .limit(10)
             .lean();

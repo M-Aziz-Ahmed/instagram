@@ -184,7 +184,7 @@ function UsersPanel() {
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{u.username || "(no username)"}</span>
-                                    <UserBadges isVerified={u.isVerified} roles={u.roles} />
+                                    <UserBadges isVerified={u.isVerified} isAdmin={u.isAdmin} roles={u.roles} />
                                 </div>
                                 <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{u.email}</p>
                             </div>
