@@ -65,6 +65,7 @@ export default function Chat({ pendingMessage, recipient }) {
     const [loading, setLoading]     = useState(true);
     const bottomRef                  = useRef(null);
     const pendingIdRef               = useRef(null);
+    const initialLoadDone            = useRef(false);
 
     const fetchMessages = useCallback(async () => {
         if (!user || !recipient) return;
@@ -94,10 +95,12 @@ export default function Chat({ pendingMessage, recipient }) {
         if (!recipient) {
             setMessages([]);
             setLoading(false);
+            initialLoadDone.current = false;
             return;
         }
-        setLoading(true);
+        if (!initialLoadDone.current) setLoading(true);
         fetchMessages();
+        initialLoadDone.current = true;
     }, [fetchMessages, recipient]);
 
     useEffect(() => {
