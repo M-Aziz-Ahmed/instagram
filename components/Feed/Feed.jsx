@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import PostCard from "./PostCard";
 
-export default function Feed({ refreshTrigger, activeTag, onHashtag }) {
+export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError }) {
     const [posts, setPosts]     = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -13,6 +13,10 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag }) {
                 ? `/api/posts?tag=${encodeURIComponent(activeTag)}`
                 : "/api/posts";
             const res = await fetch(url, { cache: "no-store" });
+            if (res.status === 401) {
+                onAuthError?.();
+                return;
+            }
             if (res.ok) {
                 const data = await res.json();
                 setPosts(data);
@@ -22,7 +26,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag }) {
         } finally {
             setLoading(false);
         }
-    }, [activeTag]);
+    }, [activeTag, onAuthError]);
 
     useEffect(() => {
         setLoading(true);

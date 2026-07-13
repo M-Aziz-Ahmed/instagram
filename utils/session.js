@@ -1,9 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { getJwtSecret } from "@/utils/jwt";
 
-const SECRET = new TextEncoder().encode(
-    process.env.JWT_SECRET || "anonfeed_fallback_secret_32chars!!"
-);
+const SECRET = getJwtSecret();
 
 const COOKIE = "af_session";
 const MAX_AGE = 60 * 60 * 24 * 365; // 1 year

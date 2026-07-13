@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import Compose from "./Compose";
@@ -53,6 +53,11 @@ export default function FeedClient() {
         await logout();
         router.replace("/login");
     };
+
+    const handleAuthError = useCallback(() => {
+        logout();
+        router.replace("/login");
+    }, [logout, router]);
 
     return (
         <div className="min-h-dvh bg-white">
@@ -128,6 +133,7 @@ export default function FeedClient() {
                         refreshTrigger={refreshTrigger}
                         activeTag={activeTag}
                         onHashtag={handleHashtag}
+                        onAuthError={handleAuthError}
                     />
                 </main>
                 <TrendingTags activeTag={activeTag} onTagClick={handleHashtag} />
