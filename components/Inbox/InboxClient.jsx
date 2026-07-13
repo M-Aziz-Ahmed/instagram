@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import ChatBox from "./ChatBox";
+import Sidebar from "@/components/Layout/Sidebar";
 
 function timeAgo(date) {
     const diff = (Date.now() - new Date(date)) / 1000;
@@ -22,6 +23,7 @@ export default function InboxClient() {
     const [conversations, setConversations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedConvo, setSelectedConvo] = useState(null);
+    const [sidebarOpen, setSidebarOpen]     = useState(false);
 
     const fetchConversations = useCallback(async () => {
         if (!user) return;
@@ -84,7 +86,16 @@ export default function InboxClient() {
                 ${view === "chat" ? "hidden md:flex" : "flex"}
             `}>
                 <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-                    <span className="font-semibold text-base tracking-tight">{user?.username}</span>
+                    <span className="font-semibold text-base tracking-tight">Inbox</span>
+                    <button
+                        onClick={() => setSidebarOpen(true)}
+                        aria-label="Open menu"
+                        className="p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                        </svg>
+                    </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto">
@@ -148,6 +159,8 @@ export default function InboxClient() {
                     recipientUser={selectedConvo?.user}
                 />
             </main>
+
+            <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         </div>
     );
 }

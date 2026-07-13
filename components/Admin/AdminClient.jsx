@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import UserBadges from "@/components/shared/UserBadges";
+import Sidebar from "@/components/Layout/Sidebar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -12,6 +13,7 @@ export default function AdminClient() {
     const { user: me, ready } = useUser();
     const router = useRouter();
     const [tab, setTab] = useState("users");
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     if (!ready || !me) {
         return <div className="flex h-dvh items-center justify-center">
@@ -29,12 +31,21 @@ export default function AdminClient() {
         <div className="min-h-dvh bg-gray-50">
             <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-200">
                 <div className="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3">
-                    <Link href="/" className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors">
+                    <Link href="/" className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
                         </svg>
                     </Link>
-                    <span className="font-bold text-base text-gray-900">Admin Dashboard</span>
+                    <span className="font-bold text-base text-gray-900 flex-1">Admin Dashboard</span>
+                    <button
+                        onClick={() => setSidebarOpen(true)}
+                        aria-label="Open menu"
+                        className="p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                        </svg>
+                    </button>
                 </div>
             </header>
 
@@ -58,6 +69,8 @@ export default function AdminClient() {
                 {tab === "roles" && <RolesPanel />}
                 {tab === "analytics" && <AnalyticsPanel />}
             </div>
+
+            <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         </div>
     );
 }
