@@ -67,12 +67,14 @@ export async function POST(request) {
             };
         }
 
-        const isSecure = request.url.startsWith("https");
+        const isSecure = request.url.startsWith("https") || process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
+        const secure = isSecure;
+        const sameSite = secure ? "none" : "lax";
         const response = NextResponse.json({ ok: true, needsSetup, userId: user._id, user: userData });
         response.cookies.set(COOKIE, token, {
             httpOnly: true,
-            secure:   isSecure,
-            sameSite: "lax",
+            secure,
+            sameSite,
             maxAge:   MAX_AGE,
             path:     "/",
         });

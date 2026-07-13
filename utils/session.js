@@ -23,10 +23,13 @@ export async function verifyToken(token) {
 export async function setSessionCookie(userId) {
     const token = await signToken({ userId });
     const cookieStore = await cookies();
+    const isProd = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
+    const secure = isProd;
+    const sameSite = secure ? "none" : "lax";
     cookieStore.set(COOKIE, token, {
         httpOnly: true,
-        secure:   false,
-        sameSite: "lax",
+        secure,
+        sameSite,
         maxAge:   MAX_AGE,
         path:     "/",
     });

@@ -54,9 +54,12 @@ export async function GET() {
             const remaining = session.exp - now;
             if (remaining < MAX_AGE / 2) {
                 const newToken = await signToken({ userId: user._id.toString() });
+                const isSecure = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
+                const secureFlag = isSecure ? "; Secure" : "";
+                const sameSite = isSecure ? "None" : "Lax";
                 response.headers.set(
                     "Set-Cookie",
-                    `${COOKIE}=${newToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${MAX_AGE}`
+                    `${COOKIE}=${newToken}; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=${MAX_AGE}${secureFlag}`
                 );
             }
         }

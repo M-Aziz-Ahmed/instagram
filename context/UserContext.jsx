@@ -28,7 +28,7 @@ export function UserProvider({ children }) {
             return;
         }
         try {
-            const res = await fetch("/api/auth/me", { credentials: "same-origin" });
+            const res = await fetch("/api/auth/me", { credentials: "include" });
             if (res.ok) {
                 const data = await res.json();
                 setUser(data.user ?? null);
@@ -40,7 +40,7 @@ export function UserProvider({ children }) {
     useEffect(() => { reloadUser(); }, [reloadUser]);
 
     const logout = async () => {
-        await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+        await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
         setUser(null);
     };
 
