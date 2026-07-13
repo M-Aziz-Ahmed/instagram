@@ -43,14 +43,23 @@ export default function Chat({ refreshTrigger, recipient }) {
         }
     }, [user, recipient]);
 
-    // Initial load
-    useEffect(() => { fetchMessages(); }, [fetchMessages, refreshTrigger]);
+    // Initial load and recipient changes
+    useEffect(() => {
+        if (!recipient) {
+            setMessages([]);
+            setLoading(false);
+            return;
+        }
+        setLoading(true);
+        fetchMessages();
+    }, [fetchMessages, refreshTrigger, recipient]);
 
     // Poll every 2 seconds — works on Vercel serverless
     useEffect(() => {
+        if (!recipient) return;
         const interval = setInterval(fetchMessages, 2000);
         return () => clearInterval(interval);
-    }, [fetchMessages]);
+    }, [fetchMessages, recipient]);
 
     // Auto-scroll when messages change
     useEffect(() => {

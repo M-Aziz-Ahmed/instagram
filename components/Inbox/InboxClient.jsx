@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import ChatBox from "./ChatBox";
 
 function timeAgo(date) {
@@ -15,6 +15,7 @@ function timeAgo(date) {
 
 export default function InboxClient() {
     const { user, ready } = useUser();
+    const router = useRouter();
     const searchParams = useSearchParams();
     const targetUser = searchParams.get("user");
     const [view, setView] = useState("list");
@@ -37,21 +38,22 @@ export default function InboxClient() {
     useEffect(() => { fetchConversations(); }, [fetchConversations]);
 
     useEffect(() => {
-        if (targetUser && conversations.length > 0 && !selectedConvo) {
-            const existing = conversations.find((c) => c.username === targetUser);
-            if (existing) {
-                handleSelectConvo(existing);
-            } else {
-                const newConvo = {
-                    username: targetUser,
-                    user: { username: targetUser, avatarUrl: "", color: "#3b82f6" },
-                    lastMessage: null,
-                    unreadCount: 0,
-                };
-                handleSelectConvo(newConvo);
-            }
+        if (!targetUser || selectedConvo?.username === targetUser) return;
+
+        const existing = conversations.find((c) => c.username === targetUser);
+        if (existing) {
+            handleSelectConvo(existing);
+            return;
         }
-    }, [targetUser, conversations]);
+
+        const newConvo = {
+            username: targetUser,
+            user: { username: targetUser, avatarUrl: "", color: "#3b82f6" },
+            lastMessage: null,
+            unreadCount: 0,
+        };
+        handleSelectConvo(newConvo);
+    }, [targetUser, conversations, selectedConvo]);
 
     useEffect(() => {
         const interval = setInterval(fetchConversations, 5000);
@@ -59,6 +61,9 @@ export default function InboxClient() {
     }, [fetchConversations]);
 
     const handleSelectConvo = (convo) => {
+        const url = new URL(window.location.href);
+        url.searchParams.set("user", convo.username);
+        router.replace(url.pathname + url.search, { scroll: false });
         setSelectedConvo(convo);
         setView("chat");
     };
@@ -101,7 +106,7 @@ export default function InboxClient() {
                                 onClick={() => handleSelectConvo(convo)}
                                 className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left ${
                                     selectedConvo?.username === convo.username ? "bg-gray-100" : ""
-                                }`}
+                                } ${targetUser === convo.username ? "bg-gray-100" : ""}`}
                             >
                                 {convo.user?.avatarUrl ? (
                                     <img src={convo.user.avatarUrl} alt="" className="w-14 h-14 rounded-full object-cover shrink-0" />
