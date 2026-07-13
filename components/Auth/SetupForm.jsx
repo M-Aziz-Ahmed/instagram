@@ -66,15 +66,14 @@ export default function SetupForm({ onDone }) {
     return (
         <div className="w-full max-w-sm flex flex-col items-center gap-6">
             <div className="text-center">
-                <h2 className="text-xl font-black text-gray-900">Create your profile</h2>
-                <p className="text-sm text-gray-500 mt-1">Pick a username to get started</p>
+                <h2 className="text-xl font-black text-gray-900 dark:text-gray-100">Create your profile</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Pick a username to get started</p>
             </div>
 
-            {/* Avatar preview + upload */}
             <div className="relative shrink-0">
                 {avatarUrl ? (
                     <img src={avatarUrl} alt="Preview"
-                        className="w-20 h-20 rounded-full object-cover border-2 border-gray-100" />
+                        className="w-20 h-20 rounded-full object-cover border-2 border-gray-100 dark:border-gray-800" />
                 ) : (
                     <div
                         className="w-20 h-20 rounded-full flex items-center justify-center text-white text-3xl font-black select-none transition-colors"
@@ -110,13 +109,12 @@ export default function SetupForm({ onDone }) {
             </div>
 
             <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4 mt-2">
-                {/* Username */}
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                         Username
                     </label>
                     <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">@</span>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm">@</span>
                         <input
                             type="text"
                             value={username}
@@ -124,30 +122,28 @@ export default function SetupForm({ onDone }) {
                             placeholder="yourname"
                             maxLength={30}
                             autoFocus
-                            className="w-full border border-gray-300 rounded-xl pl-7 pr-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-black transition-colors"
+                            className="w-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-xl pl-7 pr-4 py-3 text-sm outline-none focus:border-black dark:focus:border-gray-500 transition-colors"
                         />
                     </div>
                 </div>
 
-                {/* Bio */}
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                        Bio <span className="font-normal normal-case text-gray-400">(optional)</span>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                        Bio <span className="font-normal normal-case text-gray-400 dark:text-gray-500">(optional)</span>
                     </label>
                     <textarea
                         value={bio}
                         onChange={(e) => setBio(e.target.value)}
-                        placeholder="Tell us a bit about yourself…"
+                        placeholder="Tell us a bit about yourself\u2026"
                         maxLength={160}
                         rows={2}
-                        className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-black transition-colors resize-none"
+                        className="w-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none focus:border-black dark:focus:border-gray-500 transition-colors resize-none"
                     />
                 </div>
 
-                {/* Color */}
                 {!avatarUrl && (
                     <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                             Avatar color
                         </label>
                         <div className="flex gap-2 flex-wrap">
@@ -173,9 +169,9 @@ export default function SetupForm({ onDone }) {
                 <button
                     type="submit"
                     disabled={!username.trim() || saving || uploading}
-                    className="w-full bg-black text-white font-bold py-3 rounded-xl disabled:opacity-40 hover:bg-gray-800 transition-colors"
+                    className="w-full bg-black dark:bg-gray-100 text-white dark:text-gray-900 font-bold py-3 rounded-xl disabled:opacity-40 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
                 >
-                    {saving ? "Saving…" : "Let's go →"}
+                    {saving ? "Saving\u2026" : "Let\u2019s go \u2192"}
                 </button>
             </form>
         </div>

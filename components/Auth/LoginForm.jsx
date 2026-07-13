@@ -5,7 +5,7 @@ import { useUser } from "@/context/UserContext";
 
 export default function LoginForm({ onSuccess }) {
     const { reloadUser }          = useUser();
-    const [step, setStep]         = useState("email"); // "email" | "otp"
+    const [step, setStep]         = useState("email");
     const [email, setEmail]       = useState("");
     const [otp, setOtp]           = useState(["", "", "", "", "", ""]);
     const [loading, setLoading]   = useState(false);
@@ -13,7 +13,6 @@ export default function LoginForm({ onSuccess }) {
     const [resendCooldown, setResendCooldown] = useState(0);
     const inputRefs               = useRef([]);
 
-    // ── Step 1: send OTP ──────────────────────────────────────────────────────
     const handleSendOTP = async (e) => {
         e?.preventDefault();
         if (!email.trim() || loading) return;
@@ -44,14 +43,12 @@ export default function LoginForm({ onSuccess }) {
         }, 1000);
     };
 
-    // ── OTP input handling ────────────────────────────────────────────────────
     const handleOtpChange = (i, val) => {
         const v = val.replace(/\D/g, "").slice(0, 1);
         const next = [...otp];
         next[i] = v;
         setOtp(next);
         if (v && i < 5) inputRefs.current[i + 1]?.focus();
-        // Auto-submit when all 6 filled
         if (v && next.every(Boolean)) handleVerify(next.join(""));
     };
 
@@ -70,7 +67,6 @@ export default function LoginForm({ onSuccess }) {
         }
     };
 
-    // ── Step 2: verify OTP ────────────────────────────────────────────────────
     const handleVerify = async (code) => {
         if (loading) return;
         setLoading(true);
@@ -98,7 +94,7 @@ export default function LoginForm({ onSuccess }) {
             {step === "email" ? (
                 <form onSubmit={handleSendOTP} className="flex flex-col gap-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                             Email address
                         </label>
                         <input
@@ -107,25 +103,24 @@ export default function LoginForm({ onSuccess }) {
                             onChange={(e) => { setEmail(e.target.value); setError(""); }}
                             placeholder="you@example.com"
                             autoFocus
-                            className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-black transition-colors"
+                            className="w-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none focus:border-black dark:focus:border-gray-500 transition-colors"
                         />
                     </div>
                     {error && <p className="text-xs text-red-500">{error}</p>}
                     <button
                         type="submit"
                         disabled={!email.trim() || loading}
-                        className="w-full bg-black text-white font-bold py-3 rounded-xl disabled:opacity-40 hover:bg-gray-800 transition-colors"
+                        className="w-full bg-black dark:bg-gray-100 text-white dark:text-gray-900 font-bold py-3 rounded-xl disabled:opacity-40 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
                     >
-                        {loading ? "Sending…" : "Continue"}
+                        {loading ? "Sending\u2026" : "Continue"}
                     </button>
                 </form>
             ) : (
                 <div className="flex flex-col gap-5">
                     <div>
-                        <p className="text-sm text-gray-600 mb-4">
-                            Enter the 6-digit code sent to <span className="font-semibold text-gray-900">{email}</span>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                            Enter the 6-digit code sent to <span className="font-semibold text-gray-900 dark:text-gray-100">{email}</span>
                         </p>
-                        {/* 6-box OTP input */}
                         <div className="flex gap-1.5 sm:gap-2 justify-center" onPaste={handleOtpPaste}>
                             {otp.map((v, i) => (
                                 <input
@@ -138,7 +133,7 @@ export default function LoginForm({ onSuccess }) {
                                     onChange={(e) => handleOtpChange(i, e.target.value)}
                                     onKeyDown={(e) => handleOtpKeyDown(i, e)}
                                     autoFocus={i === 0}
-                                    className="w-10 h-12 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-black border-2 border-gray-200 rounded-xl outline-none focus:border-black transition-colors"
+                                    className="w-10 h-12 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-black border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl outline-none focus:border-black dark:focus:border-gray-500 transition-colors"
                                 />
                             ))}
                         </div>
@@ -148,21 +143,21 @@ export default function LoginForm({ onSuccess }) {
 
                     {loading && (
                         <div className="flex justify-center">
-                            <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-700 rounded-full animate-spin" />
+                            <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-700 dark:border-t-gray-300 rounded-full animate-spin" />
                         </div>
                     )}
 
                     <div className="flex flex-col gap-2 items-center">
                         <button
                             onClick={() => { setStep("email"); setOtp(["","","","","",""]); setError(""); }}
-                            className="text-sm text-gray-500 hover:text-gray-800"
+                            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
                         >
-                            ← Change email
+                            \u2190 Change email
                         </button>
                         <button
                             onClick={() => { if (!resendCooldown) { setOtp(["","","","","",""]); handleSendOTP(); } }}
                             disabled={!!resendCooldown || loading}
-                            className="text-sm text-blue-500 hover:text-blue-600 disabled:opacity-40"
+                            className="text-sm text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-40"
                         >
                             {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
                         </button>

@@ -2,8 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
+import { useToast } from "@/context/ToastContext";
 import RichText from "./RichText";
 import UserBadges from "@/components/shared/UserBadges";
+import BookmarkButton from "@/components/shared/BookmarkButton";
+import FollowButton from "@/components/shared/FollowButton";
 import Link from "next/link";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -108,7 +111,7 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
                 )}
             </div>
             <div className="flex-1">
-                <div className="flex items-center border border-gray-200 rounded-2xl px-3 py-2 focus-within:border-gray-400 transition-colors bg-gray-50">
+                <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-2xl px-3 py-2 focus-within:border-gray-400 dark:focus-within:border-gray-500 transition-colors bg-gray-50 dark:bg-gray-800">
                     <input
                         type="text"
                         value={text}
@@ -116,7 +119,7 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
                         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
                         placeholder={placeholder || "Write a reply\u2026"}
                         maxLength={300}
-                        className="flex-1 bg-transparent text-xs text-gray-900 placeholder-gray-400 outline-none"
+                        className="flex-1 bg-transparent text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
                     />
                     <div className="flex items-center gap-1 ml-2">
                         <button type="button" onClick={() => fileRef.current?.click()}
@@ -143,7 +146,7 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
 
                 {imageUrl && (
                     <div className="relative mt-1.5 inline-block">
-                        <img src={imageUrl} alt="" className="h-16 rounded-lg object-cover border border-gray-200" />
+                        <img src={imageUrl} alt="" className="h-16 rounded-lg object-cover border border-gray-200 dark:border-gray-700" />
                         <button onClick={() => setImageUrl("")}
                             className="absolute -top-1.5 -right-1.5 bg-black/60 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] hover:bg-black/80">
                             &#x2715;
@@ -152,7 +155,7 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
                 )}
 
                 {onCancel && (
-                    <button onClick={onCancel} className="text-xs text-gray-400 hover:text-gray-600 mt-1">
+                    <button onClick={onCancel} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 mt-1">
                         Cancel
                     </button>
                 )}
@@ -171,28 +174,28 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
     const avatarUrl = author?.avatarUrl || comment.avatarUrl;
 
     return (
-        <div className={depth > 0 ? "ml-6 border-l-2 border-gray-100 pl-3" : ""}>
+        <div className={depth > 0 ? "ml-6 border-l-2 border-gray-100 dark:border-gray-700 pl-3" : ""}>
             <div className="flex gap-2 items-start py-1.5">
                 <PostAvatar sender={comment.sender} color={comment.color} avatarUrl={avatarUrl} author={author} size="sm" />
                 <div className="flex-1 min-w-0">
-                    <div className="bg-gray-50 rounded-2xl px-3 py-1.5 inline-block max-w-full">
-                        <span className="font-semibold text-xs text-gray-900 mr-1 inline-flex items-center gap-1">
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl px-3 py-1.5 inline-block max-w-full">
+                        <span className="font-semibold text-xs text-gray-900 dark:text-gray-100 mr-1 inline-flex items-center gap-1">
                             <Link href={`/profile/${encodeURIComponent(comment.sender)}`} className="hover:underline">
                                 {comment.sender}
                             </Link>
                             <UserBadges isVerified={author?.isVerified} roles={author?.roles || []} size="sm" />
                         </span>
                         {comment.text && (
-                            <RichText text={comment.text} onHashtag={onHashtag} className="text-xs text-gray-700" />
+                            <RichText text={comment.text} onHashtag={onHashtag} className="text-xs text-gray-700 dark:text-gray-300" />
                         )}
                     </div>
                     {comment.imageUrl && (
-                        <div className="mt-1 rounded-xl overflow-hidden border border-gray-200 max-w-[80vw] sm:max-w-xs">
+                        <div className="mt-1 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 max-w-[80vw] sm:max-w-xs">
                             <img src={comment.imageUrl} alt="Comment image" className="w-full h-auto block" loading="lazy" />
                         </div>
                     )}
                     <div className="flex items-center gap-2 mt-0.5 px-1">
-                        <span className="text-gray-300 text-[11px]">{timeAgo(comment.timeStamp)}</span>
+                        <span className="text-gray-300 dark:text-gray-600 text-[11px]">{timeAgo(comment.timeStamp)}</span>
                         {user && (
                             <button
                                 onClick={() => onReply(comment.commentId, comment.sender)}
@@ -232,6 +235,7 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
 
 export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     const { user } = useUser();
+    const { showToast } = useToast();
     const [post, setPost]                     = useState(initialPost);
     const [liking, setLiking]                 = useState(false);
     const [deleting, setDeleting]             = useState(false);
@@ -241,7 +245,10 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     const [replyTo, setReplyTo]               = useState(null);
     const [replyToName, setReplyToName]       = useState("");
     const [viewCount, setViewCount]           = useState(initialPost.viewCount || 0);
+    const [showHeart, setShowHeart]           = useState(false);
     const hasTrackedView = useRef(false);
+    const lastTapRef = useRef(0);
+    const imageRef = useRef(null);
 
     const liked = user ? post.likes.includes(user.username) : false;
     const isOwn = user?.username === post.sender;
@@ -284,6 +291,19 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
         }
     };
 
+    // Double-tap to like on image
+    const handleImageTap = () => {
+        if (!user) return;
+        const now = Date.now();
+        if (now - lastTapRef.current < 300) {
+            // Double tap detected
+            if (!liked) handleLike();
+            setShowHeart(true);
+            setTimeout(() => setShowHeart(false), 900);
+        }
+        lastTapRef.current = now;
+    };
+
     const handleComment = async ({ text, imageUrl }) => {
         if ((!text && !imageUrl) || submitting || !user) return;
         setSubmitting(true);
@@ -306,6 +326,9 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                 setReplyTo(null);
                 setReplyToName("");
                 setShowComments(true);
+                showToast(replyTo ? "Reply posted" : "Comment posted", "success");
+            } else {
+                showToast("Failed to post comment", "error");
             }
         } finally {
             setSubmitting(false);
@@ -324,8 +347,15 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                     commentId,
                 }),
             });
-            if (res.ok) setPost(await res.json());
-        } catch { /* silent */ }
+            if (res.ok) {
+                setPost(await res.json());
+                showToast("Comment deleted", "success");
+            } else {
+                showToast("Failed to delete comment", "error");
+            }
+        } catch {
+            showToast("Failed to delete comment", "error");
+        }
     };
 
     const handleReply = (commentId, senderName) => {
@@ -343,14 +373,21 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: user.username }),
             });
-            if (res.ok) onDeleted?.();
+            if (res.ok) {
+                showToast("Post deleted", "success");
+                onDeleted?.();
+            } else {
+                showToast("Failed to delete post", "error");
+            }
+        } catch {
+            showToast("Failed to delete post", "error");
         } finally {
             setDeleting(false);
         }
     };
 
     return (
-        <article className="border-b border-gray-200 px-4 py-4">
+        <article className="border-b border-gray-200 dark:border-gray-800 px-4 py-4">
             <div className="flex gap-3">
                 <PostAvatar sender={post.sender} color={post.color} avatarUrl={post.avatarUrl} author={author} />
 
@@ -359,44 +396,62 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                         <span className="inline-flex items-center gap-1">
                             <Link
                                 href={`/profile/${encodeURIComponent(post.sender)}`}
-                                className="font-bold text-sm text-gray-900 hover:underline"
+                                className="font-bold text-sm text-gray-900 dark:text-gray-100 hover:underline"
                             >
                                 {post.sender}
                             </Link>
                             <UserBadges isVerified={author?.isVerified} roles={author?.roles || []} size="sm" />
                         </span>
-                        <span className="text-gray-400 text-xs">&middot;</span>
-                        <span className="text-gray-400 text-xs">{timeAgo(post.timeStamp)}</span>
-                        {isOwn && (
-                            <button
-                                onClick={handleDelete}
-                                disabled={deleting}
-                                aria-label="Delete post"
-                                className="ml-auto text-gray-300 hover:text-red-500 transition-colors p-2.5 -mr-1 min-h-[44px] min-w-[44px] flex items-center justify-center"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                    strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
-                                    <path strokeLinecap="round" strokeLinejoin="round"
-                                        d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                                </svg>
-                            </button>
-                        )}
+                        <span className="text-gray-400 dark:text-gray-500 text-xs">&middot;</span>
+                        <span className="text-gray-400 dark:text-gray-500 text-xs">{timeAgo(post.timeStamp)}</span>
+                        <div className="ml-auto flex items-center gap-1">
+                            {!isOwn && user && !author?.followers?.includes?.(user.username) && (
+                                <FollowButton username={post.sender} size="xs" />
+                            )}
+                            {isOwn && (
+                                <button
+                                    onClick={handleDelete}
+                                    disabled={deleting}
+                                    aria-label="Delete post"
+                                    className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors p-2.5 -mr-1 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                                        <path strokeLinecap="round" strokeLinejoin="round"
+                                            d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     {post.text && (
-                        <p className="text-sm text-gray-900 mt-1 leading-relaxed whitespace-pre-wrap">
+                        <p className="text-sm text-gray-900 dark:text-gray-100 mt-1 leading-relaxed whitespace-pre-wrap">
                             <RichText text={post.text} onHashtag={onHashtag} />
                         </p>
                     )}
 
                     {post.imageUrl && (
-                        <div className="mt-3 rounded-2xl overflow-hidden border border-gray-200 bg-gray-50">
+                        <div
+                            ref={imageRef}
+                            className="mt-3 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 relative cursor-pointer select-none"
+                            onClick={handleImageTap}
+                            onTouchEnd={handleImageTap}
+                        >
                             <img
                                 src={post.imageUrl}
                                 alt="Post image"
                                 className="w-full h-auto block"
                                 loading="lazy"
                             />
+                            {/* Double-tap heart animation */}
+                            {showHeart && (
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-20 h-20 text-white drop-shadow-lg animate-heart-burst">
+                                        <path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
+                                    </svg>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -406,7 +461,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                             disabled={liking || !user}
                             aria-label={liked ? "Unlike" : "Like"}
                             className={`flex items-center gap-1.5 text-sm transition-colors group disabled:cursor-not-allowed min-h-[44px] px-2 py-1 rounded-lg ${
-                                liked ? "text-red-500" : "text-gray-400 hover:text-red-500"
+                                liked ? "text-red-500" : "text-gray-400 dark:text-gray-500 hover:text-red-500"
                             }`}
                         >
                             <HeartIcon filled={liked} />
@@ -416,13 +471,14 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                         <button
                             onClick={() => setShowComments((v) => !v)}
                             aria-label="Comments"
-                            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-blue-500 transition-colors min-h-[44px] px-2 py-1 rounded-lg"
+                            className="flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-blue-500 transition-colors min-h-[44px] px-2 py-1 rounded-lg"
                         >
                             <CommentIcon />
                             {(post.comments?.length || 0) > 0 && <span>{post.comments.length}</span>}
                         </button>
+
                         {viewCount > 0 && (
-                            <span className="flex items-center gap-1 text-sm text-gray-400 ml-1">
+                            <span className="flex items-center gap-1 text-sm text-gray-400 dark:text-gray-500 ml-1">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
@@ -430,6 +486,10 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                                 <span>{viewCount}</span>
                             </span>
                         )}
+
+                        <div className="ml-auto">
+                            <BookmarkButton postId={post._id} />
+                        </div>
                     </div>
 
                     {showComments && (
@@ -455,10 +515,10 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                             {user && (
                                 <div>
                                     {replyToName && (
-                                        <p className="text-[11px] text-gray-400 mb-1 ml-8">
-                                            Replying to <span className="font-medium text-gray-500">@{replyToName}</span>
+                                        <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-1 ml-8">
+                                            Replying to <span className="font-medium text-gray-500 dark:text-gray-400">@{replyToName}</span>
                                             <button onClick={() => { setReplyTo(null); setReplyToName(""); }}
-                                                className="ml-1 text-gray-400 hover:text-gray-600">&#x2715;</button>
+                                                className="ml-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">&#x2715;</button>
                                         </p>
                                     )}
                                     <CommentComposer

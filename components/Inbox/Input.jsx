@@ -38,8 +38,7 @@ export default function Input({ onMessageSent, recipient }) {
 
     return (
         <div className="flex items-center gap-2">
-            {/* Emoji */}
-            <button aria-label="Emoji" className="shrink-0 text-gray-500 hover:text-gray-800 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center">
+            <button aria-label="Emoji" className="shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                     strokeWidth={1.8} stroke="currentColor" className="w-6 h-6">
                     <path strokeLinecap="round" strokeLinejoin="round"
@@ -47,19 +46,18 @@ export default function Input({ onMessageSent, recipient }) {
                 </svg>
             </button>
 
-            {/* Input field */}
-            <div className="flex-1 flex items-center border border-gray-300 rounded-full px-4 py-2.5 focus-within:border-gray-400 transition-colors min-h-[44px]">
+            <div className="flex-1 flex items-center border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-full px-4 py-2.5 focus-within:border-gray-400 dark:focus-within:border-gray-500 transition-colors min-h-[44px]">
                 <input
                     type="text"
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder={recipient ? "Message…" : "Select a conversation…"}
+                    placeholder={recipient ? "Message\u2026" : "Select a conversation\u2026"}
                     disabled={!user || !recipient}
-                    className="flex-1 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none disabled:cursor-not-allowed"
+                    className="flex-1 bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none disabled:cursor-not-allowed"
                 />
                 {!hasText && (
-                    <button aria-label="Voice message" className="shrink-0 ml-2 text-gray-500 hover:text-gray-800 transition-colors p-2 min-h-[44px] min-w-[44px] flex items-center justify-center">
+                    <button aria-label="Voice message" className="shrink-0 ml-2 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 transition-colors p-2 min-h-[44px] min-w-[44px] flex items-center justify-center">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                             strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
                             <path strokeLinecap="round" strokeLinejoin="round"
@@ -69,13 +67,12 @@ export default function Input({ onMessageSent, recipient }) {
                 )}
             </div>
 
-            {/* Send / Like */}
             {hasText ? (
                 <button
                     onClick={handleSend}
                     disabled={sending}
                     aria-label="Send"
-                    className="shrink-0 text-blue-500 hover:text-blue-600 disabled:opacity-50 transition-colors font-semibold text-sm"
+                    className="shrink-0 text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50 transition-colors font-semibold text-sm"
                 >
                     {sending
                         ? <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
@@ -83,7 +80,7 @@ export default function Input({ onMessageSent, recipient }) {
                     }
                 </button>
             ) : (
-                <button aria-label="Like" className="shrink-0 text-gray-500 hover:text-gray-800 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center">
+                <button aria-label="Like" className="shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                         strokeWidth={1.8} stroke="currentColor" className="w-6 h-6">
                         <path strokeLinecap="round" strokeLinejoin="round"

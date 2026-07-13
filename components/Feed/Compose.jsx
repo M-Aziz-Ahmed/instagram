@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
+import { useToast } from "@/context/ToastContext";
 import MentionInput from "@/components/shared/MentionInput";
 
 const CLOUD_NAME     = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -9,6 +10,7 @@ const UPLOAD_PRESET  = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
 export default function Compose({ onPosted }) {
     const { user } = useUser();
+    const { showToast } = useToast();
     const [text, setText]                 = useState("");
     const [preview, setPreview]           = useState(null);
     const [imageFile, setImageFile]       = useState(null);
@@ -85,6 +87,7 @@ export default function Compose({ onPosted }) {
             }
             setText("");
             removeImage();
+            showToast("Post published", "success");
             if (onPosted) onPosted();
         } catch (err) {
             console.error(err);
@@ -98,13 +101,17 @@ export default function Compose({ onPosted }) {
     const canPost = (text.trim().length > 0 || !!imageFile) && !posting;
 
     return (
-        <div className="border-b border-gray-200 py-4">
+        <div className="border-b border-gray-200 dark:border-gray-800 py-4">
             <div className="flex gap-3">
                 <div
                     className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-sm select-none mt-0.5"
                     style={{ backgroundColor: user?.color ?? "#94a3b8" }}
                 >
-                    {user?.username?.[0]?.toUpperCase() ?? "?"}
+                    {user?.avatarUrl ? (
+                        <img src={user.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                    ) : (
+                        user?.username?.[0]?.toUpperCase() ?? "?"
+                    )}
                 </div>
 
                 <div className="flex-1 flex flex-col gap-3">
@@ -118,10 +125,10 @@ export default function Compose({ onPosted }) {
                     />
 
                     {preview && (
-                        <div className="relative w-full rounded-2xl overflow-hidden border border-gray-200">
-                            <img src={preview} alt="Preview" className="w-full max-h-80 object-contain bg-gray-50" />
+                        <div className="relative w-full rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                            <img src={preview} alt="Preview" className="w-full max-h-80 object-contain bg-gray-50 dark:bg-gray-800" />
                             {posting && uploadProgress > 0 && uploadProgress < 100 && (
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
+                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-700">
                                     <div
                                         className="h-full bg-blue-500 transition-all duration-200"
                                         style={{ width: `${uploadProgress}%` }}
@@ -145,12 +152,12 @@ export default function Compose({ onPosted }) {
 
                     {error && <p className="text-xs text-red-500">{error}</p>}
 
-                    <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+                    <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-gray-800">
                         <button
                             onClick={() => fileRef.current?.click()}
                             aria-label="Add image"
                             disabled={!user || posting}
-                            className="p-2 text-blue-500 hover:bg-blue-50 rounded-full transition-colors disabled:opacity-40"
+                            className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors disabled:opacity-40"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                 strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
@@ -163,12 +170,12 @@ export default function Compose({ onPosted }) {
                         <button
                             onClick={handlePost}
                             disabled={!canPost}
-                            className="bg-black text-white text-sm font-bold px-5 py-1.5 rounded-full hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors min-w-16 flex items-center justify-center"
+                            className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-bold px-5 py-1.5 rounded-full hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors min-w-16 flex items-center justify-center"
                         >
                             {posting ? (
                                 <span className="flex items-center gap-1.5">
-                                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                    {uploadProgress > 0 && uploadProgress < 100 ? `${uploadProgress}%` : "…"}
+                                    <div className="w-3.5 h-3.5 border-2 border-white dark:border-gray-900 border-t-transparent rounded-full animate-spin" />
+                                    {uploadProgress > 0 && uploadProgress < 100 ? `${uploadProgress}%` : "\u2026"}
                                 </span>
                             ) : "Post"}
                         </button>

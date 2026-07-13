@@ -19,9 +19,8 @@ export default function Chat({ refreshTrigger, recipient }) {
     const [messages, setMessages]   = useState([]);
     const [loading, setLoading]     = useState(true);
     const bottomRef                  = useRef(null);
-    const latestIdRef                = useRef(null); // track last known message _id
+    const latestIdRef                = useRef(null);
 
-    // ── fetch (initial + poll) ────────────────────────────────────────────────
     const fetchMessages = useCallback(async () => {
         if (!user || !recipient) return;
         try {
@@ -43,7 +42,6 @@ export default function Chat({ refreshTrigger, recipient }) {
         }
     }, [user, recipient]);
 
-    // Initial load and recipient changes
     useEffect(() => {
         if (!recipient) {
             setMessages([]);
@@ -54,24 +52,21 @@ export default function Chat({ refreshTrigger, recipient }) {
         fetchMessages();
     }, [fetchMessages, refreshTrigger, recipient]);
 
-    // Poll every 2 seconds — works on Vercel serverless
     useEffect(() => {
         if (!recipient) return;
         const interval = setInterval(fetchMessages, 2000);
         return () => clearInterval(interval);
     }, [fetchMessages, recipient]);
 
-    // Auto-scroll when messages change
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
-    // ── render states ─────────────────────────────────────────────────────────
     if (loading) {
         return (
-            <div className="flex flex-col items-center justify-center h-full gap-2 text-gray-400">
-                <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin" />
-                <p className="text-sm">Loading…</p>
+            <div className="flex flex-col items-center justify-center h-full gap-2 text-gray-400 dark:text-gray-500">
+                <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-700 border-t-gray-500 dark:border-t-gray-400 rounded-full animate-spin" />
+                <p className="text-sm">Loading\u2026</p>
             </div>
         );
     }
@@ -85,8 +80,8 @@ export default function Chat({ refreshTrigger, recipient }) {
                 >
                     {user?.username?.[0]?.toUpperCase() ?? "?"}
                 </div>
-                <p className="font-semibold text-gray-900">{user?.username}</p>
-                <p className="text-sm text-gray-500">Select a conversation to start messaging</p>
+                <p className="font-semibold text-gray-900 dark:text-gray-100">{user?.username}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Select a conversation to start messaging</p>
             </div>
         );
     }
@@ -95,12 +90,12 @@ export default function Chat({ refreshTrigger, recipient }) {
         return (
             <div className="flex flex-col items-center justify-center h-full gap-3 select-none">
                 <div
-                    className="w-20 h-20 rounded-full flex items-center justify-center text-white text-3xl font-bold bg-gray-300"
+                    className="w-20 h-20 rounded-full flex items-center justify-center text-white text-3xl font-bold bg-gray-300 dark:bg-gray-700"
                 >
                     {recipient?.[0]?.toUpperCase() ?? "?"}
                 </div>
-                <p className="font-semibold text-gray-900">{recipient}</p>
-                <p className="text-sm text-gray-500">No messages yet. Say hello 👋</p>
+                <p className="font-semibold text-gray-900 dark:text-gray-100">{recipient}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">No messages yet. Say hello</p>
             </div>
         );
     }
@@ -138,7 +133,7 @@ export default function Chat({ refreshTrigger, recipient }) {
                     <div key={msg._id}>
                         {showTime && (
                             <div className="flex justify-center my-4">
-                                <span className="text-xs text-gray-400 bg-gray-50 px-3 py-1 rounded-full">
+                                <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-full">
                                     {new Date(msg.timeStamp).toLocaleString([], {
                                         month: "short", day: "numeric",
                                         hour: "2-digit", minute: "2-digit",
@@ -156,13 +151,13 @@ export default function Chat({ refreshTrigger, recipient }) {
 
                             <div className="flex flex-col max-w-[72vw] sm:max-w-xs lg:max-w-md">
                                 {!isMine && !sameAsPrev && (
-                                    <span className="text-xs text-gray-500 mb-1 ml-1">{msg.sender}</span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400 mb-1 ml-1">{msg.sender}</span>
                                 )}
                                 <div
                                     className={`px-4 py-2.5 text-sm leading-snug wrap-break-word ${rounding} ${
                                         isMine
                                             ? "bg-blue-500 text-white"
-                                            : "bg-gray-100 text-gray-900"
+                                            : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                                     }`}
                                 >
                                     {msg.text}

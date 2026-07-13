@@ -20,19 +20,16 @@ export default function ProfileSetup({ onDone }) {
     const initial = username.trim() ? username.trim()[0].toUpperCase() : "?";
 
     return (
-        /* Full-screen overlay — scrollable on short/small screens */
-        <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-white overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-white dark:bg-gray-950 overflow-y-auto">
             <div className="w-full max-w-sm px-6 md:px-8 py-8 md:py-10 flex flex-col items-center gap-5 md:gap-6 min-h-full md:min-h-0 justify-center">
 
-                {/* Logo */}
-                <span className="font-black text-2xl tracking-tight text-gray-900">AnonFeed</span>
+                <span className="font-black text-2xl tracking-tight text-gray-900 dark:text-gray-100">AnonFeed</span>
 
                 <div className="text-center">
-                    <h1 className="text-xl font-semibold text-gray-900">Set up your profile</h1>
-                    <p className="text-sm text-gray-500 mt-1">No account needed — just pick a name and color.</p>
+                    <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Set up your profile</h1>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">No account needed — just pick a name and color.</p>
                 </div>
 
-                {/* Avatar preview */}
                 <div
                     className="w-20 h-20 rounded-full flex items-center justify-center text-white text-3xl font-bold select-none transition-colors duration-200"
                     style={{ backgroundColor: color }}
@@ -41,7 +38,6 @@ export default function ProfileSetup({ onDone }) {
                 </div>
 
                 <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
-                    {/* Username input */}
                     <div>
                         <input
                             type="text"
@@ -50,14 +46,13 @@ export default function ProfileSetup({ onDone }) {
                             placeholder="Username"
                             maxLength={30}
                             autoFocus
-                            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-500 transition-colors"
+                            className="w-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-gray-500 dark:focus:border-gray-500 transition-colors"
                         />
                         {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
                     </div>
 
-                    {/* Color picker */}
                     <div>
-                        <p className="text-xs text-gray-500 mb-2">Avatar color</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Avatar color</p>
                         <div className="flex gap-2 flex-wrap">
                             {AVATAR_COLORS.map((c) => (
                                 <button
@@ -83,7 +78,7 @@ export default function ProfileSetup({ onDone }) {
                         <button
                             type="button"
                             onClick={onDone}
-                            className="w-full text-sm text-gray-500 hover:text-gray-700 transition-colors py-1"
+                            className="w-full text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors py-1"
                         >
                             Cancel
                         </button>

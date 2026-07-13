@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useUser } from "@/context/UserContext";
+import { useTheme } from "@/context/ThemeContext";
 import { useRouter, usePathname } from "next/navigation";
 import EditProfileModal from "@/components/Auth/EditProfileModal";
 import Link from "next/link";
@@ -9,8 +10,8 @@ import Link from "next/link";
 function NavItem({ href, icon, label, active, onClick }) {
     const classes = `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors min-h-[48px] ${
         active
-            ? "bg-gray-100 text-gray-900"
-            : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/60 hover:text-gray-900 dark:hover:text-gray-100"
     }`;
 
     if (href) {
@@ -62,6 +63,30 @@ function AdminIcon() {
     );
 }
 
+function BookmarkIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+        </svg>
+    );
+}
+
+function SunIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+        </svg>
+    );
+}
+
+function MoonIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
+        </svg>
+    );
+}
+
 function SettingsIcon() {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
@@ -81,6 +106,7 @@ function LogoutIcon() {
 
 export default function Sidebar({ open, onClose }) {
     const { user, logout } = useUser();
+    const { theme, toggleTheme } = useTheme();
     const router = useRouter();
     const pathname = usePathname();
     const [editingProfile, setEditingProfile] = useState(false);
@@ -112,7 +138,7 @@ export default function Sidebar({ open, onClose }) {
 
             {/* Sidebar panel */}
             <aside
-                className={`fixed top-0 left-0 h-full w-72 bg-white z-50 shadow-xl transition-transform duration-300 ease-in-out lg:translate-x-0 lg:shadow-none lg:border-r lg:border-gray-200 ${
+                className={`fixed top-0 left-0 h-full w-72 bg-white dark:bg-gray-900 z-50 shadow-xl transition-transform duration-300 ease-in-out lg:translate-x-0 lg:shadow-none lg:border-r lg:border-gray-200 dark:lg:border-gray-800 ${
                     open ? "translate-x-0" : "-translate-x-full"
                 }`}
             >
@@ -131,9 +157,9 @@ export default function Sidebar({ open, onClose }) {
                                 )}
                             </div>
                             <div className="min-w-0">
-                                <p className="font-bold text-sm text-gray-900 truncate">@{user?.username}</p>
+                                <p className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">@{user?.username}</p>
                                 {user?.bio && (
-                                    <p className="text-xs text-gray-500 truncate mt-0.5">{user.bio}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{user.bio}</p>
                                 )}
                             </div>
                         </div>
@@ -156,6 +182,13 @@ export default function Sidebar({ open, onClose }) {
                             onClick={handleNavClick}
                         />
                         <NavItem
+                            href="/bookmarks"
+                            icon={<BookmarkIcon />}
+                            label="Bookmarks"
+                            active={isActive("/bookmarks")}
+                            onClick={handleNavClick}
+                        />
+                        <NavItem
                             href="/inbox"
                             icon={<InboxIcon />}
                             label="Inbox"
@@ -174,12 +207,17 @@ export default function Sidebar({ open, onClose }) {
                     </nav>
 
                     {/* Settings section */}
-                    <div className="border-t border-gray-200 px-3 py-3 space-y-1">
-                        <p className="px-4 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Settings</p>
+                    <div className="border-t border-gray-200 dark:border-gray-800 px-3 py-3 space-y-1">
+                        <p className="px-4 py-1.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Settings</p>
                         <NavItem
                             icon={<SettingsIcon />}
                             label="Edit Profile"
                             onClick={() => { handleNavClick(); setEditingProfile(true); }}
+                        />
+                        <NavItem
+                            icon={theme === "dark" ? <SunIcon /> : <MoonIcon />}
+                            label={theme === "dark" ? "Light mode" : "Dark mode"}
+                            onClick={() => { toggleTheme(); }}
                         />
                         <NavItem
                             icon={<LogoutIcon />}

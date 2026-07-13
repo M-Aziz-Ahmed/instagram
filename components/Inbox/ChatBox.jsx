@@ -14,7 +14,7 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
     if (!ready) {
         return (
             <div className="flex items-center justify-center h-full">
-                <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
             </div>
         );
     }
@@ -27,14 +27,13 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
         <div className="flex flex-col h-full">
 
             {/* ── Header ──────────────────────────────────────────────────── */}
-            <header className="flex items-center gap-2 px-3 md:px-6 py-3 md:py-4 border-b border-gray-200 shrink-0">
+            <header className="flex items-center gap-2 px-3 md:px-6 py-3 md:py-4 border-b border-gray-200 dark:border-gray-800 shrink-0">
 
-                {/* Back button — mobile only */}
                 {onBack && (
                     <button
                         onClick={onBack}
                         aria-label="Back"
-                        className="md:hidden text-gray-800 hover:text-gray-600 transition-colors p-2.5 -ml-1 shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        className="md:hidden text-gray-800 dark:text-gray-200 hover:text-gray-600 dark:hover:text-gray-400 transition-colors p-2.5 -ml-1 shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                             strokeWidth={2} stroke="currentColor" className="w-6 h-6">
@@ -43,7 +42,6 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
                     </button>
                 )}
 
-                {/* Avatar */}
                 <div
                     className="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center text-white font-bold text-sm md:text-base select-none shrink-0"
                     style={{ backgroundColor: recipientUser?.color || "#3b82f6" }}
@@ -55,19 +53,16 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
                     )}
                 </div>
 
-                {/* Name */}
                 <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-gray-900 truncate">{recipient || user?.username}</p>
+                    <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{recipient || user?.username}</p>
                 </div>
 
-                {/* Action icons */}
-                <div className="flex items-center gap-1 md:gap-2 text-gray-700 shrink-0">
-                    {/* Edit profile */}
+                <div className="flex items-center gap-1 md:gap-2 text-gray-700 dark:text-gray-400 shrink-0">
                     <button
                         onClick={() => setEditingProfile(true)}
                         aria-label="Edit profile"
                         title="Edit profile"
-                        className="hover:text-gray-900 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                             strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
@@ -76,8 +71,7 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
                         </svg>
                     </button>
 
-                    {/* Video call */}
-                    <button aria-label="Video call" className="hover:text-gray-900 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center">
+                    <button aria-label="Video call" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                             strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 md:w-6 md:h-6">
                             <path strokeLinecap="round" strokeLinejoin="round"
@@ -85,8 +79,7 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
                         </svg>
                     </button>
 
-                    {/* Info */}
-                    <button aria-label="Info" className="hover:text-gray-900 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center">
+                    <button aria-label="Info" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                             strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 md:w-6 md:h-6">
                             <path strokeLinecap="round" strokeLinejoin="round"
@@ -102,7 +95,7 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
             </div>
 
             {/* ── Input ───────────────────────────────────────────────────── */}
-            <div className="px-3 md:px-4 py-2.5 md:py-3 border-t border-gray-200 shrink-0">
+            <div className="px-3 md:px-4 py-2.5 md:py-3 border-t border-gray-200 dark:border-gray-800 shrink-0">
                 <Input onMessageSent={() => setRefreshTrigger((n) => n + 1)} recipient={recipient} />
             </div>
         </div>

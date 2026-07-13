@@ -48,8 +48,26 @@ export async function GET(request) {
         await connectDB();
         const { searchParams } = new URL(request.url);
         const tag = searchParams.get("tag");
+        const feed = searchParams.get("feed");
+        const username = searchParams.get("username");
 
-        const query = tag ? { hashtags: tag.toLowerCase() } : {};
+        let query = {};
+
+        if (tag) {
+            query.hashtags = tag.toLowerCase();
+        }
+
+        // "For You" feed: only posts from followed users
+        if (feed === "following" && username) {
+            const user = await User.findOne({ username }).select("following").lean();
+            if (user?.following?.length) {
+                query.sender = { $in: user.following };
+            } else {
+                // Following nobody → return empty
+                return Response.json([]);
+            }
+        }
+
         let posts = await Post.find(query).sort({ timeStamp: -1 }).lean();
         posts = await enrichPosts(posts);
         return Response.json(posts);

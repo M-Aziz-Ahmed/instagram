@@ -104,7 +104,7 @@ export default function MentionInput({
                 placeholder={placeholder}
                 maxLength={maxLength}
                 rows={1}
-                className="w-full bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none resize-none"
+                className="w-full bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none"
                 onInput={(e) => {
                     e.target.style.height = "auto";
                     e.target.style.height = e.target.scrollHeight + "px";
@@ -114,15 +114,15 @@ export default function MentionInput({
             {showDropdown && results.length > 0 && (
                 <div
                     ref={dropdownRef}
-                    className="absolute z-30 bottom-full mb-1 left-0 w-56 sm:w-64 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto"
+                    className="absolute z-30 bottom-full mb-1 left-0 w-56 sm:w-64 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto"
                 >
                     {results.map((u, i) => (
                         <button
                             key={u._id || u.username}
                             type="button"
                             onClick={() => insertMention(u.username)}
-                            className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${
-                                i === highlight ? "bg-gray-100" : ""
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
+                                i === highlight ? "bg-gray-100 dark:bg-gray-800" : ""
                             }`}
                         >
                             <div
@@ -135,7 +135,7 @@ export default function MentionInput({
                                     u.username?.[0]?.toUpperCase()
                                 )}
                             </div>
-                            <span className="font-medium text-gray-900 truncate">{u.username}</span>
+                            <span className="font-medium text-gray-900 dark:text-gray-100 truncate">{u.username}</span>
                         </button>
                     ))}
                 </div>

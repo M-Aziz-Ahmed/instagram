@@ -6,20 +6,20 @@ import UserBadges from "@/components/shared/UserBadges";
 
 function SearchDropdown({ users, posts, loading, hasResults, onClose }) {
     return (
-        <div className="bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden max-h-[70vh] overflow-y-auto">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden max-h-[70vh] overflow-y-auto">
             {!loading && !hasResults && (
-                <p className="text-sm text-gray-400 text-center py-6">No results</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-6">No results</p>
             )}
 
             {users.length > 0 && (
                 <div>
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 pt-3 pb-1">People</p>
+                    <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-3 pt-3 pb-1">People</p>
                     {users.map((u) => (
                         <Link
                             key={u._id || u.username}
                             href={`/profile/${encodeURIComponent(u.username)}`}
                             onClick={onClose}
-                            className="flex items-center gap-3 px-3 py-3 hover:bg-gray-50 transition-colors min-h-[48px]"
+                            className="flex items-center gap-3 px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors min-h-[48px]"
                         >
                             <div
                                 className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
@@ -32,7 +32,7 @@ function SearchDropdown({ users, posts, loading, hasResults, onClose }) {
                                 )}
                             </div>
                             <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="font-medium text-sm text-gray-900 truncate">{u.username}</span>
+                                <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{u.username}</span>
                                 <UserBadges user={u} size="sm" />
                             </div>
                         </Link>
@@ -42,13 +42,13 @@ function SearchDropdown({ users, posts, loading, hasResults, onClose }) {
 
             {posts.length > 0 && (
                 <div>
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 pt-3 pb-1">Posts</p>
+                    <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-3 pt-3 pb-1">Posts</p>
                     {posts.map((p) => (
-                        <div key={p._id} className="px-3 py-3 hover:bg-gray-50 transition-colors min-h-[48px]">
-                            <p className="text-xs text-gray-400 mb-0.5">
+                        <div key={p._id} className="px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors min-h-[48px]">
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">
                                 {p.sender} · {new Date(p.timeStamp).toLocaleDateString()}
                             </p>
-                            <p className="text-sm text-gray-900 line-clamp-2">{p.text}</p>
+                            <p className="text-sm text-gray-900 dark:text-gray-100 line-clamp-2">{p.text}</p>
                         </div>
                     ))}
                 </div>
@@ -105,7 +105,7 @@ export default function SearchBar() {
             {/* Mobile: search icon */}
             <button
                 onClick={() => setMobileOpen((v) => !v)}
-                className="sm:hidden p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="sm:hidden p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                 aria-label="Search"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -118,9 +118,9 @@ export default function SearchBar() {
             {/* Mobile expanded search */}
             {mobileOpen && (
                 <div className="sm:hidden fixed inset-x-0 top-14 z-50 px-4">
-                    <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden flex items-center">
+                    <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden flex items-center">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                            strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 absolute left-3 text-gray-400 pointer-events-none">
+                            strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 absolute left-3 text-gray-400 dark:text-gray-500 pointer-events-none">
                             <path strokeLinecap="round" strokeLinejoin="round"
                                 d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                         </svg>
@@ -129,13 +129,13 @@ export default function SearchBar() {
                             value={query}
                             onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
                             onFocus={() => query.trim() && setOpen(true)}
-                            placeholder="Search…"
+                            placeholder="Search\u2026"
                             autoFocus
-                            className="w-full pl-9 pr-4 py-3.5 text-sm bg-white rounded-2xl outline-none text-gray-900 placeholder-gray-400 min-h-[48px]"
+                            className="w-full pl-9 pr-4 py-3.5 text-sm bg-white dark:bg-gray-900 rounded-2xl outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 min-h-[48px]"
                         />
                         {loading && (
                             <div className="absolute right-3 text-gray-400">
-                                <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin" />
+                                <div className="w-4 h-4 border-2 border-gray-300 dark:border-gray-600 border-t-gray-500 dark:border-t-gray-400 rounded-full animate-spin" />
                             </div>
                         )}
                     </div>
@@ -150,7 +150,7 @@ export default function SearchBar() {
             {/* Desktop: full search input */}
             <div className="relative hidden sm:block">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                    strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                    strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 pointer-events-none">
                     <path strokeLinecap="round" strokeLinejoin="round"
                         d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                 </svg>
@@ -159,12 +159,12 @@ export default function SearchBar() {
                     value={query}
                     onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
                     onFocus={() => query.trim() && setOpen(true)}
-                    placeholder="Search…"
-                    className="w-full pl-9 pr-3 py-2.5 text-sm bg-gray-100 rounded-full outline-none focus:bg-white focus:ring-2 focus:ring-gray-200 transition-all text-gray-900 placeholder-gray-400 min-h-[44px]"
+                    placeholder="Search\u2026"
+                    className="w-full pl-9 pr-3 py-2.5 text-sm bg-gray-100 dark:bg-gray-800 rounded-full outline-none focus:bg-white dark:focus:bg-gray-700 focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-600 transition-all text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 min-h-[44px]"
                 />
                 {loading && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        <div className="w-3.5 h-3.5 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin" />
+                        <div className="w-3.5 h-3.5 border-2 border-gray-300 dark:border-gray-600 border-t-gray-500 dark:border-t-gray-400 rounded-full animate-spin" />
                     </div>
                 )}
                 {open && query.trim() && (

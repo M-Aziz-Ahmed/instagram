@@ -2,12 +2,14 @@
 
 import { useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
+import { useToast } from "@/context/ToastContext";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
 export default function EditProfileModal({ onClose }) {
     const { user, reloadUser, AVATAR_COLORS } = useUser();
+    const { showToast } = useToast();
     const [bio, setBio]             = useState(user?.bio ?? "");
     const [color, setColor]         = useState(user?.avatarColor ?? AVATAR_COLORS[0]);
     const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl ?? "");
@@ -51,6 +53,7 @@ export default function EditProfileModal({ onClose }) {
             const data = await res.json();
             if (!res.ok) { setError(data.error); return; }
             await reloadUser();
+            showToast("Profile updated", "success");
             onClose();
         } catch {
             setError("Something went wrong.");
@@ -63,10 +66,10 @@ export default function EditProfileModal({ onClose }) {
 
     return (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-2xl w-full max-w-sm p-6 flex flex-col gap-5" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm p-6 flex flex-col gap-5" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
-                    <h2 className="font-bold text-lg">Edit profile</h2>
-                        <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center" aria-label="Close">
+                    <h2 className="font-bold text-lg text-gray-900 dark:text-gray-100">Edit profile</h2>
+                        <button onClick={onClose} className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center" aria-label="Close">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                             strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -79,7 +82,7 @@ export default function EditProfileModal({ onClose }) {
                     <div className="relative shrink-0">
                         {avatarUrl ? (
                             <img src={avatarUrl} alt={user?.username}
-                                className="w-14 h-14 rounded-full object-cover border-2 border-gray-100" />
+                                className="w-14 h-14 rounded-full object-cover border-2 border-gray-100 dark:border-gray-800" />
                         ) : (
                             <div
                                 className="w-14 h-14 rounded-full flex items-center justify-center text-white font-black text-xl select-none"
@@ -88,7 +91,6 @@ export default function EditProfileModal({ onClose }) {
                                 {user?.username?.[0]?.toUpperCase()}
                             </div>
                         )}
-                        {/* Camera overlay */}
                         <button
                             type="button"
                             onClick={() => fileRef.current?.click()}
@@ -107,13 +109,13 @@ export default function EditProfileModal({ onClose }) {
                         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
                     </div>
                     <div>
-                        <p className="font-semibold text-sm">{user?.username}</p>
+                        <p className="font-semibold text-sm text-gray-900 dark:text-gray-100">{user?.username}</p>
                         <button
                             type="button"
                             onClick={() => fileRef.current?.click()}
                             className="text-xs text-blue-500 hover:underline mt-0.5"
                         >
-                            {uploading ? "Uploading…" : "Change profile photo"}
+                            {uploading ? "Uploading\u2026" : "Change profile photo"}
                         </button>
                         {avatarUrl && (
                             <button
@@ -129,21 +131,21 @@ export default function EditProfileModal({ onClose }) {
 
                 <form onSubmit={handleSave} className="flex flex-col gap-4">
                     <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Bio</label>
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Bio</label>
                         <textarea
                             value={bio}
                             onChange={(e) => setBio(e.target.value)}
-                            placeholder="Tell us about yourself…"
+                            placeholder="Tell us about yourself\u2026"
                             maxLength={160}
                             rows={3}
-                            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-black transition-colors resize-none"
+                            className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl px-4 py-3 text-sm outline-none focus:border-black dark:focus:border-gray-500 transition-colors resize-none"
                         />
-                        <p className="text-right text-[10px] text-gray-400 mt-0.5">{bio.length}/160</p>
+                        <p className="text-right text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{bio.length}/160</p>
                     </div>
 
                     {!avatarUrl && (
                         <div>
-                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Avatar color</label>
+                            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Avatar color</label>
                             <div className="flex gap-2 flex-wrap">
                                 {AVATAR_COLORS.map((c) => (
                                     <button key={c} type="button" onClick={() => setColor(c)}
@@ -158,8 +160,8 @@ export default function EditProfileModal({ onClose }) {
                     {error && <p className="text-xs text-red-500">{error}</p>}
 
                     <button type="submit" disabled={saving || uploading}
-                        className="w-full bg-black text-white font-bold py-2.5 rounded-xl disabled:opacity-40 hover:bg-gray-800 transition-colors">
-                        {saving ? "Saving…" : "Save changes"}
+                        className="w-full bg-black dark:bg-gray-100 text-white dark:text-gray-900 font-bold py-2.5 rounded-xl disabled:opacity-40 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors">
+                        {saving ? "Saving\u2026" : "Save changes"}
                     </button>
                 </form>
             </div>

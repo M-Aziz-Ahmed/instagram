@@ -3,15 +3,19 @@
 import { useCallback, useEffect, useState } from "react";
 import PostCard from "./PostCard";
 
-export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError }) {
+export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError, feedType, username }) {
     const [posts, setPosts]     = useState([]);
     const [loading, setLoading] = useState(true);
 
     const fetchPosts = useCallback(async () => {
         try {
-            const url = activeTag
-                ? `/api/posts?tag=${encodeURIComponent(activeTag)}`
-                : "/api/posts";
+            const params = new URLSearchParams();
+            if (activeTag) params.set("tag", activeTag);
+            if (feedType === "following" && username) {
+                params.set("feed", "following");
+                params.set("username", username);
+            }
+            const url = `/api/posts${params.toString() ? `?${params}` : ""}`;
             const res = await fetch(url, { cache: "no-store" });
             if (res.status === 401) {
                 onAuthError?.();
@@ -26,7 +30,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
         } finally {
             setLoading(false);
         }
-    }, [activeTag, onAuthError]);
+    }, [activeTag, onAuthError, feedType, username]);
 
     useEffect(() => {
         setLoading(true);

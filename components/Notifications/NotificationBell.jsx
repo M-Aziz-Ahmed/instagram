@@ -33,14 +33,12 @@ export default function NotificationBell({ onNavigate }) {
         } catch { /* silent */ }
     }, [user]);
 
-    // Poll every 15s
     useEffect(() => {
         fetchNotifs();
         const id = setInterval(fetchNotifs, 15000);
         return () => clearInterval(id);
     }, [fetchNotifs]);
 
-    // Close on outside click
     useEffect(() => {
         const handler = (e) => {
             if (panelRef.current && !panelRef.current.contains(e.target)) setOpen(false);
@@ -52,7 +50,6 @@ export default function NotificationBell({ onNavigate }) {
     const handleOpen = async () => {
         setOpen((v) => !v);
         if (!open && unread > 0 && user) {
-            // Mark all read
             await fetch("/api/notifications", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
@@ -67,7 +64,7 @@ export default function NotificationBell({ onNavigate }) {
             <button
                 onClick={handleOpen}
                 aria-label="Notifications"
-                className="relative p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="relative p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                     strokeWidth={1.8} stroke="currentColor" className="w-6 h-6">
@@ -82,9 +79,9 @@ export default function NotificationBell({ onNavigate }) {
             </button>
 
             {open && (
-                <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] max-w-80 bg-white rounded-2xl shadow-xl border border-gray-200 z-50 overflow-hidden">
-                    <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                        <span className="font-bold text-sm text-gray-900">Notifications</span>
+                <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] max-w-80 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                        <span className="font-bold text-sm text-gray-900 dark:text-gray-100">Notifications</span>
                         {notifs.length > 0 && (
                             <button
                                 onClick={async () => {
@@ -96,7 +93,7 @@ export default function NotificationBell({ onNavigate }) {
                                     });
                                     setNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
                                 }}
-                                className="text-xs text-blue-500 hover:text-blue-600"
+                                className="text-xs text-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
                             >
                                 Mark all read
                             </button>
@@ -105,13 +102,12 @@ export default function NotificationBell({ onNavigate }) {
 
                     <div className="max-h-96 overflow-y-auto">
                         {notifs.length === 0 ? (
-                            <p className="text-sm text-gray-400 text-center py-8">No notifications yet</p>
+                            <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">No notifications yet</p>
                         ) : notifs.map((n) => (
                             <div
                                 key={n._id}
-                                className={`flex items-start gap-3 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${!n.read ? "bg-blue-50/40" : ""}`}
+                                className={`flex items-start gap-3 px-4 py-3 border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${!n.read ? "bg-blue-50/40 dark:bg-blue-900/10" : ""}`}
                             >
-                                {/* Avatar */}
                                 <div
                                     className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold select-none"
                                     style={{ backgroundColor: n.fromColor }}
@@ -120,14 +116,14 @@ export default function NotificationBell({ onNavigate }) {
                                 </div>
 
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm text-gray-900 leading-snug">
+                                    <p className="text-sm text-gray-900 dark:text-gray-100 leading-snug">
                                         <span className="font-semibold">{n.fromUser}</span>
                                         {" "}{TYPE_LABEL[n.type] ?? n.type}
                                         {n.type === "comment" && n.text && (
-                                            <span className="text-gray-500">: "{n.text.slice(0, 60)}{n.text.length > 60 ? "…" : ""}"</span>
+                                            <span className="text-gray-500 dark:text-gray-400">: &ldquo;{n.text.slice(0, 60)}{n.text.length > 60 ? "…" : ""}&rdquo;</span>
                                         )}
                                     </p>
-                                    <p className="text-xs text-gray-400 mt-0.5">{timeAgo(n.createdAt)}</p>
+                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{timeAgo(n.createdAt)}</p>
                                 </div>
 
                                 {!n.read && (

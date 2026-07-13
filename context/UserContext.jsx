@@ -53,9 +53,8 @@ export function UserProvider({ children }) {
 
 export function useUser() {
     const ctx = useContext(UserContext);
-    // Backwards-compat shim: expose user.color = user.avatarColor
     if (ctx.user && ctx.user.avatarColor && !ctx.user.color) {
-        ctx.user = { ...ctx.user, color: ctx.user.avatarColor };
+        return { ...ctx, user: { ...ctx.user, color: ctx.user.avatarColor } };
     }
     return ctx;
 }
