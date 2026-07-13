@@ -16,8 +16,13 @@ export async function signToken(payload) {
 }
 
 export async function verifyToken(token) {
-    const { payload } = await jwtVerify(token, SECRET);
-    return payload;
+    try {
+        const { payload } = await jwtVerify(token, SECRET);
+        return payload;
+    } catch (err) {
+        console.error("verifyToken failed:", err?.message ?? err);
+        throw err;
+    }
 }
 
 export async function setSessionCookie(userId) {
@@ -41,7 +46,8 @@ export async function getSession() {
     if (!token) return null;
     try {
         return await verifyToken(token);
-    } catch {
+    } catch (err) {
+        console.error("getSession: token verification error:", err?.message ?? err);
         return null;
     }
 }
