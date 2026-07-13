@@ -55,7 +55,11 @@ export async function GET(request) {
         return Response.json(posts);
     } catch (error) {
         console.error(error);
-        return Response.json({ error: "Failed to fetch posts" }, { status: 500 });
+        const includeDetails = process.env.DEBUG_ERRORS === "1";
+        return Response.json(
+            includeDetails ? { error: "Failed to fetch posts", details: error.message } : { error: "Failed to fetch posts" },
+            { status: 500 }
+        );
     }
 }
 
@@ -107,6 +111,10 @@ export async function POST(request) {
         return Response.json(post, { status: 201 });
     } catch (error) {
         console.error(error);
-        return Response.json({ error: "Failed to create post" }, { status: 500 });
+        const includeDetails = process.env.DEBUG_ERRORS === "1";
+        return Response.json(
+            includeDetails ? { error: "Failed to create post", details: error.message } : { error: "Failed to create post" },
+            { status: 500 }
+        );
     }
 }
