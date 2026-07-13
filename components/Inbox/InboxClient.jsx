@@ -1,33 +1,67 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
+import { useSearchParams } from "next/navigation";
 import ChatBox from "./ChatBox";
 
-// Back-arrow icon
-function BackIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-            strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-        </svg>
-    );
-}
-
-// Compose icon
-function ComposeIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-            strokeWidth={1.8} stroke="currentColor" className="w-6 h-6">
-            <path strokeLinecap="round" strokeLinejoin="round"
-                d="M16.862 3.487a2.25 2.25 0 1 1 3.182 3.182L7.5 19.213l-4.5 1.125 1.125-4.5L16.862 3.487z" />
-        </svg>
-    );
+function timeAgo(date) {
+    const diff = (Date.now() - new Date(date)) / 1000;
+    if (diff < 60)    return `${Math.floor(diff)}s`;
+    if (diff < 3600)  return `${Math.floor(diff / 60)}m`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+    return new Date(date).toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
 export default function InboxClient() {
     const { user, ready } = useUser();
+    const searchParams = useSearchParams();
+    const targetUser = searchParams.get("user");
     const [view, setView] = useState("list");
+    const [conversations, setConversations] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedConvo, setSelectedConvo] = useState(null);
+
+    const fetchConversations = useCallback(async () => {
+        if (!user) return;
+        try {
+            const res = await fetch(`/api/messages?username=${encodeURIComponent(user.username)}`);
+            if (res.ok) setConversations(await res.json());
+        } catch (err) {
+            console.error("Failed to fetch conversations:", err);
+        } finally {
+            setLoading(false);
+        }
+    }, [user]);
+
+    useEffect(() => { fetchConversations(); }, [fetchConversations]);
+
+    useEffect(() => {
+        if (targetUser && conversations.length > 0 && !selectedConvo) {
+            const existing = conversations.find((c) => c.username === targetUser);
+            if (existing) {
+                handleSelectConvo(existing);
+            } else {
+                const newConvo = {
+                    username: targetUser,
+                    user: { username: targetUser, avatarUrl: "", color: "#3b82f6" },
+                    lastMessage: null,
+                    unreadCount: 0,
+                };
+                handleSelectConvo(newConvo);
+            }
+        }
+    }, [targetUser, conversations]);
+
+    useEffect(() => {
+        const interval = setInterval(fetchConversations, 5000);
+        return () => clearInterval(interval);
+    }, [fetchConversations]);
+
+    const handleSelectConvo = (convo) => {
+        setSelectedConvo(convo);
+        setView("chat");
+    };
 
     if (!ready) {
         return (
@@ -39,62 +73,75 @@ export default function InboxClient() {
 
     return (
         <div className="flex h-dvh bg-white overflow-hidden">
-
-            {/* ── Sidebar ─────────────────────────────────────────────────────
-                Desktop: always visible, fixed width
-                Mobile:  full-screen, hidden when view === "chat"           */}
             <aside className={`
                 flex flex-col shrink-0 border-r border-gray-200 bg-white
                 w-full md:w-80
                 ${view === "chat" ? "hidden md:flex" : "flex"}
             `}>
-                {/* Header */}
                 <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-                    <span className="font-semibold text-base tracking-tight">Messages</span>
-                    <button aria-label="New message" className="text-gray-900 hover:text-gray-500 transition-colors p-1 -mr-1">
-                        <ComposeIcon />
-                    </button>
+                    <span className="font-semibold text-base tracking-tight">{user?.username}</span>
                 </div>
 
-                {/* Conversation list */}
                 <div className="flex-1 overflow-y-auto">
-                    {/* Tap the conversation to open chat on mobile */}
-                    <button
-                        onClick={() => setView("chat")}
-                        className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left"
-                    >
-                        {/* Avatar */}
-                        {user ? (
-                            <div
-                                className="w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-xl select-none shrink-0"
-                                style={{ backgroundColor: user.color }}
-                            >
-                                {user.username?.[0]?.toUpperCase() ?? "?"}
-                            </div>
-                        ) : (
-                            <div className="w-14 h-14 rounded-full bg-gray-200 shrink-0 animate-pulse" />
-                        )}
-
-                        <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-sm text-gray-900 truncate">
-                                {user?.username ?? "…"}
-                            </p>
-                            <p className="text-xs text-gray-500 truncate mt-0.5">You · Active now</p>
+                    {loading ? (
+                        <div className="flex justify-center py-12">
+                            <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
                         </div>
+                    ) : conversations.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10 mb-2 opacity-40">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
+                            </svg>
+                            <p className="text-sm">No conversations yet</p>
+                        </div>
+                    ) : (
+                        conversations.map((convo) => (
+                            <button
+                                key={convo.username}
+                                onClick={() => handleSelectConvo(convo)}
+                                className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left ${
+                                    selectedConvo?.username === convo.username ? "bg-gray-100" : ""
+                                }`}
+                            >
+                                {convo.user?.avatarUrl ? (
+                                    <img src={convo.user.avatarUrl} alt="" className="w-14 h-14 rounded-full object-cover shrink-0" />
+                                ) : (
+                                    <div
+                                        className="w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-xl select-none shrink-0"
+                                        style={{ backgroundColor: convo.user?.color || "#3b82f6" }}
+                                    >
+                                        {convo.username?.[0]?.toUpperCase() ?? "?"}
+                                    </div>
+                                )}
 
-                        <span className="w-2.5 h-2.5 bg-green-400 rounded-full shrink-0" />
-                    </button>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-semibold text-sm text-gray-900 truncate">{convo.username}</p>
+                                    <p className="text-xs text-gray-500 truncate mt-0.5">
+                                        {convo.lastMessage?.sender === user?.username ? "You: " : ""}
+                                        {convo.lastMessage?.text?.slice(0, 30) || "Image"} · {timeAgo(convo.lastMessage?.timeStamp)}
+                                    </p>
+                                </div>
+
+                                {convo.unreadCount > 0 && (
+                                    <span className="bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shrink-0">
+                                        {convo.unreadCount > 9 ? "9+" : convo.unreadCount}
+                                    </span>
+                                )}
+                            </button>
+                        ))
+                    )}
                 </div>
             </aside>
 
-            {/* ── Chat area ───────────────────────────────────────────────────
-                Desktop: always visible, fills remaining space
-                Mobile:  full-screen, only shown when view === "chat"       */}
             <main className={`
                 flex-1 flex flex-col min-w-0 bg-white
                 ${view === "list" ? "hidden md:flex" : "flex"}
             `}>
-                <ChatBox onBack={() => setView("list")} />
+                <ChatBox
+                    onBack={() => setView("list")}
+                    recipient={selectedConvo?.username}
+                    recipientUser={selectedConvo?.user}
+                />
             </main>
         </div>
     );

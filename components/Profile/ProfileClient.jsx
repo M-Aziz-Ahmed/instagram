@@ -125,6 +125,14 @@ export default function ProfileClient({ username }) {
                                             Edit profile
                                         </button>
                                     )}
+                                    {!isOwn && user && (
+                                        <Link
+                                            href={`/inbox?user=${encodeURIComponent(username)}`}
+                                            className="ml-1 text-xs border border-gray-300 rounded-full px-3 py-1 hover:bg-gray-50 transition-colors text-gray-600"
+                                        >
+                                            Message
+                                        </Link>
+                                    )}
                                     {user?.isAdmin && !isOwn && (
                                         <Link href="/admin" className="text-xs text-purple-600 border border-purple-200 rounded-full px-3 py-1 hover:bg-purple-50 transition-colors">
                                             Manage in admin

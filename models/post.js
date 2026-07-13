@@ -21,6 +21,7 @@ const postSchema = new mongoose.Schema({
     comments:  { type: [commentSchema], default: [] },
     hashtags:  { type: [String], default: [] },
     mentions:  { type: [String], default: [] },
+    viewCount: { type: Number, default: 0 },
     timeStamp: { type: Date, default: Date.now },
 });
 

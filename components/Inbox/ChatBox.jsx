@@ -6,7 +6,7 @@ import Chat from "./Chat";
 import Input from "./Input";
 import ProfileSetup from "@/components/ProfileSetup";
 
-export default function ChatBox({ onBack }) {
+export default function ChatBox({ onBack, recipient, recipientUser }) {
     const { user, ready } = useUser();
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [editingProfile, setEditingProfile] = useState(false);
@@ -46,15 +46,19 @@ export default function ChatBox({ onBack }) {
                 {/* Avatar */}
                 <div
                     className="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center text-white font-bold text-sm md:text-base select-none shrink-0"
-                    style={{ backgroundColor: user.color }}
+                    style={{ backgroundColor: recipientUser?.color || "#3b82f6" }}
                 >
-                    {user.username?.[0]?.toUpperCase() ?? "?"}
+                    {recipientUser?.avatarUrl ? (
+                        <img src={recipientUser.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                    ) : (
+                        (recipient || user?.username)?.[0]?.toUpperCase() ?? "?"
+                    )}
                 </div>
 
                 {/* Name */}
                 <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-gray-900 truncate">{user.username}</p>
-                    <p className="text-xs text-green-500">Active now</p>
+                    <p className="font-semibold text-sm text-gray-900 truncate">{recipient || user?.username}</p>
+                    {recipient && <p className="text-xs text-green-500">Active now</p>}
                 </div>
 
                 {/* Action icons */}
@@ -95,12 +99,12 @@ export default function ChatBox({ onBack }) {
 
             {/* ── Messages ────────────────────────────────────────────────── */}
             <div className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-4">
-                <Chat refreshTrigger={refreshTrigger} />
+                <Chat refreshTrigger={refreshTrigger} recipient={recipient} />
             </div>
 
             {/* ── Input ───────────────────────────────────────────────────── */}
             <div className="px-3 md:px-4 py-2.5 md:py-3 border-t border-gray-200 shrink-0">
-                <Input onMessageSent={() => setRefreshTrigger((n) => n + 1)} />
+                <Input onMessageSent={() => setRefreshTrigger((n) => n + 1)} recipient={recipient} />
             </div>
         </div>
     );

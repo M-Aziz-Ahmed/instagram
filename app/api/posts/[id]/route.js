@@ -111,6 +111,12 @@ export async function PATCH(request, { params }) {
             return Response.json(enriched);
         }
 
+        if (action === "view") {
+            post.viewCount = (post.viewCount || 0) + 1;
+            await post.save();
+            return Response.json({ viewCount: post.viewCount });
+        }
+
         const idx = post.likes.indexOf(username);
         const isLiking = idx === -1;
 

@@ -3,16 +3,14 @@
 import { useState } from "react";
 import { useUser } from "@/context/UserContext";
 
-export default function Input({ onMessageSent }) {
+export default function Input({ onMessageSent, recipient }) {
     const { user } = useUser();
     const [text, setText]       = useState("");
     const [sending, setSending] = useState(false);
 
     const handleSend = async () => {
-        if (!text.trim() || sending || !user) return;
+        if (!text.trim() || sending || !user || !recipient) return;
 
-        // Optimistic UI — caller (ChatBox) will also receive the SSE echo,
-        // so we just clear the input and let SSE append the bubble.
         const snapshot = text.trim();
         setText("");
         setSending(true);
@@ -21,12 +19,12 @@ export default function Input({ onMessageSent }) {
             await fetch("/api/messages", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text: snapshot, sender: user.username, color: user.color }),
+                body: JSON.stringify({ text: snapshot, sender: user.username, recipient, color: user.color }),
             });
             if (onMessageSent) onMessageSent();
         } catch (err) {
             console.error("Failed to send:", err);
-            setText(snapshot); // restore on error
+            setText(snapshot);
         } finally {
             setSending(false);
         }
@@ -56,8 +54,8 @@ export default function Input({ onMessageSent }) {
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Message…"
-                    disabled={!user}
+                    placeholder={recipient ? "Message…" : "Select a conversation…"}
+                    disabled={!user || !recipient}
                     className="flex-1 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none disabled:cursor-not-allowed"
                 />
                 {!hasText && (

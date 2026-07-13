@@ -14,7 +14,7 @@ function Avatar({ sender, color }) {
     );
 }
 
-export default function Chat({ refreshTrigger }) {
+export default function Chat({ refreshTrigger, recipient }) {
     const { user } = useUser();
     const [messages, setMessages]   = useState([]);
     const [loading, setLoading]     = useState(true);
@@ -23,18 +23,25 @@ export default function Chat({ refreshTrigger }) {
 
     // ── fetch (initial + poll) ────────────────────────────────────────────────
     const fetchMessages = useCallback(async () => {
+        if (!user || !recipient) return;
         try {
-            const res = await fetch("/api/messages");
+            const res = await fetch(`/api/messages?user1=${encodeURIComponent(user.username)}&user2=${encodeURIComponent(recipient)}`);
             if (!res.ok) return;
             const data = await res.json();
             setMessages(data);
             if (data.length > 0) latestIdRef.current = data[data.length - 1]._id;
+
+            await fetch("/api/messages", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ sender: user.username, recipient }),
+            });
         } catch (err) {
             console.error("Failed to fetch messages:", err);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [user, recipient]);
 
     // Initial load
     useEffect(() => { fetchMessages(); }, [fetchMessages, refreshTrigger]);
@@ -60,7 +67,7 @@ export default function Chat({ refreshTrigger }) {
         );
     }
 
-    if (messages.length === 0) {
+    if (!recipient) {
         return (
             <div className="flex flex-col items-center justify-center h-full gap-3 select-none">
                 <div
@@ -70,6 +77,20 @@ export default function Chat({ refreshTrigger }) {
                     {user?.username?.[0]?.toUpperCase() ?? "?"}
                 </div>
                 <p className="font-semibold text-gray-900">{user?.username}</p>
+                <p className="text-sm text-gray-500">Select a conversation to start messaging</p>
+            </div>
+        );
+    }
+
+    if (messages.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full gap-3 select-none">
+                <div
+                    className="w-20 h-20 rounded-full flex items-center justify-center text-white text-3xl font-bold bg-gray-300"
+                >
+                    {recipient?.[0]?.toUpperCase() ?? "?"}
+                </div>
+                <p className="font-semibold text-gray-900">{recipient}</p>
                 <p className="text-sm text-gray-500">No messages yet. Say hello 👋</p>
             </div>
         );
