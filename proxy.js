@@ -10,7 +10,6 @@ const PUBLIC_PATHS = ["/login", "/api/auth/send-otp", "/api/auth/verify-otp"];
 export async function proxy(request) {
     const { pathname } = request.nextUrl;
 
-    // Let public paths and static assets through
     if (
         PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
         pathname.startsWith("/_next") ||
@@ -19,7 +18,6 @@ export async function proxy(request) {
         return NextResponse.next();
     }
 
-    // Check session cookie
     const token = request.cookies.get("af_session")?.value;
     if (!token) {
         const loginUrl = new URL("/login", request.url);
@@ -30,7 +28,6 @@ export async function proxy(request) {
         await jwtVerify(token, SECRET);
         return NextResponse.next();
     } catch {
-        // Invalid or expired token — clear it and redirect
         const loginUrl = new URL("/login", request.url);
         const res = NextResponse.redirect(loginUrl);
         res.cookies.delete("af_session");
