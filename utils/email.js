@@ -1,13 +1,18 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 
-console.log('RESEND_API_KEY:', process.env.RESEND_API_KEY);
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
+    },
+});
 
 export async function sendOTPEmail(email, code) {
-    await resend.emails.send({
-        from:    "AnonFeed <onboarding@resend.dev>",
+    await transporter.sendMail({
+        from:    process.env.GMAIL_USER,
         to:      email,
+        subject: "Your AnonFeed Login Code",
         html: `
             <div style="font-family:sans-serif;max-width:400px;margin:0 auto;padding:32px">
                 <h1 style="font-size:24px;font-weight:900;margin:0 0 8px">AnonFeed</h1>
@@ -22,4 +27,3 @@ export async function sendOTPEmail(email, code) {
         `,
     });
 }
-
