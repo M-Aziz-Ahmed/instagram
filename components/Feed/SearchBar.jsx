@@ -33,7 +33,7 @@ function SearchDropdown({ users, posts, loading, hasResults, onClose }) {
                             </div>
                             <div className="flex items-center gap-1.5 min-w-0">
                                 <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{u.username}</span>
-                                <UserBadges user={u} size="sm" />
+                                <UserBadges isVerified={u.isVerified} roles={u.roles || []} size="sm" />
                             </div>
                         </Link>
                     ))}

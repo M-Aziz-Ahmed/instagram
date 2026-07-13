@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import ImageLightbox from "@/components/shared/ImageLightbox";
+import UserBadges from "@/components/shared/UserBadges";
 
 function Avatar({ sender, color }) {
     return (
@@ -60,7 +61,7 @@ function getMessageStatus(msg) {
     return "sent";
 }
 
-export default function Chat({ pendingMessage, recipient }) {
+export default function Chat({ pendingMessage, recipient, recipientUser }) {
     const { user } = useUser();
     const [messages, setMessages]   = useState([]);
     const [loading, setLoading]     = useState(true);
@@ -241,7 +242,12 @@ export default function Chat({ pendingMessage, recipient }) {
 
                             <div className="flex flex-col max-w-[72vw] sm:max-w-xs lg:max-w-md">
                                 {!isMine && !sameAsPrev && (
-                                    <span className="text-xs text-gray-500 dark:text-gray-400 mb-1 ml-1">{msg.sender}</span>
+                                    <div className="flex items-center gap-1 mb-1 ml-1">
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">{msg.sender}</span>
+                                        {msg.sender === recipient && (
+                                            <UserBadges isVerified={recipientUser?.isVerified} roles={recipientUser?.roles || []} size="xs" />
+                                        )}
+                                    </div>
                                 )}
                                 <div
                                     className={`overflow-hidden ${rounding} ${

@@ -5,6 +5,7 @@ import { useUser } from "@/context/UserContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import ChatBox from "./ChatBox";
 import Sidebar from "@/components/Layout/Sidebar";
+import UserBadges from "@/components/shared/UserBadges";
 
 function timeAgo(date) {
     const diff = (Date.now() - new Date(date)) / 1000;
@@ -131,7 +132,10 @@ export default function InboxClient() {
                                 )}
 
                                 <div className="flex-1 min-w-0">
-                                    <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{convo.username}</p>
+                                    <div className="flex items-center gap-1.5">
+                                        <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{convo.username}</p>
+                                        <UserBadges isVerified={convo.user?.isVerified} roles={convo.user?.roles || []} size="sm" />
+                                    </div>
                                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                                         {convo.lastMessage?.sender === user?.username ? "You: " : ""}
                                         {convo.lastMessage?.imageUrl && !convo.lastMessage?.text ? "📷 Photo" : convo.lastMessage?.text?.slice(0, 30) || "Message"} · {timeAgo(convo.lastMessage?.timeStamp)}

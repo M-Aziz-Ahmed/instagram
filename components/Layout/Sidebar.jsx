@@ -6,6 +6,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useRouter, usePathname } from "next/navigation";
 import EditProfileModal from "@/components/Auth/EditProfileModal";
 import Link from "next/link";
+import UserBadges from "@/components/shared/UserBadges";
 
 function NavItem({ href, icon, label, active, onClick, badge }) {
     const classes = `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors min-h-[48px] ${
@@ -185,7 +186,10 @@ export default function Sidebar({ open, onClose }) {
                                 )}
                             </div>
                             <div className="min-w-0">
-                                <p className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">@{user?.username}</p>
+                                <div className="flex items-center gap-1.5">
+                                    <p className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">@{user?.username}</p>
+                                    <UserBadges isVerified={user?.isVerified} roles={user?.roles || []} size="sm" />
+                                </div>
                                 {user?.bio && (
                                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{user.bio}</p>
                                 )}

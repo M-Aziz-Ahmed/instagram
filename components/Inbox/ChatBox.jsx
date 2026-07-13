@@ -5,6 +5,7 @@ import { useUser } from "@/context/UserContext";
 import Chat from "./Chat";
 import Input from "./Input";
 import ProfileSetup from "@/components/ProfileSetup";
+import UserBadges from "@/components/shared/UserBadges";
 
 export default function ChatBox({ onBack, recipient, recipientUser }) {
     const { user, ready } = useUser();
@@ -54,7 +55,10 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{recipient || user?.username}</p>
+                    <div className="flex items-center gap-1.5">
+                        <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{recipient || user?.username}</p>
+                        <UserBadges isVerified={recipientUser?.isVerified} roles={recipientUser?.roles || []} size="sm" />
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-1 md:gap-2 text-gray-700 dark:text-gray-400 shrink-0">
@@ -91,7 +95,7 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
 
             {/* ── Messages ────────────────────────────────────────────────── */}
             <div className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-4">
-                <Chat pendingMessage={pendingMessage} recipient={recipient} />
+                <Chat pendingMessage={pendingMessage} recipient={recipient} recipientUser={recipientUser} />
             </div>
 
             {/* ── Input ───────────────────────────────────────────────────── */}

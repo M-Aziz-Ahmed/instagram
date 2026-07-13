@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
+import UserBadges from "@/components/shared/UserBadges";
 
 function timeAgo(date) {
     const diff = (Date.now() - new Date(date)) / 1000;
@@ -129,6 +130,7 @@ export default function NotificationBell({ onNavigate }) {
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm text-gray-900 dark:text-gray-100 leading-snug">
                                         <span className="font-semibold">{n.fromUser}</span>
+                                        <UserBadges isVerified={n.fromUserDoc?.isVerified} roles={n.fromUserDoc?.roles || []} size="xs" />
                                         {" "}{TYPE_LABEL[n.type] ?? n.type}
                                         {n.type === "comment" && n.text && (
                                             <span className="text-gray-500 dark:text-gray-400">: &ldquo;{n.text.slice(0, 60)}{n.text.length > 60 ? "…" : ""}&rdquo;</span>

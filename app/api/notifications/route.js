@@ -1,5 +1,6 @@
 import connectDB from "@/utils/db";
 import Notification from "@/models/notification";
+import User from "@/models/user";
 
 // GET /api/notifications?username=X  — fetch latest 30 for user
 export async function GET(request) {
@@ -14,7 +15,19 @@ export async function GET(request) {
             .limit(30)
             .lean();
 
-        return Response.json(notifs);
+        const fromUsernames = [...new Set(notifs.map(n => n.fromUser))];
+        const users = await User.find({ username: { $in: fromUsernames } })
+            .select("username isVerified roles")
+            .populate("roles", "name badge color")
+            .lean();
+        const userMap = Object.fromEntries(users.map(u => [u.username, u]));
+
+        const enriched = notifs.map(n => ({
+            ...n,
+            fromUserDoc: userMap[n.fromUser] || null,
+        }));
+
+        return Response.json(enriched);
     } catch (error) {
         console.error(error);
         return Response.json({ error: "Failed to fetch notifications" }, { status: 500 });
