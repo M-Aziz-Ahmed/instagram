@@ -46,13 +46,19 @@ export async function PATCH(request, { params }) {
         const { id } = await params;
         const { username, action, text, color, parentId, imageUrl } = await request.json();
 
-        if (!username) {
-            return Response.json({ error: "Username required" }, { status: 400 });
-        }
-
         await connectDB();
         const post = await Post.findById(id);
         if (!post) return Response.json({ error: "Not found" }, { status: 404 });
+
+        if (action === "view") {
+            post.viewCount = (post.viewCount || 0) + 1;
+            await post.save();
+            return Response.json({ viewCount: post.viewCount });
+        }
+
+        if (!username) {
+            return Response.json({ error: "Username required" }, { status: 400 });
+        }
 
         if (action === "comment") {
             const hasText = text?.trim();
@@ -109,12 +115,6 @@ export async function PATCH(request, { params }) {
             await post.save();
             const enriched = await enrichPost(post);
             return Response.json(enriched);
-        }
-
-        if (action === "view") {
-            post.viewCount = (post.viewCount || 0) + 1;
-            await post.save();
-            return Response.json({ viewCount: post.viewCount });
         }
 
         const idx = post.likes.indexOf(username);
