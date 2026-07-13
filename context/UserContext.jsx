@@ -21,7 +21,12 @@ export function UserProvider({ children }) {
     const [user, setUser]   = useState(null);
     const [ready, setReady] = useState(false);
 
-    const reloadUser = useCallback(async () => {
+    const reloadUser = useCallback(async (userData) => {
+        if (userData !== undefined) {
+            setUser(userData);
+            setReady(true);
+            return;
+        }
         try {
             const res = await fetch("/api/auth/me");
             if (res.ok) {

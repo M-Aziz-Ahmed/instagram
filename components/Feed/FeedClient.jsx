@@ -19,7 +19,7 @@ export default function FeedClient() {
 
     useEffect(() => {
         if (ready && !user) router.replace("/login");
-    }, [user, ready, router]);
+    }, [ready]);
 
     if (!ready || !user) {
         return (

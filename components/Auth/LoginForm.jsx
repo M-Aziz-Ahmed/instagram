@@ -82,7 +82,7 @@ export default function LoginForm({ onSuccess }) {
             });
             const data = await res.json();
             if (!res.ok) { setError(data.error); setOtp(["","","","","",""]); inputRefs.current[0]?.focus(); return; }
-            await reloadUser();
+            await reloadUser(data.user);
             onSuccess?.(data.needsSetup);
         } catch {
             setError("Network error. Try again.");
