@@ -28,7 +28,7 @@ export default function FeedClient() {
         }
     }, [ready, user, redirecting, router]);
 
-    if (!ready || redirecting) {
+    if (!ready || redirecting || !user) {
         return (
             <div className="flex h-dvh items-center justify-center bg-white dark:bg-gray-950">
                 <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />

@@ -65,12 +65,12 @@ export default function Chat({ pendingMessage, recipient }) {
     const [loading, setLoading]     = useState(true);
     const bottomRef                  = useRef(null);
     const pendingIdRef               = useRef(null);
-    const initialLoadDone            = useRef(false);
+    const username                   = user?.username;
 
     const fetchMessages = useCallback(async () => {
-        if (!user || !recipient) return;
+        if (!username || !recipient) return;
         try {
-            const res = await fetch(`/api/messages?user1=${encodeURIComponent(user.username)}&user2=${encodeURIComponent(recipient)}`);
+            const res = await fetch(`/api/messages?user1=${encodeURIComponent(username)}&user2=${encodeURIComponent(recipient)}`);
             if (!res.ok) return;
             const data = await res.json();
 
@@ -84,23 +84,30 @@ export default function Chat({ pendingMessage, recipient }) {
                     return m;
                 });
             });
+
+            await fetch("/api/messages", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ sender: username, recipient }),
+            });
         } catch (err) {
             console.error("Failed to fetch messages:", err);
-        } finally {
-            setLoading(false);
         }
-    }, [user, recipient]);
+    }, [username, recipient]);
 
     useEffect(() => {
         if (!recipient) {
             setMessages([]);
             setLoading(false);
-            initialLoadDone.current = false;
             return;
         }
-        if (!initialLoadDone.current) setLoading(true);
-        fetchMessages();
-        initialLoadDone.current = true;
+        let cancelled = false;
+        setLoading(true);
+        (async () => {
+            await fetchMessages();
+            if (!cancelled) setLoading(false);
+        })();
+        return () => { cancelled = true; };
     }, [fetchMessages, recipient]);
 
     useEffect(() => {
