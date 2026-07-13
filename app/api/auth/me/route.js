@@ -1,6 +1,7 @@
 import connectDB from "@/utils/db";
 import User from "@/models/user";
 import { getSession, signToken } from "@/utils/session";
+import { cookies } from "next/headers";
 
 const COOKIE = "af_session";
 const MAX_AGE = 60 * 60 * 24 * 365; // 1 year
@@ -8,6 +9,8 @@ const MAX_AGE = 60 * 60 * 24 * 365; // 1 year
 export async function GET() {
     try {
         const session = await getSession();
+        // Debug: raw cookie value when DEBUG_COOKIES=1
+        const rawCookie = process.env.DEBUG_COOKIES === "1" ? (await cookies()).get(COOKIE)?.value ?? null : undefined;
         if (!session?.userId) return Response.json({ user: null });
 
         await connectDB();
@@ -38,6 +41,8 @@ export async function GET() {
                 })),
                 needsSetup: !user.username,
             },
+            },
+            ...(process.env.DEBUG_COOKIES === "1" ? { _debugCookie: rawCookie } : {}),
         });
 
         if (session.exp) {
