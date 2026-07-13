@@ -39,7 +39,7 @@ export default function Input({ onMessageSent, recipient }) {
     return (
         <div className="flex items-center gap-2">
             {/* Emoji */}
-            <button aria-label="Emoji" className="shrink-0 text-gray-500 hover:text-gray-800 transition-colors">
+            <button aria-label="Emoji" className="shrink-0 text-gray-500 hover:text-gray-800 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                     strokeWidth={1.8} stroke="currentColor" className="w-6 h-6">
                     <path strokeLinecap="round" strokeLinejoin="round"
@@ -48,7 +48,7 @@ export default function Input({ onMessageSent, recipient }) {
             </button>
 
             {/* Input field */}
-            <div className="flex-1 flex items-center border border-gray-300 rounded-full px-4 py-2 focus-within:border-gray-400 transition-colors">
+            <div className="flex-1 flex items-center border border-gray-300 rounded-full px-4 py-2.5 focus-within:border-gray-400 transition-colors min-h-[44px]">
                 <input
                     type="text"
                     value={text}
@@ -59,7 +59,7 @@ export default function Input({ onMessageSent, recipient }) {
                     className="flex-1 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none disabled:cursor-not-allowed"
                 />
                 {!hasText && (
-                    <button aria-label="Voice message" className="shrink-0 ml-2 text-gray-500 hover:text-gray-800 transition-colors">
+                    <button aria-label="Voice message" className="shrink-0 ml-2 text-gray-500 hover:text-gray-800 transition-colors p-2 min-h-[44px] min-w-[44px] flex items-center justify-center">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                             strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
                             <path strokeLinecap="round" strokeLinejoin="round"
@@ -83,7 +83,7 @@ export default function Input({ onMessageSent, recipient }) {
                     }
                 </button>
             ) : (
-                <button aria-label="Like" className="shrink-0 text-gray-500 hover:text-gray-800 transition-colors">
+                <button aria-label="Like" className="shrink-0 text-gray-500 hover:text-gray-800 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                         strokeWidth={1.8} stroke="currentColor" className="w-6 h-6">
                         <path strokeLinecap="round" strokeLinejoin="round"

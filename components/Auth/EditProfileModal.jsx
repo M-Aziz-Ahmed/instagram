@@ -66,7 +66,7 @@ export default function EditProfileModal({ onClose }) {
             <div className="bg-white rounded-2xl w-full max-w-sm p-6 flex flex-col gap-5" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
                     <h2 className="font-bold text-lg">Edit profile</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-1" aria-label="Close">
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center" aria-label="Close">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                             strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -95,7 +95,7 @@ export default function EditProfileModal({ onClose }) {
                             disabled={uploading}
                             title="Change photo"
                             aria-label="Change profile photo"
-                            className="absolute inset-0 rounded-full bg-black/35 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity disabled:cursor-wait"
+                            className="absolute inset-0 rounded-full bg-black/35 flex items-center justify-center transition-opacity disabled:cursor-wait opacity-100 sm:opacity-0 sm:hover:opacity-100"
                         >
                             {uploading
                                 ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -147,7 +147,7 @@ export default function EditProfileModal({ onClose }) {
                             <div className="flex gap-2 flex-wrap">
                                 {AVATAR_COLORS.map((c) => (
                                     <button key={c} type="button" onClick={() => setColor(c)}
-                                        className="w-8 h-8 rounded-full hover:scale-110 transition-transform"
+                                        className="w-10 h-10 rounded-full hover:scale-110 transition-transform"
                                         aria-label={`Color ${c}`}
                                         style={{ backgroundColor: c, boxShadow: color === c ? `0 0 0 3px white, 0 0 0 5px ${c}` : "none" }} />
                                 ))}

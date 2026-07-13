@@ -38,8 +38,8 @@ export default function AdminClient() {
                 </div>
             </header>
 
-            <div className="max-w-5xl mx-auto px-4 py-6">
-                <div className="flex gap-1 mb-6 bg-white rounded-xl border border-gray-200 p-1 w-fit">
+            <div className="max-w-5xl mx-auto px-3 sm:px-4 py-6">
+                <div className="flex gap-1 mb-6 bg-white rounded-xl border border-gray-200 p-1 w-fit overflow-x-auto max-w-full">
                     <button onClick={() => setTab("users")}
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "users" ? "bg-black text-white" : "text-gray-600 hover:bg-gray-100"}`}>
                         Users
@@ -197,7 +197,7 @@ function UsersPanel() {
 
                             {/* Role picker dropdown */}
                             {editing === u.id && (
-                                <div onClick={(e) => e.stopPropagation()} className="absolute right-4 top-full z-30 bg-white border border-gray-200 rounded-xl shadow-lg p-3 w-56">
+                                <div onClick={(e) => e.stopPropagation()} className="absolute right-4 top-full z-30 bg-white border border-gray-200 rounded-xl shadow-lg p-3 w-56 max-w-[calc(100vw-2rem)]">
                                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Assign roles</p>
                                     {roles.length === 0 ? (
                                         <p className="text-xs text-gray-400">No roles created yet.</p>
@@ -469,7 +469,7 @@ function AnalyticsPanel() {
 
     return (
         <div className="space-y-6">
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
                 <StatCard
                     label="Users"
                     value={stats.totalUsers}
@@ -601,8 +601,8 @@ function AnalyticsPanel() {
                 {topPosts.length === 0 ? (
                     <p className="text-sm text-gray-400 text-center py-4">No posts yet</p>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
+                    <div className="overflow-x-auto -mx-5 px-5">
+                        <table className="w-full text-left min-w-[500px]">
                             <thead>
                                 <tr className="border-b border-gray-100">
                                     <th className="pb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">User</th>

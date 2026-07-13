@@ -3,7 +3,7 @@ import User from "@/models/user";
 import { getSession, signToken } from "@/utils/session";
 
 const COOKIE = "af_session";
-const MAX_AGE = 60 * 60 * 24 * 30;
+const MAX_AGE = 60 * 60 * 24 * 365; // 1 year
 
 export async function GET() {
     try {

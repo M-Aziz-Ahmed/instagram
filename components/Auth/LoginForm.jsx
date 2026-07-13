@@ -124,7 +124,7 @@ export default function LoginForm({ onSuccess }) {
                             Enter the 6-digit code sent to <span className="font-semibold text-gray-900">{email}</span>
                         </p>
                         {/* 6-box OTP input */}
-                        <div className="flex gap-2 justify-center" onPaste={handleOtpPaste}>
+                        <div className="flex gap-1.5 sm:gap-2 justify-center" onPaste={handleOtpPaste}>
                             {otp.map((v, i) => (
                                 <input
                                     key={i}
@@ -136,7 +136,7 @@ export default function LoginForm({ onSuccess }) {
                                     onChange={(e) => handleOtpChange(i, e.target.value)}
                                     onKeyDown={(e) => handleOtpKeyDown(i, e)}
                                     autoFocus={i === 0}
-                                    className="w-12 h-14 text-center text-2xl font-black border-2 border-gray-200 rounded-xl outline-none focus:border-black transition-colors"
+                                    className="w-10 h-12 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-black border-2 border-gray-200 rounded-xl outline-none focus:border-black transition-colors"
                                 />
                             ))}
                         </div>

@@ -120,7 +120,7 @@ export default function ProfileClient({ username }) {
                                     {isOwn && (
                                         <button
                                             onClick={() => setEditingProfile(true)}
-                                            className="ml-1 text-xs border border-gray-300 rounded-full px-3 py-1 hover:bg-gray-50 transition-colors text-gray-600"
+                                            className="ml-1 text-xs border border-gray-300 rounded-full px-4 py-2 hover:bg-gray-50 transition-colors text-gray-600 min-h-[36px]"
                                         >
                                             Edit profile
                                         </button>
@@ -128,7 +128,7 @@ export default function ProfileClient({ username }) {
                                     {!isOwn && user && (
                                         <Link
                                             href={`/inbox?user=${encodeURIComponent(username)}`}
-                                            className="ml-1 text-xs border border-gray-300 rounded-full px-3 py-1 hover:bg-gray-50 transition-colors text-gray-600"
+                                            className="ml-1 text-xs border border-gray-300 rounded-full px-4 py-2 hover:bg-gray-50 transition-colors text-gray-600 min-h-[36px] inline-flex items-center"
                                         >
                                             Message
                                         </Link>
@@ -203,7 +203,7 @@ export default function ProfileClient({ username }) {
                     <div className="bg-white rounded-2xl overflow-hidden max-w-lg w-full max-h-[90dvh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                             <span className="font-bold text-sm">{expandedPost.sender}</span>
-                            <button onClick={() => setExpanded(null)} className="text-gray-400 hover:text-gray-700 p-1" aria-label="Close">
+                            <button onClick={() => setExpanded(null)} className="text-gray-400 hover:text-gray-700 p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center" aria-label="Close">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                 </svg>

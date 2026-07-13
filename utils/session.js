@@ -6,7 +6,7 @@ const SECRET = new TextEncoder().encode(
 );
 
 const COOKIE = "af_session";
-const MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+const MAX_AGE = 60 * 60 * 24 * 365; // 1 year
 
 export async function signToken(payload) {
     return new SignJWT(payload)

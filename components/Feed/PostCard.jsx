@@ -187,16 +187,16 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                         )}
                     </div>
                     {comment.imageUrl && (
-                        <div className="mt-1 rounded-xl overflow-hidden border border-gray-200 max-w-xs">
+                        <div className="mt-1 rounded-xl overflow-hidden border border-gray-200 max-w-[80vw] sm:max-w-xs">
                             <img src={comment.imageUrl} alt="Comment image" className="w-full h-auto block" loading="lazy" />
                         </div>
                     )}
-                    <div className="flex items-center gap-3 mt-0.5 px-1">
+                    <div className="flex items-center gap-2 mt-0.5 px-1">
                         <span className="text-gray-300 text-[11px]">{timeAgo(comment.timeStamp)}</span>
                         {user && (
                             <button
                                 onClick={() => onReply(comment.commentId, comment.sender)}
-                                className="text-[11px] text-gray-400 hover:text-blue-500 font-medium transition-colors"
+                                className="text-[11px] text-gray-400 hover:text-blue-500 font-medium transition-colors px-2 py-1.5 min-h-[36px]"
                             >
                                 Reply
                             </button>
@@ -204,7 +204,7 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                         {user?.username === comment.sender && (
                             <button
                                 onClick={() => onDelete(comment.commentId)}
-                                className="text-[11px] text-gray-400 hover:text-red-500 font-medium transition-colors"
+                                className="text-[11px] text-gray-400 hover:text-red-500 font-medium transition-colors px-2 py-1.5 min-h-[36px]"
                             >
                                 Delete
                             </button>
@@ -372,7 +372,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                                 onClick={handleDelete}
                                 disabled={deleting}
                                 aria-label="Delete post"
-                                className="ml-auto text-gray-300 hover:text-red-500 transition-colors p-1 -mr-1"
+                                className="ml-auto text-gray-300 hover:text-red-500 transition-colors p-2.5 -mr-1 min-h-[44px] min-w-[44px] flex items-center justify-center"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                     strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
@@ -400,12 +400,12 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                         </div>
                     )}
 
-                    <div className="flex items-center gap-5 mt-3">
+                    <div className="flex items-center gap-1 sm:gap-5 mt-3">
                         <button
                             onClick={handleLike}
                             disabled={liking || !user}
                             aria-label={liked ? "Unlike" : "Like"}
-                            className={`flex items-center gap-1.5 text-sm transition-colors group disabled:cursor-not-allowed ${
+                            className={`flex items-center gap-1.5 text-sm transition-colors group disabled:cursor-not-allowed min-h-[44px] px-2 py-1 rounded-lg ${
                                 liked ? "text-red-500" : "text-gray-400 hover:text-red-500"
                             }`}
                         >
@@ -416,7 +416,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                         <button
                             onClick={() => setShowComments((v) => !v)}
                             aria-label="Comments"
-                            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-blue-500 transition-colors"
+                            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-blue-500 transition-colors min-h-[44px] px-2 py-1 rounded-lg"
                         >
                             <CommentIcon />
                             {(post.comments?.length || 0) > 0 && <span>{post.comments.length}</span>}

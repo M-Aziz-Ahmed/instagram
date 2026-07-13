@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
-import UserBadges from "@/components/shared/UserBadges";
 import Link from "next/link";
 
 function StatCard({ label, value, icon }) {
@@ -135,8 +134,8 @@ export default function AnalyticsClient() {
                 </div>
             </header>
 
-            <div className="max-w-5xl mx-auto px-4 py-6">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="max-w-5xl mx-auto px-3 sm:px-4 py-6">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
                     <StatCard
                         label="Posts"
                         value={stats.totalPosts}
@@ -180,18 +179,18 @@ export default function AnalyticsClient() {
                     <div className="bg-white rounded-2xl border border-gray-200 p-5">
                         <h3 className="font-bold text-sm text-gray-900 mb-4">Posts (Last 7 Days)</h3>
                         <MiniChart data={charts.postsByDay} color="#3b82f6" />
-                        <div className="flex justify-between mt-2">
-                            {Object.keys(charts.postsByDay).slice(-7).map((date) => (
-                                <span key={date} className="text-[10px] text-gray-400">{formatDate(date)}</span>
+                        <div className="flex justify-between mt-2 overflow-hidden">
+                            {Object.keys(charts.postsByDay).slice(-7).map((date, i, arr) => (
+                                <span key={date} className={`text-[10px] text-gray-400 ${i === 0 || i === arr.length - 1 ? "" : "hidden sm:inline"}`}>{formatDate(date)}</span>
                             ))}
                         </div>
                     </div>
 
                     <div className="bg-white rounded-2xl border border-gray-200 p-5">
                         <h3 className="font-bold text-sm text-gray-900 mb-4">Engagement Rate</h3>
-                        <div className="flex items-center gap-4">
-                            <div className="text-4xl font-bold text-gray-900">{stats.engagementRate}</div>
-                            <div className="text-sm text-gray-500">avg. interactions per post</div>
+                        <div className="flex items-center gap-3 sm:gap-4">
+                            <div className="text-3xl sm:text-4xl font-bold text-gray-900 truncate">{stats.engagementRate}</div>
+                            <div className="text-xs sm:text-sm text-gray-500">avg. interactions per post</div>
                         </div>
                         <div className="mt-4 grid grid-cols-3 gap-4 text-center">
                             <div>
@@ -218,10 +217,9 @@ export default function AnalyticsClient() {
                         ) : (
                             <div className="space-y-3">
                                 {topPosts.map((post) => (
-                                    <Link
+                                    <div
                                         key={post.id}
-                                        href="/"
-                                        className="block p-3 rounded-xl hover:bg-gray-50 transition-colors"
+                                        className="p-3 rounded-xl hover:bg-gray-50 transition-colors"
                                     >
                                         <p className="text-sm text-gray-900 line-clamp-2">{post.text || "Image post"}</p>
                                         <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
@@ -245,7 +243,7 @@ export default function AnalyticsClient() {
                                                 {post.views}
                                             </span>
                                         </div>
-                                    </Link>
+                                    </div>
                                 ))}
                             </div>
                         )}

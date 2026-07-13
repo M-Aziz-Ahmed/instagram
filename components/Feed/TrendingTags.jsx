@@ -23,7 +23,7 @@ export default function TrendingTags({ activeTag, onTagClick }) {
                         <li key={tag}>
                             <button
                                 onClick={() => onTagClick(tag === activeTag ? null : tag)}
-                                className={`w-full text-left px-3 py-2 rounded-xl transition-colors ${
+                                className={`w-full text-left px-3 py-2.5 rounded-xl transition-colors min-h-[44px] ${
                                     tag === activeTag
                                         ? "bg-blue-100 text-blue-700"
                                         : "hover:bg-gray-100 text-gray-800"

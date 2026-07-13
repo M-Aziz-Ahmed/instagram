@@ -88,7 +88,7 @@ export default function SetupForm({ onDone }) {
                     onClick={() => fileRef.current?.click()}
                     disabled={uploading}
                     title="Upload photo"
-                    className="absolute inset-0 rounded-full bg-black/35 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity disabled:cursor-wait"
+                    className="absolute inset-0 rounded-full bg-black/35 flex items-center justify-center transition-opacity disabled:cursor-wait opacity-100 sm:opacity-0 sm:hover:opacity-100"
                 >
                     {uploading
                         ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -102,7 +102,7 @@ export default function SetupForm({ onDone }) {
                     <button
                         type="button"
                         onClick={() => setAvatarUrl("")}
-                        className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-red-400 hover:underline whitespace-nowrap"
+                        className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs text-red-400 hover:underline whitespace-nowrap px-2 py-1"
                     >
                         Remove photo
                     </button>
@@ -156,7 +156,7 @@ export default function SetupForm({ onDone }) {
                                     key={c}
                                     type="button"
                                     onClick={() => setColor(c)}
-                                    className="w-8 h-8 rounded-full transition-transform hover:scale-110 focus:outline-none"
+                                    className="w-10 h-10 rounded-full transition-transform hover:scale-110 focus:outline-none"
                                     style={{
                                         backgroundColor: c,
                                         boxShadow: color === c ? `0 0 0 3px white, 0 0 0 5px ${c}` : "none",

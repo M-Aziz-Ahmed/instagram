@@ -114,7 +114,7 @@ export default function MentionInput({
             {showDropdown && results.length > 0 && (
                 <div
                     ref={dropdownRef}
-                    className="absolute z-30 bottom-full mb-1 left-0 w-64 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto"
+                    className="absolute z-30 bottom-full mb-1 left-0 w-56 sm:w-64 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto"
                 >
                     {results.map((u, i) => (
                         <button

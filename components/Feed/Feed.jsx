@@ -12,8 +12,11 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag }) {
             const url = activeTag
                 ? `/api/posts?tag=${encodeURIComponent(activeTag)}`
                 : "/api/posts";
-            const res = await fetch(url);
-            if (res.ok) setPosts(await res.json());
+            const res = await fetch(url, { cache: "no-store" });
+            if (res.ok) {
+                const data = await res.json();
+                setPosts(data);
+            }
         } catch (err) {
             console.error(err);
         } finally {
@@ -57,12 +60,12 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag }) {
     return (
         <div>
             {activeTag && (
-                <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
+                <div className="py-3 border-b border-gray-200 flex items-center gap-2">
                     <span className="text-sm font-bold text-blue-600">#{activeTag}</span>
                     <span className="text-xs text-gray-400">{posts.length} post{posts.length !== 1 ? "s" : ""}</span>
                     <button
                         onClick={() => onHashtag(null)}
-                        className="ml-auto text-xs text-gray-400 hover:text-gray-600"
+                        className="ml-auto text-xs text-gray-400 hover:text-gray-600 px-3 py-2 min-h-[44px]"
                     >
                         ✕ Clear
                     </button>

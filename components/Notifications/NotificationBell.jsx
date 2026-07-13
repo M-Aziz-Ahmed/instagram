@@ -67,7 +67,7 @@ export default function NotificationBell({ onNavigate }) {
             <button
                 onClick={handleOpen}
                 aria-label="Notifications"
-                className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors"
+                className="relative p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                     strokeWidth={1.8} stroke="currentColor" className="w-6 h-6">
@@ -82,7 +82,7 @@ export default function NotificationBell({ onNavigate }) {
             </button>
 
             {open && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-200 z-50 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] max-w-80 bg-white rounded-2xl shadow-xl border border-gray-200 z-50 overflow-hidden">
                     <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                         <span className="font-bold text-sm text-gray-900">Notifications</span>
                         {notifs.length > 0 && (
