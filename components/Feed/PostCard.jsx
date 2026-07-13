@@ -7,6 +7,7 @@ import RichText from "./RichText";
 import UserBadges from "@/components/shared/UserBadges";
 import BookmarkButton from "@/components/shared/BookmarkButton";
 import FollowButton from "@/components/shared/FollowButton";
+import ImageLightbox from "@/components/shared/ImageLightbox";
 import Link from "next/link";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -170,6 +171,7 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
         [allComments, comment.commentId]
     );
 
+    const [commentLightbox, setCommentLightbox] = useState(false);
     const author = comment._author || null;
     const avatarUrl = author?.avatarUrl || comment.avatarUrl;
 
@@ -190,9 +192,12 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                         )}
                     </div>
                     {comment.imageUrl && (
-                        <div className="mt-1 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 max-w-[80vw] sm:max-w-xs">
+                        <div className="mt-1 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 max-w-[80vw] sm:max-w-xs cursor-pointer" onClick={() => setCommentLightbox(true)}>
                             <img src={comment.imageUrl} alt="Comment image" className="w-full h-auto block" loading="lazy" />
                         </div>
+                    )}
+                    {commentLightbox && comment.imageUrl && (
+                        <ImageLightbox src={comment.imageUrl} alt="Comment image" onClose={() => setCommentLightbox(false)} />
                     )}
                     <div className="flex items-center gap-2 mt-0.5 px-1">
                         <span className="text-gray-300 dark:text-gray-600 text-[11px]">{timeAgo(comment.timeStamp)}</span>
@@ -246,8 +251,10 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     const [replyToName, setReplyToName]       = useState("");
     const [viewCount, setViewCount]           = useState(initialPost.viewCount || 0);
     const [showHeart, setShowHeart]           = useState(false);
+    const [lightboxSrc, setLightboxSrc]       = useState(null);
     const hasTrackedView = useRef(false);
     const lastTapRef = useRef(0);
+    const singleTapTimer = useRef(null);
     const imageRef = useRef(null);
 
     const liked = user ? post.likes.includes(user.username) : false;
@@ -291,15 +298,24 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
         }
     };
 
-    // Double-tap to like on image
+    // Double-tap to like, single tap to open lightbox
     const handleImageTap = () => {
-        if (!user) return;
+        if (!user) {
+            setLightboxSrc(post.imageUrl);
+            return;
+        }
         const now = Date.now();
         if (now - lastTapRef.current < 300) {
             // Double tap detected
+            clearTimeout(singleTapTimer.current);
             if (!liked) handleLike();
             setShowHeart(true);
             setTimeout(() => setShowHeart(false), 900);
+        } else {
+            // Single tap — wait to see if double tap follows
+            singleTapTimer.current = setTimeout(() => {
+                setLightboxSrc(post.imageUrl);
+            }, 300);
         }
         lastTapRef.current = now;
     };
@@ -387,6 +403,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     };
 
     return (
+        <>
         <article className="border-b border-gray-200 dark:border-gray-800 px-4 py-4">
             <div className="flex gap-3">
                 <PostAvatar sender={post.sender} color={post.color} avatarUrl={post.avatarUrl} author={author} />
@@ -535,5 +552,10 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                 </div>
             </div>
         </article>
+
+        {lightboxSrc && (
+            <ImageLightbox src={lightboxSrc} alt="Post image" onClose={() => setLightboxSrc(null)} />
+        )}
+        </>
     );
 }

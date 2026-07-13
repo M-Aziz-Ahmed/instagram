@@ -1,5 +1,6 @@
 import connectDB from "@/utils/db";
 import Message from "@/models/messages";
+import Notification from "@/models/notification";
 
 export async function GET(request) {
     try {
@@ -94,6 +95,15 @@ export async function POST(request) {
             recipient: recipient.trim(),
             color:     color || "#3b82f6",
         });
+
+        Notification.create({
+            recipient: recipient.trim(),
+            type: "message",
+            fromUser: sender.trim(),
+            fromColor: color || "#3b82f6",
+            postId: message._id.toString(),
+            text: text.trim().slice(0, 120),
+        }).catch(() => {});
 
         return Response.json(message.toObject(), { status: 201 });
     } catch (error) {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import PostCard from "@/components/Feed/PostCard";
 import UserBadges from "@/components/shared/UserBadges";
+import ImageLightbox from "@/components/shared/ImageLightbox";
 import EditProfileModal from "@/components/Auth/EditProfileModal";
 import Sidebar from "@/components/Layout/Sidebar";
 import Link from "next/link";
@@ -38,6 +39,7 @@ export default function ProfileClient({ username }) {
     const [expanded, setExpanded]             = useState(null);
     const [editingProfile, setEditingProfile] = useState(false);
     const [sidebarOpen, setSidebarOpen]       = useState(false);
+    const [avatarLightbox, setAvatarLightbox] = useState(false);
 
     const isOwn = user?.username === username;
 
@@ -104,11 +106,11 @@ export default function ProfileClient({ username }) {
                     <>
                         {/* Profile header */}
                         <div className="flex items-start gap-5 mb-6">
-                            <div className="relative shrink-0">
+                            <div className="relative shrink-0 cursor-pointer" onClick={() => { if (profile.avatarUrl) setAvatarLightbox(true); }}>
                                 <Avatar username={username} avatarUrl={profile.avatarUrl} color={profile.avatarColor} size="lg" />
                                 {isOwn && (
                                     <button
-                                        onClick={() => setEditingProfile(true)}
+                                        onClick={(e) => { e.stopPropagation(); setEditingProfile(true); }}
                                         title="Change photo"
                                         aria-label="Change profile photo"
                                         className="absolute inset-0 rounded-full bg-black/30 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity"
@@ -218,6 +220,10 @@ export default function ProfileClient({ username }) {
             )}
 
             <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+            {avatarLightbox && profile.avatarUrl && (
+                <ImageLightbox src={profile.avatarUrl} alt={username} onClose={() => setAvatarLightbox(false)} />
+            )}
         </div>
     );
 }

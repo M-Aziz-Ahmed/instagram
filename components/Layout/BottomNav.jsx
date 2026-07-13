@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/context/UserContext";
@@ -55,6 +56,24 @@ const NAV_ITEMS = [
 export default function BottomNav() {
     const { user } = useUser();
     const pathname = usePathname();
+    const [unreadCount, setUnreadCount] = useState(0);
+
+    const fetchUnread = useCallback(async () => {
+        if (!user) return;
+        try {
+            const res = await fetch(`/api/messages/unread?username=${encodeURIComponent(user.username)}`);
+            if (res.ok) {
+                const data = await res.json();
+                setUnreadCount(data.total);
+            }
+        } catch { /* silent */ }
+    }, [user]);
+
+    useEffect(() => {
+        fetchUnread();
+        const id = setInterval(fetchUnread, 10000);
+        return () => clearInterval(id);
+    }, [fetchUnread]);
 
     const profileHref = user?.username
         ? `/profile/${encodeURIComponent(user.username)}`
@@ -80,13 +99,16 @@ export default function BottomNav() {
                             key={label}
                             href={targetHref}
                             aria-label={label}
-                            className={`flex flex-col items-center justify-center gap-0.5 w-full h-full transition-colors min-h-[44px] ${
+                            className={`relative flex flex-col items-center justify-center gap-0.5 w-full h-full transition-colors min-h-[44px] ${
                                 active
                                     ? "text-gray-900 dark:text-gray-100"
                                     : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"
                             }`}
                         >
                             {icon(active)}
+                            {label === "Inbox" && unreadCount > 0 && (
+                                <span className="absolute top-1.5 right-1/2 translate-x-3 w-2 h-2 bg-blue-500 rounded-full" />
+                            )}
                         </Link>
                     );
                 })}

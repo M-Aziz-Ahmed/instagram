@@ -1,32 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useRouter, usePathname } from "next/navigation";
 import EditProfileModal from "@/components/Auth/EditProfileModal";
 import Link from "next/link";
 
-function NavItem({ href, icon, label, active, onClick }) {
+function NavItem({ href, icon, label, active, onClick, badge }) {
     const classes = `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors min-h-[48px] ${
         active
             ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/60 hover:text-gray-900 dark:hover:text-gray-100"
     }`;
 
+    const content = (
+        <>
+            {icon}
+            <span className="flex-1">{label}</span>
+            {badge > 0 && (
+                <span className="bg-blue-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center leading-none px-1">
+                    {badge > 99 ? "99+" : badge}
+                </span>
+            )}
+        </>
+    );
+
     if (href) {
         return (
             <Link href={href} onClick={onClick} className={classes}>
-                {icon}
-                <span>{label}</span>
+                {content}
             </Link>
         );
     }
 
     return (
         <button onClick={onClick} className={`${classes} w-full text-left`}>
-            {icon}
-            <span>{label}</span>
+            {content}
         </button>
     );
 }
@@ -110,6 +120,24 @@ export default function Sidebar({ open, onClose }) {
     const router = useRouter();
     const pathname = usePathname();
     const [editingProfile, setEditingProfile] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
+
+    const fetchUnread = useCallback(async () => {
+        if (!user) return;
+        try {
+            const res = await fetch(`/api/messages/unread?username=${encodeURIComponent(user.username)}`);
+            if (res.ok) {
+                const data = await res.json();
+                setUnreadCount(data.total);
+            }
+        } catch { /* silent */ }
+    }, [user]);
+
+    useEffect(() => {
+        fetchUnread();
+        const id = setInterval(fetchUnread, 10000);
+        return () => clearInterval(id);
+    }, [fetchUnread]);
 
     const handleLogout = async () => {
         onClose();
@@ -194,6 +222,7 @@ export default function Sidebar({ open, onClose }) {
                             label="Inbox"
                             active={isActive("/inbox")}
                             onClick={handleNavClick}
+                            badge={unreadCount}
                         />
                         {user?.isAdmin && (
                             <NavItem

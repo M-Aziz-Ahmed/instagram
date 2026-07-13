@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
+import { useRouter } from "next/navigation";
 
 function timeAgo(date) {
     const diff = (Date.now() - new Date(date)) / 1000;
@@ -15,10 +16,12 @@ const TYPE_LABEL = {
     like:    "liked your post",
     comment: "commented on your post",
     mention: "mentioned you",
+    message: "sent you a message",
 };
 
 export default function NotificationBell({ onNavigate }) {
     const { user } = useUser();
+    const router = useRouter();
     const [notifs, setNotifs]   = useState([]);
     const [open, setOpen]       = useState(false);
     const panelRef              = useRef(null);
@@ -104,9 +107,17 @@ export default function NotificationBell({ onNavigate }) {
                         {notifs.length === 0 ? (
                             <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">No notifications yet</p>
                         ) : notifs.map((n) => (
-                            <div
+                            <button
                                 key={n._id}
-                                className={`flex items-start gap-3 px-4 py-3 border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${!n.read ? "bg-blue-50/40 dark:bg-blue-900/10" : ""}`}
+                                onClick={() => {
+                                    setOpen(false);
+                                    if (n.type === "message") {
+                                        router.push(`/inbox?user=${encodeURIComponent(n.fromUser)}`);
+                                    } else if (n.postId) {
+                                        router.push(`/`);
+                                    }
+                                }}
+                                className={`w-full flex items-start gap-3 px-4 py-3 border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left ${!n.read ? "bg-blue-50/40 dark:bg-blue-900/10" : ""}`}
                             >
                                 <div
                                     className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold select-none"
@@ -129,7 +140,7 @@ export default function NotificationBell({ onNavigate }) {
                                 {!n.read && (
                                     <span className="w-2 h-2 bg-blue-500 rounded-full shrink-0 mt-1.5" />
                                 )}
-                            </div>
+                            </button>
                         ))}
                     </div>
                 </div>
