@@ -46,7 +46,6 @@ export default function LoginClient() {
                             <LoginForm
                                 onSuccess={(needsSetup) => {
                                     if (needsSetup) setScreen("setup");
-                                    else router.replace("/");
                                 }}
                             />
                         </>

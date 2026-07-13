@@ -7,7 +7,7 @@ const SECRET = new TextEncoder().encode(
 
 const PUBLIC_PATHS = ["/login", "/api/auth/send-otp", "/api/auth/verify-otp"];
 
-export async function proxy(request) {
+export async function middleware(request) {
     const { pathname } = request.nextUrl;
 
     if (

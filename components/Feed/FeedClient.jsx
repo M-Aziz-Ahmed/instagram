@@ -31,7 +31,11 @@ export default function FeedClient() {
 
     if (user.needsSetup) {
         router.replace("/login");
-        return null;
+        return (
+            <div className="flex h-dvh items-center justify-center">
+                <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+            </div>
+        );
     }
 
     const handleHashtag = (tag) => {
