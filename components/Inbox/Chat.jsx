@@ -245,9 +245,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                     setOldestTimestamp(first.timeStamp);
                 } else {
                     // Initial load or polling
-                    if (!oldestTimestamp) {
-                        setOldestTimestamp(first.timeStamp);
-                    }
+                    setOldestTimestamp(prevOldest => prevOldest || first.timeStamp);
                     
                     if (latestTimestampRef.current && !isNearBottomRef.current) {
                         const newCount = fetched.filter((m) => new Date(m.timeStamp) > new Date(latestTimestampRef.current)).length;
@@ -273,7 +271,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             console.error("Failed to fetch messages:", err);
             return null;
         }
-    }, [username, recipient, oldestTimestamp]);
+    }, [username, recipient]);
 
     const loadOlderMessages = useCallback(async () => {
         if (!username || !recipient || !hasMore || loadingMore || !oldestTimestamp) return;
