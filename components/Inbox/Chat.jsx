@@ -141,6 +141,14 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             }
 
             if (pm._id && !pm._sending) {
+                // Prefer replacing a matching optimistic message (by content) with server message
+                const tempIndex = prev.findIndex((m) => m._tempId && m.sender === pm.sender && m.text === pm.text && m.imageUrl === pm.imageUrl);
+                if (tempIndex !== -1) {
+                    const copy = prev.slice();
+                    copy[tempIndex] = pm;
+                    return copy;
+                }
+
                 const exists = prev.some((m) => m._id === pm._id);
                 if (exists) {
                     return prev.map((m) => (m._id === pm._id ? { ...m, _sending: false } : m));
@@ -148,10 +156,13 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                 return [...prev, pm];
             }
 
-            const existsTemp = prev.some((m) => m._tempId === pm._tempId);
-            if (existsTemp) {
-                return prev.map((m) => (m._tempId === pm._tempId ? pm : m));
+            if (pm._tempId) {
+                const existsTemp = prev.some((m) => m._tempId === pm._tempId);
+                if (existsTemp) {
+                    return prev.map((m) => (m._tempId === pm._tempId ? pm : m));
+                }
             }
+
             return [...prev, pm];
         });
 
@@ -192,7 +203,8 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             setHasMore(Boolean(data.hasMore));
 
             setMessages(prev => {
-                const prevMap = new Map(prev.map(m => [m._id, m]));
+                const keyOf = (m) => m._id || m._tempId;
+                const prevMap = new Map(prev.map(m => [keyOf(m), m]));
                 const items = fetched.map(m => {
                     const local = prevMap.get(m._id);
                     return local ? { ...m, _sending: local._sending } : m;
@@ -202,7 +214,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                     return [...items, ...prev];
                 }
 
-                const mergedMap = new Map(prev.map(m => [m._id, m]));
+                const mergedMap = new Map(prev.map(m => [keyOf(m), m]));
                 for (const item of items) {
                     const existing = mergedMap.get(item._id);
                     mergedMap.set(item._id, existing ? { ...item, _sending: existing._sending } : item);
