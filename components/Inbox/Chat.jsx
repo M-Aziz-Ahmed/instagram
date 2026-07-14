@@ -168,6 +168,13 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
 
     useEffect(() => {
         if (!recipient) return;
+        isNearBottomRef.current = true;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setShowScrollBtn(false);
+    }, [recipient]);
+
+    useEffect(() => {
+        if (!recipient) return;
         const interval = setInterval(fetchMessages, 2000);
         return () => clearInterval(interval);
     }, [fetchMessages, recipient]);
