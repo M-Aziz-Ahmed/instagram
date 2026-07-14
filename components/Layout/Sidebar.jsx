@@ -19,13 +19,13 @@ function NavItem({ href, icon, label, active, onClick, badge }) {
 
     const content = (
         <>
-            {icon}
-            <span className={collapsed ? "sr-only" : "flex-1"}>{label}</span>
-            {badge > 0 && (
-                <span className="bg-blue-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center leading-none px-1">
-                    {badge > 99 ? "99+" : badge}
-                </span>
-            )}
+                {icon}
+                <span className={collapsed ? "sr-only" : "flex-1"}>{label}</span>
+                {badge > 0 && !collapsed && (
+                    <span className="bg-blue-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center leading-none px-1">
+                        {badge > 99 ? "99+" : badge}
+                    </span>
+                )}
         </>
     );
 
@@ -37,11 +37,11 @@ function NavItem({ href, icon, label, active, onClick, badge }) {
         );
     }
 
-    return (
-        <button onClick={onClick} className={`${classes} w-full text-left`}>
-            {content}
-        </button>
-    );
+        return (
+            <button onClick={onClick} className={`${classes} w-full ${collapsed ? "" : "text-left"}`}>
+                {content}
+            </button>
+        );
 }
 
 function HomeIcon() {
@@ -138,7 +138,7 @@ export default function Sidebar({ open, onClose }) {
     }, [user]);
 
     useEffect(() => {
-        fetchUnread();
+        queueMicrotask(() => { void fetchUnread(); });
         const id = setInterval(fetchUnread, 10000);
         return () => clearInterval(id);
     }, [fetchUnread]);
@@ -177,43 +177,47 @@ export default function Sidebar({ open, onClose }) {
                 <div className="flex flex-col h-full">
                     {/* User profile header */}
                     <div className="px-5 pt-6 pb-4">
-                        <div className="flex items-center justify-between gap-3 mb-3">
+                        <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-3">
                                 <div
-                                className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg select-none shrink-0 overflow-hidden"
-                                style={{ backgroundColor: user?.avatarColor }}
-                            >
-                                {user?.avatarUrl ? (
-                                    <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                    user?.username?.[0]?.toUpperCase()
-                                )}
-                            </div>
-                            <div className="min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                    <p className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">@{user?.username}</p>
-                                    <UserBadges isVerified={user?.isVerified} isAdmin={user?.isAdmin} roles={user?.roles || []} size="sm" />
-                                </div>
-                                {user?.bio && (
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{user.bio}</p>
-                                )}
-                            </div>
-                            <button
-                                onClick={toggleCollapsed}
-                                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                                className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-5 h-5">
-                                    {collapsed ? (
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
+                                    className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg select-none shrink-0 overflow-hidden"
+                                    style={{ backgroundColor: user?.avatarColor }}
+                                >
+                                    {user?.avatarUrl ? (
+                                        <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
                                     ) : (
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 6l-6 6 6 6" />
+                                        user?.username?.[0]?.toUpperCase()
                                     )}
-                                </svg>
-                            </button>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            
+                                </div>
+
+                                {!collapsed && (
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-1.5">
+                                            <p className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">@{user?.username}</p>
+                                            <UserBadges isVerified={user?.isVerified} isAdmin={user?.isAdmin} roles={user?.roles || []} size="sm" />
+                                        </div>
+                                        {user?.bio && (
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{user.bio}</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={toggleCollapsed}
+                                    aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                                    className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-5 h-5">
+                                        {collapsed ? (
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
+                                        ) : (
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 6l-6 6 6 6" />
+                                        )}
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
