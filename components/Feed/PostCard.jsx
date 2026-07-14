@@ -256,6 +256,8 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     const lastTapRef = useRef(0);
     const singleTapTimer = useRef(null);
     const imageRef = useRef(null);
+    const touchStartRef = useRef(null);
+    const scrollDetectedRef = useRef(false);
 
     const liked = user ? post.likes.includes(user.username) : false;
     const isOwn = user?.username === post.sender;
@@ -298,8 +300,31 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
         }
     };
 
-    // Double-tap to like, single tap to open lightbox
+    const handleTouchStart = (e) => {
+        const t = e.touches[0];
+        touchStartRef.current = { x: t.clientX, y: t.clientY };
+        scrollDetectedRef.current = false;
+    };
+
+    const handleTouchEnd = (e) => {
+        if (!touchStartRef.current) return;
+        const t = e.changedTouches?.[0];
+        if (t) {
+            const dx = Math.abs(t.clientX - touchStartRef.current.x);
+            const dy = Math.abs(t.clientY - touchStartRef.current.y);
+            if (dx > 10 || dy > 10) {
+                scrollDetectedRef.current = true;
+            }
+        }
+        touchStartRef.current = null;
+    };
+
+    // Double-tap to like, single tap to open lightbox (fires via onClick only)
     const handleImageTap = () => {
+        if (scrollDetectedRef.current) {
+            scrollDetectedRef.current = false;
+            return;
+        }
         if (!user) {
             setLightboxSrc(post.imageUrl);
             return;
@@ -453,7 +478,8 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                             ref={imageRef}
                             className="mt-3 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 relative cursor-pointer select-none"
                             onClick={handleImageTap}
-                            onTouchEnd={handleImageTap}
+                            onTouchStart={handleTouchStart}
+                            onTouchEnd={handleTouchEnd}
                         >
                             <img
                                 src={post.imageUrl}

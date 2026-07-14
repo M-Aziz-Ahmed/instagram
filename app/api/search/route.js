@@ -6,7 +6,7 @@ export async function GET(request) {
     try {
         const { searchParams } = new URL(request.url);
         const q = searchParams.get("q")?.trim();
-        if (!q) return Response.json({ users: [], posts: [] });
+        if (!q) return Response.json({ users: [], posts: [], hashtags: [] });
 
         await connectDB();
 
@@ -25,7 +25,17 @@ export async function GET(request) {
             .limit(20)
             .lean();
 
-        return Response.json({ users, posts });
+        const hashtagResults = await Post.aggregate([
+            { $unwind: "$hashtags" },
+            { $match: { hashtags: regex } },
+            { $group: { _id: "$hashtags", count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 10 },
+        ]);
+
+        const hashtags = hashtagResults.map((r) => ({ tag: r._id, count: r.count }));
+
+        return Response.json({ users, posts, hashtags });
     } catch (error) {
         console.error(error);
         return Response.json({ error: "Search failed" }, { status: 500 });
