@@ -124,6 +124,8 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     const [hasMore, setHasMore] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
     const [oldestTimestamp, setOldestTimestamp] = useState(null);
+    const [newMessagesCount, setNewMessagesCount] = useState(0);
+    const latestTimestampRef = useRef(null);
 
     const fetchMessages = useCallback(async (options = {}) => {
         if (!username || !recipient) return null;
@@ -148,12 +150,32 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                     const local = prevMap.get(m._id);
                     return local ? { ...m, _sending: local._sending } : m;
                 });
-                return options.prepend ? [...items, ...prev] : items;
+
+                if (options.prepend) {
+                    return [...items, ...prev];
+                }
+
+                const mergedMap = new Map(prev.map(m => [m._id, m]));
+                for (const item of items) {
+                    const existing = mergedMap.get(item._id);
+                    mergedMap.set(item._id, existing ? { ...item, _sending: existing._sending } : item);
+                }
+                return Array.from(mergedMap.values()).sort((a, b) => new Date(a.timeStamp) - new Date(b.timeStamp));
             });
 
             if (fetched.length) {
                 const first = fetched[0];
+                const last = fetched[fetched.length - 1];
                 setOldestTimestamp(first.timeStamp);
+                if (!options.prepend) {
+                    if (latestTimestampRef.current && !isNearBottomRef.current) {
+                        const newCount = fetched.filter((m) => new Date(m.timeStamp) > new Date(latestTimestampRef.current)).length;
+                        if (newCount > 0) {
+                            setNewMessagesCount((count) => count + newCount);
+                        }
+                    }
+                    latestTimestampRef.current = last.timeStamp;
+                }
             }
 
             if (!options.prepend) {
@@ -276,6 +298,11 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             scrollToBottom();
         }
     }, [messages, scrollToBottom]);
+
+    useEffect(() => {
+        if (!isNearBottomRef.current && newMessagesCount > 0) return;
+        setNewMessagesCount(0);
+    }, [messages, newMessagesCount]);
 
     if (loading) {
         return (
@@ -448,6 +475,20 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                 </svg>
+            </button>
+        )}
+
+        {newMessagesCount > 0 && (
+            <button
+                onClick={() => {
+                    isNearBottomRef.current = true;
+                    setShowScrollBtn(false);
+                    setNewMessagesCount(0);
+                    scrollToBottom();
+                }}
+                className="fixed bottom-24 left-1/2 -translate-x-1/2 z-20 rounded-full bg-blue-500 px-4 py-2 text-xs font-semibold text-white shadow-lg hover:bg-blue-600 transition-colors"
+            >
+                {newMessagesCount} new message{newMessagesCount > 1 ? "s" : ""}
             </button>
         )}
 
