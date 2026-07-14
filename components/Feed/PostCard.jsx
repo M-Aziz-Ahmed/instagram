@@ -614,16 +614,6 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                             <BookmarkButton postId={post._id} />
                         </div>
                     </div>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                                </svg>
-                                <span>{viewCount}</span>
-                            </span>
-                        )}
-
-                        <div className="ml-auto">
-                            <BookmarkButton postId={post._id} />
-                        </div>
-                    </div>
 
                     {post.reactions && (
                         <ReactionCounts 

@@ -266,6 +266,13 @@ export async function PATCH(request, { params }) {
             return Response.json(enriched);
         }
 
+        return Response.json({ error: "Invalid action" }, { status: 400 });
+    } catch (error) {
+        console.error(error);
+        return Response.json({ error: "Failed to update post" }, { status: 500 });
+    }
+}
+
 export async function DELETE(request, { params }) {
     try {
         const { id } = await params;
