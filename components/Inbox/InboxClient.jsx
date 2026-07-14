@@ -15,6 +15,28 @@ function timeAgo(date) {
     return new Date(date).toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+function OnlineDot({ username }) {
+    const [online, setOnline] = useState(false);
+    useEffect(() => {
+        let cancelled = false;
+        const check = async () => {
+            try {
+                const res = await fetch(`/api/users/${encodeURIComponent(username)}/active`);
+                if (res.ok && !cancelled) {
+                    const data = await res.json();
+                    setOnline(data.isOnline);
+                }
+            } catch { /* silent */ }
+        };
+        check();
+        const id = setInterval(check, 30000);
+        return () => { cancelled = true; clearInterval(id); };
+    }, [username]);
+
+    if (!online) return null;
+    return <span className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" title="Online" />;
+}
+
 export default function InboxClient() {
     const { user, ready } = useUser();
     const router = useRouter();
@@ -26,6 +48,19 @@ export default function InboxClient() {
     const [selectedConvo, setSelectedConvo] = useState(null);
     const [sidebarOpen, setSidebarOpen]     = useState(false);
     const urlInitDoneRef                    = useRef(false);
+
+    useEffect(() => {
+        if (!user || !selectedConvo) return;
+        const clearTyping = () => {
+            fetch("/api/typing", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: user.username, typingTo: "" }),
+            }).catch(() => {});
+        };
+
+        return () => clearTyping();
+    }, [user, selectedConvo?.username]);
 
     const fetchConversations = useCallback(async () => {
         if (!user) return;
@@ -150,6 +185,7 @@ export default function InboxClient() {
                                     <div className="flex items-center gap-1.5">
                                         <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{convo.username}</p>
                                         <UserBadges isVerified={convo.user?.isVerified} isAdmin={convo.user?.isAdmin} roles={convo.user?.roles || []} size="sm" />
+                                        <OnlineDot username={convo.username} />
                                     </div>
                                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                                         {convo.lastMessage?.sender === user?.username ? "You: " : ""}

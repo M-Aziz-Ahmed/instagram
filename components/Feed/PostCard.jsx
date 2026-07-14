@@ -8,6 +8,7 @@ import UserBadges from "@/components/shared/UserBadges";
 import BookmarkButton from "@/components/shared/BookmarkButton";
 import FollowButton from "@/components/shared/FollowButton";
 import ImageLightbox from "@/components/shared/ImageLightbox";
+import ReactionPicker from "./ReactionPicker";
 import Link from "next/link";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -252,6 +253,8 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     const [viewCount, setViewCount]           = useState(initialPost.viewCount || 0);
     const [showHeart, setShowHeart]           = useState(false);
     const [lightboxSrc, setLightboxSrc]       = useState(null);
+    const [showReactions, setShowReactions]   = useState(false);
+    const [reacting, setReacting]             = useState(false);
     const hasTrackedView = useRef(false);
     const lastTapRef = useRef(0);
     const singleTapTimer = useRef(null);
@@ -297,6 +300,21 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
             if (res.ok) setPost(await res.json());
         } finally {
             setLiking(false);
+        }
+    };
+
+    const handleReaction = async (emoji) => {
+        if (!user || reacting) return;
+        setReacting(true);
+        try {
+            const res = await fetch(`/api/posts/${post._id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: user.username, action: "react", emoji }),
+            });
+            if (res.ok) setPost(await res.json());
+        } finally {
+            setReacting(false);
         }
     };
 
@@ -446,6 +464,13 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                         </span>
                         <span className="text-gray-400 dark:text-gray-500 text-xs">&middot;</span>
                         <span className="text-gray-400 dark:text-gray-500 text-xs">{timeAgo(post.timeStamp)}</span>
+                        {post.visibility === "closeFriends" && (
+                            <span className="inline-flex items-center gap-0.5 text-[11px] text-green-500 font-medium" title="Close Friends only">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                                </svg>
+                            </span>
+                        )}
                         <div className="ml-auto flex items-center gap-1">
                             {!isOwn && user && !author?.followers?.includes?.(user.username) && (
                                 <FollowButton username={post.sender} size="xs" />
@@ -498,18 +523,27 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                         </div>
                     )}
 
-                    <div className="flex items-center gap-1 sm:gap-5 mt-3">
-                        <button
-                            onClick={handleLike}
-                            disabled={liking || !user}
-                            aria-label={liked ? "Unlike" : "Like"}
-                            className={`flex items-center gap-1.5 text-sm transition-colors group disabled:cursor-not-allowed min-h-[44px] px-2 py-1 rounded-lg ${
-                                liked ? "text-red-500" : "text-gray-400 dark:text-gray-500 hover:text-red-500"
-                            }`}
-                        >
-                            <HeartIcon filled={liked} />
-                            {post.likes.length > 0 && <span>{post.likes.length}</span>}
-                        </button>
+                    <div className="flex items-center gap-1 sm:gap-5 mt-3 relative">
+                        <div className="relative">
+                            <button
+                                onClick={handleLike}
+                                onContextMenu={(e) => { e.preventDefault(); setShowReactions(!showReactions); }}
+                                onDoubleClick={() => setShowReactions(!showReactions)}
+                                disabled={liking || !user}
+                                aria-label={liked ? "Unlike" : "Like"}
+                                className={`flex items-center gap-1.5 text-sm transition-colors group disabled:cursor-not-allowed min-h-[44px] px-2 py-1 rounded-lg ${
+                                    liked ? "text-red-500" : "text-gray-400 dark:text-gray-500 hover:text-red-500"
+                                }`}
+                            >
+                                <HeartIcon filled={liked} />
+                                {post.likes.length > 0 && <span>{post.likes.length}</span>}
+                            </button>
+                            <ReactionPicker
+                                visible={showReactions}
+                                onSelect={handleReaction}
+                                onClose={() => setShowReactions(false)}
+                            />
+                        </div>
 
                         <button
                             onClick={() => setShowComments((v) => !v)}
@@ -534,6 +568,25 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                             <BookmarkButton postId={post._id} />
                         </div>
                     </div>
+
+                    {post.reactions && Object.keys(post.reactions).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                            {Object.entries(post.reactions).map(([emoji, users]) => (
+                                <button
+                                    key={emoji}
+                                    onClick={() => user && handleReaction(emoji)}
+                                    className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                                        users.includes(user?.username)
+                                            ? "bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400"
+                                            : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    }`}
+                                >
+                                    <span className="text-sm">{emoji}</span>
+                                    <span className="font-medium">{users.length}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
                     {showComments && (
                         <div className="mt-3 flex flex-col gap-2">

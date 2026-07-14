@@ -107,6 +107,33 @@ function FollowListModal({ username, type, onClose }) {
     );
 }
 
+function ActiveIndicator({ username }) {
+    const [online, setOnline] = useState(false);
+    useEffect(() => {
+        let cancelled = false;
+        const check = async () => {
+            try {
+                const res = await fetch(`/api/users/${encodeURIComponent(username)}/active`);
+                if (res.ok && !cancelled) {
+                    const data = await res.json();
+                    setOnline(data.isOnline);
+                }
+            } catch { /* silent */ }
+        };
+        check();
+        const id = setInterval(check, 30000);
+        return () => { cancelled = true; clearInterval(id); };
+    }, [username]);
+
+    if (!online) return null;
+    return (
+        <span className="inline-flex items-center gap-1 text-xs text-green-500 font-medium">
+            <span className="w-2 h-2 rounded-full bg-green-500" />
+            Active now
+        </span>
+    );
+}
+
 export default function ProfileClient({ username }) {
     const { user } = useUser();
     const [data, setData]                     = useState(null);
@@ -118,6 +145,16 @@ export default function ProfileClient({ username }) {
     const [listModal, setListModal]           = useState(null);
 
     const isOwn = user?.username === username;
+
+    useEffect(() => {
+        if (!user || !isOwn) return;
+        const ping = () => {
+            fetch(`/api/users/${encodeURIComponent(user.username)}/active`, { method: "POST" }).catch(() => {});
+        };
+        ping();
+        const id = setInterval(ping, 60000);
+        return () => clearInterval(id);
+    }, [user, isOwn]);
 
     const fetchProfile = useCallback(async () => {
         setLoading(true);
@@ -223,6 +260,7 @@ export default function ProfileClient({ username }) {
                                 <div className="flex items-center gap-2 flex-wrap mb-1">
                                     <h1 className="font-black text-xl text-gray-900 dark:text-gray-100">@{username}</h1>
                                     <UserBadges isVerified={profile.isVerified} isAdmin={profile.isAdmin} roles={profile.roles} />
+                                    {!isOwn && <ActiveIndicator username={username} />}
                                     {!isOwn && user && (
                                         <>
                                             <FollowButton username={username} onToggle={handleFollowToggle} />

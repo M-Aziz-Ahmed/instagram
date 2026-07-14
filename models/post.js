@@ -22,6 +22,8 @@ const postSchema = new mongoose.Schema({
     hashtags:  { type: [String], default: [] },
     mentions:  { type: [String], default: [] },
     viewCount: { type: Number, default: 0 },
+    reactions:  { type: Map, of: [{ type: String }], default: {} },
+    visibility: { type: String, enum: ["public", "closeFriends"], default: "public" },
     timeStamp: { type: Date, default: Date.now },
 });
 

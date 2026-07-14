@@ -73,10 +73,25 @@ export async function GET(request) {
             query.timeStamp = { $lt: new Date(before) };
         }
 
-        const posts = await Post.find(query)
+        let posts = await Post.find(query)
             .sort({ timeStamp: -1 })
-            .limit(limit + 1)
+            .limit(limit + 50)
             .lean();
+
+        if (username) {
+            const viewer = await User.findOne({ username }).select("mutedWords closeFriends").lean();
+            const muted = new Set((viewer?.mutedWords || []).map((w) => w.toLowerCase()));
+
+            posts = posts.filter((p) => {
+                const words = (p.text || "").toLowerCase().split(/\s+/);
+                const tags = (p.hashtags || []).map((t) => t.toLowerCase());
+                if ([...words, ...tags].some((w) => muted.has(w))) return false;
+                if (p.visibility === "closeFriends") {
+                    return viewer?.closeFriends?.includes(p.sender) || p.sender === username;
+                }
+                return true;
+            });
+        }
 
         const hasMore = posts.length > limit;
         const sliced = hasMore ? posts.slice(0, limit) : posts;
@@ -95,7 +110,7 @@ export async function GET(request) {
 
 export async function POST(request) {
     try {
-        const { text, imageUrl: providedUrl, imageData, sender, color } = await request.json();
+        const { text, imageUrl: providedUrl, imageData, sender, color, visibility } = await request.json();
 
         if (!sender?.trim()) {
             return Response.json({ error: "Sender is required" }, { status: 400 });
@@ -124,6 +139,7 @@ export async function POST(request) {
             avatarUrl: user?.avatarUrl || "",
             hashtags,
             mentions,
+            visibility: visibility || "public",
         });
 
         if (mentions.length > 0) {

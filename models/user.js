@@ -13,6 +13,9 @@ const userSchema = new mongoose.Schema({
     followers:   [{ type: String, default: [] }],
     following:   [{ type: String, default: [] }],
     bookmarks:   [{ type: String, default: [] }],
+    closeFriends: [{ type: String, default: [] }],
+    mutedWords:   [{ type: String, default: [] }],
+    lastActive:   { type: Date, default: Date.now },
     createdAt:   { type: Date, default: Date.now },
 });
 

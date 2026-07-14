@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -14,6 +14,39 @@ export default function Input({ onMessageSent, recipient }) {
     const [uploading, setUploading] = useState(false);
     const fileRef                   = useRef(null);
     const inputRef                  = useRef(null);
+
+    useEffect(() => {
+        if (!user || !recipient) return;
+        const typingTimeout = { current: null };
+        const sendTyping = () => {
+            fetch("/api/typing", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: user.username, typingTo: recipient }),
+            }).catch(() => {});
+        };
+        const clearTyping = () => {
+            fetch("/api/typing", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: user.username, typingTo: "" }),
+            }).catch(() => {});
+        };
+        return () => {
+            clearTyping();
+            if (typingTimeout.current) clearTimeout(typingTimeout.current);
+        };
+    }, [user, recipient]);
+
+    const handleTextChange = (val) => {
+        setText(val);
+        if (!user || !recipient) return;
+        fetch("/api/typing", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: user.username, typingTo: val.trim() ? recipient : "" }),
+        }).catch(() => {});
+    };
 
     const uploadToCloudinary = (file) =>
         new Promise((resolve, reject) => {
@@ -56,6 +89,14 @@ export default function Input({ onMessageSent, recipient }) {
         setText("");
         setImagePreview(null);
         setSending(true);
+
+        if (user && recipient) {
+            fetch("/api/typing", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: user.username, typingTo: "" }),
+            }).catch(() => {});
+        }
 
         const tempId = `temp_${Date.now()}_${Math.random()}`;
 
@@ -148,7 +189,7 @@ export default function Input({ onMessageSent, recipient }) {
                         ref={inputRef}
                         type="text"
                         value={text}
-                        onChange={(e) => setText(e.target.value)}
+                        onChange={(e) => handleTextChange(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder={recipient ? "Message\u2026" : "Select a conversation\u2026"}
                         disabled={!user || !recipient}

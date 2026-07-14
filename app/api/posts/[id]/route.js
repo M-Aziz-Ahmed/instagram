@@ -131,6 +131,31 @@ export async function PATCH(request, { params }) {
             return Response.json(enriched);
         }
 
+        if (action === "react") {
+            const { emoji } = await request.json();
+            if (!emoji) return Response.json({ error: "Emoji required" }, { status: 400 });
+
+            if (!post.reactions) post.reactions = new Map();
+            const users = post.reactions.get(emoji) || [];
+            const userIdx = users.indexOf(username);
+
+            if (userIdx === -1) {
+                users.push(username);
+                post.reactions.set(emoji, users);
+            } else {
+                users.splice(userIdx, 1);
+                if (users.length === 0) {
+                    post.reactions.delete(emoji);
+                } else {
+                    post.reactions.set(emoji, users);
+                }
+            }
+            await post.save();
+
+            const enriched = await enrichPost(post);
+            return Response.json(enriched);
+        }
+
         const idx = post.likes.indexOf(username);
         const isLiking = idx === -1;
 

@@ -10,6 +10,7 @@ import SearchBar from "./SearchBar";
 import NotificationBell from "@/components/Notifications/NotificationBell";
 import Sidebar from "@/components/Layout/Sidebar";
 import Link from "next/link";
+import StoryTray from "@/components/Stories/StoryTray";
 
 export default function FeedClient() {
     const { user, ready, logout } = useUser();
@@ -138,6 +139,7 @@ export default function FeedClient() {
             {/* ── Body ─────────────────────────────────────────────────── */}
             <div className="max-w-4xl mx-auto flex gap-4 lg:gap-8 px-3 sm:px-4">
                 <main className="flex-1 min-w-0 border-x border-gray-100 dark:border-gray-800">
+                    <StoryTray />
                     <Compose onPosted={() => setRefreshTrigger((n) => n + 1)} />
                     <Feed
                         refreshTrigger={refreshTrigger}

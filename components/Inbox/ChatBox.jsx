@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import Chat from "./Chat";
 import Input from "./Input";
@@ -12,6 +12,23 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
     const [pendingMessage, setPendingMessage] = useState(null);
     const [editingProfile, setEditingProfile] = useState(false);
     const scrollContainerRef = useRef(null);
+    const [isTyping, setIsTyping] = useState(false);
+
+    useEffect(() => {
+        if (!recipient) return;
+        const poll = async () => {
+            try {
+                const res = await fetch(`/api/typing?username=${encodeURIComponent(recipient)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setIsTyping(data.typingTo === user?.username);
+                }
+            } catch { /* silent */ }
+        };
+        poll();
+        const id = setInterval(poll, 3000);
+        return () => clearInterval(id);
+    }, [recipient, user?.username]);
 
     if (!ready) {
         return (
@@ -60,6 +77,9 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
                         <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{recipient || user?.username}</p>
                         <UserBadges isVerified={recipientUser?.isVerified} isAdmin={recipientUser?.isAdmin} roles={recipientUser?.roles || []} size="sm" />
                     </div>
+                    {isTyping && (
+                        <p className="text-xs text-blue-500 dark:text-blue-400 animate-pulse">typing...</p>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-1 md:gap-2 text-gray-700 dark:text-gray-400 shrink-0">

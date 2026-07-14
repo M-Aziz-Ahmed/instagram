@@ -8,6 +8,8 @@ import { useRouter, usePathname } from "next/navigation";
 import EditProfileModal from "@/components/Auth/EditProfileModal";
 import Link from "next/link";
 import UserBadges from "@/components/shared/UserBadges";
+import CloseFriendsModal from "@/components/Settings/CloseFriendsModal";
+import MutedWordsModal from "@/components/Settings/MutedWordsModal";
 
 function NavItem({ href, icon, label, active, onClick, badge }) {
     const { collapsed } = useSidebar();
@@ -125,6 +127,8 @@ export default function Sidebar({ open, onClose }) {
     const pathname = usePathname();
     const [editingProfile, setEditingProfile] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [showCloseFriends, setShowCloseFriends] = useState(false);
+    const [showMutedWords, setShowMutedWords] = useState(false);
 
     const fetchUnread = useCallback(async () => {
         if (!user) return;
@@ -276,6 +280,25 @@ export default function Sidebar({ open, onClose }) {
                             label={theme === "dark" ? "Light mode" : "Dark mode"}
                             onClick={() => { toggleTheme(); }}
                         />
+                        <button
+                            onClick={() => { setShowCloseFriends(true); onClose(); }}
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 text-gray-500 dark:text-gray-400">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                            </svg>
+                            <span className="text-sm text-gray-700 dark:text-gray-300">Close Friends</span>
+                        </button>
+
+                        <button
+                            onClick={() => { setShowMutedWords(true); onClose(); }}
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 text-gray-500 dark:text-gray-400">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                            </svg>
+                            <span className="text-sm text-gray-700 dark:text-gray-300">Muted Words</span>
+                        </button>
                         <NavItem
                             icon={<LogoutIcon />}
                             label="Log Out"
@@ -289,6 +312,8 @@ export default function Sidebar({ open, onClose }) {
             {editingProfile && (
                 <EditProfileModal onClose={() => setEditingProfile(false)} />
             )}
+            {showCloseFriends && <CloseFriendsModal onClose={() => setShowCloseFriends(false)} />}
+            {showMutedWords && <MutedWordsModal onClose={() => setShowMutedWords(false)} />}
         </>
     );
 }
