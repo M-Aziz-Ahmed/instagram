@@ -63,7 +63,12 @@ export default function InboxClient() {
     }, [user, selectedConvo?.username]);
 
     const fetchConversations = useCallback(async () => {
-        if (!user?.username) return;
+        if (!user?.username) {
+            console.log('fetchConversations: No username');
+            return;
+        }
+        
+        console.log('Fetching conversations for:', user.username);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
 
@@ -74,11 +79,18 @@ export default function InboxClient() {
             });
             clearTimeout(timeoutId);
             
+            console.log('Conversations response status:', res.status);
+            
             if (res.ok) {
-                setConversations(await res.json());
-            } else if (res.status === 401) {
-                // Handle unauthorized - user session may have expired
-                console.error("Unauthorized access to messages");
+                const data = await res.json();
+                console.log('Conversations data:', data);
+                setConversations(data);
+            } else {
+                const errorText = await res.text();
+                console.error('Failed to fetch conversations:', res.status, errorText);
+                if (res.status === 401) {
+                    console.error("Unauthorized access to messages");
+                }
             }
         } catch (err) {
             clearTimeout(timeoutId);

@@ -71,7 +71,7 @@ export async function GET(request) {
                 },
                 { $sort: { "lastMessage.timeStamp": -1 } },
                 { $limit: 100 }, // Limit conversations
-            ]).maxTimeMS(10000);
+            ], { maxTimeMS: 10000 });
 
             // Optimize: Batch user lookup instead of N+1 queries
             const usernames = conversations.map(conv => conv._id);
