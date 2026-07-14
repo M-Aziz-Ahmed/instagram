@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import ChatBox from "./ChatBox";
@@ -25,6 +25,7 @@ export default function InboxClient() {
     const [loading, setLoading] = useState(true);
     const [selectedConvo, setSelectedConvo] = useState(null);
     const [sidebarOpen, setSidebarOpen]     = useState(false);
+    const urlInitDoneRef                    = useRef(false);
 
     const fetchConversations = useCallback(async () => {
         if (!user) return;
@@ -49,21 +50,22 @@ export default function InboxClient() {
     useEffect(() => { fetchConversations(); }, [fetchConversations]);
 
     useEffect(() => {
-        if (!targetUser || selectedConvo?.username === targetUser) return;
+        if (!targetUser || urlInitDoneRef.current) return;
+        if (selectedConvo?.username === targetUser) { urlInitDoneRef.current = true; return; }
 
         const existing = conversations.find((c) => c.username === targetUser);
         if (existing) {
             handleSelectConvo(existing);
-            return;
+        } else {
+            const newConvo = {
+                username: targetUser,
+                user: { username: targetUser, avatarUrl: "", color: "#3b82f6" },
+                lastMessage: null,
+                unreadCount: 0,
+            };
+            handleSelectConvo(newConvo);
         }
-
-        const newConvo = {
-            username: targetUser,
-            user: { username: targetUser, avatarUrl: "", color: "#3b82f6" },
-            lastMessage: null,
-            unreadCount: 0,
-        };
-        handleSelectConvo(newConvo);
+        urlInitDoneRef.current = true;
     }, [targetUser, conversations, selectedConvo, handleSelectConvo]);
 
     useEffect(() => {
