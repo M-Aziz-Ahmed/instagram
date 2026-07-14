@@ -77,6 +77,16 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     const [, forceUpdate]            = useState(0);
 
+    const isNearBottom = useCallback(() => {
+        const el = scrollContainerRef.current;
+        if (!el) return true;
+        return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    }, []);
+
+    const scrollToBottom = useCallback((smooth = true) => {
+        bottomRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "instant" });
+    }, []);
+
     useEffect(() => {
         if (!recipient) return;
         const id = setInterval(() => forceUpdate((n) => n + 1), 10000);
@@ -192,16 +202,6 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             requestAnimationFrame(() => scrollToBottom());
         }
     }, [pendingMessage, user?.username, scrollToBottom]);
-
-    const isNearBottom = useCallback(() => {
-        const el = scrollContainerRef.current;
-        if (!el) return true;
-        return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-    }, []);
-
-    const scrollToBottom = useCallback((smooth = true) => {
-        bottomRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "instant" });
-    }, []);
 
     useEffect(() => {
         const el = scrollContainerRef.current;
