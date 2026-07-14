@@ -6,6 +6,7 @@ import Chat from "./Chat";
 import Input from "./Input";
 import ProfileSetup from "@/components/ProfileSetup";
 import UserBadges from "@/components/shared/UserBadges";
+import { useOnlineStatus, getLastSeenText } from "@/utils/useOnlineStatus";
 
 export default function ChatBox({ onBack, recipient, recipientUser }) {
     const { user, ready } = useUser();
@@ -13,7 +14,12 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
     const [editingProfile, setEditingProfile] = useState(false);
     const scrollContainerRef = useRef(null);
     const [isTyping, setIsTyping] = useState(false);
+    const [recipientOnlineStatus, setRecipientOnlineStatus] = useState(null);
 
+    // Track current user's online status
+    useOnlineStatus(user?.username);
+
+    // Poll for typing status
     useEffect(() => {
         if (!recipient || !user?.username) return;
         const poll = async () => {
@@ -31,9 +37,28 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
             } catch { /* silent */ }
         };
         poll();
-        const id = setInterval(poll, 3000); // Increased from 2s to 3s
+        const id = setInterval(poll, 3000);
         return () => clearInterval(id);
     }, [recipient, user?.username]);
+
+    // Poll for recipient's online status
+    useEffect(() => {
+        if (!recipient) return;
+        const fetchStatus = async () => {
+            try {
+                const res = await fetch(`/api/users/${encodeURIComponent(recipient)}/active`, {
+                    credentials: 'include'
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setRecipientOnlineStatus(data);
+                }
+            } catch { /* silent */ }
+        };
+        fetchStatus();
+        const id = setInterval(fetchStatus, 30000); // Check every 30 seconds
+        return () => clearInterval(id);
+    }, [recipient]);
 
     if (!ready) {
         return (
@@ -82,8 +107,17 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
                         <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{recipient || user?.username}</p>
                         <UserBadges isVerified={recipientUser?.isVerified} isAdmin={recipientUser?.isAdmin} roles={recipientUser?.roles || []} size="sm" />
                     </div>
-                    {isTyping && (
+                    {isTyping ? (
                         <p className="text-xs text-blue-500 dark:text-blue-400 animate-pulse">typing...</p>
+                    ) : recipientOnlineStatus && (
+                        <div className="flex items-center gap-1.5">
+                            {recipientOnlineStatus.isOnline && (
+                                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                            )}
+                            <p className={`text-xs ${recipientOnlineStatus.isOnline ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                                {getLastSeenText(recipientOnlineStatus.lastActive, recipientOnlineStatus.isOnline)}
+                            </p>
+                        </div>
                     )}
                 </div>
 

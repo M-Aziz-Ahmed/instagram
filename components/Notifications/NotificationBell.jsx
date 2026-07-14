@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 import UserBadges from "@/components/shared/UserBadges";
+import { playNotificationSound, initAudio, toggleNotificationSound, isSoundEnabled } from "@/utils/notificationSound";
 
 function timeAgo(date) {
     const diff = (Date.now() - new Date(date)) / 1000;
@@ -25,21 +26,49 @@ export default function NotificationBell({ onNavigate }) {
     const router = useRouter();
     const [notifs, setNotifs]   = useState([]);
     const [open, setOpen]       = useState(false);
+    const [soundEnabled, setSoundEnabled] = useState(true);
     const panelRef              = useRef(null);
+    const prevUnreadCount       = useRef(0);
 
     const unread = notifs.filter((n) => !n.read).length;
+
+    // Initialize audio on first user interaction
+    useEffect(() => {
+        const handleInteraction = () => {
+            initAudio();
+            setSoundEnabled(isSoundEnabled());
+        };
+        document.addEventListener('click', handleInteraction, { once: true });
+        return () => document.removeEventListener('click', handleInteraction);
+    }, []);
 
     const fetchNotifs = useCallback(async () => {
         if (!user) return;
         try {
             const res = await fetch(`/api/notifications?username=${encodeURIComponent(user.username)}`);
-            if (res.ok) setNotifs(await res.json());
+            if (res.ok) {
+                const newNotifs = await res.json();
+                const newUnreadCount = newNotifs.filter((n) => !n.read).length;
+                
+                // Play sound if new unread notifications arrived
+                if (newUnreadCount > prevUnreadCount.current && prevUnreadCount.current > 0) {
+                    // Determine sound type from most recent notification
+                    const latestNotif = newNotifs.find(n => !n.read);
+                    const soundType = latestNotif?.type || 'default';
+                    playNotificationSound(soundType);
+                }
+                
+                prevUnreadCount.current = newUnreadCount;
+                setNotifs(newNotifs);
+            }
         } catch { /* silent */ }
     }, [user]);
 
     useEffect(() => {
         fetchNotifs();
-        // Increased interval from potential aggressive polling to 15 seconds
+        // Initialize prev count on first load
+        prevUnreadCount.current = notifs.filter((n) => !n.read).length;
+        
         const id = setInterval(fetchNotifs, 15000);
         return () => clearInterval(id);
     }, [fetchNotifs]);
@@ -64,6 +93,15 @@ export default function NotificationBell({ onNavigate }) {
         }
     };
 
+    const handleToggleSound = () => {
+        const newState = toggleNotificationSound();
+        setSoundEnabled(newState);
+        // Play a test sound
+        if (newState) {
+            playNotificationSound('default');
+        }
+    };
+
     return (
         <div className="relative" ref={panelRef}>
             <button
@@ -85,24 +123,43 @@ export default function NotificationBell({ onNavigate }) {
 
             {open && (
                 <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] max-w-80 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
-                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
                         <span className="font-bold text-sm text-gray-900 dark:text-gray-100">Notifications</span>
-                        {notifs.length > 0 && (
+                        <div className="flex items-center gap-2">
                             <button
-                                onClick={async () => {
-                                    if (!user) return;
-                                    await fetch("/api/notifications", {
-                                        method: "PATCH",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify({ username: user.username }),
-                                    });
-                                    setNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
-                                }}
-                                className="text-xs text-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
+                                onClick={handleToggleSound}
+                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                                title={soundEnabled ? "Mute notifications" : "Unmute notifications"}
+                                aria-label={soundEnabled ? "Mute" : "Unmute"}
                             >
-                                Mark all read
+                                {soundEnabled ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-blue-500">
+                                        <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM18.584 5.106a.75.75 0 0 1 1.06 0c3.808 3.807 3.808 9.98 0 13.788a.75.75 0 0 1-1.06-1.06 8.25 8.25 0 0 0 0-11.668.75.75 0 0 1 0-1.06Z" />
+                                        <path d="M15.932 7.757a.75.75 0 0 1 1.061 0 6 6 0 0 1 0 8.486.75.75 0 0 1-1.06-1.061 4.5 4.5 0 0 0 0-6.364.75.75 0 0 1 0-1.06Z" />
+                                    </svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-gray-400">
+                                        <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 0 0 1.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06ZM17.78 9.22a.75.75 0 1 0-1.06 1.06L18.44 12l-1.72 1.72a.75.75 0 1 0 1.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 1 0 1.06-1.06L20.56 12l1.72-1.72a.75.75 0 1 0-1.06-1.06l-1.72 1.72-1.72-1.72Z" />
+                                    </svg>
+                                )}
                             </button>
-                        )}
+                            {notifs.length > 0 && (
+                                <button
+                                    onClick={async () => {
+                                        if (!user) return;
+                                        await fetch("/api/notifications", {
+                                            method: "PATCH",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ username: user.username }),
+                                        });
+                                        setNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
+                                    }}
+                                    className="text-xs text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 whitespace-nowrap"
+                                >
+                                    Mark all read
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div className="max-h-96 overflow-y-auto">

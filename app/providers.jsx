@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/context/ThemeContext";
 import { ToastProvider } from "@/context/ToastContext";
 import { SidebarProvider } from "@/context/SidebarContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import OnlineStatusTracker from "@/components/OnlineStatusTracker";
 import { useEffect } from "react";
 
 export default function Providers({ children }) {
@@ -28,6 +29,7 @@ export default function Providers({ children }) {
                 <UserProvider>
                     <ToastProvider>
                         <ErrorBoundary>
+                            <OnlineStatusTracker />
                             {children}
                         </ErrorBoundary>
                     </ToastProvider>
