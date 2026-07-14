@@ -125,9 +125,47 @@
 - Added credentials to fetch
 **Impact:** Better error handling, prevents crashes
 
-## Summary Statistics
+## Sidebar & Navigation Fixes (P2) ✅
 
-- **Total Bugs Fixed:** 17
+### 18. ✅ Sidebar Polling Memory Leak
+**Location:** `components/Layout/Sidebar.jsx`
+**Issue:** `fetchUnread` recreated on every render causing interval issues
+**Fix:** 
+- Used ref to avoid recreating interval
+- Added proper null checks on `user?.username`
+- Added credentials to fetch
+- Added 401 error handling
+- Better fallback for data
+**Impact:** Prevents memory leaks in sidebar polling
+
+### 19. ✅ Sidebar Collapsed State Issues
+**Location:** `components/Layout/Sidebar.jsx`
+**Issue:** Settings label and buttons didn't adapt to collapsed state
+**Fix:**
+- Hide "Settings" label when collapsed
+- Made Close Friends and Muted Words buttons responsive to collapsed state
+- Consistent styling with NavItem component
+**Impact:** Better UX when sidebar is collapsed
+
+### 20. ✅ Logout Error Handling
+**Location:** `components/Layout/Sidebar.jsx`
+**Issue:** No error handling if logout fails, onClose called before async operation
+**Fix:**
+- Added try-catch around logout
+- Force navigation even if logout fails
+- Check if onClose exists before calling
+**Impact:** More robust logout handling
+
+### 21. ✅ BottomNav Polling Issues  
+**Location:** `components/Layout/BottomNav.jsx`
+**Issue:** Same polling issues as sidebar, missing null checks
+**Fix:**
+- Added null check on `user?.username`
+- Added credentials to fetch
+- Added 401 error handling
+- Better fallback for data
+- Added null check on href
+**Impact:** Prevents crashes and improves error handling
 - **Critical (P0):** 5
 - **High (P1):** 5  
 - **Medium (P2):** 7

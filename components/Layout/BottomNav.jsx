@@ -59,14 +59,20 @@ export default function BottomNav() {
     const [unreadCount, setUnreadCount] = useState(0);
 
     const fetchUnread = useCallback(async () => {
-        if (!user) return;
+        if (!user?.username) return;
         try {
-            const res = await fetch(`/api/messages/unread?username=${encodeURIComponent(user.username)}`);
+            const res = await fetch(`/api/messages/unread?username=${encodeURIComponent(user.username)}`, {
+                credentials: 'include'
+            });
             if (res.ok) {
                 const data = await res.json();
-                setUnreadCount(data.total);
+                setUnreadCount(data?.total || 0);
+            } else if (res.status === 401) {
+                console.warn("Unauthorized access to unread messages");
             }
-        } catch { /* silent */ }
+        } catch (err) {
+            console.error("Failed to fetch unread count:", err);
+        }
     }, [user]);
 
     useEffect(() => {
@@ -97,7 +103,7 @@ export default function BottomNav() {
                     return (
                         <Link
                             key={label}
-                            href={targetHref}
+                            href={targetHref || "#"}
                             aria-label={label}
                             className={`relative flex flex-col items-center justify-center gap-0.5 w-full h-full transition-colors min-h-[44px] ${
                                 active
