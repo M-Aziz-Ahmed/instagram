@@ -33,6 +33,80 @@ function Avatar({ username, avatarUrl, color, size = "lg" }) {
     );
 }
 
+function FollowListModal({ username, type, onClose }) {
+    const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch(`/api/users/${encodeURIComponent(username)}/followers?type=${type}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (!cancelled) setUsers(data.users || []);
+                }
+            } catch { /* silent */ }
+            if (!cancelled) setLoading(false);
+        })();
+        return () => { cancelled = true; };
+    }, [username, type]);
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden max-w-md w-full max-h-[80dvh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                    <span className="font-bold text-sm text-gray-900 dark:text-gray-100">
+                        {type === "followers" ? "Followers" : "Following"}
+                    </span>
+                    <button onClick={onClose} className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center" aria-label="Close">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                    {loading ? (
+                        <div className="flex justify-center py-10">
+                            <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                        </div>
+                    ) : users.length === 0 ? (
+                        <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-10">
+                            {type === "followers" ? "No followers yet" : "Not following anyone"}
+                        </p>
+                    ) : (
+                        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {users.map((u) => (
+                                <Link
+                                    key={u._id || u.username}
+                                    href={`/profile/${encodeURIComponent(u.username)}`}
+                                    onClick={onClose}
+                                    className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors min-h-[56px]"
+                                >
+                                    <div
+                                        className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
+                                        style={{ backgroundColor: u.avatarColor }}
+                                    >
+                                        {u.avatarUrl ? (
+                                            <img src={u.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                                        ) : (
+                                            u.username?.[0]?.toUpperCase()
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{u.username}</span>
+                                        <UserBadges isVerified={u.isVerified} isAdmin={u.isAdmin} roles={u.roles || []} size="sm" />
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function ProfileClient({ username }) {
     const { user } = useUser();
     const [data, setData]                     = useState(null);
@@ -41,6 +115,7 @@ export default function ProfileClient({ username }) {
     const [editingProfile, setEditingProfile] = useState(false);
     const [sidebarOpen, setSidebarOpen]       = useState(false);
     const [avatarLightbox, setAvatarLightbox] = useState(false);
+    const [listModal, setListModal]           = useState(null);
 
     const isOwn = user?.username === username;
 
@@ -55,6 +130,20 @@ export default function ProfileClient({ username }) {
 
     useEffect(() => { fetchProfile(); }, [fetchProfile]);
 
+    const handleFollowToggle = useCallback(({ followersCount, followingCount }) => {
+        setData((prev) => {
+            if (!prev?.profile) return prev;
+            return {
+                ...prev,
+                profile: {
+                    ...prev.profile,
+                    followersCount,
+                    followingCount,
+                },
+            };
+        });
+    }, []);
+
     const profile = isOwn
         ? {
             username,
@@ -64,6 +153,8 @@ export default function ProfileClient({ username }) {
             isVerified:  user?.isVerified ?? false,
             isAdmin:     user?.isAdmin ?? false,
             roles:       user?.roles ?? [],
+            followersCount: user?.followers?.length ?? 0,
+            followingCount: user?.following?.length ?? 0,
           }
         : (data?.profile ?? {
             username,
@@ -73,6 +164,8 @@ export default function ProfileClient({ username }) {
             isVerified:  false,
             isAdmin:     false,
             roles:       [],
+            followersCount: 0,
+            followingCount: 0,
           });
 
     const expandedPost = expanded ? data?.posts?.find((p) => p._id === expanded) : null;
@@ -132,7 +225,7 @@ export default function ProfileClient({ username }) {
                                     <UserBadges isVerified={profile.isVerified} isAdmin={profile.isAdmin} roles={profile.roles} />
                                     {!isOwn && user && (
                                         <>
-                                            <FollowButton username={username} />
+                                            <FollowButton username={username} onToggle={handleFollowToggle} />
                                             <Link
                                                 href={`/inbox?user=${encodeURIComponent(username)}`}
                                                 className="text-xs border border-gray-300 dark:border-gray-700 rounded-full px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400 min-h-[36px] inline-flex items-center"
@@ -161,14 +254,20 @@ export default function ProfileClient({ username }) {
                                         <span className="font-black text-gray-900 dark:text-gray-100">{data?.totalLikes ?? 0}</span>
                                         <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">likes</span>
                                     </div>
-                                    <div>
+                                    <button
+                                        onClick={() => setListModal("followers")}
+                                        className="text-left hover:opacity-70 transition-opacity"
+                                    >
                                         <span className="font-black text-gray-900 dark:text-gray-100">{profile.followersCount ?? 0}</span>
                                         <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">followers</span>
-                                    </div>
-                                    <div>
+                                    </button>
+                                    <button
+                                        onClick={() => setListModal("following")}
+                                        className="text-left hover:opacity-70 transition-opacity"
+                                    >
                                         <span className="font-black text-gray-900 dark:text-gray-100">{profile.followingCount ?? 0}</span>
                                         <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">following</span>
-                                    </div>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -237,6 +336,14 @@ export default function ProfileClient({ username }) {
 
             {avatarLightbox && profile.avatarUrl && (
                 <ImageLightbox src={profile.avatarUrl} alt={username} onClose={() => setAvatarLightbox(false)} />
+            )}
+
+            {listModal && (
+                <FollowListModal
+                    username={username}
+                    type={listModal}
+                    onClose={() => setListModal(null)}
+                />
             )}
         </div>
     );

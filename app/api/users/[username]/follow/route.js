@@ -41,7 +41,7 @@ export async function POST(request, { params }) {
         return NextResponse.json({
             following: !isFollowing,
             followersCount: targetUser.followers.length,
-            followingCount: currentUser.following.length,
+            followingCount: targetUser.following.length,
         });
     } catch (error) {
         console.error("Follow error:", error);

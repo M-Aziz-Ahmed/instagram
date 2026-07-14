@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/context/ToastContext";
 
-export default function FollowButton({ username, size = "sm" }) {
+export default function FollowButton({ username, size = "sm", onToggle }) {
     const { user, reloadUser } = useUser();
     const { showToast } = useToast();
     const [loading, setLoading] = useState(false);
@@ -31,6 +31,7 @@ export default function FollowButton({ username, size = "sm" }) {
                     reloadUser({ ...user, following: (user.following || []).filter((u) => u !== username) });
                     showToast(`Unfollowed @${username}`, "info");
                 }
+                onToggle?.({ following: data.following, followersCount: data.followersCount, followingCount: data.followingCount });
             }
         } catch {
             showToast("Something went wrong", "error");
