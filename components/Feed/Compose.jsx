@@ -169,7 +169,7 @@ export default function Compose({ onPosted }) {
 
                     {error && <p className="text-xs text-red-500">{error}</p>}
 
-                    <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center justify-between p-1 border-t border-gray-100 dark:border-gray-800">
                         <div className="flex items-center gap-1">
                             <button
                                 onClick={() => fileRef.current?.click()}
