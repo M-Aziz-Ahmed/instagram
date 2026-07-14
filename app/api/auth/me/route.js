@@ -45,6 +45,9 @@ export async function GET(request) {
                     badge: r.badge,
                     color: r.color,
                 })),
+                bookmarks:   user.bookmarks || [],
+                following:   user.following || [],
+                followers:   user.followers || [],
                 needsSetup: !user.username,
             },
         };

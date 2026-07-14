@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import PostCard from "@/components/Feed/PostCard";
 import UserBadges from "@/components/shared/UserBadges";
+import FollowButton from "@/components/shared/FollowButton";
 import ImageLightbox from "@/components/shared/ImageLightbox";
 import EditProfileModal from "@/components/Auth/EditProfileModal";
 import Sidebar from "@/components/Layout/Sidebar";
@@ -130,12 +131,15 @@ export default function ProfileClient({ username }) {
                                     <h1 className="font-black text-xl text-gray-900 dark:text-gray-100">@{username}</h1>
                                     <UserBadges isVerified={profile.isVerified} isAdmin={profile.isAdmin} roles={profile.roles} />
                                     {!isOwn && user && (
-                                        <Link
-                                            href={`/inbox?user=${encodeURIComponent(username)}`}
-                                            className="ml-1 text-xs border border-gray-300 dark:border-gray-700 rounded-full px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400 min-h-[36px] inline-flex items-center"
-                                        >
-                                            Message
-                                        </Link>
+                                        <>
+                                            <FollowButton username={username} />
+                                            <Link
+                                                href={`/inbox?user=${encodeURIComponent(username)}`}
+                                                className="text-xs border border-gray-300 dark:border-gray-700 rounded-full px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400 min-h-[36px] inline-flex items-center"
+                                            >
+                                                Message
+                                            </Link>
+                                        </>
                                     )}
                                     {user?.isAdmin && !isOwn && (
                                         <Link href="/admin" className="text-xs text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800 rounded-full px-3 py-1 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
@@ -156,6 +160,14 @@ export default function ProfileClient({ username }) {
                                     <div>
                                         <span className="font-black text-gray-900 dark:text-gray-100">{data?.totalLikes ?? 0}</span>
                                         <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">likes</span>
+                                    </div>
+                                    <div>
+                                        <span className="font-black text-gray-900 dark:text-gray-100">{profile.followersCount ?? 0}</span>
+                                        <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">followers</span>
+                                    </div>
+                                    <div>
+                                        <span className="font-black text-gray-900 dark:text-gray-100">{profile.followingCount ?? 0}</span>
+                                        <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">following</span>
                                     </div>
                                 </div>
                             </div>

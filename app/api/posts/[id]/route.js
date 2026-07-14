@@ -41,6 +41,20 @@ async function enrichPost(post) {
     return obj;
 }
 
+export async function GET(request, { params }) {
+    try {
+        const { id } = await params;
+        await connectDB();
+        const post = await Post.findById(id);
+        if (!post) return Response.json({ error: "Not found" }, { status: 404 });
+        const enriched = await enrichPost(post);
+        return Response.json(enriched);
+    } catch (error) {
+        console.error(error);
+        return Response.json({ error: "Failed to fetch post" }, { status: 500 });
+    }
+}
+
 export async function PATCH(request, { params }) {
     try {
         const { id } = await params;

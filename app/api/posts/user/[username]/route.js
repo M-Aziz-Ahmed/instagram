@@ -27,6 +27,8 @@ export async function GET(request, { params }) {
                 badge: r.badge,
                 color: r.color,
             })),
+            followersCount: (userDoc.followers || []).length,
+            followingCount: (userDoc.following || []).length,
         } : null;
 
         const authorData = profile ? {
