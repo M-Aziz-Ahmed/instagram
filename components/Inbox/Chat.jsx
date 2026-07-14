@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/context/ToastContext";
@@ -81,7 +82,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         const el = scrollContainerRef.current;
         if (!el) return true;
         return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-    }, []);
+    }, [scrollContainerRef]);
 
     const scrollToBottom = useCallback((smooth = true) => {
         bottomRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "instant" });
@@ -150,6 +151,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
 
     useEffect(() => {
         if (!recipient) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setMessages([]);
             setLoading(false);
             return;
@@ -174,6 +176,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         if (!pendingMessage) return;
         const pm = pendingMessage;
 
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setMessages(prev => {
             if (pm._remove) {
                 return prev.filter(m => m._id !== pm._id && m._tempId !== pm._tempId);
@@ -213,7 +216,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         };
         el.addEventListener("scroll", onScroll, { passive: true });
         return () => el.removeEventListener("scroll", onScroll);
-    }, [isNearBottom]);
+    }, [isNearBottom, scrollContainerRef]);
 
     useEffect(() => {
         if (isNearBottomRef.current) {
@@ -328,13 +331,20 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                     }`}
                                 >
                                     {msg.imageUrl && (
-                                        <img
-                                            src={msg.imageUrl}
-                                            alt="Photo"
-                                            className={`block w-full ${msg.text ? "" : "max-w-[300px]"} object-cover cursor-pointer`}
+                                        <button
+                                            type="button"
                                             onClick={() => setLightboxSrc(msg.imageUrl)}
-                                            loading="lazy"
-                                        />
+                                            className={`block w-full ${msg.text ? "" : "max-w-[300px]"} overflow-hidden rounded-3xl cursor-pointer`}
+                                        >
+                                            <Image
+                                                src={msg.imageUrl}
+                                                alt="Photo"
+                                                width={600}
+                                                height={400}
+                                                className="w-full h-auto object-cover"
+                                                priority={false}
+                                            />
+                                        </button>
                                     )}
                                     {msg.text && (
                                         <div className={`px-4 py-2.5 text-sm leading-snug wrap-break-word ${msg.imageUrl ? "border-t border-white/20" : ""}`}>
