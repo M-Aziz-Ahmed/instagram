@@ -126,7 +126,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     const [oldestTimestamp, setOldestTimestamp] = useState(null);
 
     const fetchMessages = useCallback(async (options = {}) => {
-        if (!username || !recipient) return;
+        if (!username || !recipient) return null;
         const params = new URLSearchParams({
             user1: username,
             user2: recipient,
@@ -136,39 +136,57 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
 
         try {
             const res = await fetch(`/api/messages?${params.toString()}`);
-            if (!res.ok) return;
+            if (!res.ok) return null;
             const data = await res.json();
 
+            const fetched = Array.isArray(data.messages) ? data.messages : [];
             setHasMore(Boolean(data.hasMore));
-            setOldestTimestamp(data.messages[0]?.timeStamp || null);
 
             setMessages(prev => {
                 const prevMap = new Map(prev.map(m => [m._id, m]));
-                const items = data.messages.map(m => {
+                const items = fetched.map(m => {
                     const local = prevMap.get(m._id);
-                    if (local) return { ...m, _sending: local._sending };
-                    return m;
+                    return local ? { ...m, _sending: local._sending } : m;
                 });
                 return options.prepend ? [...items, ...prev] : items;
             });
 
-            if (!options.prepend && data.messages.length) {
-                const last = data.messages[data.messages.length - 1];
-                setOldestTimestamp(last.timeStamp);
+            if (fetched.length) {
+                const first = fetched[0];
+                setOldestTimestamp(first.timeStamp);
             }
-        } catch (err) {
-            console.error("Failed to fetch messages:", err);
-        }
 
-            await fetch("/api/messages", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ sender: username, recipient }),
-            });
+            if (!options.prepend) {
+                await fetch("/api/messages", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sender: username, recipient }),
+                });
+            }
+
+            return fetched;
         } catch (err) {
             console.error("Failed to fetch messages:", err);
+            return null;
         }
     }, [username, recipient]);
+
+    const loadOlderMessages = useCallback(async () => {
+        if (!username || !recipient || !hasMore || loadingMore || !oldestTimestamp) return;
+        const el = scrollContainerRef.current;
+        const previousScrollTop = el?.scrollTop || 0;
+        const previousScrollHeight = el?.scrollHeight || 0;
+        setLoadingMore(true);
+        try {
+            await fetchMessages({ limit: 20, before: oldestTimestamp, prepend: true });
+            requestAnimationFrame(() => {
+                if (!el) return;
+                el.scrollTop = el.scrollHeight - previousScrollHeight + previousScrollTop;
+            });
+        } finally {
+            setLoadingMore(false);
+        }
+    }, [fetchMessages, hasMore, loadingMore, oldestTimestamp, recipient, username]);
 
     useEffect(() => {
         if (!recipient) {
