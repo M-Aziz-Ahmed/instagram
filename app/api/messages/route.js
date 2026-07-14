@@ -28,16 +28,18 @@ export async function GET(request) {
             const messages = await Message.find(query)
                 .sort({ timeStamp: -1 })
                 .limit(limit + 1)
+                .maxTimeMS(10000)
                 .lean();
 
             const hasMore = messages.length > limit;
             const sliced = hasMore ? messages.slice(0, limit) : messages;
             const ordered = sliced.reverse();
 
-            await Message.updateMany(
+            // Non-blocking update - don't wait for it
+            Message.updateMany(
                 { sender: user2, recipient: user1, delivered: false },
                 { $set: { delivered: true } }
-            );
+            ).catch(err => console.error("Failed to update delivery status:", err));
 
             return Response.json({ messages: ordered, hasMore });
         }
@@ -68,23 +70,26 @@ export async function GET(request) {
                     },
                 },
                 { $sort: { "lastMessage.timeStamp": -1 } },
-            ]);
+                { $limit: 100 }, // Limit conversations
+            ]).maxTimeMS(10000);
 
-            const conversationsWithUsers = await Promise.all(
-                conversations.map(async (conv) => {
-                    const User = (await import("@/models/user")).default;
-                    const user = await User.findOne({ username: conv._id })
-                        .select("username avatarUrl color isVerified isAdmin roles")
-                        .populate("roles", "name badge color")
-                        .lean();
-                    return {
-                        username: conv._id,
-                        user: user || { username: conv._id, avatarUrl: "", color: "#3b82f6" },
-                        lastMessage: conv.lastMessage,
-                        unreadCount: conv.unreadCount,
-                    };
-                })
-            );
+            // Optimize: Batch user lookup instead of N+1 queries
+            const usernames = conversations.map(conv => conv._id);
+            const User = (await import("@/models/user")).default;
+            const users = await User.find({ username: { $in: usernames } })
+                .select("username avatarUrl color isVerified isAdmin roles")
+                .populate("roles", "name badge color")
+                .lean()
+                .maxTimeMS(5000);
+
+            const userMap = new Map(users.map(u => [u.username, u]));
+
+            const conversationsWithUsers = conversations.map(conv => ({
+                username: conv._id,
+                user: userMap.get(conv._id) || { username: conv._id, avatarUrl: "", color: "#3b82f6" },
+                lastMessage: conv.lastMessage,
+                unreadCount: conv.unreadCount,
+            }));
 
             return Response.json(conversationsWithUsers);
         }

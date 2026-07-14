@@ -80,7 +80,6 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     const username                   = user?.username;
     const [lightboxSrc, setLightboxSrc] = useState(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
-    const [, forceUpdate]            = useState(0);
 
     const isNearBottom = useCallback(() => {
         const el = scrollContainerRef.current;
@@ -91,12 +90,6 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     const scrollToBottom = useCallback((smooth = true) => {
         bottomRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "instant" });
     }, []);
-
-    useEffect(() => {
-        if (!recipient) return;
-        const id = setInterval(() => forceUpdate((n) => n + 1), 10000);
-        return () => clearInterval(id);
-    }, [recipient]);
 
     const canRecall = useCallback((msg) => {
         if (msg.sender !== username) return false;
@@ -199,10 +192,16 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         });
         if (options.before) params.set("before", options.before);
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
         try {
             const res = await fetch(`/api/messages?${params.toString()}`, {
-                credentials: 'include'
+                credentials: 'include',
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
+            
             if (!res.ok) return null;
             const data = await res.json();
 
@@ -268,7 +267,11 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
 
             return fetched;
         } catch (err) {
-            console.error("Failed to fetch messages:", err);
+            if (err.name === 'AbortError') {
+                console.warn("Message fetch timed out");
+            } else {
+                console.error("Failed to fetch messages:", err);
+            }
             return null;
         }
     }, [username, recipient]);
@@ -312,8 +315,14 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         queueMicrotask(resetChatState);
 
         const load = async () => {
-            await fetchMessages({ limit: 20 });
-            if (!cancelled) setLoading(false);
+            const result = await fetchMessages({ limit: 20 });
+            if (!cancelled) {
+                setLoading(false);
+                // If fetch failed, set empty state to prevent infinite loading
+                if (result === null) {
+                    setMessages([]);
+                }
+            }
         };
 
         load();
@@ -335,7 +344,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         if (!recipient) return;
         const interval = setInterval(() => {
             fetchMessagesRef.current();
-        }, 2000);
+        }, 5000); // Increased from 2s to 5s
         return () => clearInterval(interval);
     }, [recipient]);
 

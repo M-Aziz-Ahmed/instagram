@@ -6,5 +6,7 @@ const typingSchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now, expires: 15 },
 });
 
+typingSchema.index({ typingTo: 1 });
+
 const Typing = mongoose.models.Typing || mongoose.model("Typing", typingSchema);
 export default Typing;

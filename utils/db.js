@@ -10,7 +10,13 @@ const connectDB = async () => {
     }
     try {
         console.log("Connecting to MongoDB using env var...");
-        await mongoose.connect(uri);
+        await mongoose.connect(uri, {
+            maxPoolSize: 10,
+            minPoolSize: 2,
+            socketTimeoutMS: 45000,
+            serverSelectionTimeoutMS: 10000,
+            heartbeatFrequencyMS: 10000,
+        });
         console.log("MongoDB connected");
     } catch (error) {
         console.error("MongoDB connection error:", error);

@@ -11,9 +11,9 @@ export async function POST(request) {
                 { username },
                 { typingTo, updatedAt: new Date() },
                 { upsert: true, new: true }
-            );
+            ).maxTimeMS(5000);
         } else {
-            await Typing.deleteOne({ username });
+            await Typing.deleteOne({ username }).maxTimeMS(5000);
         }
         return Response.json({ ok: true });
     } catch (error) {
@@ -30,7 +30,9 @@ export async function GET(request) {
 
         await connectDB();
         // Find who is typing TO this username
-        const typing = await Typing.findOne({ typingTo: username }).lean();
+        const typing = await Typing.findOne({ typingTo: username })
+            .lean()
+            .maxTimeMS(5000);
         // Return the username of who is typing (not typingTo)
         return Response.json({ isTyping: !!typing, typingUser: typing?.username || "" });
     } catch (error) {

@@ -64,10 +64,16 @@ export default function InboxClient() {
 
     const fetchConversations = useCallback(async () => {
         if (!user?.username) return;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
         try {
             const res = await fetch(`/api/messages?username=${encodeURIComponent(user.username)}`, {
-                credentials: 'include'
+                credentials: 'include',
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
+            
             if (res.ok) {
                 setConversations(await res.json());
             } else if (res.status === 401) {
@@ -75,7 +81,12 @@ export default function InboxClient() {
                 console.error("Unauthorized access to messages");
             }
         } catch (err) {
-            console.error("Failed to fetch conversations:", err);
+            clearTimeout(timeoutId);
+            if (err.name === 'AbortError') {
+                console.warn("Conversation fetch timed out");
+            } else {
+                console.error("Failed to fetch conversations:", err);
+            }
         } finally {
             setLoading(false);
         }
@@ -124,7 +135,7 @@ export default function InboxClient() {
     }, [targetUser, conversations, selectedConvo]);
 
     useEffect(() => {
-        const interval = setInterval(fetchConversations, 5000);
+        const interval = setInterval(fetchConversations, 10000); // Increased from 5s to 10s
         return () => clearInterval(interval);
     }, [fetchConversations]);
 

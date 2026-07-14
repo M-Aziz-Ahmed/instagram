@@ -13,6 +13,8 @@ const messagesSchema = new mongoose.Schema({
 
 messagesSchema.index({ sender: 1, recipient: 1, timeStamp: -1 });
 messagesSchema.index({ recipient: 1, isRead: 1 });
+messagesSchema.index({ sender: 1, timeStamp: -1 });
+messagesSchema.index({ recipient: 1, timeStamp: -1 });
 
 const Message = mongoose.models.Message || mongoose.model("Message", messagesSchema);
 

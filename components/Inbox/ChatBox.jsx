@@ -31,7 +31,7 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
             } catch { /* silent */ }
         };
         poll();
-        const id = setInterval(poll, 2000);
+        const id = setInterval(poll, 3000); // Increased from 2s to 3s
         return () => clearInterval(id);
     }, [recipient, user?.username]);
 
