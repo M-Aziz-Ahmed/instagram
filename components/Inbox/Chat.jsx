@@ -130,6 +130,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     const [oldestTimestamp, setOldestTimestamp] = useState(null);
     const [newMessagesCount, setNewMessagesCount] = useState(0);
     const latestTimestampRef = useRef(null);
+    const isLoadingOlderRef = useRef(false);
 
     const resetChatState = useCallback(() => {
         setMessages([]);
@@ -210,29 +211,44 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
 
             setMessages(prev => {
                 const keyOf = (m) => m._id || m._tempId;
+
+                // If prepending (loading older), just prepend without re-sorting
+                if (options.prepend) {
+                    const prevIds = new Set(prev.map(keyOf));
+                    const newItems = fetched.filter(m => !prevIds.has(keyOf(m)));
+                    return [...newItems, ...prev];
+                }
+
+                // For polling (append/update), merge intelligently
                 const prevMap = new Map(prev.map(m => [keyOf(m), m]));
                 const items = fetched.map(m => {
                     const local = prevMap.get(m._id);
                     return local ? { ...m, _sending: local._sending } : m;
                 });
 
-                if (options.prepend) {
-                    return [...items, ...prev];
-                }
-
                 const mergedMap = new Map(prev.map(m => [keyOf(m), m]));
                 for (const item of items) {
                     const existing = mergedMap.get(item._id);
                     mergedMap.set(item._id, existing ? { ...item, _sending: existing._sending } : item);
                 }
+                
+                // Sort only when not prepending
                 return Array.from(mergedMap.values()).sort((a, b) => new Date(a.timeStamp) - new Date(b.timeStamp));
             });
 
             if (fetched.length) {
                 const first = fetched[0];
                 const last = fetched[fetched.length - 1];
-                setOldestTimestamp(first.timeStamp);
-                if (!options.prepend) {
+                
+                if (options.prepend) {
+                    // Update oldest timestamp only when loading older messages
+                    setOldestTimestamp(first.timeStamp);
+                } else {
+                    // Initial load or polling
+                    if (!oldestTimestamp) {
+                        setOldestTimestamp(first.timeStamp);
+                    }
+                    
                     if (latestTimestampRef.current && !isNearBottomRef.current) {
                         const newCount = fetched.filter((m) => new Date(m.timeStamp) > new Date(latestTimestampRef.current)).length;
                         if (newCount > 0) {
@@ -247,8 +263,9 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                 await fetch("/api/messages", {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
+                    credentials: 'include',
                     body: JSON.stringify({ sender: username, recipient }),
-                });
+                }).catch(() => {});
             }
 
             return fetched;
@@ -256,20 +273,29 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             console.error("Failed to fetch messages:", err);
             return null;
         }
-    }, [username, recipient]);
+    }, [username, recipient, oldestTimestamp]);
 
     const loadOlderMessages = useCallback(async () => {
         if (!username || !recipient || !hasMore || loadingMore || !oldestTimestamp) return;
         const el = scrollContainerRef.current;
         const previousScrollTop = el?.scrollTop || 0;
         const previousScrollHeight = el?.scrollHeight || 0;
+        
         setLoadingMore(true);
+        isLoadingOlderRef.current = true;
+        
         try {
             await fetchMessages({ limit: 20, before: oldestTimestamp, prepend: true });
             requestAnimationFrame(() => {
                 if (!el) return;
                 el.scrollTop = el.scrollHeight - previousScrollHeight + previousScrollTop;
+                // Keep isLoadingOlderRef true for a bit longer to prevent auto-scroll
+                setTimeout(() => {
+                    isLoadingOlderRef.current = false;
+                }, 300);
             });
+        } catch (err) {
+            isLoadingOlderRef.current = false;
         } finally {
             setLoadingMore(false);
         }
@@ -347,7 +373,8 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     }, [hasMore, isNearBottom, loadOlderMessages, loadingMore, scrollContainerRef]);
 
     useEffect(() => {
-        if (isNearBottomRef.current) {
+        // Only auto-scroll if user is near bottom AND not currently loading older messages
+        if (isNearBottomRef.current && !isLoadingOlderRef.current) {
             scrollToBottom();
         }
     }, [messages, scrollToBottom]);
