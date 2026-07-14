@@ -4,6 +4,7 @@ import Providers from "./providers";
 import LayoutWrapper from "@/components/Layout/LayoutWrapper";
 import { Analytics } from "@vercel/analytics/next";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
+import PWADiagnostic from "@/components/PWADiagnostic";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -93,6 +94,7 @@ export default function RootLayout({ children }) {
             {children}
           </LayoutWrapper>
           <PWAInstallPrompt />
+          <PWADiagnostic />
         </Providers>
       </body>
     </html>
