@@ -105,6 +105,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser }) {
             return;
         }
         let cancelled = false;
+        setMessages([]);
         setLoading(true);
         (async () => {
             await fetchMessages();

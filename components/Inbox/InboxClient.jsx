@@ -56,20 +56,20 @@ export default function InboxClient() {
             unreadCount: 0,
         };
         handleSelectConvo(newConvo);
-    }, [targetUser, conversations, selectedConvo]);
+    }, [targetUser, conversations, selectedConvo, handleSelectConvo]);
 
     useEffect(() => {
         const interval = setInterval(fetchConversations, 5000);
         return () => clearInterval(interval);
     }, [fetchConversations]);
 
-    const handleSelectConvo = (convo) => {
+    const handleSelectConvo = useCallback((convo) => {
         const url = new URL(window.location.href);
         url.searchParams.set("user", convo.username);
         router.replace(url.pathname + url.search, { scroll: false });
         setSelectedConvo(convo);
         setView("chat");
-    };
+    }, [router]);
 
     if (!ready) {
         return (
