@@ -10,8 +10,60 @@ const geistSans = Geist({
 });
 
 export const metadata = {
-  title: "AnonFeed",
-  description: "Say anything. Anonymously.",
+  title: {
+    default: "AnonFeed - Anonymous Social Media Platform",
+    template: "%s | AnonFeed"
+  },
+  description: "Say anything. Anonymously. Share your thoughts, stories, and connect with others without revealing your identity. A safe space for authentic expression.",
+  keywords: ["anonymous social media", "anonymous posting", "share anonymously", "anonymous stories", "private social network", "AnonFeed"],
+  authors: [{ name: "AnonFeed Team" }],
+  creator: "AnonFeed",
+  publisher: "AnonFeed",
+  applicationName: "AnonFeed",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://yourapp.com'),
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: '/',
+    title: 'AnonFeed - Anonymous Social Media Platform',
+    description: 'Say anything. Anonymously. Share your thoughts, stories, and connect with others without revealing your identity.',
+    siteName: 'AnonFeed',
+    images: [
+      {
+        url: '/og-image.jpg',
+        width: 1200,
+        height: 630,
+        alt: 'AnonFeed - Anonymous Social Media',
+      }
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'AnonFeed - Anonymous Social Media Platform',
+    description: 'Say anything. Anonymously. Share your thoughts, stories, and connect with others.',
+    images: ['/og-image.jpg'],
+    creator: '@anonfeed',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  verification: {
+    google: 'your-google-verification-code', // Replace with your Google Search Console verification code
+    // yandex: 'your-yandex-verification-code',
+    // bing: 'your-bing-verification-code',
+  },
+  category: 'social media',
 };
 
 export const viewport = {

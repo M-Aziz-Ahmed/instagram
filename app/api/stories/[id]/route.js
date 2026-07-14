@@ -24,6 +24,7 @@ export async function PATCH(request, { params }) {
             await story.save();
 
             if (story.sender !== username) {
+                // Create a notification
                 await Notification.create({
                     recipient: story.sender,
                     type: "message",
@@ -31,6 +32,15 @@ export async function PATCH(request, { params }) {
                     fromColor: story.color,
                     postId: story._id.toString(),
                     text: text?.slice(0, 80) || "Replied to your story",
+                });
+
+                // Create an actual message so it appears in inbox
+                const Message = (await import("@/models/messages")).default;
+                await Message.create({
+                    text: text || "Replied to your story",
+                    sender: username,
+                    recipient: story.sender,
+                    color: story.color,
                 });
             }
 

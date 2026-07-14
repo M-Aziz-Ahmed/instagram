@@ -18,6 +18,7 @@ export default function CreateStory({ onClose }) {
     const [uploading, setUploading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const fileRef = useRef(null);
+    const abortControllerRef = useRef(null);
 
     const uploadToCloudinary = (file) =>
         new Promise((resolve, reject) => {
@@ -26,9 +27,14 @@ export default function CreateStory({ onClose }) {
             fd.append("upload_preset", UPLOAD_PRESET);
             fd.append("folder", "anon-feed");
             const xhr = new XMLHttpRequest();
+            
+            // Store XHR in ref so we can abort it
+            abortControllerRef.current = xhr;
+            
             xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`);
             xhr.onload = () => xhr.status === 200 ? resolve(JSON.parse(xhr.responseText).secure_url) : reject(new Error("Upload failed"));
             xhr.onerror = () => reject(new Error("Network error"));
+            xhr.onabort = () => reject(new Error("Upload cancelled"));
             xhr.send(fd);
         });
 
@@ -39,10 +45,22 @@ export default function CreateStory({ onClose }) {
         try {
             setImageUrl(await uploadToCloudinary(file));
             setMode("image");
-        } catch {
-            showToast("Upload failed", "error");
+        } catch (err) {
+            if (err.message !== "Upload cancelled") {
+                showToast("Upload failed", "error");
+            }
         }
         setUploading(false);
+        abortControllerRef.current = null;
+    };
+
+    const handleCancel = () => {
+        // Abort ongoing upload if any
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+        onClose();
     };
 
     const handlePost = async () => {
@@ -75,16 +93,20 @@ export default function CreateStory({ onClose }) {
     return (
         <div className="fixed inset-0 z-50 bg-white dark:bg-gray-950 flex flex-col">
             <header className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
-                <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-medium text-sm">
+                <button 
+                    onClick={handleCancel} 
+                    disabled={submitting}
+                    className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-medium text-sm disabled:opacity-40"
+                >
                     Cancel
                 </button>
                 <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">New Story</span>
                 <button
                     onClick={handlePost}
-                    disabled={submitting || (!text.trim() && !imageUrl)}
+                    disabled={submitting || uploading || (!text.trim() && !imageUrl)}
                     className="text-blue-500 hover:text-blue-600 font-semibold text-sm disabled:opacity-40"
                 >
-                    {submitting ? "..." : "Share"}
+                    {submitting ? "Posting..." : "Share"}
                 </button>
             </header>
 
@@ -105,16 +127,26 @@ export default function CreateStory({ onClose }) {
                 ) : (
                     <div className="w-full max-w-sm aspect-[9/16] rounded-2xl overflow-hidden bg-gray-900 flex items-center justify-center relative">
                         {uploading ? (
-                            <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            <div className="flex flex-col items-center gap-3">
+                                <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                <button
+                                    onClick={handleCancel}
+                                    className="text-white/70 hover:text-white text-sm font-medium"
+                                >
+                                    Cancel upload
+                                </button>
+                            </div>
                         ) : (
-                            <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+                            <>
+                                <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+                                <button
+                                    onClick={() => { setImageUrl(""); setMode("text"); }}
+                                    className="absolute top-3 right-3 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-black/70 transition-colors"
+                                >
+                                    &#x2715;
+                                </button>
+                            </>
                         )}
-                        <button
-                            onClick={() => { setImageUrl(""); setMode("text"); }}
-                            className="absolute top-3 right-3 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center"
-                        >
-                            &#x2715;
-                        </button>
                     </div>
                 )}
             </div>
