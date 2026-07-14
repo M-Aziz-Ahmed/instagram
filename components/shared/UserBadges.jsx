@@ -36,7 +36,7 @@ export default function UserBadges({ isVerified, isAdmin, roles = [], size = "sm
     const hasVerified = isVerified || isAdmin;
     if (!hasVerified && roles.length === 0) return null;
     return (
-        <span className="inline-flex items-center gap-1 flex-wrap">
+        <span className="inline-flex items-center gap-1">
             {hasVerified && <VerifiedBadge />}
             {isAdmin && (
                 <span
