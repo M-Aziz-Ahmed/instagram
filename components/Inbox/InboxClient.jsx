@@ -38,6 +38,14 @@ export default function InboxClient() {
         }
     }, [user]);
 
+    const handleSelectConvo = useCallback((convo) => {
+        const url = new URL(window.location.href);
+        url.searchParams.set("user", convo.username);
+        router.replace(url.pathname + url.search, { scroll: false });
+        setSelectedConvo(convo);
+        setView("chat");
+    }, [router]);
+
     useEffect(() => { fetchConversations(); }, [fetchConversations]);
 
     useEffect(() => {
@@ -62,14 +70,6 @@ export default function InboxClient() {
         const interval = setInterval(fetchConversations, 5000);
         return () => clearInterval(interval);
     }, [fetchConversations]);
-
-    const handleSelectConvo = useCallback((convo) => {
-        const url = new URL(window.location.href);
-        url.searchParams.set("user", convo.username);
-        router.replace(url.pathname + url.search, { scroll: false });
-        setSelectedConvo(convo);
-        setView("chat");
-    }, [router]);
 
     if (!ready) {
         return (
