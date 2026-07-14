@@ -186,7 +186,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         } finally {
             setLoadingMore(false);
         }
-    }, [fetchMessages, hasMore, loadingMore, oldestTimestamp, recipient, username]);
+    }, [fetchMessages, hasMore, loadingMore, oldestTimestamp, recipient, scrollContainerRef, username]);
 
     useEffect(() => {
         if (!recipient) {
@@ -260,13 +260,16 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         const el = scrollContainerRef.current;
         if (!el) return;
         const onScroll = () => {
+            if (el.scrollTop < 120 && hasMore && !loadingMore) {
+                loadOlderMessages();
+            }
             const near = isNearBottom();
             isNearBottomRef.current = near;
             setShowScrollBtn(!near);
         };
         el.addEventListener("scroll", onScroll, { passive: true });
         return () => el.removeEventListener("scroll", onScroll);
-    }, [isNearBottom, scrollContainerRef]);
+    }, [hasMore, isNearBottom, loadOlderMessages, loadingMore, scrollContainerRef]);
 
     useEffect(() => {
         if (isNearBottomRef.current) {
@@ -315,6 +318,11 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     return (
         <div className="relative h-full">
         <div className="flex flex-col gap-0.5 w-full">
+            {loadingMore && (
+                <div className="flex items-center justify-center py-2">
+                    <div className="w-4 h-4 border-2 border-gray-300 dark:border-gray-700 border-t-transparent rounded-full animate-spin" />
+                </div>
+            )}
             {messages.map((msg, i) => {
                 const isMine  = msg.sender === user?.username;
                 const isFirst = i === 0;
