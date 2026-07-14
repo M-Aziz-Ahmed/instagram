@@ -10,6 +10,7 @@ import Link from "next/link";
 import UserBadges from "@/components/shared/UserBadges";
 import CloseFriendsModal from "@/components/Settings/CloseFriendsModal";
 import MutedWordsModal from "@/components/Settings/MutedWordsModal";
+import PWAInstallButton from "@/components/PWAInstallButton";
 
 function NavItem({ href, icon, label, active, onClick, badge }) {
     const { collapsed } = useSidebar();
@@ -293,6 +294,7 @@ export default function Sidebar({ open, onClose }) {
                         {!collapsed && (
                             <p className="px-4 py-1.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Settings</p>
                         )}
+                        <PWAInstallButton onInstall={handleNavClick} />
                         <NavItem
                             icon={<SettingsIcon />}
                             label="Edit Profile"
