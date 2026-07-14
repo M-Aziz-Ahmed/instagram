@@ -134,3 +134,35 @@ export async function PATCH(request) {
         return Response.json({ error: "Failed to mark messages as read" }, { status: 500 });
     }
 }
+
+const RECALL_WINDOW_MS = 60 * 1000;
+
+export async function DELETE(request) {
+    try {
+        const { messageId, username } = await request.json();
+
+        if (!messageId || !username) {
+            return Response.json({ error: "messageId and username required" }, { status: 400 });
+        }
+
+        await connectDB();
+        const message = await Message.findById(messageId);
+        if (!message) {
+            return Response.json({ error: "Message not found" }, { status: 404 });
+        }
+
+        if (message.sender !== username) {
+            return Response.json({ error: "Unauthorized" }, { status: 403 });
+        }
+
+        const elapsed = Date.now() - new Date(message.timeStamp).getTime();
+        if (elapsed > RECALL_WINDOW_MS) {
+            return Response.json({ error: "Recall window expired" }, { status: 400 });
+        }
+
+        await Message.findByIdAndDelete(messageId);
+        return Response.json({ ok: true });
+    } catch (error) {
+        return Response.json({ error: "Failed to recall message" }, { status: 500 });
+    }
+}

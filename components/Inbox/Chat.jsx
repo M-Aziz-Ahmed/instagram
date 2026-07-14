@@ -2,8 +2,11 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
+import { useToast } from "@/context/ToastContext";
 import ImageLightbox from "@/components/shared/ImageLightbox";
 import UserBadges from "@/components/shared/UserBadges";
+
+const RECALL_WINDOW_MS = 60 * 1000;
 
 function Avatar({ sender, color }) {
     return (
@@ -63,12 +66,46 @@ function getMessageStatus(msg) {
 
 export default function Chat({ pendingMessage, recipient, recipientUser }) {
     const { user } = useUser();
+    const { showToast } = useToast();
     const [messages, setMessages]   = useState([]);
     const [loading, setLoading]     = useState(true);
     const bottomRef                  = useRef(null);
     const pendingIdRef               = useRef(null);
     const username                   = user?.username;
     const [lightboxSrc, setLightboxSrc] = useState(null);
+    const [, forceUpdate]            = useState(0);
+
+    useEffect(() => {
+        const id = setInterval(() => forceUpdate((n) => n + 1), 10000);
+        return () => clearInterval(id);
+    }, []);
+
+    const canRecall = useCallback((msg) => {
+        if (msg.sender !== username) return false;
+        if (msg._sending) return false;
+        const elapsed = Date.now() - new Date(msg.timeStamp).getTime();
+        return elapsed < RECALL_WINDOW_MS;
+    }, [username]);
+
+    const handleRecall = useCallback(async (msg) => {
+        if (!confirm("Recall this message?")) return;
+        try {
+            const res = await fetch("/api/messages", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ messageId: msg._id, username }),
+            });
+            if (res.ok) {
+                setMessages((prev) => prev.filter((m) => m._id !== msg._id));
+                showToast("Message recalled", "success");
+            } else {
+                const data = await res.json();
+                showToast(data.error || "Failed to recall", "error");
+            }
+        } catch {
+            showToast("Failed to recall message", "error");
+        }
+    }, [username, showToast]);
 
     const fetchMessages = useCallback(async () => {
         if (!username || !recipient) return;
@@ -278,6 +315,15 @@ export default function Chat({ pendingMessage, recipient, recipientUser }) {
                                             {new Date(msg.timeStamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                         </span>
                                         <TickIcon status={tickStatus} />
+                                        {canRecall(msg) && (
+                                            <button
+                                                onClick={() => handleRecall(msg)}
+                                                className="ml-1 text-[10px] text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors font-medium"
+                                                title="Recall message"
+                                            >
+                                                Recall
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                             </div>
