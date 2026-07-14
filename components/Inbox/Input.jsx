@@ -14,38 +14,54 @@ export default function Input({ onMessageSent, recipient }) {
     const [uploading, setUploading] = useState(false);
     const fileRef                   = useRef(null);
     const inputRef                  = useRef(null);
+    const typingTimeoutRef          = useRef(null);
 
     useEffect(() => {
         if (!user || !recipient) return;
-        const typingTimeout = { current: null };
-        const sendTyping = () => {
-            fetch("/api/typing", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: user.username, typingTo: recipient }),
-            }).catch(() => {});
-        };
         const clearTyping = () => {
             fetch("/api/typing", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: 'include',
                 body: JSON.stringify({ username: user.username, typingTo: "" }),
             }).catch(() => {});
         };
         return () => {
             clearTyping();
-            if (typingTimeout.current) clearTimeout(typingTimeout.current);
         };
     }, [user, recipient]);
+
+    const typingTimeoutRef = useRef(null);
 
     const handleTextChange = (val) => {
         setText(val);
         if (!user || !recipient) return;
+
+        // Clear any pending timeout
+        if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current);
+        }
+
+        // Send typing status with debouncing
+        const typingTo = val.trim() ? recipient : "";
         fetch("/api/typing", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username: user.username, typingTo: val.trim() ? recipient : "" }),
+            credentials: 'include',
+            body: JSON.stringify({ username: user.username, typingTo }),
         }).catch(() => {});
+
+        // Auto-clear typing status after 3 seconds of no typing
+        if (val.trim()) {
+            typingTimeoutRef.current = setTimeout(() => {
+                fetch("/api/typing", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: 'include',
+                    body: JSON.stringify({ username: user.username, typingTo: "" }),
+                }).catch(() => {});
+            }, 3000);
+        }
     };
 
     const uploadToCloudinary = (file) =>
@@ -94,8 +110,14 @@ export default function Input({ onMessageSent, recipient }) {
             fetch("/api/typing", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: 'include',
                 body: JSON.stringify({ username: user.username, typingTo: "" }),
             }).catch(() => {});
+        }
+
+        // Clear any pending typing timeout
+        if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current);
         }
 
         const tempId = `temp_${Date.now()}_${Math.random()}`;

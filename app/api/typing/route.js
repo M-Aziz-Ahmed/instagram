@@ -29,8 +29,9 @@ export async function GET(request) {
         if (!username) return Response.json({ error: "username required" }, { status: 400 });
 
         await connectDB();
-        const typing = await Typing.findOne({ username }).lean();
-        return Response.json({ typingTo: typing?.typingTo || "" });
+        // Find who is typing TO this username (not what this username is typing to)
+        const typing = await Typing.findOne({ typingTo: username }).lean();
+        return Response.json({ typingTo: typing?.username || "" });
     } catch (error) {
         console.error(error);
         return Response.json({ error: "Failed" }, { status: 500 });
