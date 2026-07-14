@@ -1,4 +1,4 @@
-import ProfileNoSSR from "@/components/ProfileNoSSR";
+import ProfileNoSSR from "@/components/Profile/ProfileNoSSR";
 
 export const metadata = {
   title: 'Profile',

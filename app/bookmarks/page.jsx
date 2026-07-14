@@ -1,4 +1,4 @@
-import BookmarksNoSSR from "@/components/BookmarksNoSSR";
+import BookmarksNoSSR from "@/components/Feed/BookmarksNoSSR";
 
 export const metadata = {
   title: 'Bookmarks',
