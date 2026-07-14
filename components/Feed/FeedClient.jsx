@@ -29,7 +29,8 @@ export default function FeedClient() {
         }
     }, [ready, user, redirecting, router]);
 
-    if (!ready || redirecting || !user) {
+    // Always show loading state until we have a confirmed user
+    if (!ready || redirecting || !user || !user.username) {
         return (
             <div className="flex h-dvh items-center justify-center bg-white dark:bg-gray-950">
                 <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
@@ -47,7 +48,7 @@ export default function FeedClient() {
         router.replace("/login");
     }, [logout, router]);
 
-    const hasFollowing = user.following?.length > 0;
+    const hasFollowing = user?.following?.length > 0;
 
     return (
         <div className="min-h-dvh bg-white dark:bg-gray-950">
@@ -85,17 +86,17 @@ export default function FeedClient() {
                         <NotificationBell />
 
                         <Link
-                            href={`/profile/${encodeURIComponent(user.username)}`}
+                            href={`/profile/${encodeURIComponent(user?.username || "")}`}
                             className="flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-800 px-2 sm:px-3 py-2 rounded-full transition-colors min-h-[44px]"
                         >
                             <div
                                 className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs select-none"
-                                style={{ backgroundColor: user.avatarColor }}
+                                style={{ backgroundColor: user?.avatarColor || "#3b82f6" }}
                             >
-                                {user.username?.[0]?.toUpperCase()}
+                                {user?.username?.[0]?.toUpperCase() || "?"}
                             </div>
                             <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden lg:block">
-                                {user.username}
+                                {user?.username || ""}
                             </span>
                         </Link>
                     </div>
@@ -147,7 +148,7 @@ export default function FeedClient() {
                         onHashtag={handleHashtag}
                         onAuthError={handleAuthError}
                         feedType={feedType}
-                        username={user.username}
+                        username={user?.username || ""}
                     />
                 </main>
                 <TrendingTags activeTag={activeTag} onTagClick={handleHashtag} />
