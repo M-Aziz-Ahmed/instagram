@@ -118,7 +118,7 @@ export default function Compose({ onPosted }) {
     const canPost = (text.trim().length > 0 || !!imageFile) && !posting;
 
     return (
-        <div className="border-b border-gray-200 dark:border-gray-800 py-4">
+        <div className="border-b border-gray-200 dark:border-gray-800 p-4">
             <div className="flex gap-3">
                 <div
                     className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-sm select-none mt-0.5"
