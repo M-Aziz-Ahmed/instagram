@@ -31,9 +31,13 @@ export async function POST(request, { params }) {
             currentUser.following = currentUser.following.filter((u) => u !== targetUsername);
             targetUser.followers = targetUser.followers.filter((u) => u !== currentUsername);
         } else {
-            // Follow
-            currentUser.following.push(targetUsername);
-            targetUser.followers.push(currentUsername);
+            // Follow - check for duplicates before adding
+            if (!currentUser.following.includes(targetUsername)) {
+                currentUser.following.push(targetUsername);
+            }
+            if (!targetUser.followers.includes(currentUsername)) {
+                targetUser.followers.push(currentUsername);
+            }
         }
 
         await Promise.all([currentUser.save(), targetUser.save()]);

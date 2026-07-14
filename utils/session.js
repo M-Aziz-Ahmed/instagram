@@ -20,8 +20,9 @@ export async function verifyToken(token) {
         const { payload } = await jwtVerify(token, SECRET);
         return payload;
     } catch (err) {
+        // Don't throw on expired tokens - return null for graceful handling
         console.error("verifyToken failed:", err?.message ?? err);
-        throw err;
+        return null;
     }
 }
 
@@ -45,7 +46,9 @@ export async function getSession() {
     const token = cookieStore.get(COOKIE)?.value;
     if (!token) return null;
     try {
-        return await verifyToken(token);
+        const payload = await verifyToken(token);
+        // verifyToken now returns null on error instead of throwing
+        return payload;
     } catch (err) {
         console.error("getSession: token verification error:", err?.message ?? err);
         return null;

@@ -62,20 +62,35 @@ export default function Compose({ onPosted }) {
         });
 
     const handlePost = async () => {
-        if ((!text.trim() && !imageFile) || posting || !user) return;
+        // Validate input
+        const trimmedText = text.trim();
+        if ((!trimmedText && !imageFile) || posting || !user) return;
+        
+        // Check text length limit
+        if (trimmedText.length > 500) {
+            setError("Post text cannot exceed 500 characters");
+            return;
+        }
+        
         setPosting(true);
         setError("");
         setUploadProgress(0);
         try {
             let imageUrl = "";
             if (imageFile) {
-                imageUrl = await uploadToCloudinary(imageFile);
+                try {
+                    imageUrl = await uploadToCloudinary(imageFile);
+                } catch (uploadErr) {
+                    setError("Failed to upload image. Please try again.");
+                    return;
+                }
             }
             const res = await fetch("/api/posts", {
                 method:  "POST",
+                credentials: "include",
                 headers: { "Content-Type": "application/json" },
                 body:    JSON.stringify({
-                    text:     text.trim(),
+                    text:     trimmedText,
                     imageUrl,
                     sender:   user.username,
                     color:    user.color,

@@ -44,6 +44,12 @@ async function enrichPost(post) {
 export async function GET(request, { params }) {
     try {
         const { id } = await params;
+        
+        // Validate ObjectId format
+        if (!id || !/^[0-9a-fA-F]{24}$/.test(id)) {
+            return Response.json({ error: "Invalid post ID" }, { status: 400 });
+        }
+        
         await connectDB();
         const post = await Post.findById(id);
         if (!post) return Response.json({ error: "Not found" }, { status: 404 });
@@ -58,6 +64,12 @@ export async function GET(request, { params }) {
 export async function PATCH(request, { params }) {
     try {
         const { id } = await params;
+        
+        // Validate ObjectId format
+        if (!id || !/^[0-9a-fA-F]{24}$/.test(id)) {
+            return Response.json({ error: "Invalid post ID" }, { status: 400 });
+        }
+        
         const { username, action, text, color, parentId, imageUrl } = await request.json();
 
         await connectDB();
@@ -187,6 +199,12 @@ export async function PATCH(request, { params }) {
 export async function DELETE(request, { params }) {
     try {
         const { id } = await params;
+        
+        // Validate ObjectId format
+        if (!id || !/^[0-9a-fA-F]{24}$/.test(id)) {
+            return Response.json({ error: "Invalid post ID" }, { status: 400 });
+        }
+        
         const { username } = await request.json();
 
         await connectDB();

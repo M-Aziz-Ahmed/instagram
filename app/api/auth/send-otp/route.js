@@ -28,7 +28,14 @@ export async function POST(request) {
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min
 
         await OTP.create({ email: email.toLowerCase(), code, expiresAt });
-        await sendOTPEmail(email, code);
+        
+        // Wrap email sending in try-catch to handle failures gracefully
+        try {
+            await sendOTPEmail(email, code);
+        } catch (emailError) {
+            console.error("Failed to send OTP email:", emailError);
+            return Response.json({ error: "Failed to send email. Please try again." }, { status: 500 });
+        }
 
         return Response.json({ ok: true });
     } catch (error) {

@@ -67,7 +67,14 @@ export default function StoryViewer({ groups, initialIdx, onClose, onSeen }) {
             }
         };
         timerRef.current = requestAnimationFrame(tick);
-        return () => cancelAnimationFrame(timerRef.current);
+        
+        // Ensure cleanup happens properly
+        return () => {
+            if (timerRef.current) {
+                cancelAnimationFrame(timerRef.current);
+                timerRef.current = null;
+            }
+        };
     }, [story, advance, onSeen, user]);
 
     const handleReply = async () => {

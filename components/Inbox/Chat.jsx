@@ -195,7 +195,9 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         if (options.before) params.set("before", options.before);
 
         try {
-            const res = await fetch(`/api/messages?${params.toString()}`);
+            const res = await fetch(`/api/messages?${params.toString()}`, {
+                credentials: 'include'
+            });
             if (!res.ok) return null;
             const data = await res.json();
 
@@ -295,11 +297,19 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         queueMicrotask(resetScrollState);
     }, [recipient, resetScrollState]);
 
+    // Use ref to avoid recreating interval when fetchMessages changes
+    const fetchMessagesRef = useRef(fetchMessages);
+    useEffect(() => {
+        fetchMessagesRef.current = fetchMessages;
+    }, [fetchMessages]);
+
     useEffect(() => {
         if (!recipient) return;
-        const interval = setInterval(fetchMessages, 2000);
+        const interval = setInterval(() => {
+            fetchMessagesRef.current();
+        }, 2000);
         return () => clearInterval(interval);
-    }, [fetchMessages, recipient]);
+    }, [recipient]);
 
     useEffect(() => {
         if (!pendingMessage) return;

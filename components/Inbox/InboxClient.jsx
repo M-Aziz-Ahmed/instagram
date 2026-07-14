@@ -63,10 +63,17 @@ export default function InboxClient() {
     }, [user, selectedConvo?.username]);
 
     const fetchConversations = useCallback(async () => {
-        if (!user) return;
+        if (!user?.username) return;
         try {
-            const res = await fetch(`/api/messages?username=${encodeURIComponent(user.username)}`);
-            if (res.ok) setConversations(await res.json());
+            const res = await fetch(`/api/messages?username=${encodeURIComponent(user.username)}`, {
+                credentials: 'include'
+            });
+            if (res.ok) {
+                setConversations(await res.json());
+            } else if (res.status === 401) {
+                // Handle unauthorized - user session may have expired
+                console.error("Unauthorized access to messages");
+            }
         } catch (err) {
             console.error("Failed to fetch conversations:", err);
         } finally {

@@ -262,7 +262,10 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     const touchStartRef = useRef(null);
     const scrollDetectedRef = useRef(false);
 
-    const liked = user ? post.likes.includes(user.username) : false;
+    const liked = useMemo(() => 
+        user ? post.likes.includes(user.username) : false,
+        [user, post.likes]
+    );
     const isOwn = user?.username === post.sender;
     const author = post._author || null;
 
@@ -280,7 +283,13 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                 if (data?.viewCount !== undefined) setViewCount(data.viewCount);
             }).catch(() => {});
         }, 2000);
-        return () => clearTimeout(timer);
+        return () => {
+            clearTimeout(timer);
+            // Ensure single tap timer is also cleared
+            if (singleTapTimer.current) {
+                clearTimeout(singleTapTimer.current);
+            }
+        };
     }, [post._id]);
 
     const topLevelComments = useMemo(
@@ -290,6 +299,16 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
 
     const handleLike = async () => {
         if (!user || liking) return;
+        
+        // Optimistic update for better UX
+        const wasLiked = liked;
+        setPost(prev => ({
+            ...prev,
+            likes: wasLiked 
+                ? prev.likes.filter(u => u !== user.username)
+                : [...prev.likes, user.username]
+        }));
+        
         setLiking(true);
         try {
             const res = await fetch(`/api/posts/${post._id}`, {
@@ -297,7 +316,27 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: user.username }),
             });
-            if (res.ok) setPost(await res.json());
+            if (res.ok) {
+                setPost(await res.json());
+            } else {
+                // Rollback optimistic update on error
+                setPost(prev => ({
+                    ...prev,
+                    likes: wasLiked 
+                        ? [...prev.likes, user.username]
+                        : prev.likes.filter(u => u !== user.username)
+                }));
+                showToast("Failed to like post", "error");
+            }
+        } catch (err) {
+            // Rollback on network error
+            setPost(prev => ({
+                ...prev,
+                likes: wasLiked 
+                    ? [...prev.likes, user.username]
+                    : prev.likes.filter(u => u !== user.username)
+            }));
+            showToast("Network error", "error");
         } finally {
             setLiking(false);
         }

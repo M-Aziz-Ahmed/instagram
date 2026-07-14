@@ -115,7 +115,14 @@ export async function POST(request) {
         if (!sender?.trim()) {
             return Response.json({ error: "Sender is required" }, { status: 400 });
         }
-        if (!text?.trim() && !providedUrl && !imageData) {
+        
+        // Sanitize and validate text input
+        const sanitizedText = text?.trim() || "";
+        if (sanitizedText.length > 1000) {
+            return Response.json({ error: "Text exceeds maximum length of 1000 characters" }, { status: 400 });
+        }
+        
+        if (!sanitizedText && !providedUrl && !imageData) {
             return Response.json({ error: "Post must have text or an image" }, { status: 400 });
         }
 
@@ -123,16 +130,21 @@ export async function POST(request) {
 
         let imageUrl = providedUrl ?? "";
         if (!imageUrl && imageData) {
-            imageUrl = await uploadImage(imageData);
+            try {
+                imageUrl = await uploadImage(imageData);
+            } catch (uploadError) {
+                console.error("Image upload failed:", uploadError);
+                return Response.json({ error: "Failed to upload image" }, { status: 500 });
+            }
         }
 
-        const hashtags = extractHashtags(text ?? "");
-        const mentions  = extractMentions(text ?? "", sender);
+        const hashtags = extractHashtags(sanitizedText);
+        const mentions  = extractMentions(sanitizedText, sender);
 
         const user = await User.findOne({ username: sender }).select("avatarUrl").lean();
 
         const post = await Post.create({
-            text:     text?.trim() ?? "",
+            text:     sanitizedText,
             imageUrl,
             sender:   sender.trim(),
             color:    color || "#3b82f6",

@@ -23,8 +23,11 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             }
 
             if (append) {
-                const oldest = posts[posts.length - 1];
-                if (oldest?.timeStamp) params.set("before", oldest.timeStamp);
+                // Safety check: ensure posts array has items before accessing
+                if (posts.length > 0) {
+                    const oldest = posts[posts.length - 1];
+                    if (oldest?.timeStamp) params.set("before", oldest.timeStamp);
+                }
                 params.set("limit", String(PAGE_SIZE));
             } else {
                 params.set("limit", String(PAGE_SIZE));

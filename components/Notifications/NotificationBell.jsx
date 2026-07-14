@@ -39,6 +39,7 @@ export default function NotificationBell({ onNavigate }) {
 
     useEffect(() => {
         fetchNotifs();
+        // Increased interval from potential aggressive polling to 15 seconds
         const id = setInterval(fetchNotifs, 15000);
         return () => clearInterval(id);
     }, [fetchNotifs]);
