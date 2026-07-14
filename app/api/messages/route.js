@@ -12,19 +12,34 @@ export async function GET(request) {
         await connectDB();
 
         if (user1 && user2) {
-            const messages = await Message.find({
+            const limit = Math.min(parseInt(searchParams.get("limit") || "20", 10), 100);
+            const before = searchParams.get("before");
+            const query = {
                 $or: [
                     { sender: user1, recipient: user2 },
                     { sender: user2, recipient: user1 },
                 ],
-            }).sort({ timeStamp: 1 }).lean();
+            };
+
+            if (before) {
+                query.timeStamp = { $lt: new Date(before) };
+            }
+
+            const messages = await Message.find(query)
+                .sort({ timeStamp: -1 })
+                .limit(limit + 1)
+                .lean();
+
+            const hasMore = messages.length > limit;
+            const sliced = hasMore ? messages.slice(0, limit) : messages;
+            const ordered = sliced.reverse();
 
             await Message.updateMany(
                 { sender: user2, recipient: user1, delivered: false },
                 { $set: { delivered: true } }
             );
 
-            return Response.json(messages);
+            return Response.json({ messages: ordered, hasMore });
         }
 
         if (username) {

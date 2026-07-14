@@ -121,23 +121,44 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         }
     }, [username, showToast]);
 
-    const fetchMessages = useCallback(async () => {
+    const [hasMore, setHasMore] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [oldestTimestamp, setOldestTimestamp] = useState(null);
+
+    const fetchMessages = useCallback(async (options = {}) => {
         if (!username || !recipient) return;
+        const params = new URLSearchParams({
+            user1: username,
+            user2: recipient,
+            limit: String(options.limit || 20),
+        });
+        if (options.before) params.set("before", options.before);
+
         try {
-            const res = await fetch(`/api/messages?user1=${encodeURIComponent(username)}&user2=${encodeURIComponent(recipient)}`);
+            const res = await fetch(`/api/messages?${params.toString()}`);
             if (!res.ok) return;
             const data = await res.json();
 
+            setHasMore(Boolean(data.hasMore));
+            setOldestTimestamp(data.messages[0]?.timeStamp || null);
+
             setMessages(prev => {
                 const prevMap = new Map(prev.map(m => [m._id, m]));
-                return data.map(m => {
+                const items = data.messages.map(m => {
                     const local = prevMap.get(m._id);
-                    if (local) {
-                        return { ...m, _sending: local._sending };
-                    }
+                    if (local) return { ...m, _sending: local._sending };
                     return m;
                 });
+                return options.prepend ? [...items, ...prev] : items;
             });
+
+            if (!options.prepend && data.messages.length) {
+                const last = data.messages[data.messages.length - 1];
+                setOldestTimestamp(last.timeStamp);
+            }
+        } catch (err) {
+            console.error("Failed to fetch messages:", err);
+        }
 
             await fetch("/api/messages", {
                 method: "PATCH",
@@ -153,14 +174,18 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         if (!recipient) {
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setMessages([]);
+            setHasMore(false);
+            setOldestTimestamp(null);
             setLoading(false);
             return;
         }
         let cancelled = false;
         setMessages([]);
+        setHasMore(false);
+        setOldestTimestamp(null);
         setLoading(true);
         (async () => {
-            await fetchMessages();
+            await fetchMessages({ limit: 20 });
             if (!cancelled) setLoading(false);
         })();
         return () => { cancelled = true; };
