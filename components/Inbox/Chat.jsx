@@ -64,21 +64,24 @@ function getMessageStatus(msg) {
     return "sent";
 }
 
-export default function Chat({ pendingMessage, recipient, recipientUser }) {
+export default function Chat({ pendingMessage, recipient, recipientUser, scrollContainerRef }) {
     const { user } = useUser();
     const { showToast } = useToast();
     const [messages, setMessages]   = useState([]);
     const [loading, setLoading]     = useState(true);
     const bottomRef                  = useRef(null);
     const pendingIdRef               = useRef(null);
+    const isNearBottomRef            = useRef(true);
     const username                   = user?.username;
     const [lightboxSrc, setLightboxSrc] = useState(null);
+    const [showScrollBtn, setShowScrollBtn] = useState(false);
     const [, forceUpdate]            = useState(0);
 
     useEffect(() => {
+        if (!recipient) return;
         const id = setInterval(() => forceUpdate((n) => n + 1), 10000);
         return () => clearInterval(id);
-    }, []);
+    }, [recipient]);
 
     const canRecall = useCallback((msg) => {
         if (msg.sender !== username) return false;
@@ -182,11 +185,41 @@ export default function Chat({ pendingMessage, recipient, recipientUser }) {
         });
 
         if (pm._tempId) pendingIdRef.current = pm._tempId;
-    }, [pendingMessage]);
+
+        if (pm.sender === user?.username) {
+            isNearBottomRef.current = true;
+            setShowScrollBtn(false);
+            requestAnimationFrame(() => scrollToBottom());
+        }
+    }, [pendingMessage, user?.username, scrollToBottom]);
+
+    const isNearBottom = useCallback(() => {
+        const el = scrollContainerRef.current;
+        if (!el) return true;
+        return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    }, []);
+
+    const scrollToBottom = useCallback((smooth = true) => {
+        bottomRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "instant" });
+    }, []);
 
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+        const el = scrollContainerRef.current;
+        if (!el) return;
+        const onScroll = () => {
+            const near = isNearBottom();
+            isNearBottomRef.current = near;
+            setShowScrollBtn(!near);
+        };
+        el.addEventListener("scroll", onScroll, { passive: true });
+        return () => el.removeEventListener("scroll", onScroll);
+    }, [isNearBottom]);
+
+    useEffect(() => {
+        if (isNearBottomRef.current) {
+            scrollToBottom();
+        }
+    }, [messages, scrollToBottom]);
 
     if (loading) {
         return (
@@ -227,7 +260,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser }) {
     }
 
     return (
-        <>
+        <div className="relative h-full">
         <div className="flex flex-col gap-0.5 w-full">
             {messages.map((msg, i) => {
                 const isMine  = msg.sender === user?.username;
@@ -334,9 +367,25 @@ export default function Chat({ pendingMessage, recipient, recipientUser }) {
             <div ref={bottomRef} />
         </div>
 
+        {showScrollBtn && (
+            <button
+                onClick={() => {
+                    isNearBottomRef.current = true;
+                    setShowScrollBtn(false);
+                    scrollToBottom();
+                }}
+                className="sticky bottom-3 mx-auto w-9 h-9 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shadow-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors z-10 ml-auto mr-auto"
+                aria-label="Scroll to bottom"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                </svg>
+            </button>
+        )}
+
         {lightboxSrc && (
             <ImageLightbox src={lightboxSrc} alt="Photo" onClose={() => setLightboxSrc(null)} />
         )}
-        </>
+        </div>
     );
 }

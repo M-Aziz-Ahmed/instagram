@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import Chat from "./Chat";
 import Input from "./Input";
@@ -11,6 +11,7 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
     const { user, ready } = useUser();
     const [pendingMessage, setPendingMessage] = useState(null);
     const [editingProfile, setEditingProfile] = useState(false);
+    const scrollContainerRef = useRef(null);
 
     if (!ready) {
         return (
@@ -94,8 +95,8 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
             </header>
 
             {/* ── Messages ────────────────────────────────────────────────── */}
-            <div className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-4">
-                <Chat pendingMessage={pendingMessage} recipient={recipient} recipientUser={recipientUser} />
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-4">
+                <Chat key={recipient} pendingMessage={pendingMessage} recipient={recipient} recipientUser={recipientUser} scrollContainerRef={scrollContainerRef} />
             </div>
 
             {/* ── Input ───────────────────────────────────────────────────── */}
