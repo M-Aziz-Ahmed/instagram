@@ -47,15 +47,25 @@ export default function InboxClient() {
         setView("chat");
     }, [router]);
 
-    useEffect(() => { fetchConversations(); }, [fetchConversations]);
+    useEffect(() => {
+        queueMicrotask(() => {
+            void fetchConversations();
+        });
+    }, [fetchConversations]);
 
     useEffect(() => {
         if (!targetUser || urlInitDoneRef.current) return;
-        if (selectedConvo?.username === targetUser) { urlInitDoneRef.current = true; return; }
+        if (selectedConvo?.username === targetUser) {
+            urlInitDoneRef.current = true;
+            return;
+        }
 
         const existing = conversations.find((c) => c.username === targetUser);
         if (existing) {
-            handleSelectConvo(existing);
+            queueMicrotask(() => {
+                setSelectedConvo(existing);
+                setView("chat");
+            });
         } else {
             const newConvo = {
                 username: targetUser,
@@ -63,10 +73,13 @@ export default function InboxClient() {
                 lastMessage: null,
                 unreadCount: 0,
             };
-            handleSelectConvo(newConvo);
+            queueMicrotask(() => {
+                setSelectedConvo(newConvo);
+                setView("chat");
+            });
         }
         urlInitDoneRef.current = true;
-    }, [targetUser, conversations, selectedConvo, handleSelectConvo]);
+    }, [targetUser, conversations, selectedConvo]);
 
     useEffect(() => {
         const interval = setInterval(fetchConversations, 5000);

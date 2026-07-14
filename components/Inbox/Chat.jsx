@@ -127,6 +127,53 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     const [newMessagesCount, setNewMessagesCount] = useState(0);
     const latestTimestampRef = useRef(null);
 
+    const resetChatState = useCallback(() => {
+        setMessages([]);
+        setHasMore(false);
+        setOldestTimestamp(null);
+        setLoading(true);
+    }, []);
+
+    const syncPendingMessage = useCallback((pm) => {
+        setMessages((prev) => {
+            if (pm._remove) {
+                return prev.filter((m) => m._id !== pm._id && m._tempId !== pm._tempId);
+            }
+
+            if (pm._id && !pm._sending) {
+                const exists = prev.some((m) => m._id === pm._id);
+                if (exists) {
+                    return prev.map((m) => (m._id === pm._id ? { ...m, _sending: false } : m));
+                }
+                return [...prev, pm];
+            }
+
+            const existsTemp = prev.some((m) => m._tempId === pm._tempId);
+            if (existsTemp) {
+                return prev.map((m) => (m._tempId === pm._tempId ? pm : m));
+            }
+            return [...prev, pm];
+        });
+
+        if (pm._tempId) pendingIdRef.current = pm._tempId;
+
+        if (pm.sender === user?.username) {
+            isNearBottomRef.current = true;
+            setShowScrollBtn(false);
+            requestAnimationFrame(() => scrollToBottom());
+        }
+    }, [user?.username, scrollToBottom]);
+
+    const resetScrollState = useCallback(() => {
+        isNearBottomRef.current = true;
+        setShowScrollBtn(false);
+    }, []);
+
+    const resetNewMessagesCount = useCallback(() => {
+        if (!isNearBottomRef.current && newMessagesCount > 0) return;
+        setNewMessagesCount(0);
+    }, [newMessagesCount]);
+
     const fetchMessages = useCallback(async (options = {}) => {
         if (!username || !recipient) return null;
         const params = new URLSearchParams({
@@ -212,31 +259,29 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
 
     useEffect(() => {
         if (!recipient) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setMessages([]);
-            setHasMore(false);
-            setOldestTimestamp(null);
-            setLoading(false);
+            queueMicrotask(() => {
+                resetChatState();
+                setLoading(false);
+            });
             return;
         }
+
         let cancelled = false;
-        setMessages([]);
-        setHasMore(false);
-        setOldestTimestamp(null);
-        setLoading(true);
-        (async () => {
+        queueMicrotask(resetChatState);
+
+        const load = async () => {
             await fetchMessages({ limit: 20 });
             if (!cancelled) setLoading(false);
-        })();
+        };
+
+        load();
         return () => { cancelled = true; };
-    }, [fetchMessages, recipient]);
+    }, [fetchMessages, recipient, resetChatState]);
 
     useEffect(() => {
         if (!recipient) return;
-        isNearBottomRef.current = true;
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setShowScrollBtn(false);
-    }, [recipient]);
+        queueMicrotask(resetScrollState);
+    }, [recipient, resetScrollState]);
 
     useEffect(() => {
         if (!recipient) return;
@@ -246,37 +291,8 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
 
     useEffect(() => {
         if (!pendingMessage) return;
-        const pm = pendingMessage;
-
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setMessages(prev => {
-            if (pm._remove) {
-                return prev.filter(m => m._id !== pm._id && m._tempId !== pm._tempId);
-            }
-
-            if (pm._id && !pm._sending) {
-                const exists = prev.some(m => m._id === pm._id);
-                if (exists) {
-                    return prev.map(m => m._id === pm._id ? { ...m, _sending: false } : m);
-                }
-                return [...prev, pm];
-            }
-
-            const existsTemp = prev.some(m => m._tempId === pm._tempId);
-            if (existsTemp) {
-                return prev.map(m => m._tempId === pm._tempId ? pm : m);
-            }
-            return [...prev, pm];
-        });
-
-        if (pm._tempId) pendingIdRef.current = pm._tempId;
-
-        if (pm.sender === user?.username) {
-            isNearBottomRef.current = true;
-            setShowScrollBtn(false);
-            requestAnimationFrame(() => scrollToBottom());
-        }
-    }, [pendingMessage, user?.username, scrollToBottom]);
+        queueMicrotask(() => syncPendingMessage(pendingMessage));
+    }, [pendingMessage, syncPendingMessage]);
 
     useEffect(() => {
         const el = scrollContainerRef.current;
@@ -300,9 +316,8 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     }, [messages, scrollToBottom]);
 
     useEffect(() => {
-        if (!isNearBottomRef.current && newMessagesCount > 0) return;
-        setNewMessagesCount(0);
-    }, [messages, newMessagesCount]);
+        resetNewMessagesCount();
+    }, [messages, resetNewMessagesCount]);
 
     if (loading) {
         return (

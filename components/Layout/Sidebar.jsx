@@ -3,13 +3,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import { useTheme } from "@/context/ThemeContext";
+import { useSidebar } from "@/context/SidebarContext";
 import { useRouter, usePathname } from "next/navigation";
 import EditProfileModal from "@/components/Auth/EditProfileModal";
 import Link from "next/link";
 import UserBadges from "@/components/shared/UserBadges";
 
 function NavItem({ href, icon, label, active, onClick, badge }) {
-    const classes = `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors min-h-[48px] ${
+    const { collapsed } = useSidebar();
+    const classes = `flex items-center ${collapsed ? "justify-center gap-0 px-2" : "gap-3 px-4"} py-3 rounded-xl text-sm font-medium transition-colors min-h-[48px] ${
         active
             ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/60 hover:text-gray-900 dark:hover:text-gray-100"
@@ -18,7 +20,7 @@ function NavItem({ href, icon, label, active, onClick, badge }) {
     const content = (
         <>
             {icon}
-            <span className="flex-1">{label}</span>
+            <span className={collapsed ? "sr-only" : "flex-1"}>{label}</span>
             {badge > 0 && (
                 <span className="bg-blue-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center leading-none px-1">
                     {badge > 99 ? "99+" : badge}
@@ -118,6 +120,7 @@ function LogoutIcon() {
 export default function Sidebar({ open, onClose }) {
     const { user, logout } = useUser();
     const { theme, toggleTheme } = useTheme();
+    const { collapsed, toggleCollapsed } = useSidebar();
     const router = useRouter();
     const pathname = usePathname();
     const [editingProfile, setEditingProfile] = useState(false);
@@ -167,15 +170,16 @@ export default function Sidebar({ open, onClose }) {
 
             {/* Sidebar panel */}
             <aside
-                className={`fixed top-0 left-0 h-full w-72 bg-white dark:bg-gray-900 z-50 shadow-xl transition-transform duration-300 ease-in-out lg:translate-x-0 lg:shadow-none lg:border-r lg:border-gray-200 dark:lg:border-gray-800 ${
+                className={`fixed top-0 left-0 h-full ${collapsed ? "w-20" : "w-72"} bg-white dark:bg-gray-900 z-50 shadow-xl transition-all duration-300 ease-in-out lg:translate-x-0 lg:shadow-none lg:border-r lg:border-gray-200 dark:lg:border-gray-800 ${
                     open ? "translate-x-0" : "-translate-x-full"
                 }`}
             >
                 <div className="flex flex-col h-full">
                     {/* User profile header */}
                     <div className="px-5 pt-6 pb-4">
-                        <div className="flex items-center gap-3">
-                            <div
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                            <div className="flex items-center gap-3">
+                                <div
                                 className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg select-none shrink-0 overflow-hidden"
                                 style={{ backgroundColor: user?.avatarColor }}
                             >
@@ -194,6 +198,22 @@ export default function Sidebar({ open, onClose }) {
                                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{user.bio}</p>
                                 )}
                             </div>
+                            <button
+                                onClick={toggleCollapsed}
+                                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                                className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-5 h-5">
+                                    {collapsed ? (
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
+                                    ) : (
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 6l-6 6 6 6" />
+                                    )}
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            
                         </div>
                     </div>
 
