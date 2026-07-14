@@ -80,7 +80,13 @@ export default function LoginForm({ onSuccess }) {
             });
             const data = await res.json();
             if (!res.ok) { setError(data.error); setOtp(["","","","","",""]); inputRefs.current[0]?.focus(); return; }
+            
+            // Set user data immediately from response to avoid race condition
             await reloadUser(data.user);
+            
+            // Small delay to ensure cookie is fully set before navigation
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
             onSuccess?.(data.needsSetup);
         } catch {
             setError("Network error. Try again.");

@@ -309,16 +309,27 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     useEffect(() => {
         const el = scrollContainerRef.current;
         if (!el) return;
+        
+        let scrollTimeout;
         const onScroll = () => {
+            // Debounce the load trigger to prevent multiple simultaneous requests
             if (el.scrollTop < 120 && hasMore && !loadingMore) {
-                loadOlderMessages();
+                if (scrollTimeout) clearTimeout(scrollTimeout);
+                scrollTimeout = setTimeout(() => {
+                    loadOlderMessages();
+                }, 150);
             }
+            
             const near = isNearBottom();
             isNearBottomRef.current = near;
             setShowScrollBtn(!near);
         };
+        
         el.addEventListener("scroll", onScroll, { passive: true });
-        return () => el.removeEventListener("scroll", onScroll);
+        return () => {
+            el.removeEventListener("scroll", onScroll);
+            if (scrollTimeout) clearTimeout(scrollTimeout);
+        };
     }, [hasMore, isNearBottom, loadOlderMessages, loadingMore, scrollContainerRef]);
 
     useEffect(() => {
