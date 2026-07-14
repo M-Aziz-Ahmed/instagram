@@ -31,7 +31,7 @@ function TickIcon({ status }) {
 
     if (status === "sent") {
         return (
-            <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" viewBox="0 0 16 16" fill="currentColor">
+            <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M12.354 4.354a.5.5 0 0 0-.708-.708L6 9.293 3.854 7.146a.5.5 0 1 0-.708.708l2.5 2.5a.5.5 0 0 0 .708 0l6-6z" />
             </svg>
         );
@@ -39,18 +39,22 @@ function TickIcon({ status }) {
 
     if (status === "delivered") {
         return (
-            <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" viewBox="0 0 20 16" fill="currentColor">
-                <path d="M1.354 4.354a.5.5 0 0 0-.708-.708l-1 1a.5.5 0 0 0 .708.708L1.354 4.354zM5.5 5.646a.5.5 0 0 0-.708-.708l-3 3a.5.5 0 0 0 .708.708l3-3zM7 9.293l1.646-1.647a.5.5 0 0 0-.708-.708L7 8.586 4.854 6.44a.5.5 0 1 0-.708.708l2.5 2.5a.5.5 0 0 0 .708 0l3.5-3.5a.5.5 0 0 0-.708-.708L7 9.293zM13.5 4.354a.5.5 0 0 0-.708-.708l-1 1a.5.5 0 0 0 .708.708l1-1zM17.646 5.646a.5.5 0 0 0-.708-.708l-3 3a.5.5 0 0 0 .708.708l3-3z" />
-                <path d="M12.5 9.293l1.646-1.647a.5.5 0 0 0-.708-.708L12.5 8.586l-2.146-2.146a.5.5 0 0 0-.708.708l3 3a.5.5 0 0 0 .354.146.5.5 0 0 0 .146-.354l-3.5-3.5a.5.5 0 0 0-.708-.708L12.5 9.293z" />
+            <svg className="w-[18px] h-[18px] text-gray-600 dark:text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                {/* First checkmark */}
+                <path d="M20 6L9 17l-5-5" />
+                {/* Second checkmark slightly offset */}
+                <path d="M23 6L12 17" />
             </svg>
         );
     }
 
     if (status === "read") {
         return (
-            <svg className="w-4 h-4 text-blue-500" viewBox="0 0 20 16" fill="currentColor">
-                <path d="M1.354 4.354a.5.5 0 0 0-.708-.708l-1 1a.5.5 0 0 0 .708.708L1.354 4.354zM5.5 5.646a.5.5 0 0 0-.708-.708l-3 3a.5.5 0 0 0 .708.708l3-3zM7 9.293l1.646-1.647a.5.5 0 0 0-.708-.708L7 8.586 4.854 6.44a.5.5 0 1 0-.708.708l2.5 2.5a.5.5 0 0 0 .708 0l3.5-3.5a.5.5 0 0 0-.708-.708L7 9.293zM13.5 4.354a.5.5 0 0 0-.708-.708l-1 1a.5.5 0 0 0 .708.708l1-1zM17.646 5.646a.5.5 0 0 0-.708-.708l-3 3a.5.5 0 0 0 .708.708l3-3z" />
-                <path d="M12.5 9.293l1.646-1.647a.5.5 0 0 0-.708-.708L12.5 8.586l-2.146-2.146a.5.5 0 0 0-.708.708l3 3a.5.5 0 0 0 .354.146.5.5 0 0 0 .146-.354l-3.5-3.5a.5.5 0 0 0-.708-.708L12.5 9.293z" />
+            <svg className="w-[18px] h-[18px] text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                {/* First checkmark */}
+                <path d="M20 6L9 17l-5-5" />
+                {/* Second checkmark slightly offset */}
+                <path d="M23 6L12 17" />
             </svg>
         );
     }
