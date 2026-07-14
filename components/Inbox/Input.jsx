@@ -31,8 +31,6 @@ export default function Input({ onMessageSent, recipient }) {
         };
     }, [user, recipient]);
 
-    const typingTimeoutRef = useRef(null);
-
     const handleTextChange = (val) => {
         setText(val);
         if (!user || !recipient) return;

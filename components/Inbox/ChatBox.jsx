@@ -18,20 +18,20 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
         if (!recipient || !user?.username) return;
         const poll = async () => {
             try {
-                // Check if recipient is typing to current user
+                // Check if anyone is typing to current user
                 const res = await fetch(`/api/typing?username=${encodeURIComponent(user.username)}`, {
                     credentials: 'include'
                 });
                 if (res.ok) {
                     const data = await res.json();
-                    // data.typingTo contains the username who is typing to us
-                    // We want to show indicator if that username matches our recipient
-                    setIsTyping(data.typingTo === recipient);
+                    // data.typingUser contains the username who is typing to us
+                    // Show indicator only if that user is the current recipient
+                    setIsTyping(data.typingUser === recipient);
                 }
             } catch { /* silent */ }
         };
         poll();
-        const id = setInterval(poll, 2000); // Reduced from 3000ms to 2000ms for more responsive indicator
+        const id = setInterval(poll, 2000);
         return () => clearInterval(id);
     }, [recipient, user?.username]);
 
