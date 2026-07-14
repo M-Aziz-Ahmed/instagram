@@ -8,7 +8,8 @@ import UserBadges from "@/components/shared/UserBadges";
 import BookmarkButton from "@/components/shared/BookmarkButton";
 import FollowButton from "@/components/shared/FollowButton";
 import ImageLightbox from "@/components/shared/ImageLightbox";
-import ReactionPicker from "./ReactionPicker";
+import ReactionPicker, { ReactionCounts } from "./ReactionPicker";
+import RepostButton from "./RepostButton";
 import Link from "next/link";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -342,20 +343,40 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
         }
     };
 
-    const handleReaction = async (emoji) => {
+    const handleReaction = async (reactionType) => {
         if (!user || reacting) return;
         setReacting(true);
         try {
             const res = await fetch(`/api/posts/${post._id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: user.username, action: "react", emoji }),
+                body: JSON.stringify({ 
+                    username: user.username, 
+                    action: "react", 
+                    reactionType,
+                    color: user.color 
+                }),
             });
-            if (res.ok) setPost(await res.json());
+            if (res.ok) {
+                setPost(await res.json());
+            }
         } finally {
             setReacting(false);
         }
     };
+
+    const getUserReaction = () => {
+        if (!user || !post.reactions) return null;
+        const reactions = ["like", "love", "laugh", "fire", "sad", "angry"];
+        for (const type of reactions) {
+            if (post.reactions[type]?.includes(user.username)) {
+                return type;
+            }
+        }
+        return null;
+    };
+
+    const currentReaction = getUserReaction();
 
     const handleTouchStart = (e) => {
         const t = e.touches[0];
@@ -562,27 +583,11 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                         </div>
                     )}
 
-                    <div className="flex items-center gap-1 sm:gap-5 mt-3 relative">
-                        <div className="relative">
-                            <button
-                                onClick={handleLike}
-                                onContextMenu={(e) => { e.preventDefault(); setShowReactions(!showReactions); }}
-                                onDoubleClick={() => setShowReactions(!showReactions)}
-                                disabled={liking || !user}
-                                aria-label={liked ? "Unlike" : "Like"}
-                                className={`flex items-center gap-1.5 text-sm transition-colors group disabled:cursor-not-allowed min-h-[44px] px-2 py-1 rounded-lg ${
-                                    liked ? "text-red-500" : "text-gray-400 dark:text-gray-500 hover:text-red-500"
-                                }`}
-                            >
-                                <HeartIcon filled={liked} />
-                                {post.likes.length > 0 && <span>{post.likes.length}</span>}
-                            </button>
-                            <ReactionPicker
-                                visible={showReactions}
-                                onSelect={handleReaction}
-                                onClose={() => setShowReactions(false)}
-                            />
-                        </div>
+                    <div className="flex items-center gap-1 sm:gap-3 mt-3 relative">
+                        <ReactionPicker 
+                            onReact={handleReaction}
+                            currentReaction={currentReaction}
+                        />
 
                         <button
                             onClick={() => setShowComments((v) => !v)}
@@ -592,6 +597,8 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                             <CommentIcon />
                             {(post.comments?.length || 0) > 0 && <span>{post.comments.length}</span>}
                         </button>
+
+                        <RepostButton postId={post._id} onReposted={() => showToast("Reposted to your feed!", "success")} />
 
                         {viewCount > 0 && (
                             <span className="flex items-center gap-1 text-sm text-gray-400 dark:text-gray-500 ml-1">
@@ -607,24 +614,25 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                             <BookmarkButton postId={post._id} />
                         </div>
                     </div>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                </svg>
+                                <span>{viewCount}</span>
+                            </span>
+                        )}
 
-                    {post.reactions && Object.keys(post.reactions).length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                            {Object.entries(post.reactions).map(([emoji, users]) => (
-                                <button
-                                    key={emoji}
-                                    onClick={() => user && handleReaction(emoji)}
-                                    className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                                        users.includes(user?.username)
-                                            ? "bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400"
-                                            : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                    }`}
-                                >
-                                    <span className="text-sm">{emoji}</span>
-                                    <span className="font-medium">{users.length}</span>
-                                </button>
-                            ))}
+                        <div className="ml-auto">
+                            <BookmarkButton postId={post._id} />
                         </div>
+                    </div>
+
+                    {post.reactions && (
+                        <ReactionCounts 
+                            reactions={post.reactions}
+                            onReactionClick={(reaction) => {
+                                // Could show who reacted in a modal
+                                console.log('Reaction clicked:', reaction);
+                            }}
+                        />
                     )}
 
                     {showComments && (

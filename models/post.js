@@ -8,6 +8,9 @@ const commentSchema = new mongoose.Schema({
     color:     { type: String, default: "#3b82f6" },
     avatarUrl: { type: String, default: "" },
     parentId:  { type: String, default: null },
+    replies:   { type: Number, default: 0 },
+    likes:     { type: [String], default: [] },
+    mentions:  { type: [String], default: [] },
     timeStamp: { type: Date, default: Date.now },
 });
 
@@ -22,7 +25,24 @@ const postSchema = new mongoose.Schema({
     hashtags:  { type: [String], default: [] },
     mentions:  { type: [String], default: [] },
     viewCount: { type: Number, default: 0 },
-    reactions:  { type: Map, of: [{ type: String }], default: {} },
+    
+    // Enhanced reactions: { type: count }
+    reactions: { 
+        like:  { type: [String], default: [] },
+        love:  { type: [String], default: [] },
+        laugh: { type: [String], default: [] },
+        fire:  { type: [String], default: [] },
+        sad:   { type: [String], default: [] },
+        angry: { type: [String], default: [] },
+    },
+    
+    // Repost functionality
+    isRepost:       { type: Boolean, default: false },
+    originalPostId: { type: mongoose.Schema.Types.ObjectId, ref: "Post", default: null },
+    originalSender: { type: String, default: null },
+    repostComment:  { type: String, default: "" },
+    repostCount:    { type: Number, default: 0 },
+    
     visibility: { type: String, enum: ["public", "closeFriends"], default: "public" },
     timeStamp: { type: Date, default: Date.now },
 });

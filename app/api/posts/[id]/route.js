@@ -103,29 +103,47 @@ export async function PATCH(request, { params }) {
                 color:     color || "#3b82f6",
                 avatarUrl: commenter?.avatarUrl || "",
                 parentId:  parentId || null,
+                likes:     [],
+                replies:   0,
+                mentions:  extractMentions(text || ""),
             };
             post.comments.push(comment);
+            
+            // Update parent reply count if this is a reply
+            if (parentId) {
+                const parentComment = post.comments.find(c => c.commentId === parentId);
+                if (parentComment) {
+                    parentComment.replies = (parentComment.replies || 0) + 1;
+                }
+            }
+            
             await post.save();
 
+            // Notify post owner
             if (post.sender !== username) {
                 await Notification.create({
                     recipient: post.sender,
-                    type:      "comment",
+                    type:      parentId ? "reply" : "comment",
                     fromUser:  username,
                     fromColor: color || "#3b82f6",
+                    fromAvatarUrl: commenter?.avatarUrl || "",
                     postId:    id,
+                    commentId: comment.commentId,
                     text:      text?.trim() ?? "",
                 });
             }
 
-            const mentions = extractMentions(text || "", username).filter((u) => u !== post.sender);
+            // Notify mentioned users
+            const mentions = extractMentions(text || "", username).filter((u) => u !== post.sender && u !== username);
             if (mentions.length > 0) {
                 await Notification.insertMany(mentions.map((recipient) => ({
                     recipient,
                     type:      "mention",
                     fromUser:  username,
                     fromColor: color || "#3b82f6",
+                    fromAvatarUrl: commenter?.avatarUrl || "",
                     postId:    id,
+                    commentId: comment.commentId,
                     text:      text?.trim() ?? "",
                 })));
             }
@@ -136,65 +154,117 @@ export async function PATCH(request, { params }) {
 
         if (action === "deleteComment") {
             const { commentId } = await request.json();
-            post.comments = post.comments.filter((c) => c.commentId !== commentId);
-            post.comments = post.comments.filter((c) => c.parentId !== commentId);
+            const comment = post.comments.find(c => c.commentId === commentId);
+            
+            // If deleting a parent comment, also delete replies
+            post.comments = post.comments.filter((c) => c.commentId !== commentId && c.parentId !== commentId);
+            
+            // Update parent reply count if this was a reply
+            if (comment?.parentId) {
+                const parentComment = post.comments.find(c => c.commentId === comment.parentId);
+                if (parentComment && parentComment.replies > 0) {
+                    parentComment.replies -= 1;
+                }
+            }
+            
             await post.save();
             const enriched = await enrichPost(post);
             return Response.json(enriched);
         }
 
         if (action === "react") {
-            const { emoji } = await request.json();
-            if (!emoji) return Response.json({ error: "Emoji required" }, { status: 400 });
-
-            if (!post.reactions) post.reactions = new Map();
-            const users = post.reactions.get(emoji) || [];
-            const userIdx = users.indexOf(username);
-
-            if (userIdx === -1) {
-                users.push(username);
-                post.reactions.set(emoji, users);
-            } else {
-                users.splice(userIdx, 1);
-                if (users.length === 0) {
-                    post.reactions.delete(emoji);
-                } else {
-                    post.reactions.set(emoji, users);
-                }
+            const { reactionType } = await request.json();
+            const validReactions = ["like", "love", "laugh", "fire", "sad", "angry"];
+            
+            if (!reactionType || !validReactions.includes(reactionType)) {
+                return Response.json({ error: "Invalid reaction type" }, { status: 400 });
             }
-            await post.save();
 
+            // Initialize reactions if needed
+            if (!post.reactions) {
+                post.reactions = { like: [], love: [], laugh: [], fire: [], sad: [], angry: [] };
+            }
+
+            // Remove user from all other reaction types
+            validReactions.forEach(type => {
+                if (!post.reactions[type]) post.reactions[type] = [];
+                const idx = post.reactions[type].indexOf(username);
+                if (idx !== -1) {
+                    post.reactions[type].splice(idx, 1);
+                }
+            });
+
+            // Toggle the selected reaction
+            if (!post.reactions[reactionType]) post.reactions[reactionType] = [];
+            const idx = post.reactions[reactionType].indexOf(username);
+            
+            if (idx === -1) {
+                // Add reaction
+                post.reactions[reactionType].push(username);
+                
+                // Notify post owner (only for non-like reactions)
+                if (post.sender !== username && reactionType !== "like") {
+                    await Notification.create({
+                        recipient: post.sender,
+                        type:      reactionType,
+                        fromUser:  username,
+                        fromColor: color || "#3b82f6",
+                        postId:    id,
+                        text:      post.text?.slice(0, 80) ?? "",
+                    });
+                }
+            } else {
+                // Remove reaction
+                post.reactions[reactionType].splice(idx, 1);
+            }
+
+            await post.save();
             const enriched = await enrichPost(post);
             return Response.json(enriched);
         }
 
-        const idx = post.likes.indexOf(username);
-        const isLiking = idx === -1;
+        // Legacy like support (converts to "like" reaction)
+        if (action === "like" || !action) {
+            const idx = post.reactions?.like?.indexOf(username) ?? -1;
+            const isLiking = idx === -1;
 
-        if (isLiking) {
-            post.likes.push(username);
-            if (post.sender !== username) {
-                await Notification.create({
-                    recipient: post.sender,
-                    type:      "like",
-                    fromUser:  username,
-                    fromColor: color || "#3b82f6",
-                    postId:    id,
-                    text:      post.text?.slice(0, 80) ?? "",
-                });
+            if (!post.reactions) {
+                post.reactions = { like: [], love: [], laugh: [], fire: [], sad: [], angry: [] };
             }
-        } else {
-            post.likes.splice(idx, 1);
-        }
-        await post.save();
+            if (!post.reactions.like) post.reactions.like = [];
 
-        const enriched = await enrichPost(post);
-        return Response.json(enriched);
-    } catch (error) {
-        console.error(error);
-        return Response.json({ error: "Failed to update post" }, { status: 500 });
-    }
-}
+            if (isLiking) {
+                post.reactions.like.push(username);
+                
+                // Also update legacy likes array for backward compatibility
+                if (!post.likes.includes(username)) {
+                    post.likes.push(username);
+                }
+                
+                if (post.sender !== username) {
+                    await Notification.create({
+                        recipient: post.sender,
+                        type:      "like",
+                        fromUser:  username,
+                        fromColor: color || "#3b82f6",
+                        postId:    id,
+                        text:      post.text?.slice(0, 80) ?? "",
+                    });
+                }
+            } else {
+                post.reactions.like.splice(idx, 1);
+                
+                // Also update legacy likes array
+                const legacyIdx = post.likes.indexOf(username);
+                if (legacyIdx !== -1) {
+                    post.likes.splice(legacyIdx, 1);
+                }
+            }
+            
+            await post.save();
+            const enriched = await enrichPost(post);
+            return Response.json(enriched);
+        }
 
 export async function DELETE(request, { params }) {
     try {
