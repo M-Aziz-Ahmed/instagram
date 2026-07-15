@@ -70,7 +70,7 @@ export async function PATCH(request, { params }) {
             return Response.json({ error: "Invalid post ID" }, { status: 400 });
         }
         
-        const { username, action, text, color, parentId, imageUrl } = await request.json();
+        const { username, action, text, color, parentId, imageUrl, reactionType, commentId } = await request.json();
 
         await connectDB();
         const post = await Post.findById(id);
@@ -153,7 +153,6 @@ export async function PATCH(request, { params }) {
         }
 
         if (action === "deleteComment") {
-            const { commentId } = await request.json();
             const comment = post.comments.find(c => c.commentId === commentId);
             
             // If deleting a parent comment, also delete replies
@@ -173,7 +172,6 @@ export async function PATCH(request, { params }) {
         }
 
         if (action === "react") {
-            const { reactionType } = await request.json();
             const validReactions = ["like", "love", "laugh", "fire", "sad", "angry"];
             
             if (!reactionType || !validReactions.includes(reactionType)) {
