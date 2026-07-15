@@ -82,18 +82,24 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
 
                         remoteStreamRef.current = new MediaStream();
                         pc.ontrack = (e) => {
-                            if (e.track && remoteStreamRef.current) {
-                                const existing = remoteStreamRef.current.getTracks().find((t) => t.kind === e.track.kind);
-                                if (existing) {
-                                    remoteStreamRef.current.removeTrack(existing);
+                            console.log("[Live VIEWER] ontrack kind:", e.track?.kind, "readyState:", e.track?.readyState);
+                            if (e.track) {
+                                if (remoteStreamRef.current) {
+                                    const existing = remoteStreamRef.current.getTracks().find((t) => t.kind === e.track.kind);
+                                    if (existing) remoteStreamRef.current.removeTrack(existing);
+                                    remoteStreamRef.current.addTrack(e.track);
                                 }
-                                remoteStreamRef.current.addTrack(e.track);
-                                if (remoteVideoRef.current) {
-                                    remoteVideoRef.current.srcObject = remoteStreamRef.current;
-                                    remoteVideoRef.current.play().then(() => {
-                                        setViewerReady(true);
-                                    }).catch(() => {});
-                                }
+                                e.track.onunmute = () => {
+                                    console.log("[Live VIEWER] track unmuted:", e.track.kind);
+                                    if (remoteVideoRef.current && remoteStreamRef.current) {
+                                        remoteVideoRef.current.srcObject = remoteStreamRef.current;
+                                        remoteVideoRef.current.play().then(() => setViewerReady(true)).catch(() => {});
+                                    }
+                                };
+                            }
+                            if (remoteVideoRef.current && remoteStreamRef.current) {
+                                remoteVideoRef.current.srcObject = remoteStreamRef.current;
+                                remoteVideoRef.current.play().then(() => setViewerReady(true)).catch(() => {});
                             }
                         };
 
@@ -130,7 +136,11 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
 
                     const stream = localStreamRef.current;
                     if (stream) {
-                        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+                        const tracks = stream.getTracks();
+                        console.log("[Live HOST] Adding", tracks.length, "tracks:", tracks.map(t => t.kind + "/" + t.readyState));
+                        tracks.forEach((track) => pc.addTrack(track, stream));
+                    } else {
+                        console.warn("[Live HOST] NO localStream when handling request-offer from", viewer);
                     }
 
                     pc.onicecandidate = (e) => {
@@ -384,6 +394,16 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     }, [started, streamId, doPoll, doPollChat]);
 
     useEffect(() => () => stopAll(), [stopAll]);
+
+    useEffect(() => {
+        if (!started || isHost || !viewerReady) return;
+        const id = setInterval(() => {
+            if (remoteVideoRef.current && remoteStreamRef.current && remoteStreamRef.current.getVideoTracks().length > 0) {
+                remoteVideoRef.current.srcObject = remoteStreamRef.current;
+            }
+        }, 3000);
+        return () => clearInterval(id);
+    }, [started, isHost, viewerReady]);
 
     useEffect(() => {
         if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
