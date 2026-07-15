@@ -201,9 +201,14 @@ export async function PATCH(request, { params }) {
             if (idx === -1) {
                 // Add reaction
                 post.reactions[reactionType].push(username);
+
+                // Keep legacy likes array in sync
+                if (reactionType === "like" && !post.likes.includes(username)) {
+                    post.likes.push(username);
+                }
                 
-                // Notify post owner (only for non-like reactions)
-                if (post.sender !== username && reactionType !== "like") {
+                // Notify post owner
+                if (post.sender !== username) {
                     await Notification.create({
                         recipient: post.sender,
                         type:      reactionType,
@@ -216,6 +221,12 @@ export async function PATCH(request, { params }) {
             } else {
                 // Remove reaction
                 post.reactions[reactionType].splice(idx, 1);
+
+                // Keep legacy likes array in sync
+                if (reactionType === "like") {
+                    const legacyIdx = post.likes.indexOf(username);
+                    if (legacyIdx !== -1) post.likes.splice(legacyIdx, 1);
+                }
             }
 
             await post.save();

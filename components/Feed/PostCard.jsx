@@ -359,7 +359,11 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
             });
             if (res.ok) {
                 setPost(await res.json());
+            } else {
+                showToast("Failed to react to post", "error");
             }
+        } catch {
+            showToast("Network error", "error");
         } finally {
             setReacting(false);
         }

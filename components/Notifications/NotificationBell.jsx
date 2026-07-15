@@ -16,6 +16,11 @@ function timeAgo(date) {
 
 const TYPE_LABEL = {
     like:    "liked your post",
+    love:    "loved your post",
+    laugh:   "laughed at your post",
+    fire:    "reacted 🔥 to your post",
+    sad:     "reacted 😢 to your post",
+    angry:   "reacted 😠 to your post",
     comment: "commented on your post",
     mention: "mentioned you",
     message: "sent you a message",
