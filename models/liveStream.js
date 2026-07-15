@@ -1,5 +1,13 @@
 import mongoose from "mongoose";
 
+const chatMessageSchema = new mongoose.Schema({
+    username:  { type: String, required: true },
+    color:     { type: String, default: "#3b82f6" },
+    avatarUrl: { type: String, default: "" },
+    text:      { type: String, required: true },
+    createdAt: { type: Date, default: Date.now },
+}, { _id: false });
+
 const signalSchema = new mongoose.Schema({
     from:    { type: String, required: true },
     to:      { type: String, default: "" },
@@ -9,14 +17,15 @@ const signalSchema = new mongoose.Schema({
 }, { _id: false });
 
 const liveStreamSchema = new mongoose.Schema({
-    host:       { type: String, required: true, index: true },
-    title:      { type: String, default: "" },
-    status:     { type: String, enum: ["live", "ended"], default: "live" },
-    viewers:    { type: [String], default: [] },
-    maxViewers: { type: Number, default: 0 },
-    signals:    { type: [signalSchema], default: [] },
-    startedAt:  { type: Date, default: Date.now },
-    endedAt:    { type: Date, default: null },
+    host:        { type: String, required: true, index: true },
+    title:       { type: String, default: "" },
+    status:      { type: String, enum: ["live", "ended"], default: "live" },
+    viewers:     { type: [String], default: [] },
+    maxViewers:  { type: Number, default: 0 },
+    signals:     { type: [signalSchema], default: [] },
+    chat:        { type: [chatMessageSchema], default: [] },
+    startedAt:   { type: Date, default: Date.now },
+    endedAt:     { type: Date, default: null },
 }, { timestamps: true });
 
 liveStreamSchema.index({ status: 1, startedAt: -1 });
