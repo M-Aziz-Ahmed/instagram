@@ -32,6 +32,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
 
     const localVideoRef   = useRef(null);
     const remoteVideoRef  = useRef(null);
+    const remoteStreamRef = useRef(null);
     const localStreamRef  = useRef(null);
     const screenStreamRef = useRef(null);
     const pcsRef          = useRef({});
@@ -78,9 +79,18 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                         pc = new RTCPeerConnection(ICE_SERVERS);
                         viewerPcRef.current = pc;
 
+                        remoteStreamRef.current = new MediaStream();
                         pc.ontrack = (e) => {
-                            if (e.streams[0] && remoteVideoRef.current) {
-                                remoteVideoRef.current.srcObject = e.streams[0];
+                            if (e.track && remoteStreamRef.current) {
+                                const existing = remoteStreamRef.current.getTracks().find((t) => t.kind === e.track.kind);
+                                if (existing) {
+                                    remoteStreamRef.current.removeTrack(existing);
+                                }
+                                remoteStreamRef.current.addTrack(e.track);
+                                if (remoteVideoRef.current) {
+                                    remoteVideoRef.current.srcObject = remoteStreamRef.current;
+                                    remoteVideoRef.current.play().catch(() => {});
+                                }
                             }
                         };
 
@@ -224,6 +234,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
         pcsRef.current = {};
         viewerPcRef.current?.close();
         viewerPcRef.current = null;
+        remoteStreamRef.current = null;
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     }, []);
 
@@ -587,13 +598,13 @@ export default function LiveButton({ username }) {
                 Go Live
             </button>
 
-            {activeStreams.length > 0 && (
-                <div className="fixed bottom-20 sm:bottom-4 right-4 z-40 flex flex-col gap-2">
+            {activeStreams.filter((s) => s.host !== user?.username).length > 0 && (
+                <div className="fixed top-0 left-0 right-0 z-40 safe-top">
                     {activeStreams.filter((s) => s.host !== user?.username).map((s) => (
                         <button key={s._id} onClick={() => setJoining(s._id)}
-                            className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-full shadow-lg animate-pulse">
-                            <span className="w-2 h-2 rounded-full bg-white" />
-                            {s.host} is live
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-500 to-pink-500 text-white text-sm font-semibold shadow-lg">
+                            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                            {s.host} is live — tap to join
                         </button>
                     ))}
                 </div>
