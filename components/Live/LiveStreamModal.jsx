@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 
 const ICE_SERVERS = {
@@ -22,6 +22,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const [cameraOff, setCameraOff]   = useState(true);
     const [error, setError]           = useState("");
     const [started, setStarted]       = useState(false);
+    const [connecting, setConnecting] = useState(false);
 
     const [chatMessages, setChatMessages] = useState([]);
     const [chatInput, setChatInput]       = useState("");
@@ -33,169 +34,127 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const remoteVideoRef  = useRef(null);
     const localStreamRef  = useRef(null);
     const screenStreamRef = useRef(null);
-    const pcsRef          = useRef({});       // host: { viewerUsername => RTCPeerConnection }
-    const viewerPcRef     = useRef(null);     // viewer: single RTCPeerConnection to host
+    const pcsRef          = useRef({});
+    const viewerPcRef     = useRef(null);
     const pollRef         = useRef(null);
     const sinceRef        = useRef(null);
 
-    const isHostUser = user?.username === hostUsername;
+    const stateRef = useRef({});
+    stateRef.current = { streamId, isHost, user, hostUsername };
 
-    /* ── cleanup ── */
-    const stopAll = useCallback(() => {
-        localStreamRef.current?.getTracks().forEach((t) => t.stop());
-        screenStreamRef.current?.getTracks().forEach((t) => t.stop());
-        Object.values(pcsRef.current).forEach((pc) => pc.close());
-        pcsRef.current = {};
-        viewerPcRef.current?.close();
-        viewerPcRef.current = null;
-        if (pollRef.current) clearInterval(pollRef.current);
-    }, []);
-
-    /* ── host: create a peer for a specific viewer ── */
-    const createHostPeer = useCallback((viewerUsername) => {
-        const pc = new RTCPeerConnection(ICE_SERVERS);
-        pcsRef.current[viewerUsername] = pc;
-
-        if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach((track) => pc.addTrack(track, localStreamRef.current));
-        }
-
-        pc.onicecandidate = (e) => {
-            if (e.candidate && streamId) {
-                fetch(`/api/live/${streamId}`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        username: user.username,
-                        action: "signal",
-                        to: viewerUsername,
-                        type: "ice-candidate",
-                        data: e.candidate.toJSON(),
-                    }),
-                }).catch(() => {});
-            }
-        };
-
-        pc.onconnectionstatechange = () => {
-            if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
-                pc.close();
-                delete pcsRef.current[viewerUsername];
-            }
-        };
-
-        return pc;
-    }, [streamId, user?.username]);
-
-    /* ── host: send offer to a viewer who requested it ── */
-    const hostSendOffer = useCallback(async (viewerUsername) => {
-        if (!streamId) return;
-        const pc = createHostPeer(viewerUsername);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        await fetch(`/api/live/${streamId}`, {
+    const fetchSignal = (to, type, data) => {
+        const s = stateRef.current;
+        if (!s.streamId || !s.user) return;
+        return fetch(`/api/live/${s.streamId}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                username: user.username,
+                username: s.user.username,
                 action: "signal",
-                to: viewerUsername,
-                type: "offer",
-                data: offer,
+                to,
+                type,
+                data,
             }),
         }).catch(() => {});
-    }, [streamId, createHostPeer, user?.username]);
+    };
 
-    /* ── viewer: create a peer to the host ── */
-    const createViewerPeer = useCallback(() => {
-        const pc = new RTCPeerConnection(ICE_SERVERS);
-        viewerPcRef.current = pc;
+    const processSignal = async (signal) => {
+        if (!signal?.type) return;
+        const s = stateRef.current;
 
-        pc.ontrack = (e) => {
-            if (remoteVideoRef.current && e.streams[0]) {
-                remoteVideoRef.current.srcObject = e.streams[0];
-            }
-        };
-
-        pc.onicecandidate = (e) => {
-            if (e.candidate && streamId) {
-                fetch(`/api/live/${streamId}`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        username: user.username,
-                        action: "signal",
-                        to: hostUsername,
-                        type: "ice-candidate",
-                        data: e.candidate.toJSON(),
-                    }),
-                }).catch(() => {});
-            }
-        };
-
-        pc.onconnectionstatechange = () => {
-            if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-                pc.close();
-                viewerPcRef.current = null;
-            }
-        };
-
-        return pc;
-    }, [streamId, user?.username, hostUsername]);
-
-    /* ── handle incoming signal ── */
-    const handleSignal = useCallback(async (signal) => {
-        if (!signal?.type || !signal?.data) return;
-
-        if (!isHostUser) {
-            /* Viewer receives an offer from host */
-            if (signal.type === "offer") {
-                const pc = viewerPcRef.current || createViewerPeer();
-                await pc.setRemoteDescription(new RTCSessionDescription(signal.data));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-
-                await fetch(`/api/live/${streamId}`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        username: user.username,
-                        action: "signal",
-                        to: signal.from,
-                        type: "answer",
-                        data: answer,
-                    }),
-                }).catch(() => {});
-            } else if (signal.type === "ice-candidate" && viewerPcRef.current) {
-                try { await viewerPcRef.current.addIceCandidate(new RTCIceCandidate(signal.data)); } catch {}
-            }
-        } else {
-            /* Host receives a request-offer from a viewer */
-            if (signal.type === "request-offer") {
-                await hostSendOffer(signal.from);
-            } else if (signal.type === "answer") {
-                const pc = pcsRef.current[signal.from];
-                if (pc) {
-                    try { await pc.setRemoteDescription(new RTCSessionDescription(signal.data)); } catch {}
-                }
-            } else if (signal.type === "ice-candidate") {
-                const pc = pcsRef.current[signal.from];
-                if (pc) {
-                    try { await pc.addIceCandidate(new RTCIceCandidate(signal.data)); } catch {}
-                }
-            }
-        }
-    }, [isHostUser, streamId, user?.username, hostUsername, createViewerPeer, hostSendOffer]);
-
-    /* ── polling ── */
-    const pollSignals = useCallback(async () => {
-        if (!streamId || !user?.username) return;
         try {
-            const res = await fetch(`/api/live/${streamId}`, {
+            if (!s.isHost) {
+                /* ── Viewer ── */
+                if (signal.type === "offer" && signal.data) {
+                    let pc = viewerPcRef.current;
+                    if (!pc) {
+                        pc = new RTCPeerConnection(ICE_SERVERS);
+                        viewerPcRef.current = pc;
+
+                        pc.ontrack = (e) => {
+                            if (remoteVideoRef.current && e.streams[0]) {
+                                remoteVideoRef.current.srcObject = e.streams[0];
+                            }
+                        };
+
+                        pc.onicecandidate = (e) => {
+                            if (e.candidate) {
+                                fetchSignal(s.hostUsername, "ice-candidate", e.candidate.toJSON());
+                            }
+                        };
+                    }
+
+                    if (pc.signalingState === "have-remote-offer") return;
+
+                    await pc.setRemoteDescription(new RTCSessionDescription(signal.data));
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    fetchSignal(signal.from, "answer", answer);
+                } else if (signal.type === "ice-candidate" && signal.data && viewerPcRef.current) {
+                    try {
+                        await viewerPcRef.current.addIceCandidate(new RTCIceCandidate(signal.data));
+                    } catch {}
+                }
+            } else {
+                /* ── Host ── */
+                if (signal.type === "request-offer") {
+                    const viewer = signal.from;
+                    if (pcsRef.current[viewer]) return;
+
+                    const pc = new RTCPeerConnection(ICE_SERVERS);
+                    pcsRef.current[viewer] = pc;
+
+                    if (localStreamRef.current) {
+                        localStreamRef.current.getTracks().forEach((track) => {
+                            pc.addTrack(track, localStreamRef.current);
+                        });
+                    }
+
+                    pc.onicecandidate = (e) => {
+                        if (e.candidate) {
+                            fetchSignal(viewer, "ice-candidate", e.candidate.toJSON());
+                        }
+                    };
+
+                    pc.onconnectionstatechange = () => {
+                        if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
+                            pc.close();
+                            delete pcsRef.current[viewer];
+                        }
+                    };
+
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    fetchSignal(viewer, "offer", offer);
+
+                } else if (signal.type === "answer" && signal.data) {
+                    const pc = pcsRef.current[signal.from];
+                    if (pc && pc.signalingState === "have-local-offer") {
+                        await pc.setRemoteDescription(new RTCSessionDescription(signal.data));
+                    }
+                } else if (signal.type === "ice-candidate" && signal.data) {
+                    const pc = pcsRef.current[signal.from];
+                    if (pc) {
+                        try {
+                            await pc.addIceCandidate(new RTCIceCandidate(signal.data));
+                        } catch {}
+                    }
+                }
+            }
+        } catch (err) {
+            console.error("Signal error:", err);
+        }
+    };
+
+    const doPoll = async () => {
+        const s = stateRef.current;
+        if (!s.streamId || !s.user) return;
+        try {
+            const res = await fetch(`/api/live/${s.streamId}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    username: user.username,
+                    username: s.user.username,
                     action: "poll",
                     since: sinceRef.current || new Date(0).toISOString(),
                 }),
@@ -205,17 +164,18 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                 setViewers(data.viewers);
                 sinceRef.current = new Date().toISOString();
                 for (const signal of data.signals) {
-                    await handleSignal(signal);
+                    await processSignal(signal);
                 }
             }
         } catch {}
-    }, [streamId, user?.username, handleSignal]);
+    };
 
-    const pollChat = useCallback(async () => {
-        if (!streamId) return;
+    const doPollChat = async () => {
+        const s = stateRef.current;
+        if (!s.streamId) return;
         try {
             const since = chatSinceRef.current || new Date(0).toISOString();
-            const res = await fetch(`/api/live/${streamId}?action=chat&since=${encodeURIComponent(since)}`);
+            const res = await fetch(`/api/live/${s.streamId}?action=chat&since=${encodeURIComponent(since)}`);
             if (res.ok) {
                 const data = await res.json();
                 if (data.messages?.length) {
@@ -228,10 +188,9 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                 }
             }
         } catch {}
-    }, [streamId]);
+    };
 
-    /* ── chat ── */
-    const sendChat = useCallback(async () => {
+    const sendChat = async () => {
         if (!chatInput.trim() || !streamId) return;
         const text = chatInput.trim();
         setChatInput("");
@@ -255,10 +214,19 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                 }
             }
         } catch {}
-    }, [chatInput, streamId, user]);
+    };
 
-    /* ── start / join ── */
-    const goLive = useCallback(async (withCamera) => {
+    const stopAll = () => {
+        localStreamRef.current?.getTracks().forEach((t) => t.stop());
+        screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+        Object.values(pcsRef.current).forEach((pc) => { try { pc.close(); } catch {} });
+        pcsRef.current = {};
+        viewerPcRef.current?.close();
+        viewerPcRef.current = null;
+        if (pollRef.current) clearInterval(pollRef.current);
+    };
+
+    const goLive = async (withCamera) => {
         if (withCamera) {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
@@ -290,9 +258,9 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             setError("Failed to start stream");
             localStreamRef.current?.getTracks().forEach((t) => t.stop());
         }
-    }, [user]);
+    };
 
-    const joinStream = useCallback(async (sid) => {
+    const joinStream = async (sid) => {
         setStreamId(sid);
         setIsHost(false);
         setStarted(true);
@@ -305,26 +273,13 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             body: JSON.stringify({ username: user.username, action: "join" }),
         }).catch(() => {});
 
-        /* Request an offer from the host */
-        setTimeout(async () => {
-            await fetch(`/api/live/${sid}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    username: user.username,
-                    action: "signal",
-                    to: hostUsername,
-                    type: "request-offer",
-                    data: {},
-                }),
-            }).catch(() => {});
-        }, 500);
-    }, [user, hostUsername]);
+        setTimeout(() => {
+            fetchSignal(hostUsername, "request-offer", {});
+        }, 300);
+    };
 
-    /* ── toggles ── */
-    const toggleCamera = useCallback(async () => {
-        if (!isHostUser) return;
-
+    const toggleCamera = async () => {
+        if (!isHost) return;
         if (!cameraOff) {
             localStreamRef.current?.getVideoTracks().forEach((t) => t.stop());
             if (localStreamRef.current) {
@@ -338,7 +293,6 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             });
             return;
         }
-
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
             const vt = stream.getVideoTracks()[0];
@@ -354,16 +308,15 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                 if (sender) sender.replaceTrack(vt);
             });
         } catch {}
-    }, [cameraOff, isHostUser]);
+    };
 
-    const toggleMute = useCallback(() => {
+    const toggleMute = () => {
         localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = muted; });
         setMuted((m) => !m);
-    }, [muted]);
+    };
 
-    const toggleScreenShare = useCallback(async () => {
-        if (!isHostUser) return;
-
+    const toggleScreenShare = async () => {
+        if (!isHost) return;
         if (sharing) {
             screenStreamRef.current?.getTracks().forEach((t) => t.stop());
             screenStreamRef.current = null;
@@ -376,7 +329,6 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             if (localVideoRef.current && localStreamRef.current) localVideoRef.current.srcObject = localStreamRef.current;
             return;
         }
-
         try {
             const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
             screenStreamRef.current = screen;
@@ -398,9 +350,9 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             });
             if (localVideoRef.current) localVideoRef.current.srcObject = screen;
         } catch {}
-    }, [sharing, isHostUser]);
+    };
 
-    const endStream = useCallback(async () => {
+    const endStream = async () => {
         if (isHost && streamId) {
             await fetch(`/api/live/${streamId}`, {
                 method: "DELETE",
@@ -416,22 +368,20 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
         }
         stopAll();
         onClose?.();
-    }, [isHost, streamId, user?.username, stopAll, onClose]);
+    };
 
-    /* ── start polling ── */
     useEffect(() => {
         if (!started || !streamId) return;
-        pollRef.current = setInterval(() => { pollSignals(); pollChat(); }, POLL_MS);
+        pollRef.current = setInterval(() => { doPoll(); doPollChat(); }, POLL_MS);
         return () => { if (pollRef.current) clearInterval(pollRef.current); };
-    }, [started, streamId, pollSignals, pollChat]);
+    }, [started, streamId]);
 
-    useEffect(() => () => stopAll(), [stopAll]);
+    useEffect(() => () => stopAll(), []);
 
     useEffect(() => {
         if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }, [chatMessages]);
 
-    /* ── UI ── */
     if (error) {
         return (
             <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-4">
@@ -455,12 +405,12 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                             </svg>
                         </div>
                         <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">
-                            {isHostUser ? "Go Live" : `Join ${hostUsername}'s live`}
+                            {isHost ? "Go Live" : `Join ${hostUsername}'s live`}
                         </h3>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                            {isHostUser ? "Start chatting with your audience" : "Watch and chat — no camera needed"}
+                            {isHost ? "Start chatting with your audience" : "Watch and chat — no camera needed"}
                         </p>
-                        {isHostUser ? (
+                        {isHost ? (
                             <div className="flex flex-col gap-2">
                                 <button onClick={() => goLive(true)} className="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors">
                                     Start with Camera
@@ -483,11 +433,11 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
         );
     }
 
-    const hostHasVideo = isHostUser && !cameraOff;
+    const hostHasVideo = isHost && !cameraOff;
 
     return (
         <div className="fixed inset-0 z-50 bg-black flex flex-col" style={{ height: "100dvh" }}>
-            {/* ── Top bar ── */}
+            {/* Top bar */}
             <div className="flex items-center justify-between px-4 py-2.5 safe-top bg-black shrink-0 z-10">
                 <div className="flex items-center gap-2 min-w-0">
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
@@ -506,11 +456,11 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                 </div>
             </div>
 
-            {/* ── Main: video + chat side by side ── */}
+            {/* Main area */}
             <div className="flex-1 flex min-h-0">
                 {/* Video area */}
                 <div className="flex-1 relative bg-black min-h-0 flex items-center justify-center">
-                    {isHostUser ? (
+                    {isHost ? (
                         hostHasVideo ? (
                             <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                         ) : (
@@ -525,7 +475,6 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                         <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
                     )}
 
-                    {/* Host badge */}
                     <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5">
                         <div className="w-6 h-6 rounded-full bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
                             {hostUsername?.[0]?.toUpperCase()}
@@ -533,19 +482,15 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                         <span className="text-white text-xs font-medium">{hostUsername}</span>
                     </div>
 
-                    {/* Host self-view pip */}
-                    {isHostUser && hostHasVideo && (
+                    {isHost && hostHasVideo && (
                         <div className="absolute bottom-16 sm:bottom-4 right-3 w-20 h-28 sm:w-28 sm:h-36 rounded-xl overflow-hidden border-2 border-white/20 shadow-lg bg-black">
                             <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                         </div>
                     )}
                 </div>
 
-                {/* Chat panel — desktop: side, mobile: overlay */}
-                <div className={`
-                    ${chatOpen ? "absolute inset-0 z-20" : "hidden"} sm:relative sm:block sm:z-auto
-                    sm:w-72 lg:w-80 bg-gray-950 sm:border-l border-white/10 flex flex-col shrink-0
-                `}>
+                {/* Chat panel */}
+                <div className={`${chatOpen ? "absolute inset-0 z-20" : "hidden"} sm:relative sm:block sm:z-auto sm:w-72 lg:w-80 bg-gray-950 sm:border-l border-white/10 flex flex-col shrink-0`}>
                     <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10 shrink-0">
                         <span className="text-white/70 text-xs font-semibold uppercase tracking-wider">Live Chat</span>
                         <button onClick={() => setChatOpen(false)} className="sm:hidden text-white/40 hover:text-white p-1">
@@ -585,8 +530,8 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                 </div>
             </div>
 
-            {/* ── Bottom controls ── */}
-            {isHostUser && (
+            {/* Bottom controls */}
+            {isHost && (
                 <div className="flex items-center justify-center gap-3 px-4 py-3 safe-bottom bg-black shrink-0 z-10">
                     <button onClick={toggleMute} className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${muted ? "bg-white text-black" : "bg-white/15 text-white"}`}>
                         {muted
