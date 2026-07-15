@@ -16,7 +16,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const { user } = useUser();
     const [streamId, setStreamId]     = useState(initialStreamId || null);
     const [viewers, setViewers]       = useState(0);
-    const [isHost, setIsHost]         = useState(false);
+    const [isHost, setIsHost]         = useState(!initialStreamId && user?.username === hostUsername);
     const [sharing, setSharing]       = useState(false);
     const [muted, setMuted]           = useState(false);
     const [cameraOff, setCameraOff]   = useState(true);
