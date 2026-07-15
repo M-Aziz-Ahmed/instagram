@@ -283,28 +283,28 @@ export default function ProfileClient({ username }) {
                                     <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-3">{profile.bio}</p>
                                 )}
 
-                                <div className="flex gap-6">
-                                    <div>
-                                        <span className="font-black text-gray-900 dark:text-gray-100">{data?.postCount ?? 0}</span>
-                                        <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">posts</span>
+                                <div className="grid grid-cols-4 gap-2 w-full">
+                                    <div className="text-center">
+                                        <span className="font-black text-gray-900 dark:text-gray-100 block">{data?.postCount ?? 0}</span>
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">posts</span>
                                     </div>
-                                    <div>
-                                        <span className="font-black text-gray-900 dark:text-gray-100">{data?.totalLikes ?? 0}</span>
-                                        <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">likes</span>
+                                    <div className="text-center">
+                                        <span className="font-black text-gray-900 dark:text-gray-100 block">{data?.totalLikes ?? 0}</span>
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">likes</span>
                                     </div>
                                     <button
                                         onClick={() => setListModal("followers")}
-                                        className="text-left hover:opacity-70 transition-opacity"
+                                        className="text-center hover:opacity-70 transition-opacity"
                                     >
-                                        <span className="font-black text-gray-900 dark:text-gray-100">{profile.followersCount ?? 0}</span>
-                                        <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">followers</span>
+                                        <span className="font-black text-gray-900 dark:text-gray-100 block">{profile.followersCount ?? 0}</span>
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">followers</span>
                                     </button>
                                     <button
                                         onClick={() => setListModal("following")}
-                                        className="text-left hover:opacity-70 transition-opacity"
+                                        className="text-center hover:opacity-70 transition-opacity"
                                     >
-                                        <span className="font-black text-gray-900 dark:text-gray-100">{profile.followingCount ?? 0}</span>
-                                        <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">following</span>
+                                        <span className="font-black text-gray-900 dark:text-gray-100 block">{profile.followingCount ?? 0}</span>
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">following</span>
                                     </button>
                                 </div>
                             </div>
