@@ -61,17 +61,21 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const processSignal = async (signal) => {
         if (!signal?.type) return;
         const s = stateRef.current;
+        const role = s.isHost ? "HOST" : "VIEWER";
+        console.log(`[Live ${role}] processing signal: ${signal.type} from=${signal.from} to=${signal.to || "any"}`);
 
         try {
             if (!s.isHost) {
                 /* ── Viewer ── */
                 if (signal.type === "offer" && signal.data) {
+                    console.log("[Live VIEWER] received offer, signalingState before:", viewerPcRef.current?.signalingState || "no-pc");
                     let pc = viewerPcRef.current;
                     if (!pc) {
                         pc = new RTCPeerConnection(ICE_SERVERS);
                         viewerPcRef.current = pc;
 
                         pc.ontrack = (e) => {
+                            console.log("[Live VIEWER] ontrack!", e.streams?.length, "tracks:", e.track?.kind);
                             if (remoteVideoRef.current && e.streams[0]) {
                                 remoteVideoRef.current.srcObject = e.streams[0];
                             }
@@ -82,6 +86,10 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                                 fetchSignal(s.hostUsername, "ice-candidate", e.candidate.toJSON());
                             }
                         };
+
+                        pc.onconnectionstatechange = () => {
+                            console.log("[Live VIEWER] connectionState:", pc.connectionState);
+                        };
                     }
 
                     if (pc.signalingState === "have-remote-offer") return;
@@ -89,11 +97,14 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                     await pc.setRemoteDescription(new RTCSessionDescription(signal.data));
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
-                    fetchSignal(signal.from, "answer", answer);
+                    console.log("[Live VIEWER] sent answer, signalingState:", pc.signalingState);
+                    fetchSignal(signal.from, "answer", { type: answer.type, sdp: answer.sdp });
                 } else if (signal.type === "ice-candidate" && signal.data && viewerPcRef.current) {
                     try {
                         await viewerPcRef.current.addIceCandidate(new RTCIceCandidate(signal.data));
-                    } catch {}
+                    } catch (e) {
+                        console.warn("[Live VIEWER] addIceCandidate failed:", e.message);
+                    }
                 }
             } else {
                 /* ── Host ── */
@@ -101,13 +112,18 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                     const viewer = signal.from;
                     if (pcsRef.current[viewer]) return;
 
+                    console.log("[Live HOST] request-offer from", viewer, "localStream tracks:", localStreamRef.current?.getTracks().length || 0);
                     const pc = new RTCPeerConnection(ICE_SERVERS);
                     pcsRef.current[viewer] = pc;
 
-                    if (localStreamRef.current) {
-                        localStreamRef.current.getTracks().forEach((track) => {
-                            pc.addTrack(track, localStreamRef.current);
+                    const stream = localStreamRef.current;
+                    if (stream) {
+                        stream.getTracks().forEach((track) => {
+                            console.log("[Live HOST] adding track:", track.kind, track.label);
+                            pc.addTrack(track, stream);
                         });
+                    } else {
+                        console.warn("[Live HOST] NO local stream! Will send empty offer");
                     }
 
                     pc.onicecandidate = (e) => {
@@ -117,6 +133,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                     };
 
                     pc.onconnectionstatechange = () => {
+                        console.log("[Live HOST] connectionState for", viewer, ":", pc.connectionState);
                         if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
                             pc.close();
                             delete pcsRef.current[viewer];
@@ -125,7 +142,8 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
 
                     const offer = await pc.createOffer();
                     await pc.setLocalDescription(offer);
-                    fetchSignal(viewer, "offer", offer);
+                    console.log("[Live HOST] sending offer to", viewer);
+                    fetchSignal(viewer, "offer", { type: offer.type, sdp: offer.sdp });
 
                 } else if (signal.type === "answer" && signal.data) {
                     const pc = pcsRef.current[signal.from];
@@ -161,13 +179,19 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             });
             if (res.ok) {
                 const data = await res.json();
+                if (data.signals?.length) {
+                    console.log(`[Live ${s.isHost ? "HOST" : "VIEWER"}] poll: ${data.signals.length} signal(s), viewers: ${data.viewers}`);
+                    data.signals.forEach((sig) => console.log(`  → ${sig.type} from=${sig.from} to=${sig.to}`));
+                }
                 setViewers(data.viewers);
                 sinceRef.current = new Date().toISOString();
                 for (const signal of data.signals) {
                     await processSignal(signal);
                 }
             }
-        } catch {}
+        } catch (e) {
+            console.error("[Live] poll error:", e);
+        }
     };
 
     const doPollChat = async () => {
@@ -227,19 +251,17 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     };
 
     const goLive = async (withCamera) => {
-        if (withCamera) {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
-                    audio: true,
-                });
-                localStreamRef.current = stream;
-                setCameraOff(false);
-                if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-            } catch {
-                setError("Camera/microphone access denied");
-                return;
-            }
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: withCamera ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
+                audio: true,
+            });
+            localStreamRef.current = stream;
+            if (withCamera) setCameraOff(false);
+            if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+        } catch {
+            setError("Camera/microphone access denied");
+            return;
         }
 
         try {
@@ -252,8 +274,8 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             setStreamId(data.streamId);
             setIsHost(true);
             setStarted(true);
-            sinceRef.current = new Date().toISOString();
-            chatSinceRef.current = new Date().toISOString();
+            sinceRef.current = null;
+            chatSinceRef.current = null;
         } catch {
             setError("Failed to start stream");
             localStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -264,8 +286,8 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
         setStreamId(sid);
         setIsHost(false);
         setStarted(true);
-        sinceRef.current = new Date().toISOString();
-        chatSinceRef.current = new Date().toISOString();
+        sinceRef.current = null;
+        chatSinceRef.current = null;
 
         await fetch(`/api/live/${sid}`, {
             method: "POST",
