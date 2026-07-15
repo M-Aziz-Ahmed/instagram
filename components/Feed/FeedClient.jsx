@@ -11,6 +11,7 @@ import NotificationBell from "@/components/Notifications/NotificationBell";
 import Sidebar from "@/components/Layout/Sidebar";
 import Link from "next/link";
 import StoryTray from "@/components/Stories/StoryTray";
+import LiveButton from "@/components/Live/LiveStreamModal";
 
 export default function FeedClient() {
     const { user, ready, logout } = useUser();
@@ -84,6 +85,7 @@ export default function FeedClient() {
                         <div className="sm:hidden">
                             <SearchBar onSearch={setSearchQuery} searchQuery={searchQuery} onClearSearch={() => setSearchQuery(null)} />
                         </div>
+                        <LiveButton username={user?.username || ""} />
                         <NotificationBell />
 
                         <Link
