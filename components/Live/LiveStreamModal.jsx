@@ -473,7 +473,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                             </div>
                         )
                     ) : (
-                        <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                        <video ref={remoteVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                     )}
 
                     <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5">
@@ -602,7 +602,7 @@ export default function LiveButton({ username }) {
                 <div className="fixed top-0 left-0 right-0 z-40 safe-top">
                     {activeStreams.filter((s) => s.host !== user?.username).map((s) => (
                         <button key={s._id} onClick={() => setJoining(s._id)}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-500 to-pink-500 text-white text-sm font-semibold shadow-lg">
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-500 to-pink-500 text-white text-sm font-semibold shadow-lg safe-top">
                             <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
                             {s.host} is live — tap to join
                         </button>
