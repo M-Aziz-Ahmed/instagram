@@ -30,7 +30,7 @@ export async function GET(request, { params }) {
 export async function POST(request, { params }) {
     try {
         const { id } = await params;
-        const { username, action } = await request.json();
+        const { username, action, to, type, data, since, text, color, avatarUrl } = await request.json();
 
         await connectDB();
         const stream = await LiveStream.findById(id);
@@ -56,14 +56,12 @@ export async function POST(request, { params }) {
         }
 
         if (action === "signal") {
-            const { to, type, data } = await request.json();
             stream.signals.push({ from: username, to: to || "", type, data });
             await stream.save();
             return Response.json({ ok: true });
         }
 
         if (action === "poll") {
-            const { since } = await request.json();
             const sinceDate = since ? new Date(since) : new Date(0);
             const mySignals = stream.signals.filter(
                 (s) => (s.to === username || s.to === "") && new Date(s.createdAt) > sinceDate
@@ -72,7 +70,6 @@ export async function POST(request, { params }) {
         }
 
         if (action === "chat") {
-            const { text, color, avatarUrl } = await request.json();
             if (!text?.trim()) {
                 return Response.json({ error: "Empty message" }, { status: 400 });
             }
