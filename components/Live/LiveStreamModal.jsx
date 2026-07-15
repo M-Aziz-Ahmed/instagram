@@ -29,6 +29,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const [chatMessages, setChatMessages]   = useState([]);
     const [chatInput, setChatInput]         = useState("");
     const [chatOpen, setChatOpen]           = useState(false);
+    const [viewerReady, setViewerReady]     = useState(false);
 
     const localVideoRef   = useRef(null);
     const remoteVideoRef  = useRef(null);
@@ -89,7 +90,9 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                                 remoteStreamRef.current.addTrack(e.track);
                                 if (remoteVideoRef.current) {
                                     remoteVideoRef.current.srcObject = remoteStreamRef.current;
-                                    remoteVideoRef.current.play().catch(() => {});
+                                    remoteVideoRef.current.play().then(() => {
+                                        setViewerReady(true);
+                                    }).catch(() => {});
                                 }
                             }
                         };
@@ -473,7 +476,26 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                             </div>
                         )
                     ) : (
-                        <video ref={remoteVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+                        <div
+                            className="w-full h-full relative cursor-pointer"
+                            onClick={(e) => {
+                                if (remoteVideoRef.current) {
+                                    remoteVideoRef.current.play().then(() => setViewerReady(true)).catch(() => {});
+                                }
+                            }}
+                        >
+                            <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                            {!viewerReady && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
+                                    <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur flex items-center justify-center mb-3">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" className="w-8 h-8 ml-1">
+                                            <path fillRule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z" clipRule="evenodd" />
+                                        </svg>
+                                    </div>
+                                    <span className="text-white text-sm font-medium">Tap to play</span>
+                                </div>
+                            )}
+                        </div>
                     )}
 
                     <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5">
