@@ -378,16 +378,21 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
         setError("");
         try {
             let stream;
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({
-                    video: withCamera ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, facingMode: "user" } : false,
-                    audio: true,
-                });
-            } catch {
-                stream = await navigator.mediaDevices.getUserMedia({
-                    video: withCamera ? true : false,
-                    audio: true,
-                });
+            if (withCamera) {
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, facingMode: "user" },
+                        audio: true,
+                    });
+                } catch {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                }
+            } else {
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+                } catch {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: false });
+                }
             }
             localStreamRef.current = stream;
             if (withCamera) setCameraOff(false);
@@ -616,7 +621,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
 
     useEffect(() => {
         if (autoStart && !started && !loading) {
-            goLive(true);
+            goLive(false);
         }
     }, []);
 
