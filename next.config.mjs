@@ -8,6 +8,7 @@ const nextConfig = {
             },
         ],
     },
+  allowedDevOrigins: ['39.62.217.128','0.0.0.0','dad-phrases-removable-car.trycloudflare.com'],
     productionBrowserSourceMaps: true,
 };
 
