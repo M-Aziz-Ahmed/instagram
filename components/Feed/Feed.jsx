@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import PostCard from "./PostCard";
 import UserBadges from "@/components/shared/UserBadges";
+import { useUser } from "@/context/UserContext";
 
 const PAGE_SIZE = 10;
 
@@ -200,12 +201,45 @@ function SearchResults({ query, onClear, onHashtag }) {
 }
 
 export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError, feedType, username, searchQuery, onClearSearch }) {
+    const { user } = useUser();
     const [posts, setPosts]             = useState([]);
+    const [serverTranslations, setServerTranslations] = useState({});
     const [loading, setLoading]         = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore]         = useState(true);
     const sentinelRef                   = useRef(null);
     const lastRefreshRef                = useRef(0);
+    const viewBatchRef                  = useRef([]);
+    const viewTimerRef                  = useRef(null);
+
+    const flushViews = useCallback(async () => {
+        const ids = viewBatchRef.current.splice(0);
+        if (ids.length === 0) return;
+        try {
+            await fetch("/api/posts/views", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ postIds: ids }),
+            });
+        } catch {}
+    }, []);
+
+    const trackView = useCallback((postId) => {
+        viewBatchRef.current.push(postId);
+        if (!viewTimerRef.current) {
+            viewTimerRef.current = setTimeout(() => {
+                viewTimerRef.current = null;
+                flushViews();
+            }, 3000);
+        }
+    }, [flushViews]);
+
+    useEffect(() => {
+        return () => {
+            if (viewTimerRef.current) clearTimeout(viewTimerRef.current);
+            flushViews();
+        };
+    }, [flushViews]);
 
     const fetchPosts = useCallback(async ({ append = false } = {}) => {
         try {
@@ -214,6 +248,9 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             if (feedType === "following" && username) {
                 params.set("feed", "following");
                 params.set("username", username);
+            }
+            if (user?.autoTranslate && user?.language) {
+                params.set("lang", user.language);
             }
 
             if (append) {
@@ -234,6 +271,9 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             }
             if (res.ok) {
                 const data = await res.json();
+                if (data.translations) {
+                    setServerTranslations((prev) => ({ ...prev, ...data.translations }));
+                }
                 if (append) {
                     setPosts((prev) => {
                         const ids = new Set(prev.map((p) => p._id));
@@ -251,7 +291,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [activeTag, onAuthError, feedType, username, posts]);
+    }, [activeTag, onAuthError, feedType, username, posts, user?.autoTranslate, user?.language]);
 
     useEffect(() => {
         setPosts([]);
@@ -267,7 +307,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
     useEffect(() => {
         const id = setInterval(() => {
             const now = Date.now();
-            if (now - lastRefreshRef.current < 8000) return;
+            if (now - lastRefreshRef.current < 12000) return;
             lastRefreshRef.current = now;
 
             const params = new URLSearchParams();
@@ -276,12 +316,18 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                 params.set("feed", "following");
                 params.set("username", username);
             }
+            if (user?.autoTranslate && user?.language) {
+                params.set("lang", user.language);
+            }
             params.set("limit", "5");
 
             fetch(`/api/posts?${params}`, { cache: "no-store" })
                 .then((r) => r.ok ? r.json() : null)
                 .then((data) => {
                     if (!data?.posts) return;
+                    if (data.translations) {
+                        setServerTranslations((prev) => ({ ...prev, ...data.translations }));
+                    }
                     setPosts((prev) => {
                         const ids = new Set(prev.map((p) => p._id));
                         const fresh = data.posts.filter((p) => !ids.has(p._id));
@@ -290,9 +336,9 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                     });
                 })
                 .catch(() => {});
-        }, 20000);
+        }, 30000);
         return () => clearInterval(id);
-    }, [activeTag, feedType, username]);
+    }, [activeTag, feedType, username, user?.autoTranslate, user?.language]);
 
     useEffect(() => {
         const sentinel = sentinelRef.current;
@@ -360,6 +406,8 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                     post={post}
                     onDeleted={() => setPosts((prev) => prev.filter((p) => p._id !== post._id))}
                     onHashtag={onHashtag}
+                    serverTranslation={serverTranslations[post._id]}
+                    trackView={trackView}
                 />
             ))}
             <div ref={sentinelRef} className="h-1" />

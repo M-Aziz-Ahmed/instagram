@@ -240,7 +240,7 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
     );
 }
 
-export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
+export default function PostCard({ post: initialPost, onDeleted, onHashtag, serverTranslation, trackView }) {
     const { user } = useUser();
     const { showToast } = useToast();
     const [post, setPost]                     = useState(initialPost);
@@ -277,15 +277,19 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
         if (hasTrackedView.current) return;
         const timer = setTimeout(() => {
             hasTrackedView.current = true;
-            fetch(`/api/posts/${post._id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "view" }),
-            }).then((res) => {
-                if (res.ok) return res.json();
-            }).then((data) => {
-                if (data?.viewCount !== undefined) setViewCount(data.viewCount);
-            }).catch(() => {});
+            if (trackView) {
+                trackView(post._id);
+            } else {
+                fetch(`/api/posts/${post._id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "view" }),
+                }).then((res) => {
+                    if (res.ok) return res.json();
+                }).then((data) => {
+                    if (data?.viewCount !== undefined) setViewCount(data.viewCount);
+                }).catch(() => {});
+            }
         }, 2000);
         return () => {
             clearTimeout(timer);
@@ -294,7 +298,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                 clearTimeout(singleTapTimer.current);
             }
         };
-    }, [post._id]);
+    }, [post._id, trackView]);
 
     const topLevelComments = useMemo(
         () => (post.comments || []).filter((c) => !c.parentId),
@@ -322,6 +326,10 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     };
 
     useEffect(() => {
+        if (serverTranslation) {
+            setTranslations((prev) => ({ ...prev, [post._id]: serverTranslation }));
+            return;
+        }
         if (!user?.autoTranslate || !post.text || user?.username === post.sender) return;
         if (autoTranslatedRef.current || translations[post._id]) return;
         autoTranslatedRef.current = true;
@@ -334,7 +342,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                 setTranslations((prev) => ({ ...prev, [post._id]: data.translatedText }));
             }
         }).catch(() => {});
-    }, [post._id, post.text, post.sender, user?.autoTranslate, user?.language]);
+    }, [post._id, post.text, post.sender, user?.autoTranslate, user?.language, serverTranslation]);
 
     const handleLike = async () => {
         if (!user || liking) return;

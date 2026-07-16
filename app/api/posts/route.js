@@ -4,6 +4,7 @@ import User from "@/models/user";
 import Notification from "@/models/notification";
 import { uploadImage } from "@/utils/cloudinary";
 import { extractHashtags, extractMentions } from "@/utils/parseText";
+import { translateBatch } from "@/utils/translate";
 
 async function enrichPosts(posts) {
     const allUsernames = new Set();
@@ -51,53 +52,113 @@ export async function GET(request) {
         const tag = searchParams.get("tag");
         const feed = searchParams.get("feed");
         const username = searchParams.get("username");
+        const lang = searchParams.get("lang");
         const limit = Math.min(parseInt(searchParams.get("limit") || "10", 10), 50);
         const before = searchParams.get("before");
 
-        let query = {};
-
-        if (tag) {
-            query.hashtags = tag.toLowerCase();
+        let viewer = null;
+        if (username) {
+            viewer = await User.findOne({ username }).select("mutedWords closeFriends").lean();
         }
 
+        const pipeline = [];
+        const matchStage = {};
+
+        if (tag) {
+            matchStage.hashtags = tag.toLowerCase();
+        }
         if (feed === "following" && username) {
-            const user = await User.findOne({ username }).select("following").lean();
-            if (user?.following?.length) {
-                query.sender = { $in: user.following };
+            if (viewer?.following?.length) {
+                matchStage.sender = { $in: viewer.following };
             } else {
                 return Response.json({ posts: [], hasMore: false });
             }
         }
-
         if (before) {
-            query.timeStamp = { $lt: new Date(before) };
+            matchStage.timeStamp = { $lt: new Date(before) };
         }
 
-        let posts = await Post.find(query)
-            .sort({ timeStamp: -1 })
-            .limit(limit + 50)
-            .lean();
+        if (Object.keys(matchStage).length > 0) {
+            pipeline.push({ $match: matchStage });
+        }
 
-        if (username) {
-            const viewer = await User.findOne({ username }).select("mutedWords closeFriends").lean();
-            const muted = new Set((viewer?.mutedWords || []).map((w) => w.toLowerCase()));
+        if (username && viewer?.mutedWords?.length) {
+            const mutedList = viewer.mutedWords.map((w) => w.toLowerCase());
+            const escapedWords = mutedList.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+            const wordPattern = escapedWords.join("|");
+            const wordRegex = `\\b(${wordPattern})\\b`;
 
-            posts = posts.filter((p) => {
-                const words = (p.text || "").toLowerCase().split(/\s+/);
-                const tags = (p.hashtags || []).map((t) => t.toLowerCase());
-                if ([...words, ...tags].some((w) => muted.has(w))) return false;
-                if (p.visibility === "closeFriends") {
-                    return viewer?.closeFriends?.includes(p.sender) || p.sender === username;
-                }
-                return true;
+            pipeline.push({
+                $match: {
+                    $expr: {
+                        $and: [
+                            {
+                                $not: {
+                                    $regexMatch: {
+                                        input: { $toLower: "$text" },
+                                        regex: wordPattern,
+                                    },
+                                },
+                            },
+                            {
+                                $eq: [
+                                    {
+                                        $size: {
+                                            $filter: {
+                                                input: { $map: { input: "$hashtags", as: "h", in: { $toLower: "$$h" } } },
+                                                cond: { $in: ["$$this", mutedList] },
+                                            },
+                                        },
+                                    },
+                                    0,
+                                ],
+                            },
+                        ],
+                    },
+                },
             });
         }
 
-        const hasMore = posts.length > limit;
-        const sliced = hasMore ? posts.slice(0, limit) : posts;
-        const enriched = await enrichPosts(sliced);
+        if (username && viewer) {
+            pipeline.push({
+                $match: {
+                    $expr: {
+                        $or: [
+                            { $ne: ["$visibility", "closeFriends"] },
+                            { $in: ["$sender", viewer.closeFriends || []] },
+                            { $eq: ["$sender", username] },
+                        ],
+                    },
+                },
+            });
+        }
 
-        return Response.json({ posts: enriched, hasMore });
+        pipeline.push({ $sort: { timeStamp: -1 } });
+        pipeline.push({ $limit: limit + 1 });
+
+        const rawPosts = await Post.aggregate(pipeline).allowDiskUse(true);
+
+        const hasMore = rawPosts.length > limit;
+        const sliced = hasMore ? rawPosts.slice(0, limit) : rawPosts;
+
+        const posts = await enrichPosts(sliced);
+
+        const result = { posts, hasMore };
+
+        if (lang && username) {
+            const itemsToTranslate = posts
+                .filter((p) => p.text && p.sender !== username)
+                .map((p) => ({ id: p._id, text: p.text }));
+
+            if (itemsToTranslate.length > 0) {
+                const translations = await translateBatch(itemsToTranslate, lang);
+                if (Object.keys(translations).length > 0) {
+                    result.translations = translations;
+                }
+            }
+        }
+
+        return Response.json(result);
     } catch (error) {
         console.error(error);
         const includeDetails = process.env.DEBUG_ERRORS === "1";

@@ -247,6 +247,9 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             limit: String(options.limit || 20),
         });
         if (options.before) params.set("before", options.before);
+        if (user?.autoTranslate && user?.language) {
+            params.set("lang", user.language);
+        }
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -263,6 +266,10 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
 
             const fetched = Array.isArray(data.messages) ? data.messages : [];
             setHasMore(Boolean(data.hasMore));
+
+            if (data.translations) {
+                setTranslations((prev) => ({ ...prev, ...data.translations }));
+            }
 
             setMessages(prev => {
                 const keyOf = (m) => m._id || m._tempId;
@@ -330,7 +337,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             }
             return null;
         }
-    }, [username, recipient]);
+    }, [username, recipient, user?.autoTranslate, user?.language]);
 
     const loadOlderMessages = useCallback(async () => {
         if (!username || !recipient || !hasMore || loadingMore || !oldestTimestamp) return;

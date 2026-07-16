@@ -1,6 +1,7 @@
 import connectDB from "@/utils/db";
 import Message from "@/models/messages";
 import Notification from "@/models/notification";
+import { translateBatch } from "@/utils/translate";
 
 export async function GET(request) {
     try {
@@ -8,6 +9,7 @@ export async function GET(request) {
         const user1 = searchParams.get("user1");
         const user2 = searchParams.get("user2");
         const username = searchParams.get("username");
+        const lang = searchParams.get("lang");
 
         await connectDB();
 
@@ -41,7 +43,22 @@ export async function GET(request) {
                 { $set: { delivered: true } }
             ).catch(err => console.error("Failed to update delivery status:", err));
 
-            return Response.json({ messages: ordered, hasMore });
+            const result = { messages: ordered, hasMore };
+
+            if (lang) {
+                const itemsToTranslate = ordered
+                    .filter((m) => m.text && m.sender !== user1)
+                    .map((m) => ({ id: m._id.toString(), text: m.text }));
+
+                if (itemsToTranslate.length > 0) {
+                    const translations = await translateBatch(itemsToTranslate, lang);
+                    if (Object.keys(translations).length > 0) {
+                        result.translations = translations;
+                    }
+                }
+            }
+
+            return Response.json(result);
         }
 
         if (username) {

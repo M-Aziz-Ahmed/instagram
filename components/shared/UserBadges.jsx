@@ -46,7 +46,7 @@ export default function UserBadges({ isVerified, isAdmin, roles = [], size = "sm
                     ★ Admin
                 </span>
             )}
-            {roles.map((r) => <RoleBadge key={r.id} role={r} />)}
+            {roles.map((r, i) => <RoleBadge key={r._id ?? r.id ?? r.name ?? i} role={r} />)}
         </span>
     );
 }

@@ -113,10 +113,10 @@ function ActiveIndicator({ username }) {
         let cancelled = false;
         const check = async () => {
             try {
-                const res = await fetch(`/api/users/${encodeURIComponent(username)}/active`);
+                const res = await fetch(`/api/users/online?usernames=${encodeURIComponent(username)}`);
                 if (res.ok && !cancelled) {
                     const data = await res.json();
-                    setOnline(data.isOnline);
+                    setOnline(data.users?.[username]?.isOnline || false);
                 }
             } catch { /* silent */ }
         };

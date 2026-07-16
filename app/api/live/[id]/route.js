@@ -70,6 +70,15 @@ export async function POST(request, { params }) {
             const messages = chatSinceDate
                 ? stream.chat.filter((m) => new Date(m.createdAt) > chatSinceDate)
                 : [];
+
+            const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+            stream.signals = stream.signals.filter((s) => new Date(s.createdAt) > fiveMinAgo);
+            stream.viewers = stream.viewers.filter((v) => v === username || true);
+
+            if (stream.isModified()) {
+                await stream.save();
+            }
+
             return Response.json({ signals: mySignals, viewers: stream.viewers.length, messages });
         }
 

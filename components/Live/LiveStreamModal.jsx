@@ -13,7 +13,7 @@ const ICE_SERVERS = {
     ],
 };
 
-const POLL_MS = 3000;
+const POLL_MS = 5000;
 
 const MAX_BITRATE = 8000;
 

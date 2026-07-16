@@ -38,7 +38,7 @@ export default function StoryTray() {
     useEffect(() => {
         fetchStories();
         fetchLive();
-        const id = setInterval(() => { fetchStories(); fetchLive(); }, 30000);
+        const id = setInterval(() => { fetchStories(); fetchLive(); }, 45000);
         return () => clearInterval(id);
     }, [fetchStories, fetchLive]);
 

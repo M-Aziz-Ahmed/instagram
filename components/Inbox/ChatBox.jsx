@@ -47,12 +47,19 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
         if (!recipient) return;
         const fetchStatus = async () => {
             try {
-                const res = await fetch(`/api/users/${encodeURIComponent(recipient)}/active`, {
+                const res = await fetch(`/api/users/online?usernames=${encodeURIComponent(recipient)}`, {
                     credentials: 'include'
                 });
                 if (res.ok) {
                     const data = await res.json();
-                    setRecipientOnlineStatus(data);
+                    const status = data.users?.[recipient];
+                    if (status) {
+                        setRecipientOnlineStatus({
+                            username: recipient,
+                            isOnline: status.isOnline,
+                            lastActive: status.lastActive,
+                        });
+                    }
                 }
             } catch { /* silent */ }
         };

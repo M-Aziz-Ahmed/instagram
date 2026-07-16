@@ -15,24 +15,8 @@ function timeAgo(date) {
     return new Date(date).toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-function OnlineDot({ username }) {
-    const [online, setOnline] = useState(false);
-    useEffect(() => {
-        let cancelled = false;
-        const check = async () => {
-            try {
-                const res = await fetch(`/api/users/${encodeURIComponent(username)}/active`);
-                if (res.ok && !cancelled) {
-                    const data = await res.json();
-                    setOnline(data.isOnline);
-                }
-            } catch { /* silent */ }
-        };
-        check();
-        const id = setInterval(check, 30000);
-        return () => { cancelled = true; clearInterval(id); };
-    }, [username]);
-
+function OnlineDot({ username, onlineMap }) {
+    const online = onlineMap?.[username]?.isOnline;
     if (!online) return null;
     return <span className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" title="Online" />;
 }
@@ -44,6 +28,7 @@ export default function InboxClient() {
     const targetUser = searchParams.get("user");
     const [view, setView] = useState("list");
     const [conversations, setConversations] = useState([]);
+    const [onlineMap, setOnlineMap] = useState({});
     const [loading, setLoading] = useState(true);
     const [selectedConvo, setSelectedConvo] = useState(null);
     const [sidebarOpen, setSidebarOpen]     = useState(false);
@@ -151,6 +136,23 @@ export default function InboxClient() {
         return () => clearInterval(interval);
     }, [fetchConversations]);
 
+    useEffect(() => {
+        if (conversations.length === 0) return;
+        const usernames = conversations.map((c) => c.username).join(",");
+        const fetchOnline = async () => {
+            try {
+                const res = await fetch(`/api/users/online?usernames=${encodeURIComponent(usernames)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setOnlineMap(data.users || {});
+                }
+            } catch {}
+        };
+        fetchOnline();
+        const id = setInterval(fetchOnline, 30000);
+        return () => clearInterval(id);
+    }, [conversations]);
+
     if (!ready) {
         return (
             <div className="flex h-dvh items-center justify-center bg-white dark:bg-gray-950">
@@ -215,7 +217,7 @@ export default function InboxClient() {
                                     <div className="flex items-center gap-1.5">
                                         <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{convo.username}</p>
                                         <UserBadges isVerified={convo.user?.isVerified} isAdmin={convo.user?.isAdmin} roles={convo.user?.roles || []} size="sm" />
-                                        <OnlineDot username={convo.username} />
+                                        <OnlineDot username={convo.username} onlineMap={onlineMap} />
                                     </div>
                                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                                         {convo.lastMessage?.sender === user?.username ? "You: " : ""}
