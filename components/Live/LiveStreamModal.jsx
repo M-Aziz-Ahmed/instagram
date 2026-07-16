@@ -15,7 +15,7 @@ const ICE_SERVERS = {
 
 const POLL_MS = 1000;
 
-const MAX_BITRATE = 1500;
+const MAX_BITRATE = 4000;
 
 async function setMaxBitrate(sender, bitrate = MAX_BITRATE) {
     if (!sender) return;
@@ -44,9 +44,11 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const [chatMessages, setChatMessages]   = useState([]);
     const [chatInput, setChatInput]         = useState("");
     const [chatOpen, setChatOpen]           = useState(false);
+    const [isFullscreen, setIsFullscreen]   = useState(false);
 
     const localVideoRef   = useRef(null);
     const remoteVideoRef  = useRef(null);
+    const videoContainerRef = useRef(null);
     const remoteStreamRef = useRef(null);
     const localStreamRef  = useRef(null);
     const screenStreamRef = useRef(null);
@@ -300,7 +302,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const goLive = async (withCamera) => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: withCamera ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } : false,
+                video: withCamera ? { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 }, facingMode: "user" } : false,
                 audio: true,
             });
             localStreamRef.current = stream;
@@ -370,7 +372,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             return;
         }
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }, audio: false });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 }, facingMode: "user" }, audio: false });
             const vt = stream.getVideoTracks()[0];
             if (localStreamRef.current) {
                 localStreamRef.current.addTrack(vt);
@@ -389,6 +391,22 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const toggleMute = () => {
         localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = !muted; });
         setMuted((m) => !m);
+    };
+
+    const toggleFullscreen = async () => {
+        const el = videoContainerRef.current;
+        if (!el) return;
+        try {
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                if (el.requestFullscreen) await el.requestFullscreen();
+                else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+                setIsFullscreen(true);
+            } else {
+                if (document.exitFullscreen) await document.exitFullscreen();
+                else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+                setIsFullscreen(false);
+            }
+        } catch {}
     };
 
     const toggleScreenShare = async () => {
@@ -459,6 +477,16 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     useEffect(() => () => stopAll(), [stopAll]);
 
     useEffect(() => {
+        const handler = () => setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement));
+        document.addEventListener("fullscreenchange", handler);
+        document.addEventListener("webkitfullscreenchange", handler);
+        return () => {
+            document.removeEventListener("fullscreenchange", handler);
+            document.removeEventListener("webkitfullscreenchange", handler);
+        };
+    }, []);
+
+    useEffect(() => {
         if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }, [chatMessages]);
 
@@ -524,6 +552,12 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                     <span className="text-white/50 text-xs">{viewers} watching</span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={toggleFullscreen} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white">
+                        {isFullscreen
+                            ? <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25" /></svg>
+                            : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg>
+                        }
+                    </button>
                     <button onClick={() => setChatOpen((v) => !v)} className="sm:hidden w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
@@ -536,7 +570,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             </div>
 
             <div className="flex-1 flex min-h-0">
-                <div className="flex-1 relative bg-black min-h-0 flex items-center justify-center">
+                <div ref={videoContainerRef} className="flex-1 relative bg-black min-h-0 flex items-center justify-center">
                     {isHost ? (
                         hostHasVideo ? (
                             <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
