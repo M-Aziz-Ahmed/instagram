@@ -9,7 +9,7 @@ export default function SearchBar({ onSearch, searchQuery, onClearSearch }) {
     const desktopInputRef = useRef(null);
     const mobileInputRef = useRef(null);
 
-    const query = searchQuery !== undefined ? searchQuery : localQuery;
+    const query = (searchQuery != null ? searchQuery : localQuery) ?? "";
 
     const handleSubmit = (e) => {
         e.preventDefault();
