@@ -517,7 +517,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
     };
 
     const toggleMute = () => {
-        localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = !muted; });
+        localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = muted; });
         setMuted((m) => !m);
     };
 
@@ -542,6 +542,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
             screenStreamRef.current = null;
             setSharing(false);
             const vt = localStreamRef.current?.getVideoTracks()[0];
+            const at = localStreamRef.current?.getAudioTracks()[0];
             Object.keys(pcsRef.current).forEach((viewer) => {
                 sendSignal(viewer, "video-change", { active: false });
             });
@@ -549,7 +550,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                 const sender = findVideoSender(pc, viewer);
                 if (sender) sender.replaceTrack(vt || null);
                 const audioSender = pc.getSenders().find((s) => s.track?.kind === "audio");
-                if (audioSender) audioSender.replaceTrack(null);
+                if (audioSender) audioSender.replaceTrack(at || null);
             });
             if (localStreamRef.current) setLocalVideo(localStreamRef.current);
             return;
@@ -589,9 +590,12 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                     screenStreamRef.current = null;
                 }
                 const vt = localStreamRef.current?.getVideoTracks()[0];
+                const at = localStreamRef.current?.getAudioTracks()[0];
                 Object.entries(pcsRef.current).forEach(([viewer, pc]) => {
                     const sender = findVideoSender(pc, viewer);
                     if (sender) sender.replaceTrack(vt || null);
+                    const audioSender = pc.getSenders().find((s) => s.track?.kind === "audio");
+                    if (audioSender) audioSender.replaceTrack(at || null);
                 });
                 if (localStreamRef.current) setLocalVideo(localStreamRef.current);
             };
