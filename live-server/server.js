@@ -52,13 +52,10 @@ app.get("/api/streams", async (req, res) => {
             .lean();
 
         const hostNames = [...new Set(streams.map((s) => s.host))];
-        const User = mongoose.model("User",
-            new mongoose.Schema({}, { strict: false }),
-            "users"
-        );
-        const hosts = await User.find({ username: { $in: hostNames } })
-            .select("username avatarUrl avatarColor")
-            .lean();
+        const usersCol = mongoose.connection.db.collection("users");
+        const hosts = await usersCol.find({ username: { $in: hostNames } })
+            .project({ username: 1, avatarUrl: 1, avatarColor: 1 })
+            .toArray();
         const hostMap = {};
         hosts.forEach((h) => { hostMap[h.username] = h; });
 
