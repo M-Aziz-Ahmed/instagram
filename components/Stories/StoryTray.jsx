@@ -62,6 +62,35 @@ export default function StoryTray() {
     return (
         <>
             <div className="flex gap-4 px-4 py-4 overflow-x-auto scrollbar-hide">
+                {/* Live streams */}
+                {liveStreams.map((stream) => (
+                    <button
+                        key={`live-${stream._id}`}
+                        onClick={() => setLiveHost(stream.host)}
+                        className="flex flex-col items-center gap-1.5 shrink-0"
+                    >
+                        <div className="relative">
+                            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-red-500 via-red-600 to-red-700 p-0.5 animate-pulse">
+                                <div className="w-full h-full rounded-full overflow-hidden border-2 border-white dark:border-gray-950">
+                                    {stream.hostAvatarUrl ? (
+                                        <img src={stream.hostAvatarUrl} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: stream.hostAvatarColor || "#ef4444" }}>
+                                            {stream.host?.[0]?.toUpperCase()}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[7px] font-bold px-1.5 py-0.5 rounded-full leading-none border border-white dark:border-gray-950">
+                                LIVE
+                            </div>
+                        </div>
+                        <span className="text-[11px] font-semibold text-red-600 dark:text-red-400 truncate max-w-[64px]">
+                            {stream.host}
+                        </span>
+                    </button>
+                ))}
+
                 {/* Go Live button */}
                 {canGoLive && (
                     <button
@@ -118,33 +147,6 @@ export default function StoryTray() {
                     </span>
                 </button>
 
-                {/* Live streams */}
-                {liveStreams.map((stream) => (
-                    <button
-                        key={`live-${stream._id}`}
-                        onClick={() => setLiveHost(stream.host)}
-                        className="flex flex-col items-center gap-1.5 shrink-0"
-                    >
-                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-red-500 via-red-600 to-red-700 p-0.5 animate-pulse">
-                            <div className="w-full h-full rounded-full overflow-hidden border-2 border-white dark:border-gray-950">
-                                {stream.hostAvatarUrl ? (
-                                    <img src={stream.hostAvatarUrl} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: stream.hostAvatarColor || "#ef4444" }}>
-                                        {stream.host?.[0]?.toUpperCase()}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-0.5">
-                            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                            <span className="text-[11px] font-semibold text-red-600 dark:text-red-400 truncate max-w-[64px]">
-                                {stream.host}
-                            </span>
-                        </div>
-                    </button>
-                ))}
-
                 {/* Other stories */}
                 {otherGroups.map((group, i) => {
                     const globalIdx = groups.indexOf(group);
@@ -197,6 +199,7 @@ export default function StoryTray() {
                 <LiveStreamModal
                     hostUsername={user?.username}
                     onClose={() => setShowGoLive(false)}
+                    autoStart
                 />
             )}
         </>

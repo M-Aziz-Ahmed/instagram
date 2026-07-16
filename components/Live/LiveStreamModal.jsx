@@ -50,7 +50,7 @@ const QUALITY_PRESETS = {
     "480":  { bitrate: 2000, width: 854,  height: 480,  fps: 30 },
 };
 
-function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
+export default function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose, autoStart }) {
     const { user } = useUser();
 
     const [streamId, setStreamId]           = useState(initialStreamId || null);
@@ -615,6 +615,12 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     }, []);
 
     useEffect(() => {
+        if (autoStart && !started && !loading) {
+            goLive(true);
+        }
+    }, []);
+
+    useEffect(() => {
         if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }, [chatMessages]);
 
@@ -630,6 +636,16 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     }
 
     if (!started) {
+        if (autoStart) {
+            return (
+                <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-3">
+                        <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <p className="text-white/60 text-sm">Going live...</p>
+                    </div>
+                </div>
+            );
+        }
         return (
             <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
                 <div className="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
@@ -955,79 +971,5 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                 </div>
             )}
         </div>
-    );
-}
-
-export default function LiveButton({ username }) {
-    const [open, setOpen]                   = useState(false);
-    const [activeStreams, setActiveStreams]  = useState([]);
-    const [joining, setJoining]             = useState(null);
-    const { user } = useUser();
-
-    useEffect(() => {
-        let cancelled = false;
-        const poll = async () => {
-            try {
-                const res = await fetch("/api/live");
-                if (res.ok && !cancelled) {
-                    const data = await res.json();
-                    setActiveStreams(data.streams || []);
-                }
-            } catch {}
-        };
-        poll();
-        const id = setInterval(poll, 5000);
-        return () => { cancelled = true; clearInterval(id); };
-    }, []);
-
-    if (joining || open) {
-        return (
-            <LiveStreamModal
-                streamId={joining}
-                hostUsername={joining ? activeStreams.find((s) => s._id === joining)?.host : username}
-                onClose={() => { setOpen(false); setJoining(null); }}
-            />
-        );
-    }
-
-    const canGoLive = user?.isAdmin || user?.liveStreamAllowed;
-
-    if (activeStreams.filter((s) => s.host !== user?.username).length > 0 && !open && !joining) {
-        return (
-            <div className="flex items-center gap-2 flex-wrap">
-                {canGoLive && (
-                    <button onClick={() => setOpen(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-semibold rounded-full hover:from-purple-600 hover:to-pink-600 transition-all">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z" />
-                        </svg>
-                        Go Live
-                    </button>
-                )}
-                {activeStreams.filter((s) => s.host !== user?.username).map((s) => (
-                    <button key={s._id} onClick={() => setJoining(s._id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs font-semibold rounded-full hover:from-red-600 hover:to-pink-600 transition-all">
-                        <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                        {s.host} is live
-                    </button>
-                ))}
-            </div>
-        );
-    }
-
-    return (
-        <>
-            {canGoLive && (
-                <button onClick={() => setOpen(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-semibold rounded-full hover:from-purple-600 hover:to-pink-600 transition-all">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z" />
-                    </svg>
-                    Go Live
-                </button>
-            )}
-        </>
     );
 }
