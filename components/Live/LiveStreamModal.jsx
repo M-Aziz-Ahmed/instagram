@@ -56,6 +56,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const [streamId, setStreamId]           = useState(initialStreamId || null);
     const [isHost, setIsHost]               = useState(() => !initialStreamId && user?.username === hostUsername);
     const [started, setStarted]             = useState(false);
+    const [loading, setLoading]             = useState(false);
     const [error, setError]                 = useState("");
     const [viewers, setViewers]             = useState(0);
     const [cameraOff, setCameraOff]         = useState(false);
@@ -373,16 +374,27 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     }, []);
 
     const goLive = async (withCamera) => {
+        setLoading(true);
+        setError("");
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: withCamera ? { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 }, facingMode: "user" } : false,
-                audio: true,
-            });
+            let stream;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: withCamera ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, facingMode: "user" } : false,
+                    audio: true,
+                });
+            } catch {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: withCamera ? true : false,
+                    audio: true,
+                });
+            }
             localStreamRef.current = stream;
             if (withCamera) setCameraOff(false);
             if (localVideoRef.current) localVideoRef.current.srcObject = stream;
         } catch {
-            setError("Camera/microphone access denied");
+            setError("Camera/microphone access denied. Please allow permissions and try again.");
+            setLoading(false);
             return;
         }
 
@@ -390,7 +402,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             const res = await fetch("/api/live", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: user.username, title: "Live Stream" }),
+                body: JSON.stringify({ username: user?.username, title: "Live Stream" }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
@@ -404,6 +416,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             setError(e.message || "Failed to start stream");
             localStreamRef.current?.getTracks().forEach((t) => t.stop());
         }
+        setLoading(false);
     };
 
     const joinStream = async (sid) => {
@@ -627,11 +640,13 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                         </p>
                         {isHost ? (
                             <div className="flex flex-col gap-2">
-                                <button onClick={() => goLive(true)} className="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors">
-                                    Start with Camera
+                                <button onClick={() => goLive(true)} disabled={loading} className="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                                    {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : null}
+                                    {loading ? "Starting\u2026" : "Start with Camera"}
                                 </button>
-                                <button onClick={() => goLive(false)} className="w-full py-3 bg-gray-800 dark:bg-gray-700 hover:bg-gray-900 dark:hover:text-gray-600 text-white font-semibold rounded-xl transition-colors">
-                                    Start Audio Only
+                                <button onClick={() => goLive(false)} disabled={loading} className="w-full py-3 bg-gray-800 dark:bg-gray-700 hover:bg-gray-900 dark:hover:text-gray-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                                    {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : null}
+                                    {loading ? "Starting\u2026" : "Start Audio Only"}
                                 </button>
                             </div>
                         ) : (
