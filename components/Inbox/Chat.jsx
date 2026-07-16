@@ -9,6 +9,16 @@ import UserBadges from "@/components/shared/UserBadges";
 
 const RECALL_WINDOW_MS = 60 * 1000;
 
+const lastReadKey = (user1, user2) => `chat_read:${[user1, user2].sort().join(":")}`;
+
+function getLastReadId(user1, user2) {
+    try { return localStorage.getItem(lastReadKey(user1, user2)); } catch { return null; }
+}
+
+function setLastReadId(user1, user2, msgId) {
+    try { localStorage.setItem(lastReadKey(user1, user2), msgId); } catch {}
+}
+
 function Avatar({ sender, color }) {
     return (
         <div
@@ -77,6 +87,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     const bottomRef                  = useRef(null);
     const pendingIdRef               = useRef(null);
     const isNearBottomRef            = useRef(true);
+    const scrolledToLastReadRef      = useRef(false);
     const username                   = user?.username;
     const [lightboxSrc, setLightboxSrc] = useState(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -161,7 +172,9 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             }
 
             if (pm._id && !pm._sending) {
-                // Prefer replacing a matching optimistic message (by content) with server message
+                if (pm.sender === user?.username && username && recipient) {
+                    setLastReadId(username, recipient, pm._id);
+                }
                 const tempIndex = prev.findIndex((m) => m._tempId && m.sender === pm.sender && m.text === pm.text && m.imageUrl === pm.imageUrl);
                 if (tempIndex !== -1) {
                     const copy = prev.slice();
@@ -335,12 +348,12 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
 
         let cancelled = false;
         queueMicrotask(resetChatState);
+        scrolledToLastReadRef.current = false;
 
         const load = async () => {
             const result = await fetchMessages({ limit: 20 });
             if (!cancelled) {
                 setLoading(false);
-                // If fetch failed, set empty state to prevent infinite loading
                 if (result === null) {
                     setMessages([]);
                 }
@@ -381,7 +394,6 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         
         let scrollTimeout;
         const onScroll = () => {
-            // Debounce the load trigger to prevent multiple simultaneous requests
             if (el.scrollTop < 120 && hasMore && !loadingMore) {
                 if (scrollTimeout) clearTimeout(scrollTimeout);
                 scrollTimeout = setTimeout(() => {
@@ -392,6 +404,18 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             const near = isNearBottom();
             isNearBottomRef.current = near;
             setShowScrollBtn(!near);
+
+            if (username && recipient) {
+                const containerRect = el.getBoundingClientRect();
+                let bottomMostId = null;
+                el.querySelectorAll("[id^='msg-']").forEach((msgEl) => {
+                    const rect = msgEl.getBoundingClientRect();
+                    if (rect.top < containerRect.bottom) {
+                        bottomMostId = msgEl.id.replace("msg-", "");
+                    }
+                });
+                if (bottomMostId) setLastReadId(username, recipient, bottomMostId);
+            }
         };
         
         el.addEventListener("scroll", onScroll, { passive: true });
@@ -399,14 +423,29 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             el.removeEventListener("scroll", onScroll);
             if (scrollTimeout) clearTimeout(scrollTimeout);
         };
-    }, [hasMore, isNearBottom, loadOlderMessages, loadingMore, scrollContainerRef]);
+    }, [hasMore, isNearBottom, loadOlderMessages, loadingMore, scrollContainerRef, username, recipient]);
 
     useEffect(() => {
-        // Only auto-scroll if user is near bottom AND not currently loading older messages
+        if (!username || !recipient || loading) return;
+
+        if (!scrolledToLastReadRef.current) {
+            scrolledToLastReadRef.current = true;
+            const lastReadId = getLastReadId(username, recipient);
+            if (lastReadId) {
+                const el = document.getElementById(`msg-${lastReadId}`);
+                if (el) {
+                    el.scrollIntoView({ behavior: "instant", block: "center" });
+                    return;
+                }
+            }
+            scrollToBottom(false);
+            return;
+        }
+
         if (isNearBottomRef.current && !isLoadingOlderRef.current) {
             scrollToBottom();
         }
-    }, [messages, scrollToBottom]);
+    }, [messages, scrollToBottom, username, recipient, loading]);
 
     useEffect(() => {
         resetNewMessagesCount();
@@ -488,7 +527,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                 const tickStatus = isMine ? getMessageStatus(msg) : null;
 
                 return (
-                    <div key={msg._id || msg._tempId}>
+                    <div key={msg._id || msg._tempId} id={msg._id ? `msg-${msg._id}` : undefined}>
                         {showTime && (
                             <div className="flex justify-center my-4">
                                 <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-full">
