@@ -82,24 +82,25 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
 
                         remoteStreamRef.current = new MediaStream();
                         pc.ontrack = (e) => {
-                            console.log("[Live VIEWER] ontrack kind:", e.track?.kind, "readyState:", e.track?.readyState);
-                            if (e.track) {
-                                if (remoteStreamRef.current) {
-                                    const existing = remoteStreamRef.current.getTracks().find((t) => t.kind === e.track.kind);
-                                    if (existing) remoteStreamRef.current.removeTrack(existing);
-                                    remoteStreamRef.current.addTrack(e.track);
-                                }
-                                e.track.onunmute = () => {
-                                    console.log("[Live VIEWER] track unmuted:", e.track.kind);
-                                    if (remoteVideoRef.current && remoteStreamRef.current) {
-                                        remoteVideoRef.current.srcObject = remoteStreamRef.current;
-                                        remoteVideoRef.current.play().then(() => setViewerReady(true)).catch(() => {});
+                            console.log("[Live VIEWER] ontrack kind:", e.track?.kind, "readyState:", e.track?.readyState, "streams:", e.streams?.length);
+                            if (e.streams?.[0]) {
+                                e.streams[0].getTracks().forEach((t) => {
+                                    if (!remoteStreamRef.current.getTracks().find((x) => x.id === t.id)) {
+                                        remoteStreamRef.current.addTrack(t);
                                     }
-                                };
+                                });
+                            } else if (e.track) {
+                                const existing = remoteStreamRef.current.getTracks().find((t) => t.kind === e.track.kind);
+                                if (existing) remoteStreamRef.current.removeTrack(existing);
+                                remoteStreamRef.current.addTrack(e.track);
                             }
-                            if (remoteVideoRef.current && remoteStreamRef.current) {
+                            if (remoteVideoRef.current) {
+                                remoteVideoRef.current.srcObject = null;
                                 remoteVideoRef.current.srcObject = remoteStreamRef.current;
-                                remoteVideoRef.current.play().then(() => setViewerReady(true)).catch(() => {});
+                                remoteVideoRef.current.play().then(() => {
+                                    setViewerReady(true);
+                                    remoteVideoRef.current.muted = false;
+                                }).catch(() => {});
                             }
                         };
 
@@ -399,6 +400,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
         if (!started || isHost || !viewerReady) return;
         const id = setInterval(() => {
             if (remoteVideoRef.current && remoteStreamRef.current && remoteStreamRef.current.getVideoTracks().length > 0) {
+                remoteVideoRef.current.srcObject = null;
                 remoteVideoRef.current.srcObject = remoteStreamRef.current;
             }
         }, 3000);
@@ -500,11 +502,12 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                             className="w-full h-full relative cursor-pointer"
                             onClick={(e) => {
                                 if (remoteVideoRef.current) {
+                                    remoteVideoRef.current.muted = false;
                                     remoteVideoRef.current.play().then(() => setViewerReady(true)).catch(() => {});
                                 }
                             }}
                         >
-                            <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                            <video ref={remoteVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                             {!viewerReady && (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
                                     <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur flex items-center justify-center mb-3">
