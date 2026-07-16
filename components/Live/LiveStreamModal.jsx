@@ -97,10 +97,14 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                             if (remoteVideoRef.current) {
                                 remoteVideoRef.current.srcObject = null;
                                 remoteVideoRef.current.srcObject = remoteStreamRef.current;
-                                remoteVideoRef.current.play().then(() => {
+                                const p = remoteVideoRef.current.play();
+                                if (p) p.then(() => {
+                                    console.log("[Live VIEWER] autoplay succeeded");
                                     setViewerReady(true);
                                     remoteVideoRef.current.muted = false;
-                                }).catch(() => {});
+                                }).catch((err) => {
+                                    console.log("[Live VIEWER] autoplay blocked, waiting for tap:", err?.message);
+                                });
                             }
                         };
 
@@ -526,10 +530,9 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                             className="w-full h-full relative cursor-pointer"
                             onClick={() => {
                                 if (remoteVideoRef.current) {
-                                    remoteVideoRef.current.play().then(() => {
-                                        remoteVideoRef.current.muted = false;
-                                        setViewerReady(true);
-                                    }).catch(() => {});
+                                    remoteVideoRef.current.muted = false;
+                                    setViewerReady(true);
+                                    remoteVideoRef.current.play().catch(() => {});
                                 }
                             }}
                         >
