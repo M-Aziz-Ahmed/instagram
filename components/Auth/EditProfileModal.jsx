@@ -13,6 +13,7 @@ export default function EditProfileModal({ onClose }) {
     const [bio, setBio]             = useState(user?.bio ?? "");
     const [color, setColor]         = useState(user?.avatarColor ?? AVATAR_COLORS[0]);
     const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl ?? "");
+    const [lang, setLang]           = useState(user?.language ?? "en");
     const [saving, setSaving]       = useState(false);
     const [uploading, setUploading] = useState(false);
     const [error, setError]         = useState("");
@@ -48,7 +49,7 @@ export default function EditProfileModal({ onClose }) {
             const res = await fetch("/api/auth/profile", {
                 method:  "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body:    JSON.stringify({ bio: bio.trim(), avatarColor: color, avatarUrl }),
+                body:    JSON.stringify({ bio: bio.trim(), avatarColor: color, avatarUrl, language: lang }),
             });
             const data = await res.json();
             if (!res.ok) { setError(data.error); return; }
@@ -156,6 +157,46 @@ export default function EditProfileModal({ onClose }) {
                             </div>
                         </div>
                     )}
+
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Language</label>
+                        <select
+                            value={lang}
+                            onChange={(e) => setLang(e.target.value)}
+                            className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl px-4 py-3 text-sm outline-none focus:border-black dark:focus:border-gray-500 transition-colors appearance-none cursor-pointer"
+                        >
+                            <option value="en">English</option>
+                            <option value="es">Español</option>
+                            <option value="fr">Français</option>
+                            <option value="de">Deutsch</option>
+                            <option value="pt">Português</option>
+                            <option value="it">Italiano</option>
+                            <option value="ja">日本語</option>
+                            <option value="ko">한국어</option>
+                            <option value="zh-CN">中文 (简体)</option>
+                            <option value="zh-TW">中文 (繁體)</option>
+                            <option value="ar">العربية</option>
+                            <option value="hi">हिन्दी</option>
+                            <option value="ru">Русский</option>
+                            <option value="tr">Türkçe</option>
+                            <option value="vi">Tiếng Việt</option>
+                            <option value="th">ไทย</option>
+                            <option value="pl">Polski</option>
+                            <option value="nl">Nederlands</option>
+                            <option value="sv">Svenska</option>
+                            <option value="id">Bahasa Indonesia</option>
+                            <option value="ms">Bahasa Melayu</option>
+                            <option value="uk">Українська</option>
+                            <option value="cs">Čeština</option>
+                            <option value="ro">Română</option>
+                            <option value="el">Ελληνικά</option>
+                            <option value="he">עברית</option>
+                            <option value="fi">Suomi</option>
+                            <option value="no">Norsk</option>
+                            <option value="da">Dansk</option>
+                            <option value="hu">Magyar</option>
+                        </select>
+                    </div>
 
                     {error && <p className="text-xs text-red-500">{error}</p>}
 

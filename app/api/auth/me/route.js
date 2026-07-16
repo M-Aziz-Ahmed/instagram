@@ -48,6 +48,7 @@ export async function GET(request) {
                 bookmarks:   user.bookmarks || [],
                 following:   user.following || [],
                 followers:   user.followers || [],
+                language:    user.language || "en",
                 needsSetup: !user.username,
             },
         };

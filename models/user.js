@@ -16,6 +16,7 @@ const userSchema = new mongoose.Schema({
     bookmarks:   [{ type: String, default: [] }],
     closeFriends: [{ type: String, default: [] }],
     mutedWords:   [{ type: String, default: [] }],
+    language:     { type: String, default: "en" },
     lastActive:   { type: Date, default: Date.now },
     isOnline:     { type: Boolean, default: false },
     createdAt:   { type: Date, default: Date.now },

@@ -130,7 +130,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             const res = await fetch("/api/translate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text, target: "en" }),
+                body: JSON.stringify({ text, target: user?.language || "en" }),
             });
             const data = await res.json();
             if (data.translatedText) {
