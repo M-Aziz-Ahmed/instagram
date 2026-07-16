@@ -524,10 +524,12 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                     ) : (
                         <div
                             className="w-full h-full relative cursor-pointer"
-                            onClick={(e) => {
+                            onClick={() => {
                                 if (remoteVideoRef.current) {
-                                    remoteVideoRef.current.muted = false;
-                                    remoteVideoRef.current.play().then(() => setViewerReady(true)).catch(() => {});
+                                    remoteVideoRef.current.play().then(() => {
+                                        remoteVideoRef.current.muted = false;
+                                        setViewerReady(true);
+                                    }).catch(() => {});
                                 }
                             }}
                         >
