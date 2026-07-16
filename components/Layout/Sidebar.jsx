@@ -157,7 +157,7 @@ export default function Sidebar({ open, onClose }) {
         const id = setInterval(() => {
             fetchUnreadRef.current = fetchUnread;
             fetchUnreadRef.current();
-        }, 10000);
+        }, 15000);
         
         return () => clearInterval(id);
     }, [fetchUnread]);

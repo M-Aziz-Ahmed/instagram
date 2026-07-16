@@ -30,7 +30,7 @@ export async function GET(request, { params }) {
 export async function POST(request, { params }) {
     try {
         const { id } = await params;
-        const { username, action, to, type, data, since, text, color, avatarUrl, replyTo } = await request.json();
+        const { username, action, to, type, data, since, chatSince, text, color, avatarUrl, replyTo } = await request.json();
 
         await connectDB();
         const stream = await LiveStream.findById(id);
@@ -66,7 +66,11 @@ export async function POST(request, { params }) {
             const mySignals = stream.signals.filter(
                 (s) => (s.to === username || s.to === "") && new Date(s.createdAt) > sinceDate
             );
-            return Response.json({ signals: mySignals, viewers: stream.viewers.length });
+            const chatSinceDate = chatSince ? new Date(chatSince) : null;
+            const messages = chatSinceDate
+                ? stream.chat.filter((m) => new Date(m.createdAt) > chatSinceDate)
+                : [];
+            return Response.json({ signals: mySignals, viewers: stream.viewers.length, messages });
         }
 
         if (action === "chat") {

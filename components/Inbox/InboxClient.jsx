@@ -147,7 +147,7 @@ export default function InboxClient() {
     }, [targetUser, conversations, selectedConvo]);
 
     useEffect(() => {
-        const interval = setInterval(fetchConversations, 10000); // Increased from 5s to 10s
+        const interval = setInterval(fetchConversations, 15000); // Increased from 10s to 15s
         return () => clearInterval(interval);
     }, [fetchConversations]);
 

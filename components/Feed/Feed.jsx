@@ -290,7 +290,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                     });
                 })
                 .catch(() => {});
-        }, 10000);
+        }, 20000);
         return () => clearInterval(id);
     }, [activeTag, feedType, username]);
 

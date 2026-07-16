@@ -13,7 +13,7 @@ const ICE_SERVERS = {
     ],
 };
 
-const POLL_MS = 1000;
+const POLL_MS = 3000;
 
 const MAX_BITRATE = 8000;
 
@@ -267,7 +267,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
         }
     };
 
-    const doPoll = useCallback(async () => {
+    const doPollAll = useCallback(async () => {
         const s = stateRef.current;
         if (!s.streamId || !s.user) return;
         try {
@@ -275,6 +275,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                 action: "poll",
             };
             if (lastSignalRef.current) body.since = lastSignalRef.current;
+            body.chatSince = lastChatRef.current || new Date(0).toISOString();
 
             const data = await apiPost(body);
             if (!data) return;
@@ -289,19 +290,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                     await processSignal(signal);
                 }
             }
-        } catch (err) {
-            console.error("[Live] poll error:", err);
-        }
-    }, [apiPost]);
 
-    const doPollChat = useCallback(async () => {
-        const s = stateRef.current;
-        if (!s.streamId) return;
-        try {
-            const since = lastChatRef.current || new Date(0).toISOString();
-            const res = await fetch(`/api/live/${s.streamId}?action=chat&since=${encodeURIComponent(since)}`);
-            if (!res.ok) return;
-            const data = await res.json();
             if (data.messages?.length) {
                 const last = data.messages[data.messages.length - 1];
                 lastChatRef.current = last.createdAt;
@@ -312,8 +301,10 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                     return fresh.length ? [...prev, ...fresh] : prev;
                 });
             }
-        } catch {}
-    }, []);
+        } catch (err) {
+            console.error("[Live] poll error:", err);
+        }
+    }, [apiPost]);
 
     const sendChat = async () => {
         if (!chatInput.trim() || !streamId) return;
@@ -605,9 +596,9 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
 
     useEffect(() => {
         if (!started || !streamId) return;
-        pollRef.current = setInterval(() => { doPoll(); doPollChat(); }, POLL_MS);
+        pollRef.current = setInterval(() => { doPollAll(); }, POLL_MS);
         return () => { if (pollRef.current) clearInterval(pollRef.current); };
-    }, [started, streamId, doPoll, doPollChat]);
+    }, [started, streamId, doPollAll]);
 
     useEffect(() => () => stopAll(), [stopAll]);
 

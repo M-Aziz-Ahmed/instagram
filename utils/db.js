@@ -1,27 +1,35 @@
 import mongoose from "mongoose";
 
+const MONGODB_URI = process.env.mongobg_uri || process.env.MONGODB_URI || process.env.MONGO_URI;
+
+if (!MONGODB_URI) {
+    console.error("MongoDB connection string not set (check mongobg_uri / MONGODB_URI / MONGO_URI)");
+}
+
+let cached = global.mongoose;
+if (!cached) {
+    cached = global.mongoose = { conn: null, promise: null };
+}
+
 const connectDB = async () => {
-    if (mongoose.connection.readyState >= 1) return;
-    const uri = process.env.mongobg_uri || process.env.MONGODB_URI || process.env.MONGO_URI;
-    if (!uri) {
-        const err = new Error("MongoDB connection string not set (check mongobg_uri / MONGODB_URI / MONGO_URI)");
-        console.error(err.message);
-        throw err;
+    if (cached.conn) return cached.conn;
+
+    if (!MONGODB_URI) {
+        throw new Error("MongoDB connection string not set");
     }
-    try {
-        console.log("Connecting to MongoDB using env var...");
-        await mongoose.connect(uri, {
-            maxPoolSize: 10,
-            minPoolSize: 2,
-            socketTimeoutMS: 45000,
+
+    if (!cached.promise) {
+        cached.promise = mongoose.connect(MONGODB_URI, {
+            maxPoolSize: 5,
+            minPoolSize: 0,
+            socketTimeoutMS: 30000,
             serverSelectionTimeoutMS: 10000,
-            heartbeatFrequencyMS: 10000,
-        });
-        console.log("MongoDB connected");
-    } catch (error) {
-        console.error("MongoDB connection error:", error);
-        throw error;
+            heartbeatFrequencyMS: 30000,
+        }).then((mongoose) => mongoose);
     }
+
+    cached.conn = await cached.promise;
+    return cached.conn;
 };
 
 export default connectDB;

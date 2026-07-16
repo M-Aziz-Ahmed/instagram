@@ -400,7 +400,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         if (!recipient) return;
         const interval = setInterval(() => {
             fetchMessagesRef.current();
-        }, 5000); // Increased from 2s to 5s
+        }, 8000); // Increased from 5s to 8s
         return () => clearInterval(interval);
     }, [recipient]);
 

@@ -77,7 +77,7 @@ export default function BottomNav() {
 
     useEffect(() => {
         fetchUnread();
-        const id = setInterval(fetchUnread, 10000);
+        const id = setInterval(fetchUnread, 15000);
         return () => clearInterval(id);
     }, [fetchUnread]);
 
