@@ -789,23 +789,23 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                                     )}
                                 </div>
 
-                                <div className="flex items-start gap-0.5 shrink-0 mt-0.5 opacity-40 group-hover:opacity-100 transition-opacity">
+                                <div className="flex items-start gap-1 shrink-0 mt-0.5">
                                     <button
                                         onClick={() => setChatInput(`@${msg.username} `)}
-                                        className="p-1 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                                        className="p-1.5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
                                         title="Reply">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
                                         </svg>
                                     </button>
                                     <button
                                         onClick={() => translateMessage(i, msg.text)}
-                                        className={`p-1 rounded-full transition-colors ${translations[i] ? "bg-blue-500/20 text-blue-300 opacity-100" : "hover:bg-white/10 text-white/60 hover:text-white"}`}
+                                        className={`p-1.5 rounded-full transition-colors ${translations[i] ? "bg-blue-500/20 text-blue-300" : "hover:bg-white/10 text-white/50 hover:text-white"}`}
                                         title={translations[i] ? "Hide translation" : "Translate"}>
                                         {translatingIdx === i ? (
-                                            <div className="w-3 h-3 border border-white/40 border-t-white/80 rounded-full animate-spin" />
+                                            <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white/80 rounded-full animate-spin" />
                                         ) : (
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="m10.5 21 5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802" />
                                             </svg>
                                         )}
