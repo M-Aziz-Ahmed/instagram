@@ -123,6 +123,13 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                     try {
                         await viewerPcRef.current.addIceCandidate(new RTCIceCandidate(signal.data));
                     } catch {}
+                } else if (signal.type === "video-change") {
+                    console.log("[Live VIEWER] video-change received, refreshing stream");
+                    if (remoteVideoRef.current && remoteStreamRef.current) {
+                        remoteVideoRef.current.srcObject = null;
+                        remoteVideoRef.current.srcObject = remoteStreamRef.current;
+                        remoteVideoRef.current.play().then(() => setViewerReady(true)).catch(() => {});
+                    }
                 }
             } else {
                 if (signal.type === "request-offer") {
@@ -142,6 +149,15 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                         tracks.forEach((track) => pc.addTrack(track, stream));
                     } else {
                         console.warn("[Live HOST] NO localStream when handling request-offer from", viewer);
+                    }
+
+                    if (!pc.getSenders().some((s) => s.track?.kind === "video")) {
+                        const c = document.createElement("canvas");
+                        c.width = 2; c.height = 2;
+                        c.getContext("2d").fillStyle = "#000"; c.getContext("2d").fillRect(0, 0, 2, 2);
+                        const ph = c.captureStream(0).getVideoTracks()[0];
+                        pc.addTrack(ph, new MediaStream([ph]));
+                        console.log("[Live HOST] Added placeholder video sender for", viewer);
                     }
 
                     pc.onicecandidate = (e) => {
@@ -300,6 +316,11 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
         }, 500);
     };
 
+    const findVideoSender = (pc) => {
+        return pc.getSenders().find((s) => s.track?.kind === "video") ||
+            pc.getTransceivers().find((t) => t.receiver.track?.kind === "video")?.sender;
+    };
+
     const toggleCamera = async () => {
         if (!isHost) return;
         if (!cameraOff) {
@@ -310,7 +331,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             }
             setCameraOff(true);
             Object.values(pcsRef.current).forEach((pc) => {
-                const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+                const sender = findVideoSender(pc);
                 if (sender) sender.replaceTrack(null);
             });
             return;
@@ -326,7 +347,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             setCameraOff(false);
             if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
             Object.values(pcsRef.current).forEach((pc) => {
-                const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+                const sender = findVideoSender(pc);
                 if (sender) sender.replaceTrack(vt);
             });
         } catch {}
@@ -345,7 +366,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             setSharing(false);
             const vt = localStreamRef.current?.getVideoTracks()[0];
             Object.values(pcsRef.current).forEach((pc) => {
-                const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+                const sender = findVideoSender(pc);
                 if (sender) sender.replaceTrack(vt || null);
             });
             if (localVideoRef.current && localStreamRef.current) localVideoRef.current.srcObject = localStreamRef.current;
@@ -356,18 +377,21 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             screenStreamRef.current = screen;
             setSharing(true);
             const st = screen.getVideoTracks()[0];
+            Object.keys(pcsRef.current).forEach((viewer) => {
+                sendSignal(viewer, "video-change", { active: true });
+            });
             st.onended = () => {
                 setSharing(false);
                 screenStreamRef.current = null;
                 const vt = localStreamRef.current?.getVideoTracks()[0];
                 Object.values(pcsRef.current).forEach((pc) => {
-                    const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+                    const sender = findVideoSender(pc);
                     if (sender) sender.replaceTrack(vt || null);
                 });
                 if (localVideoRef.current && localStreamRef.current) localVideoRef.current.srcObject = localStreamRef.current;
             };
             Object.values(pcsRef.current).forEach((pc) => {
-                const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+                const sender = findVideoSender(pc);
                 if (sender) sender.replaceTrack(st);
             });
             if (localVideoRef.current) localVideoRef.current.srcObject = screen;
