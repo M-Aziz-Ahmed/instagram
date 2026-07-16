@@ -425,6 +425,8 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
     };
 
     const joinStream = async (sid) => {
+        stateRef.current.streamId = sid;
+        stateRef.current.isHost = false;
         setStreamId(sid);
         setIsHost(false);
         setStarted(true);

@@ -66,7 +66,7 @@ export default function StoryTray() {
                 {liveStreams.map((stream) => (
                     <button
                         key={`live-${stream._id}`}
-                        onClick={() => setLiveHost(stream.host)}
+                        onClick={() => setLiveHost(stream)}
                         className="flex flex-col items-center gap-1.5 shrink-0"
                     >
                         <div className="relative">
@@ -190,7 +190,8 @@ export default function StoryTray() {
 
             {liveHost && (
                 <LiveStreamModal
-                    hostUsername={liveHost}
+                    streamId={liveHost._id}
+                    hostUsername={liveHost.host}
                     onClose={() => setLiveHost(null)}
                 />
             )}
