@@ -72,8 +72,10 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
     const [settingsOpen, setSettingsOpen]    = useState(false);
     const [quality, setQuality]              = useState("auto");
     const [micVolume, setMicVolume]          = useState(100);
+    const [viewerMuted, setViewerMuted]      = useState(true);
 
     const localVideoRef   = useRef(null);
+    const pipVideoRef     = useRef(null);
     const remoteVideoRef  = useRef(null);
     const modalRootRef    = useRef(null);
     const remoteStreamRef = useRef(null);
@@ -87,9 +89,15 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
     const chatScrollRef   = useRef(null);
     const mountedRef      = useRef(true);
     const playAttemptedRef = useRef(false);
+    const remoteTracksRef = useRef(new Map());
 
     const lastSignalRef = useRef(null);
     const lastChatRef   = useRef(null);
+
+    const setLocalVideo = (srcObject) => {
+        if (localVideoRef.current) localVideoRef.current.srcObject = srcObject;
+        if (pipVideoRef.current) pipVideoRef.current.srcObject = srcObject;
+    };
 
     const stateRef = useRef({});
     stateRef.current = { streamId, isHost, user, hostUsername };
@@ -127,25 +135,52 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                         viewerPcRef.current = pc;
 
                         remoteStreamRef.current = new MediaStream();
+                        remoteTracksRef.current = new Map();
                         pc.ontrack = (e) => {
                             console.log("[Live VIEWER] ontrack kind:", e.track?.kind, "readyState:", e.track?.readyState, "streams:", e.streams?.length);
+                            const track = e.track;
+                            if (!track) return;
+
+                            let isReplacement = false;
+                            const prevTrackId = remoteTracksRef.current.get(track.kind);
+                            if (prevTrackId && prevTrackId !== track.id) {
+                                isReplacement = true;
+                            }
+                            remoteTracksRef.current.set(track.kind, track.id);
+
                             if (e.streams?.[0]) {
                                 e.streams[0].getTracks().forEach((t) => {
-                                    if (!remoteStreamRef.current.getTracks().find((x) => x.id === t.id)) {
+                                    const existing = remoteStreamRef.current.getTracks().find((x) => x.kind === t.kind);
+                                    if (existing) {
+                                        if (existing.id !== t.id) {
+                                            remoteStreamRef.current.removeTrack(existing);
+                                            remoteStreamRef.current.addTrack(t);
+                                        }
+                                    } else {
                                         remoteStreamRef.current.addTrack(t);
                                     }
                                 });
-                            } else if (e.track) {
-                                const existing = remoteStreamRef.current.getTracks().find((t) => t.kind === e.track.kind);
-                                if (existing) remoteStreamRef.current.removeTrack(existing);
-                                remoteStreamRef.current.addTrack(e.track);
+                            } else {
+                                const existing = remoteStreamRef.current.getTracks().find((t) => t.kind === track.kind);
+                                if (existing) {
+                                    if (existing.id !== track.id) {
+                                        remoteStreamRef.current.removeTrack(existing);
+                                        remoteStreamRef.current.addTrack(track);
+                                    }
+                                } else {
+                                    remoteStreamRef.current.addTrack(track);
+                                }
                             }
+
                             if (remoteVideoRef.current) {
                                 if (remoteVideoRef.current.srcObject !== remoteStreamRef.current) {
                                     remoteVideoRef.current.srcObject = remoteStreamRef.current;
+                                }
+                                if (isReplacement) {
+                                    console.log("[Live VIEWER] track replaced, reloading video");
                                     remoteVideoRef.current.load();
                                 }
-                                if (!playAttemptedRef.current) {
+                                if (!playAttemptedRef.current || isReplacement) {
                                     playAttemptedRef.current = true;
                                     remoteVideoRef.current.play().catch(() => {
                                         const retry = () => {
@@ -183,6 +218,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                 } else if (signal.type === "video-change") {
                     console.log("[Live VIEWER] video-change received, refreshing stream");
                     playAttemptedRef.current = false;
+                    remoteTracksRef.current.clear();
                     if (remoteVideoRef.current && remoteStreamRef.current) {
                         remoteVideoRef.current.load();
                         setTimeout(() => {
@@ -358,6 +394,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
         viewerPcRef.current?.close();
         viewerPcRef.current = null;
         remoteStreamRef.current = null;
+        remoteTracksRef.current = new Map();
         playAttemptedRef.current = false;
         setSharing(false);
         setCameraOff(true);
@@ -387,7 +424,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
             }
             localStreamRef.current = stream;
             if (withCamera) setCameraOff(false);
-            if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+            setLocalVideo(stream);
         } catch {
             setError("Camera/microphone access denied. Please allow permissions and try again.");
             setLoading(false);
@@ -464,7 +501,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                 localStreamRef.current = stream;
             }
             setCameraOff(false);
-            if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+            setLocalVideo(localStreamRef.current);
             Object.entries(pcsRef.current).forEach(([viewer, pc]) => {
                 const sender = findVideoSender(pc, viewer);
                 if (sender) sender.replaceTrack(vt);
@@ -507,7 +544,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                 const audioSender = pc.getSenders().find((s) => s.track?.kind === "audio" && s !== pc.getSenders()[0]);
                 if (audioSender) audioSender.replaceTrack(null);
             });
-            if (localVideoRef.current && localStreamRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+            if (localStreamRef.current) setLocalVideo(localStreamRef.current);
             return;
         }
         try {
@@ -530,10 +567,12 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
             });
             Object.entries(pcsRef.current).forEach(([viewer, pc]) => {
                 const sender = findVideoSender(pc, viewer);
-                if (sender) sender.replaceTrack(st);
+                if (sender) {
+                    sender.replaceTrack(st).catch(() => {});
+                }
+                const audioSender = pc.getSenders().find((s) => s.track?.kind === "audio");
                 if (sat) {
-                    const audioSender = pc.getSenders().find((s) => s.track?.kind === "audio" && s !== pc.getSenders()[0]);
-                    if (audioSender) audioSender.replaceTrack(sat);
+                    if (audioSender) audioSender.replaceTrack(sat).catch(() => {});
                     else pc.addTrack(sat, screen);
                 }
             });
@@ -547,9 +586,9 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                     const sender = findVideoSender(pc, viewer);
                     if (sender) sender.replaceTrack(vt || null);
                 });
-                if (localVideoRef.current && localStreamRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+                if (localStreamRef.current) setLocalVideo(localStreamRef.current);
             };
-            if (localVideoRef.current) localVideoRef.current.srcObject = screen;
+            setLocalVideo(screen);
         } catch (e) {
             if (e.name !== "AbortError" && e.name !== "NotAllowedError") {
                 setError("Screen share failed: " + (e.message || "Unknown error"));
@@ -767,7 +806,30 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                             </div>
                         )
                     ) : (
-                        <video ref={remoteVideoRef} autoPlay muted playsInline preload="auto" className="w-full h-full object-cover" />
+                        <div className="relative w-full h-full">
+                            <video ref={remoteVideoRef} autoPlay playsInline preload="auto" muted={viewerMuted} className="w-full h-full object-cover" />
+                            {viewerMuted && (
+                                <button
+                                    onClick={() => setViewerMuted(false)}
+                                    className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 px-5 py-3 bg-white/15 backdrop-blur-sm rounded-full text-white text-xs font-medium hover:bg-white/25 transition-colors z-10"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                                    </svg>
+                                    Tap to unmute
+                                </button>
+                            )}
+                            {!viewerMuted && (
+                                <button
+                                    onClick={() => setViewerMuted(true)}
+                                    className="absolute bottom-6 left-1/2 -translate-x-1/2 w-10 h-10 flex items-center justify-center bg-white/15 backdrop-blur-sm rounded-full text-white hover:bg-white/25 transition-colors z-10"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
                     )}
 
                     {/* Host name badge */}
@@ -781,7 +843,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                     {/* PiP preview for host */}
                     {isHost && hostHasVideo && !isFullscreen && (
                         <div className="absolute bottom-4 right-3 w-20 h-28 sm:w-28 sm:h-36 rounded-xl overflow-hidden border-2 border-white/20 shadow-lg bg-black z-30">
-                            <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+                            <video ref={pipVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                         </div>
                     )}
 

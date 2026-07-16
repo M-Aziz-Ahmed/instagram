@@ -4,7 +4,7 @@ import User from "@/models/user";
 // Update user's online status and lastActive timestamp
 export async function POST(request, { params }) {
     try {
-        const { username } = params;
+        const { username } = await params;
         const { isOnline } = await request.json();
 
         if (!username) {
@@ -42,7 +42,7 @@ export async function POST(request, { params }) {
 // Get user's online status
 export async function GET(request, { params }) {
     try {
-        const { username } = params;
+        const { username } = await params;
 
         if (!username) {
             return Response.json({ error: "Username required" }, { status: 400 });

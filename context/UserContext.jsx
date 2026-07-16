@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 export const AVATAR_COLORS = [
     "#f97316", "#ec4899", "#8b5cf6", "#06b6d4",
@@ -39,13 +39,18 @@ export function UserProvider({ children }) {
 
     useEffect(() => { reloadUser(); }, [reloadUser]);
 
-    const logout = async () => {
+    const logout = useCallback(async () => {
         await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
         setUser(null);
-    };
+    }, []);
+
+    const value = useMemo(
+        () => ({ user, ready, reloadUser, logout, AVATAR_COLORS }),
+        [user, ready, reloadUser, logout]
+    );
 
     return (
-        <UserContext.Provider value={{ user, ready, reloadUser, logout, AVATAR_COLORS }}>
+        <UserContext.Provider value={value}>
             {children}
         </UserContext.Provider>
     );
@@ -53,8 +58,11 @@ export function UserProvider({ children }) {
 
 export function useUser() {
     const ctx = useContext(UserContext);
-    if (ctx.user && ctx.user.avatarColor && !ctx.user.color) {
-        return { ...ctx, user: { ...ctx.user, color: ctx.user.avatarColor } };
-    }
-    return ctx;
+    const derivedUser = useMemo(() => {
+        if (ctx.user && ctx.user.avatarColor && !ctx.user.color) {
+            return { ...ctx.user, color: ctx.user.avatarColor };
+        }
+        return ctx.user;
+    }, [ctx.user]);
+    return useMemo(() => ({ ...ctx, user: derivedUser }), [ctx, derivedUser]);
 }
