@@ -13,12 +13,12 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 
-app.use(cors({ origin: CORS_ORIGIN.split(","), credentials: true }));
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
 const io = new Server(server, {
     cors: {
-        origin: CORS_ORIGIN.split(","),
+        origin: true,
         methods: ["GET", "POST"],
         credentials: true,
     },
