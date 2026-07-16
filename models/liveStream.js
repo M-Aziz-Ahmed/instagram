@@ -5,6 +5,7 @@ const chatMessageSchema = new mongoose.Schema({
     color:     { type: String, default: "#3b82f6" },
     avatarUrl: { type: String, default: "" },
     text:      { type: String, required: true },
+    replyTo:   { type: { username: String, text: String }, default: null },
     createdAt: { type: Date, default: Date.now },
 }, { _id: false });
 

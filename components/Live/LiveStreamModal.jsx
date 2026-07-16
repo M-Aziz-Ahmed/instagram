@@ -64,6 +64,10 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const [chatMessages, setChatMessages]   = useState([]);
     const [chatInput, setChatInput]         = useState("");
     const [chatOpen, setChatOpen]           = useState(false);
+    const [replyingTo, setReplyingTo]       = useState(null);
+    const [translations, setTranslations]   = useState({});
+    const [translatingIdx, setTranslatingIdx] = useState(null);
+    const [hoveredMsg, setHoveredMsg]       = useState(null);
     const [isFullscreen, setIsFullscreen]   = useState(false);
     const [settingsOpen, setSettingsOpen]    = useState(false);
     const [quality, setQuality]              = useState("auto");
@@ -296,17 +300,42 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const sendChat = async () => {
         if (!chatInput.trim() || !streamId) return;
         const text = chatInput.trim();
+        const replyData = replyingTo
+            ? { username: replyingTo.username, text: replyingTo.text }
+            : null;
         setChatInput("");
+        setReplyingTo(null);
         const data = await apiPost({
             action: "chat",
             text,
             color: user.color || user.avatarColor || "#3b82f6",
             avatarUrl: user.avatarUrl || "",
+            replyTo: replyData,
         });
         if (data?.message) {
             setChatMessages((prev) => [...prev, data.message]);
             lastChatRef.current = data.message.createdAt;
         }
+    };
+
+    const translateMessage = async (idx, text) => {
+        if (translations[idx]) {
+            setTranslations((prev) => { const n = { ...prev }; delete n[idx]; return n; });
+            return;
+        }
+        setTranslatingIdx(idx);
+        try {
+            const res = await fetch("/api/translate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text, target: "en" }),
+            });
+            const data = await res.json();
+            if (data.translatedText) {
+                setTranslations((prev) => ({ ...prev, [idx]: data.translatedText }));
+            }
+        } catch {}
+        setTranslatingIdx(null);
     };
 
     const stopAll = useCallback(() => {
@@ -739,25 +768,84 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                         </button>
                     </div>
 
-                    <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2.5 min-h-0">
+                    <div ref={chatScrollRef} onClick={() => setHoveredMsg(null)} className="flex-1 overflow-y-auto px-3 py-2 space-y-2.5 min-h-0">
                         {chatMessages.length === 0 && (
                             <p className="text-white/30 text-xs text-center py-8">No messages yet</p>
                         )}
-                        {chatMessages.map((msg, i) => (
-                            <div key={i} className="flex gap-2">
-                                <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0 mt-0.5" style={{ backgroundColor: msg.color || "#3b82f6" }}>
-                                    {msg.avatarUrl ? <img src={msg.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" /> : msg.username?.[0]?.toUpperCase()}
+                        {chatMessages.map((msg, i) => {
+                            const isHovered = hoveredMsg === i;
+                            return (
+                                <div key={i}
+                                    className="flex gap-2 group relative"
+                                    onMouseEnter={() => setHoveredMsg(i)}
+                                    onMouseLeave={() => setHoveredMsg(null)}
+                                    onTouchStart={(e) => { e.stopPropagation(); setHoveredMsg(hoveredMsg === i ? null : i); }}>
+                                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0 mt-0.5" style={{ backgroundColor: msg.color || "#3b82f6" }}>
+                                        {msg.avatarUrl ? <img src={msg.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" /> : msg.username?.[0]?.toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <span className="text-[11px] font-bold mr-1.5" style={{ color: msg.color || "#60a5fa" }}>{msg.username}</span>
+
+                                        {msg.replyTo && (
+                                            <div className="mb-0.5 pl-2 border-l-2 border-white/20 text-[10px] text-white/40 truncate">
+                                                <span className="font-semibold text-white/50">@{msg.replyTo.username}</span>{" "}
+                                                {msg.replyTo.text}
+                                            </div>
+                                        )}
+
+                                        <span className="text-white/90 text-xs break-words">{msg.text}</span>
+
+                                        {translations[i] && (
+                                            <div className="mt-0.5 text-[11px] text-blue-300/80 italic break-words">
+                                                {translations[i]}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className={`flex items-start gap-0.5 shrink-0 mt-0.5 transition-opacity ${isHovered ? "opacity-100" : "opacity-0"}`}>
+                                        <button
+                                            onClick={() => setReplyingTo(msg)}
+                                            className="p-1 rounded-full hover:bg-white/10 text-white/40 hover:text-white/80 transition-colors"
+                                            title="Reply">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            onClick={() => translateMessage(i, msg.text)}
+                                            className={`p-1 rounded-full transition-colors ${translations[i] ? "bg-blue-500/20 text-blue-300" : "hover:bg-white/10 text-white/40 hover:text-white/80"}`}
+                                            title={translations[i] ? "Hide translation" : "Translate"}>
+                                            {translatingIdx === i ? (
+                                                <div className="w-3 h-3 border border-white/40 border-t-white/80 rounded-full animate-spin" />
+                                            ) : (
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="m10.5 21 5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802" />
+                                                </svg>
+                                            )}
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="min-w-0">
-                                    <span className="text-[11px] font-bold mr-1.5" style={{ color: msg.color || "#60a5fa" }}>{msg.username}</span>
-                                    <span className="text-white/90 text-xs break-words">{msg.text}</span>
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
+                    {replyingTo && (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-white/5 border-t border-white/10 shrink-0">
+                            <div className="flex-1 min-w-0">
+                                <span className="text-[10px] text-blue-400 font-medium">Replying to @{replyingTo.username}</span>
+                                <p className="text-[10px] text-white/40 truncate">{replyingTo.text}</p>
+                            </div>
+                            <button onClick={() => setReplyingTo(null)} className="text-white/40 hover:text-white p-0.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    )}
+
                     <form onSubmit={(e) => { e.preventDefault(); sendChat(); }} className="flex gap-2 px-3 py-2.5 border-t border-white/10 shrink-0">
-                        <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Send a message..."
+                        <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)}
+                            placeholder={replyingTo ? `Reply to @${replyingTo.username}...` : "Send a message..."}
                             className="flex-1 bg-white/10 text-white text-sm rounded-full px-4 py-2.5 outline-none placeholder-white/30 focus:bg-white/15 transition-colors min-w-0" />
                         <button type="submit" disabled={!chatInput.trim()}
                             className="w-10 h-10 rounded-full bg-blue-500 hover:bg-blue-600 disabled:opacity-30 text-white flex items-center justify-center shrink-0">

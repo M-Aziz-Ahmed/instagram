@@ -30,7 +30,7 @@ export async function GET(request, { params }) {
 export async function POST(request, { params }) {
     try {
         const { id } = await params;
-        const { username, action, to, type, data, since, text, color, avatarUrl } = await request.json();
+        const { username, action, to, type, data, since, text, color, avatarUrl, replyTo } = await request.json();
 
         await connectDB();
         const stream = await LiveStream.findById(id);
@@ -73,7 +73,13 @@ export async function POST(request, { params }) {
             if (!text?.trim()) {
                 return Response.json({ error: "Empty message" }, { status: 400 });
             }
-            const msg = { username, color: color || "#3b82f6", avatarUrl: avatarUrl || "", text: text.trim() };
+            const msg = {
+                username,
+                color: color || "#3b82f6",
+                avatarUrl: avatarUrl || "",
+                text: text.trim(),
+                replyTo: (replyTo && replyTo.username && replyTo.text) ? { username: replyTo.username, text: String(replyTo.text).slice(0, 300) } : null,
+            };
             stream.chat.push(msg);
             if (stream.chat.length > 200) {
                 stream.chat = stream.chat.slice(-200);
