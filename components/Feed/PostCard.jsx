@@ -256,6 +256,8 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     const [lightboxSrc, setLightboxSrc]       = useState(null);
     const [showReactions, setShowReactions]   = useState(false);
     const [reacting, setReacting]             = useState(false);
+    const [translations, setTranslations]   = useState({});
+    const [translatingIdx, setTranslatingIdx] = useState(null);
     const hasTrackedView = useRef(false);
     const lastTapRef = useRef(0);
     const singleTapTimer = useRef(null);
@@ -297,6 +299,26 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
         () => (post.comments || []).filter((c) => !c.parentId),
         [post.comments]
     );
+
+    const translatePost = async (postId, text) => {
+        if (translations[postId]) {
+            setTranslations((prev) => { const n = { ...prev }; delete n[postId]; return n; });
+            return;
+        }
+        setTranslatingIdx(postId);
+        try {
+            const res = await fetch("/api/translate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text, target: user?.language || "en" }),
+            });
+            const data = await res.json();
+            if (data.translatedText) {
+                setTranslations((prev) => ({ ...prev, [postId]: data.translatedText }));
+            }
+        } catch {}
+        setTranslatingIdx(null);
+    };
 
     const handleLike = async () => {
         if (!user || liking) return;
@@ -557,9 +579,30 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
                     </div>
 
                     {post.text && (
-                        <p className="text-sm text-gray-900 dark:text-gray-100 mt-1 leading-relaxed whitespace-pre-wrap">
-                            <RichText text={post.text} onHashtag={onHashtag} />
-                        </p>
+                        <div className="mt-1">
+                            <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap">
+                                <RichText text={post.text} onHashtag={onHashtag} />
+                            </p>
+                            {translations[post._id] && (
+                                <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-1 leading-relaxed whitespace-pre-wrap">
+                                    {translations[post._id]}
+                                </p>
+                            )}
+                            <button
+                                onClick={() => translatePost(post._id, post.text)}
+                                disabled={translatingIdx === post._id}
+                                className="text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors mt-0.5 flex items-center gap-1"
+                                title={translations[post._id] ? "Hide translation" : "Translate"}
+                            >
+                                {translatingIdx === post._id ? (
+                                    <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802" />
+                                    </svg>
+                                )}
+                            </button>
+                        </div>
                     )}
 
                     {post.imageUrl && (
