@@ -15,7 +15,7 @@ const ICE_SERVERS = {
 
 const POLL_MS = 1000;
 
-const MAX_BITRATE = 4000;
+const MAX_BITRATE = 8000;
 
 async function setMaxBitrate(sender, bitrate = MAX_BITRATE) {
     if (!sender) return;
@@ -25,10 +25,30 @@ async function setMaxBitrate(sender, bitrate = MAX_BITRATE) {
             params.encodings = [{}];
         }
         params.encodings[0].maxBitrate = bitrate * 1000;
+        params.encodings[0].maxFramerate = 60;
         params.encodings[0].networkPriority = "high";
+        params.encodings[0].priority = "high";
         await sender.setParameters(params);
     } catch {}
 }
+
+function mungeSdp(sdp) {
+    return sdp
+        .replace(/a=fmtp:\d+ .*/g, (m) => {
+            if (m.includes("vp8") || m.includes("vp9") || m.includes("h264")) {
+                return m + ";x-google-max-bitrate=8000;x-google-min-bitrate=3000";
+            }
+            return m;
+        })
+        .replace(/a=mid:video\r?\n/, "a=mid:video\r\nb=AS:8000\r\n");
+}
+
+const QUALITY_PRESETS = {
+    auto:   { bitrate: 8000, width: 1920, height: 1080, fps: 60 },
+    "1080": { bitrate: 8000, width: 1920, height: 1080, fps: 60 },
+    "720":  { bitrate: 4000, width: 1280, height: 720,  fps: 30 },
+    "480":  { bitrate: 2000, width: 854,  height: 480,  fps: 30 },
+};
 
 function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const { user } = useUser();
@@ -45,6 +65,9 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const [chatInput, setChatInput]         = useState("");
     const [chatOpen, setChatOpen]           = useState(false);
     const [isFullscreen, setIsFullscreen]   = useState(false);
+    const [settingsOpen, setSettingsOpen]    = useState(false);
+    const [quality, setQuality]              = useState("auto");
+    const [micVolume, setMicVolume]          = useState(100);
 
     const localVideoRef   = useRef(null);
     const remoteVideoRef  = useRef(null);
@@ -52,6 +75,8 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const remoteStreamRef = useRef(null);
     const localStreamRef  = useRef(null);
     const screenStreamRef = useRef(null);
+    const audioCtxRef     = useRef(null);
+    const gainNodeRef     = useRef(null);
     const pcsRef          = useRef({});
     const viewerPcRef     = useRef(null);
     const pollRef         = useRef(null);
@@ -199,6 +224,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                     };
 
                     const offer = await pc.createOffer();
+                    offer.sdp = mungeSdp(offer.sdp);
                     await pc.setLocalDescription(offer);
                     sendSignal(viewer, "offer", { type: offer.type, sdp: offer.sdp });
 
@@ -420,17 +446,29 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             Object.entries(pcsRef.current).forEach(([viewer, pc]) => {
                 const sender = findVideoSender(pc, viewer);
                 if (sender) sender.replaceTrack(vt || null);
+                const audioSender = pc.getSenders().find((s) => s.track?.kind === "audio" && s !== pc.getSenders()[0]);
+                if (audioSender) audioSender.replaceTrack(null);
             });
             if (localVideoRef.current && localStreamRef.current) localVideoRef.current.srcObject = localStreamRef.current;
             return;
         }
         try {
-            const screen = await navigator.mediaDevices.getDisplayMedia({ video: { width: { max: 1280 }, height: { max: 720 }, frameRate: { max: 30 } }, audio: false });
+            const screen = await navigator.mediaDevices.getDisplayMedia({ video: { width: { max: 1920 }, height: { max: 1080 }, frameRate: { max: 60 } }, audio: true });
             screenStreamRef.current = screen;
             setSharing(true);
             const st = screen.getVideoTracks()[0];
+            const sat = screen.getAudioTracks()[0];
             Object.keys(pcsRef.current).forEach((viewer) => {
                 sendSignal(viewer, "video-change", { active: true });
+            });
+            Object.entries(pcsRef.current).forEach(([viewer, pc]) => {
+                const sender = findVideoSender(pc, viewer);
+                if (sender) sender.replaceTrack(st);
+                if (sat) {
+                    const audioSender = pc.getSenders().find((s) => s.track?.kind === "audio" && s !== pc.getSenders()[0]);
+                    if (audioSender) audioSender.replaceTrack(sat);
+                    else pc.addTrack(sat, screen);
+                }
             });
             st.onended = () => {
                 if (screenStreamRef.current === screen) {
@@ -444,12 +482,31 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                 });
                 if (localVideoRef.current && localStreamRef.current) localVideoRef.current.srcObject = localStreamRef.current;
             };
-            Object.entries(pcsRef.current).forEach(([viewer, pc]) => {
-                const sender = findVideoSender(pc, viewer);
-                if (sender) sender.replaceTrack(st);
-            });
             if (localVideoRef.current) localVideoRef.current.srcObject = screen;
         } catch {}
+    };
+
+    const applyMicVolume = (vol) => {
+        setMicVolume(vol);
+        const track = localStreamRef.current?.getAudioTracks()[0];
+        if (!track) return;
+        if (!audioCtxRef.current) {
+            audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            const src = audioCtxRef.current.createMediaStreamSource(new MediaStream([track]));
+            gainNodeRef.current = audioCtxRef.current.createGain();
+            src.connect(gainNodeRef.current);
+            gainNodeRef.current.connect(audioCtxRef.current.destination);
+        }
+        if (gainNodeRef.current) gainNodeRef.current.gain.value = vol / 100;
+    };
+
+    const applyQuality = async (preset) => {
+        setQuality(preset);
+        const q = QUALITY_PRESETS[preset];
+        Object.values(pcsRef.current).forEach((pc) => {
+            const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+            if (sender) setMaxBitrate(sender, q.bitrate);
+        });
     };
 
     const endStream = async () => {
@@ -555,6 +612,53 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                 :fullscreen .fs-exit-btn, ::-webkit-full-screen .fs-exit-btn { display: flex !important; }
             `}</style>
 
+            {settingsOpen && (
+                <div className="absolute top-12 left-1/2 -translate-x-1/2 w-72 bg-gray-900/95 backdrop-blur-md border border-white/10 rounded-2xl p-4 z-50 shadow-2xl">
+                    <div className="flex items-center justify-between mb-4">
+                        <span className="text-white text-sm font-semibold">Settings</span>
+                        <button onClick={() => setSettingsOpen(false)} className="text-white/40 hover:text-white">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+
+                    {isHost && (
+                        <div className="mb-4">
+                            <label className="text-white/60 text-xs font-medium uppercase tracking-wider mb-2 block">Video Quality</label>
+                            <div className="grid grid-cols-4 gap-1.5">
+                                {Object.keys(QUALITY_PRESETS).map((p) => (
+                                    <button key={p} onClick={() => applyQuality(p)}
+                                        className={`py-1.5 rounded-lg text-xs font-medium transition-colors ${quality === p ? "bg-blue-500 text-white" : "bg-white/10 text-white/60 hover:bg-white/15"}`}>
+                                        {p === "auto" ? "Auto" : p + "p"}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {isHost && (
+                        <div>
+                            <label className="text-white/60 text-xs font-medium uppercase tracking-wider mb-2 flex items-center justify-between">
+                                <span>Microphone</span>
+                                <span className="text-white/40">{micVolume}%</span>
+                            </label>
+                            <input type="range" min="0" max="100" value={micVolume} onChange={(e) => applyMicVolume(Number(e.target.value))}
+                                className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-blue-500" />
+                        </div>
+                    )}
+
+                    {!isHost && (
+                        <div>
+                            <label className="text-white/60 text-xs font-medium uppercase tracking-wider mb-2 flex items-center justify-between">
+                                <span>Speaker Volume</span>
+                            </label>
+                            <input type="range" min="0" max="100" defaultValue="100"
+                                onChange={(e) => { if (remoteVideoRef.current) remoteVideoRef.current.volume = Number(e.target.value) / 100; }}
+                                className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-blue-500" />
+                        </div>
+                    )}
+                </div>
+            )}
+
             {!isFullscreen && (
                 <div className="flex items-center justify-between px-4 py-2.5 safe-top bg-black shrink-0 z-10">
                     <div className="flex items-center gap-2 min-w-0">
@@ -562,8 +666,11 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                         <span className="text-white text-sm font-bold">LIVE</span>
                         <span className="text-white/50 text-xs">{viewers} watching</span>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                        <button onClick={toggleFullscreen} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white">
+                <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={() => setSettingsOpen((v) => !v)} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+                    </button>
+                    <button onClick={toggleFullscreen} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg>
                         </button>
                         <button onClick={() => setChatOpen((v) => !v)} className="sm:hidden w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white">
