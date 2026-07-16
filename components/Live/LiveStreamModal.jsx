@@ -99,7 +99,8 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                                 remoteVideoRef.current.srcObject = remoteStreamRef.current;
                                 const p = remoteVideoRef.current.play();
                                 if (p) p.then(() => {
-                                    console.log("[Live VIEWER] autoplay succeeded");
+                                    console.log("[Live VIEWER] autoplay succeeded, unmuting");
+                                    remoteVideoRef.current.muted = false;
                                     setViewerReady(true);
                                 }).catch((err) => {
                                     console.log("[Live VIEWER] autoplay blocked, waiting for tap:", err?.message);
@@ -529,9 +530,13 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                             className="w-full h-full relative cursor-pointer"
                             onClick={() => {
                                 if (remoteVideoRef.current) {
-                                    remoteVideoRef.current.muted = false;
-                                    setViewerReady(true);
-                                    remoteVideoRef.current.play().catch(() => {});
+                                    remoteVideoRef.current.muted = true;
+                                    remoteVideoRef.current.play().then(() => {
+                                        remoteVideoRef.current.muted = false;
+                                        setViewerReady(true);
+                                    }).catch(() => {
+                                        setViewerReady(true);
+                                    });
                                 }
                             }}
                         >
