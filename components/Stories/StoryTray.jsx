@@ -14,6 +14,7 @@ export default function StoryTray() {
     const [activeIdx, setActiveIdx] = useState(null);
     const [showCreate, setShowCreate] = useState(false);
     const [liveHost, setLiveHost] = useState(null);
+    const [showGoLive, setShowGoLive] = useState(false);
 
     const fetchStories = useCallback(async () => {
         if (!user) return;
@@ -29,7 +30,7 @@ export default function StoryTray() {
             const res = await fetch("/api/live");
             if (res.ok) {
                 const data = await res.json();
-                setLiveStreams(data.filter((s) => s.host !== user?.username && s.status === "live"));
+                setLiveStreams((data.streams || []).filter((s) => s.host !== user?.username && s.status === "live"));
             }
         } catch { /* silent */ }
     }, [user]);
@@ -43,6 +44,7 @@ export default function StoryTray() {
 
     const myGroup = groups.find((g) => g.sender === user?.username);
     const otherGroups = groups.filter((g) => g.sender !== user?.username);
+    const canGoLive = user?.isAdmin || user?.liveStreamAllowed;
 
     if (loading) {
         return (
@@ -60,6 +62,24 @@ export default function StoryTray() {
     return (
         <>
             <div className="flex gap-4 px-4 py-4 overflow-x-auto scrollbar-hide">
+                {/* Go Live button */}
+                {canGoLive && (
+                    <button
+                        onClick={() => setShowGoLive(true)}
+                        className="flex flex-col items-center gap-1.5 shrink-0"
+                    >
+                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-red-500 via-pink-500 to-purple-500 p-0.5">
+                            <div className="w-full h-full rounded-full overflow-hidden border-2 border-white dark:border-gray-950 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-7 h-7 text-white">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z" />
+                                </svg>
+                            </div>
+                        </div>
+                        <span className="text-[11px] text-red-500 dark:text-red-400 font-semibold">Go Live</span>
+                    </button>
+                )}
+
                 {/* Create story button */}
                 <button
                     onClick={() => setShowCreate(true)}
@@ -170,6 +190,13 @@ export default function StoryTray() {
                 <LiveStreamModal
                     hostUsername={liveHost}
                     onClose={() => setLiveHost(null)}
+                />
+            )}
+
+            {showGoLive && (
+                <LiveStreamModal
+                    hostUsername={user?.username}
+                    onClose={() => setShowGoLive(false)}
                 />
             )}
         </>

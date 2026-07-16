@@ -54,7 +54,24 @@ export async function GET() {
             .sort({ startedAt: -1 })
             .limit(20)
             .lean();
-        return Response.json({ streams });
+
+        const hostNames = [...new Set(streams.map((s) => s.host))];
+        const hosts = await User.find({ username: { $in: hostNames } })
+            .select("username avatarUrl avatarColor")
+            .lean();
+        const hostMap = {};
+        hosts.forEach((h) => { hostMap[h.username] = h; });
+
+        const enriched = streams.map((s) => {
+            const u = hostMap[s.host] || {};
+            return {
+                ...s,
+                hostAvatarUrl: u.avatarUrl || "",
+                hostAvatarColor: u.avatarColor || "#3b82f6",
+            };
+        });
+
+        return Response.json({ streams: enriched });
     } catch (error) {
         console.error(error);
         return Response.json({ error: "Failed to fetch streams" }, { status: 500 });
