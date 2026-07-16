@@ -1,6 +1,9 @@
 require("dotenv").config();
 const express = require("express");
+const https = require("https");
 const http = require("http");
+const fs = require("fs");
+const path = require("path");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -8,7 +11,22 @@ const cors = require("cors");
 const LiveStream = require("./models/liveStream");
 
 const app = express();
-const server = http.createServer(app);
+
+let server;
+const certDir = __dirname;
+const keyPath = path.join(certDir, "key.pem");
+const certPath = path.join(certDir, "cert.pem");
+
+if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+    server = https.createServer({
+        key: fs.readFileSync(keyPath),
+        cert: fs.readFileSync(certPath),
+    }, app);
+    console.log("[HTTPS] SSL certificates loaded");
+} else {
+    server = http.createServer(app);
+    console.log("[HTTP] No SSL certs found, running without TLS");
+}
 
 const PORT = process.env.PORT || 3001;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
