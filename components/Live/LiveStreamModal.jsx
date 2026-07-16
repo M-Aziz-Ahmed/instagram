@@ -15,6 +15,21 @@ const ICE_SERVERS = {
 
 const POLL_MS = 1000;
 
+const MAX_BITRATE = 1500;
+
+async function setMaxBitrate(sender, bitrate = MAX_BITRATE) {
+    if (!sender) return;
+    try {
+        const params = sender.getParameters();
+        if (!params.encodings || params.encodings.length === 0) {
+            params.encodings = [{}];
+        }
+        params.encodings[0].maxBitrate = bitrate * 1000;
+        params.encodings[0].networkPriority = "high";
+        await sender.setParameters(params);
+    } catch {}
+}
+
 function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const { user } = useUser();
 
@@ -29,7 +44,6 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const [chatMessages, setChatMessages]   = useState([]);
     const [chatInput, setChatInput]         = useState("");
     const [chatOpen, setChatOpen]           = useState(false);
-    const [viewerReady, setViewerReady]     = useState(false);
 
     const localVideoRef   = useRef(null);
     const remoteVideoRef  = useRef(null);
@@ -95,16 +109,13 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                                 remoteStreamRef.current.addTrack(e.track);
                             }
                             if (remoteVideoRef.current) {
-                                remoteVideoRef.current.srcObject = null;
-                                remoteVideoRef.current.srcObject = remoteStreamRef.current;
-                                const p = remoteVideoRef.current.play();
-                                if (p) p.then(() => {
+                                if (remoteVideoRef.current.srcObject !== remoteStreamRef.current) {
+                                    remoteVideoRef.current.srcObject = remoteStreamRef.current;
+                                }
+                                remoteVideoRef.current.play().then(() => {
                                     console.log("[Live VIEWER] autoplay succeeded, unmuting");
-                                    remoteVideoRef.current.muted = false;
-                                    setViewerReady(true);
-                                }).catch((err) => {
-                                    console.log("[Live VIEWER] autoplay blocked, waiting for tap:", err?.message);
-                                });
+                                    if (remoteVideoRef.current) remoteVideoRef.current.muted = false;
+                                }).catch(() => {});
                             }
                         };
 
@@ -130,9 +141,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                 } else if (signal.type === "video-change") {
                     console.log("[Live VIEWER] video-change received, refreshing stream");
                     if (remoteVideoRef.current && remoteStreamRef.current) {
-                        remoteVideoRef.current.srcObject = null;
-                        remoteVideoRef.current.srcObject = remoteStreamRef.current;
-                        remoteVideoRef.current.play().then(() => setViewerReady(true)).catch(() => {});
+                        remoteVideoRef.current.play().catch(() => {});
                     }
                 }
             } else {
@@ -151,7 +160,10 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                     if (stream) {
                         const tracks = stream.getTracks();
                         console.log("[Live HOST] Adding", tracks.length, "tracks:", tracks.map(t => t.kind + "/" + t.readyState));
-                        tracks.forEach((track) => pc.addTrack(track, stream));
+                        tracks.forEach((track) => {
+                            const sender = pc.addTrack(track, stream);
+                            if (track.kind === "video") setMaxBitrate(sender);
+                        });
                     } else {
                         console.warn("[Live HOST] NO localStream when handling request-offer from", viewer);
                     }
@@ -161,10 +173,12 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                         if (existingScreen && existingScreen.readyState === "live") {
                             const sender = pc.addTrack(existingScreen, screenStreamRef.current);
                             videoSenderRef.current[viewer] = sender;
+                            setMaxBitrate(sender);
                             console.log("[Live HOST] Added active screen share track for", viewer);
                         } else {
                             const t = pc.addTransceiver("video", { direction: "sendonly" });
                             videoSenderRef.current[viewer] = t.sender;
+                            setMaxBitrate(t.sender);
                             console.log("[Live HOST] Added empty video transceiver for", viewer);
                         }
                     }
@@ -356,7 +370,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             return;
         }
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }, audio: false });
             const vt = stream.getVideoTracks()[0];
             if (localStreamRef.current) {
                 localStreamRef.current.addTrack(vt);
@@ -395,7 +409,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             return;
         }
         try {
-            const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+            const screen = await navigator.mediaDevices.getDisplayMedia({ video: { width: { max: 1280 }, height: { max: 720 }, frameRate: { max: 30 } }, audio: false });
             screenStreamRef.current = screen;
             setSharing(true);
             const st = screen.getVideoTracks()[0];
@@ -443,17 +457,6 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     }, [started, streamId, doPoll, doPollChat]);
 
     useEffect(() => () => stopAll(), [stopAll]);
-
-    useEffect(() => {
-        if (!started || isHost || !viewerReady) return;
-        const id = setInterval(() => {
-            if (remoteVideoRef.current && remoteStreamRef.current && remoteStreamRef.current.getVideoTracks().length > 0) {
-                remoteVideoRef.current.srcObject = null;
-                remoteVideoRef.current.srcObject = remoteStreamRef.current;
-            }
-        }, 3000);
-        return () => clearInterval(id);
-    }, [started, isHost, viewerReady]);
 
     useEffect(() => {
         if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
@@ -546,31 +549,8 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                             </div>
                         )
                     ) : (
-                        <div
-                            className="w-full h-full relative cursor-pointer"
-                            onClick={() => {
-                                if (remoteVideoRef.current) {
-                                    remoteVideoRef.current.muted = true;
-                                    remoteVideoRef.current.play().then(() => {
-                                        remoteVideoRef.current.muted = false;
-                                        setViewerReady(true);
-                                    }).catch(() => {
-                                        setViewerReady(true);
-                                    });
-                                }
-                            }}
-                        >
+                        <div className="w-full h-full relative">
                             <video ref={remoteVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
-                            {!viewerReady && (
-                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
-                                    <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur flex items-center justify-center mb-3">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" className="w-8 h-8 ml-1">
-                                            <path fillRule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z" clipRule="evenodd" />
-                                        </svg>
-                                    </div>
-                                    <span className="text-white text-sm font-medium">Tap to play</span>
-                                </div>
-                            )}
                         </div>
                     )}
 
