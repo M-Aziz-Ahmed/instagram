@@ -9,6 +9,7 @@ const userSchema = new mongoose.Schema({
     avatarUrl:   { type: String, default: "" },
     isVerified:  { type: Boolean, default: false },
     isAdmin:     { type: Boolean, default: false },
+    liveStreamAllowed: { type: Boolean, default: false },
     roles:       [{ type: mongoose.Schema.Types.ObjectId, ref: "Role" }],
     followers:   [{ type: String, default: [] }],
     following:   [{ type: String, default: [] }],

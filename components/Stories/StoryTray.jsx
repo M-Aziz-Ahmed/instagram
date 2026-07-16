@@ -4,13 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import StoryViewer from "./StoryViewer";
 import CreateStory from "./CreateStory";
+import LiveStreamModal from "@/components/Live/LiveStreamModal";
 
 export default function StoryTray() {
     const { user } = useUser();
     const [groups, setGroups] = useState([]);
+    const [liveStreams, setLiveStreams] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeIdx, setActiveIdx] = useState(null);
     const [showCreate, setShowCreate] = useState(false);
+    const [liveHost, setLiveHost] = useState(null);
 
     const fetchStories = useCallback(async () => {
         if (!user) return;
@@ -21,11 +24,22 @@ export default function StoryTray() {
         setLoading(false);
     }, [user]);
 
+    const fetchLive = useCallback(async () => {
+        try {
+            const res = await fetch("/api/live");
+            if (res.ok) {
+                const data = await res.json();
+                setLiveStreams(data.filter((s) => s.host !== user?.username && s.status === "live"));
+            }
+        } catch { /* silent */ }
+    }, [user]);
+
     useEffect(() => {
         fetchStories();
-        const id = setInterval(fetchStories, 30000);
+        fetchLive();
+        const id = setInterval(() => { fetchStories(); fetchLive(); }, 15000);
         return () => clearInterval(id);
-    }, [fetchStories]);
+    }, [fetchStories, fetchLive]);
 
     const myGroup = groups.find((g) => g.sender === user?.username);
     const otherGroups = groups.filter((g) => g.sender !== user?.username);
@@ -84,6 +98,33 @@ export default function StoryTray() {
                     </span>
                 </button>
 
+                {/* Live streams */}
+                {liveStreams.map((stream) => (
+                    <button
+                        key={`live-${stream._id}`}
+                        onClick={() => setLiveHost(stream.host)}
+                        className="flex flex-col items-center gap-1.5 shrink-0"
+                    >
+                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-red-500 via-red-600 to-red-700 p-0.5 animate-pulse">
+                            <div className="w-full h-full rounded-full overflow-hidden border-2 border-white dark:border-gray-950">
+                                {stream.hostAvatarUrl ? (
+                                    <img src={stream.hostAvatarUrl} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: stream.hostAvatarColor || "#ef4444" }}>
+                                        {stream.host?.[0]?.toUpperCase()}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-0.5">
+                            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                            <span className="text-[11px] font-semibold text-red-600 dark:text-red-400 truncate max-w-[64px]">
+                                {stream.host}
+                            </span>
+                        </div>
+                    </button>
+                ))}
+
                 {/* Other stories */}
                 {otherGroups.map((group, i) => {
                     const globalIdx = groups.indexOf(group);
@@ -123,6 +164,13 @@ export default function StoryTray() {
 
             {showCreate && (
                 <CreateStory onClose={() => { setShowCreate(false); fetchStories(); }} />
+            )}
+
+            {liveHost && (
+                <LiveStreamModal
+                    hostUsername={liveHost}
+                    onClose={() => setLiveHost(null)}
+                />
             )}
         </>
     );

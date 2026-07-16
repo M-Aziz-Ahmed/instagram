@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const notificationSchema = new mongoose.Schema({
     recipient:  { type: String, required: true },   // username who receives it
-    type:       { type: String, enum: ["like", "love", "laugh", "fire", "sad", "angry", "comment", "reply", "mention", "repost", "follow", "message"], required: true },
+    type:       { type: String, enum: ["like", "love", "laugh", "fire", "sad", "angry", "comment", "reply", "mention", "repost", "follow", "message", "live"], required: true },
     fromUser:   { type: String, required: true },   // who triggered it
     fromColor:  { type: String, default: "#3b82f6" },
     fromAvatarUrl: { type: String, default: "" },

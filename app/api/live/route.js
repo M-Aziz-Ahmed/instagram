@@ -1,5 +1,7 @@
 import connectDB from "@/utils/db";
 import LiveStream from "@/models/liveStream";
+import User from "@/models/user";
+import Notification from "@/models/notification";
 
 export async function POST(request) {
     try {
@@ -15,11 +17,28 @@ export async function POST(request) {
             return Response.json({ streamId: existing._id, message: "Already live" });
         }
 
+        const hostUser = await User.findOne({ username }).lean();
+        if (!hostUser?.isAdmin && !hostUser?.liveStreamAllowed) {
+            return Response.json({ error: "You are not allowed to go live. Contact an admin." }, { status: 403 });
+        }
+
         const stream = await LiveStream.create({
             host: username,
             title: title || "",
             status: "live",
         });
+
+        if (hostUser?.followers?.length) {
+            const notifs = hostUser.followers.map((follower) => ({
+                recipient: follower,
+                type: "live",
+                fromUser: username,
+                fromColor: hostUser.avatarColor || "#3b82f6",
+                fromAvatarUrl: hostUser.avatarUrl || "",
+                text: title || "is live now",
+            }));
+            await Notification.insertMany(notifs).catch(() => {});
+        }
 
         return Response.json({ streamId: stream._id, title: stream.title });
     } catch (error) {
