@@ -85,6 +85,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const pollRef         = useRef(null);
     const chatScrollRef   = useRef(null);
     const mountedRef      = useRef(true);
+    const playAttemptedRef = useRef(false);
 
     const lastSignalRef = useRef(null);
     const lastChatRef   = useRef(null);
@@ -141,11 +142,21 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                             if (remoteVideoRef.current) {
                                 if (remoteVideoRef.current.srcObject !== remoteStreamRef.current) {
                                     remoteVideoRef.current.srcObject = remoteStreamRef.current;
+                                    remoteVideoRef.current.load();
                                 }
-                                remoteVideoRef.current.play().then(() => {
-                                    console.log("[Live VIEWER] autoplay succeeded, unmuting");
-                                    if (remoteVideoRef.current) remoteVideoRef.current.muted = false;
-                                }).catch(() => {});
+                                if (!playAttemptedRef.current) {
+                                    playAttemptedRef.current = true;
+                                    remoteVideoRef.current.play().catch(() => {
+                                        const retry = () => {
+                                            if (!remoteVideoRef.current || !remoteStreamRef.current) return;
+                                            remoteVideoRef.current.play().then(() => {
+                                                console.log("[Live VIEWER] autoplay retry succeeded");
+                                            }).catch(() => {});
+                                        };
+                                        setTimeout(retry, 1000);
+                                        setTimeout(retry, 3000);
+                                    });
+                                }
                             }
                         };
 
@@ -170,8 +181,15 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                     } catch {}
                 } else if (signal.type === "video-change") {
                     console.log("[Live VIEWER] video-change received, refreshing stream");
+                    playAttemptedRef.current = false;
                     if (remoteVideoRef.current && remoteStreamRef.current) {
-                        remoteVideoRef.current.play().catch(() => {});
+                        remoteVideoRef.current.load();
+                        setTimeout(() => {
+                            if (remoteVideoRef.current) {
+                                playAttemptedRef.current = true;
+                                remoteVideoRef.current.play().catch(() => {});
+                            }
+                        }, 500);
                     }
                 }
             } else {
@@ -348,6 +366,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
         viewerPcRef.current?.close();
         viewerPcRef.current = null;
         remoteStreamRef.current = null;
+        playAttemptedRef.current = false;
         setSharing(false);
         setCameraOff(true);
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -728,7 +747,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                         )
                     ) : (
                         <div className="w-full h-full relative">
-                            <video ref={remoteVideoRef} autoPlay muted playsInline className={`w-full h-full ${isFullscreen ? "fs-video object-contain" : "object-cover"}`} />
+                            <video ref={remoteVideoRef} autoPlay muted playsInline preload="auto" className={`w-full h-full ${isFullscreen ? "fs-video object-contain" : "object-cover"}`} />
                         </div>
                     )}
 
