@@ -27,7 +27,10 @@ export default function StoryTray() {
 
     const fetchLive = useCallback(async () => {
         try {
-            const res = await fetch("/api/live");
+            const url = process.env.NEXT_PUBLIC_LIVE_SERVER_URL
+                ? `${process.env.NEXT_PUBLIC_LIVE_SERVER_URL}/api/streams`
+                : "/api/live";
+            const res = await fetch(url);
             if (res.ok) {
                 const data = await res.json();
                 setLiveStreams((data.streams || []).filter((s) => s.host !== user?.username && s.status === "live"));

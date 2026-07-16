@@ -5,7 +5,7 @@ import User from "@/models/user";
 export async function POST(request, { params }) {
     try {
         const { username } = await params;
-        const { isOnline } = await request.json();
+        const { isOnline } = await request.json().catch(() => ({}));
 
         if (!username) {
             return Response.json({ error: "Username required" }, { status: 400 });

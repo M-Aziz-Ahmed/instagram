@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
+import { io } from "socket.io-client";
 
 const ICE_SERVERS = {
     iceServers: [
@@ -12,8 +13,6 @@ const ICE_SERVERS = {
         { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
     ],
 };
-
-const POLL_MS = 5000;
 
 const MAX_BITRATE = 8000;
 
@@ -50,6 +49,8 @@ const QUALITY_PRESETS = {
     "480":  { bitrate: 2000, width: 854,  height: 480,  fps: 30 },
 };
 
+const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "";
+
 export default function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose, autoStart }) {
     const { user } = useUser();
 
@@ -85,42 +86,36 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
     const gainNodeRef     = useRef(null);
     const pcsRef          = useRef({});
     const viewerPcRef     = useRef(null);
-    const pollRef         = useRef(null);
     const chatScrollRef   = useRef(null);
     const mountedRef      = useRef(true);
     const playAttemptedRef = useRef(false);
     const remoteTracksRef = useRef(new Map());
-
-    const lastSignalRef = useRef(null);
-    const lastChatRef   = useRef(null);
-
-    const setLocalVideo = (srcObject) => {
-        if (localVideoRef.current) localVideoRef.current.srcObject = srcObject;
-        if (pipVideoRef.current) pipVideoRef.current.srcObject = srcObject;
-    };
+    const socketRef       = useRef(null);
+    const videoSenderRef  = useRef({});
 
     const stateRef = useRef({});
     stateRef.current = { streamId, isHost, user, hostUsername };
 
     useEffect(() => () => { mountedRef.current = false; }, []);
 
-    const apiPost = useCallback(async (body) => {
-        const s = stateRef.current;
-        if (!s.streamId) return null;
-        try {
-            const res = await fetch(`/api/live/${s.streamId}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: s.user?.username, ...body }),
-            });
-            if (res.ok) return await res.json();
-        } catch {}
-        return null;
-    }, []);
+    const setLocalVideo = (srcObject) => {
+        if (localVideoRef.current) localVideoRef.current.srcObject = srcObject;
+        if (pipVideoRef.current) pipVideoRef.current.srcObject = srcObject;
+    };
+
+    const findVideoSender = (pc, viewer) => {
+        if (viewer && videoSenderRef.current[viewer]) return videoSenderRef.current[viewer];
+        return pc.getSenders().find((s) => s.track?.kind === "video") ||
+            pc.getTransceivers().find((t) => t.receiver.track?.kind === "video")?.sender ||
+            pc.getTransceivers().find((t) => t.sender)?.sender;
+    };
 
     const sendSignal = useCallback((to, type, data) => {
-        return apiPost({ action: "signal", to, type, data });
-    }, [apiPost]);
+        const s = stateRef.current;
+        const sock = socketRef.current;
+        if (!sock || !s.streamId) return;
+        sock.emit("signal", { streamId: s.streamId, from: s.user?.username, to, type, data });
+    }, []);
 
     const processSignal = async (signal) => {
         if (!signal?.type || !signal.data) return;
@@ -137,7 +132,6 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                         remoteStreamRef.current = new MediaStream();
                         remoteTracksRef.current = new Map();
                         pc.ontrack = (e) => {
-                            console.log("[Live VIEWER] ontrack kind:", e.track?.kind, "readyState:", e.track?.readyState, "streams:", e.streams?.length);
                             const track = e.track;
                             if (!track) return;
 
@@ -177,7 +171,6 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                                     remoteVideoRef.current.srcObject = remoteStreamRef.current;
                                 }
                                 if (isReplacement) {
-                                    console.log("[Live VIEWER] track replaced, reloading video");
                                     remoteVideoRef.current.load();
                                 }
                                 if (!playAttemptedRef.current || isReplacement) {
@@ -185,9 +178,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                                     remoteVideoRef.current.play().catch(() => {
                                         const retry = () => {
                                             if (!remoteVideoRef.current || !remoteStreamRef.current) return;
-                                            remoteVideoRef.current.play().then(() => {
-                                                console.log("[Live VIEWER] autoplay retry succeeded");
-                                            }).catch(() => {});
+                                            remoteVideoRef.current.play().catch(() => {});
                                         };
                                         setTimeout(retry, 1000);
                                         setTimeout(retry, 3000);
@@ -200,9 +191,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                             if (e.candidate) sendSignal(s.hostUsername, "ice-candidate", e.candidate.toJSON());
                         };
 
-                        pc.onconnectionstatechange = () => {
-                            console.log("[Live VIEWER] state:", pc.connectionState, "ice:", pc.iceConnectionState);
-                        };
+                        pc.onconnectionstatechange = () => {};
                     }
 
                     if (pc.signalingState === "stable") {
@@ -216,7 +205,6 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                         await viewerPcRef.current.addIceCandidate(new RTCIceCandidate(signal.data));
                     } catch {}
                 } else if (signal.type === "video-change") {
-                    console.log("[Live VIEWER] video-change received, refreshing stream");
                     playAttemptedRef.current = false;
                     remoteTracksRef.current.clear();
                     if (remoteVideoRef.current && remoteStreamRef.current) {
@@ -244,13 +232,10 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                     const stream = localStreamRef.current;
                     if (stream) {
                         const tracks = stream.getTracks();
-                        console.log("[Live HOST] Adding", tracks.length, "tracks:", tracks.map(t => t.kind + "/" + t.readyState));
                         tracks.forEach((track) => {
                             const sender = pc.addTrack(track, stream);
                             if (track.kind === "video") setMaxBitrate(sender);
                         });
-                    } else {
-                        console.warn("[Live HOST] NO localStream when handling request-offer from", viewer);
                     }
 
                     if (!pc.getSenders().some((s) => s.track?.kind === "video")) {
@@ -259,12 +244,10 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                             const sender = pc.addTrack(existingScreen, screenStreamRef.current);
                             videoSenderRef.current[viewer] = sender;
                             setMaxBitrate(sender);
-                            console.log("[Live HOST] Added active screen share track for", viewer);
                         } else {
                             const t = pc.addTransceiver("video", { direction: "sendonly" });
                             videoSenderRef.current[viewer] = t.sender;
                             setMaxBitrate(t.sender);
-                            console.log("[Live HOST] Added empty video transceiver for", viewer);
                         }
                     }
 
@@ -273,7 +256,6 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                     };
 
                     pc.onconnectionstatechange = () => {
-                        console.log("[Live HOST] state for", viewer, ":", pc.connectionState);
                         if (pc.connectionState === "failed" || pc.connectionState === "closed") {
                             try { pc.close(); } catch {}
                             delete pcsRef.current[viewer];
@@ -303,85 +285,58 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
         }
     };
 
-    const doPollAll = useCallback(async () => {
-        const s = stateRef.current;
-        if (!s.streamId || !s.user) return;
-        try {
-            const body = {
-                action: "poll",
-            };
-            if (lastSignalRef.current) body.since = lastSignalRef.current;
-            body.chatSince = lastChatRef.current || new Date(0).toISOString();
-
-            const data = await apiPost(body);
-            if (!data) return;
-
-            setViewers(data.viewers);
-
-            if (data.signals?.length) {
-                const last = data.signals[data.signals.length - 1];
-                lastSignalRef.current = last.createdAt;
-
-                for (const signal of data.signals) {
-                    await processSignal(signal);
-                }
-            }
-
-            if (data.messages?.length) {
-                const last = data.messages[data.messages.length - 1];
-                lastChatRef.current = last.createdAt;
-
-                setChatMessages((prev) => {
-                    const seen = new Set(prev.map((m) => `${m.username}-${m.createdAt}`));
-                    const fresh = data.messages.filter((m) => !seen.has(`${m.username}-${m.createdAt}`));
-                    return fresh.length ? [...prev, ...fresh] : prev;
-                });
-            }
-        } catch (err) {
-            console.error("[Live] poll error:", err);
+    const connectSocket = useCallback((sid, username) => {
+        if (socketRef.current) {
+            socketRef.current.disconnect();
+            socketRef.current = null;
         }
-    }, [apiPost]);
+        if (!LIVE_SERVER || !sid || !username) return null;
 
-    const sendChat = async () => {
-        if (!chatInput.trim() || !streamId) return;
-        const text = chatInput.trim();
-        const replyData = replyingTo
-            ? { username: replyingTo.username, text: replyingTo.text }
-            : null;
-        setChatInput("");
-        setReplyingTo(null);
-        const data = await apiPost({
-            action: "chat",
-            text,
-            color: user.color || user.avatarColor || "#3b82f6",
-            avatarUrl: user.avatarUrl || "",
-            replyTo: replyData,
+        const socket = io(LIVE_SERVER, {
+            transports: ["websocket", "polling"],
+            reconnection: true,
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000,
         });
-        if (data?.message) {
-            setChatMessages((prev) => [...prev, data.message]);
-            lastChatRef.current = data.message.createdAt;
-        }
-    };
 
-    const translateMessage = async (idx, text) => {
-        if (translations[idx]) {
-            setTranslations((prev) => { const n = { ...prev }; delete n[idx]; return n; });
-            return;
-        }
-        setTranslatingIdx(idx);
-        try {
-            const res = await fetch("/api/translate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text, target: "en" }),
-            });
-            const data = await res.json();
-            if (data.translatedText) {
-                setTranslations((prev) => ({ ...prev, [idx]: data.translatedText }));
+        socket.on("connect", () => {
+            socket.emit("join-stream", { streamId: sid, username });
+        });
+
+        socket.on("signal", async (signal) => {
+            if (mountedRef.current) {
+                await processSignal(signal);
             }
-        } catch {}
-        setTranslatingIdx(null);
-    };
+        });
+
+        socket.on("chat-message", (msg) => {
+            if (!mountedRef.current) return;
+            setChatMessages((prev) => {
+                const key = `${msg.username}-${msg.createdAt}`;
+                const seen = new Set(prev.map((m) => `${m.username}-${m.createdAt}`));
+                if (seen.has(key)) return prev;
+                return [...prev, msg];
+            });
+        });
+
+        socket.on("viewer-count", ({ count }) => {
+            if (mountedRef.current) setViewers(count);
+        });
+
+        socket.on("host-ended", () => {
+            if (mountedRef.current) {
+                stopAll();
+                onClose?.();
+            }
+        });
+
+        socket.on("error", ({ message }) => {
+            if (mountedRef.current) setError(message || "Connection error");
+        });
+
+        socketRef.current = socket;
+        return socket;
+    }, [onClose]);
 
     const stopAll = useCallback(() => {
         localStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -398,7 +353,10 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
         playAttemptedRef.current = false;
         setSharing(false);
         setCameraOff(true);
-        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        if (socketRef.current) {
+            socketRef.current.disconnect();
+            socketRef.current = null;
+        }
     }, []);
 
     const goLive = async (withCamera) => {
@@ -431,20 +389,30 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
             return;
         }
 
+        if (!LIVE_SERVER) {
+            setError("Live server not configured. Set NEXT_PUBLIC_LIVE_SERVER_URL.");
+            setLoading(false);
+            localStreamRef.current?.getTracks().forEach((t) => t.stop());
+            return;
+        }
+
         try {
-            const res = await fetch("/api/live", {
+            const res = await fetch(`${LIVE_SERVER}/api/streams`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: user?.username, title: "Live Stream" }),
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            if (!res.ok) throw new Error(data.error || "Failed to start stream");
 
-            setStreamId(data.streamId);
+            const sid = data.streamId;
+            setStreamId(sid);
             setIsHost(true);
             setStarted(true);
-            lastSignalRef.current = null;
-            lastChatRef.current = null;
+            stateRef.current.streamId = sid;
+            stateRef.current.isHost = true;
+
+            connectSocket(sid, user.username);
         } catch (e) {
             setError(e.message || "Failed to start stream");
             localStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -458,23 +426,62 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
         setStreamId(sid);
         setIsHost(false);
         setStarted(true);
-        lastSignalRef.current = null;
-        lastChatRef.current = null;
 
-        await apiPost({ action: "join" });
+        connectSocket(sid, user.username);
 
         setTimeout(() => {
-            sendSignal(hostUsername, "request-offer", { ts: Date.now() });
+            const sock = socketRef.current;
+            if (sock) {
+                sock.emit("signal", {
+                    streamId: sid,
+                    from: user.username,
+                    to: hostUsername,
+                    type: "request-offer",
+                    data: { ts: Date.now() },
+                });
+            }
         }, 500);
     };
 
-    const videoSenderRef = useRef({});
+    const sendChat = async () => {
+        if (!chatInput.trim() || !streamId) return;
+        const text = chatInput.trim();
+        const replyData = replyingTo
+            ? { username: replyingTo.username, text: replyingTo.text }
+            : null;
+        setChatInput("");
+        setReplyingTo(null);
+        const sock = socketRef.current;
+        if (sock) {
+            sock.emit("chat-message", {
+                streamId,
+                username: user.username,
+                color: user.color || user.avatarColor || "#3b82f6",
+                avatarUrl: user.avatarUrl || "",
+                text,
+                replyTo: replyData,
+            });
+        }
+    };
 
-    const findVideoSender = (pc, viewer) => {
-        if (viewer && videoSenderRef.current[viewer]) return videoSenderRef.current[viewer];
-        return pc.getSenders().find((s) => s.track?.kind === "video") ||
-            pc.getTransceivers().find((t) => t.receiver.track?.kind === "video")?.sender ||
-            pc.getTransceivers().find((t) => t.sender)?.sender;
+    const translateMessage = async (idx, text) => {
+        if (translations[idx]) {
+            setTranslations((prev) => { const n = { ...prev }; delete n[idx]; return n; });
+            return;
+        }
+        setTranslatingIdx(idx);
+        try {
+            const res = await fetch("/api/translate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text, target: "en" }),
+            });
+            const data = await res.json();
+            if (data.translatedText) {
+                setTranslations((prev) => ({ ...prev, [idx]: data.translatedText }));
+            }
+        } catch {}
+        setTranslatingIdx(null);
     };
 
     const toggleCamera = async () => {
@@ -541,7 +548,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
             Object.entries(pcsRef.current).forEach(([viewer, pc]) => {
                 const sender = findVideoSender(pc, viewer);
                 if (sender) sender.replaceTrack(vt || null);
-                const audioSender = pc.getSenders().find((s) => s.track?.kind === "audio" && s !== pc.getSenders()[0]);
+                const audioSender = pc.getSenders().find((s) => s.track?.kind === "audio");
                 if (audioSender) audioSender.replaceTrack(null);
             });
             if (localStreamRef.current) setLocalVideo(localStreamRef.current);
@@ -620,24 +627,20 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
     };
 
     const endStream = async () => {
-        if (isHost && streamId) {
-            await fetch(`/api/live/${streamId}`, {
+        const sock = socketRef.current;
+        const s = stateRef.current;
+        if (s.isHost && s.streamId && LIVE_SERVER) {
+            await fetch(`${LIVE_SERVER}/api/streams/${s.streamId}`, {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: user.username }),
+                body: JSON.stringify({ username: s.user?.username }),
             }).catch(() => {});
-        } else if (streamId) {
-            await apiPost({ action: "leave" }).catch(() => {});
+        } else if (s.streamId && sock) {
+            sock.emit("leave-stream", { streamId: s.streamId, username: s.user?.username });
         }
         stopAll();
         onClose?.();
     };
-
-    useEffect(() => {
-        if (!started || !streamId) return;
-        pollRef.current = setInterval(() => { doPollAll(); }, POLL_MS);
-        return () => { if (pollRef.current) clearInterval(pollRef.current); };
-    }, [started, streamId, doPollAll]);
 
     useEffect(() => () => stopAll(), [stopAll]);
 
@@ -728,7 +731,6 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
 
     return (
         <div ref={modalRootRef} className="fixed inset-0 z-50 bg-black flex flex-col" style={{ height: "100dvh" }}>
-            {/* ── Settings panel ──────────────────────────────────── */}
             {settingsOpen && (
                 <div className="absolute top-14 left-1/2 -translate-x-1/2 w-72 bg-gray-900/95 backdrop-blur-md border border-white/10 rounded-2xl p-4 z-50 shadow-2xl">
                     <div className="flex items-center justify-between mb-4">
@@ -773,7 +775,6 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                 </div>
             )}
 
-            {/* ── Top bar ─────────────────────────────────────────── */}
             <div className="flex items-center justify-between px-4 py-2 safe-top bg-black shrink-0 z-10">
                 <div className="flex items-center gap-2 min-w-0">
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
@@ -782,7 +783,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                     <button onClick={() => setSettingsOpen((v) => !v)} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
                     </button>
                     <button onClick={toggleFullscreen} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg>
@@ -790,9 +791,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                 </div>
             </div>
 
-            {/* ── Video + Chat area ───────────────────────────────── */}
             <div className="flex-1 flex min-h-0">
-                {/* Video container */}
                 <div className="flex-1 relative bg-black min-h-0 flex items-center justify-center">
                     {isHost ? (
                         hostHasVideo ? (
@@ -832,7 +831,6 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                         </div>
                     )}
 
-                    {/* Host name badge */}
                     <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5 fs-hide">
                         <div className="w-6 h-6 rounded-full bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
                             {hostUsername?.[0]?.toUpperCase()}
@@ -840,21 +838,18 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                         <span className="text-white text-xs font-medium">{hostUsername}</span>
                     </div>
 
-                    {/* PiP preview for host */}
                     {isHost && hostHasVideo && !isFullscreen && (
                         <div className="absolute bottom-4 right-3 w-20 h-28 sm:w-28 sm:h-36 rounded-xl overflow-hidden border-2 border-white/20 shadow-lg bg-black z-30">
                             <video ref={pipVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                         </div>
                     )}
 
-                    {/* Exit fullscreen button (visible only in fullscreen) */}
                     <button onClick={toggleFullscreen} className="fs-exit-btn hidden absolute bottom-4 left-1/2 -translate-x-1/2 items-center gap-2 px-4 py-2.5 bg-black/60 backdrop-blur-sm rounded-full text-white text-xs font-medium z-50">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25" /></svg>
                         Exit fullscreen
                     </button>
                 </div>
 
-                {/* Chat panel */}
                 <div className={`${chatOpen ? (isFullscreen ? "fs-chat-overlay" : "absolute inset-0 z-20") : "hidden"} sm:relative sm:block sm:z-auto sm:w-72 lg:w-80 bg-gray-950 sm:border-l border-white/10 flex flex-col shrink-0`}>
                     <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10 shrink-0">
                         <span className="text-white/70 text-xs font-semibold uppercase tracking-wider">Live Chat</span>
@@ -940,12 +935,10 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                 </div>
             </div>
 
-            {/* ── Bottom control bar (host) ────────────────────────── */}
             {isHost && (
                 <div className="shrink-0 bg-black border-t border-white/10 safe-bottom z-20">
                     {!isFullscreen ? (
                         <div className="flex items-center justify-between px-4 py-3">
-                            {/* Left: End button */}
                             <button onClick={endStream} className="px-4 py-2 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white text-sm font-semibold rounded-full transition-colors flex items-center gap-1.5 shrink-0">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z" />
@@ -953,7 +946,6 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                                 End
                             </button>
 
-                            {/* Center: Media controls */}
                             <div className="flex items-center gap-3">
                                 <button onClick={toggleMute} className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${muted ? "bg-white text-black" : "bg-white/15 text-white"}`}>
                                     {muted
@@ -976,7 +968,6 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                                 )}
                             </div>
 
-                            {/* Right: Chat toggle */}
                             <button onClick={() => setChatOpen((v) => !v)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white shrink-0">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
@@ -984,7 +975,6 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                             </button>
                         </div>
                     ) : (
-                        /* Fullscreen: compact floating bar */
                         <div className="flex items-center justify-center gap-2 px-3 py-2">
                             <button onClick={endStream} className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded-full transition-colors">
                                 End
@@ -1007,7 +997,6 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                 </div>
             )}
 
-            {/* ── Bottom control bar (viewer) ──────────────────────── */}
             {!isHost && (
                 <div className="shrink-0 bg-black border-t border-white/10 safe-bottom z-20">
                     <div className="flex items-center justify-between px-4 py-3">
@@ -1019,7 +1008,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                         </button>
                         <div className="flex items-center gap-2">
                             <button onClick={() => setSettingsOpen((v) => !v)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
                             </button>
                             <button onClick={() => setChatOpen((v) => !v)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
