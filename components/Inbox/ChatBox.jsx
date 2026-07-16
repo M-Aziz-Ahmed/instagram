@@ -11,6 +11,7 @@ import { useOnlineStatus, getLastSeenText } from "@/utils/useOnlineStatus";
 export default function ChatBox({ onBack, recipient, recipientUser }) {
     const { user, ready } = useUser();
     const [pendingMessage, setPendingMessage] = useState(null);
+    const [replyingTo, setReplyingTo]         = useState(null);
     const [editingProfile, setEditingProfile] = useState(false);
     const scrollContainerRef = useRef(null);
     const [isTyping, setIsTyping] = useState(false);
@@ -155,12 +156,12 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
 
             {/* ── Messages ────────────────────────────────────────────────── */}
             <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-4">
-                <Chat key={recipient} pendingMessage={pendingMessage} recipient={recipient} recipientUser={recipientUser} scrollContainerRef={scrollContainerRef} />
+                <Chat key={recipient} pendingMessage={pendingMessage} recipient={recipient} recipientUser={recipientUser} scrollContainerRef={scrollContainerRef} replyingTo={replyingTo} setReplyingTo={setReplyingTo} />
             </div>
 
             {/* ── Input ───────────────────────────────────────────────────── */}
             <div className="px-3 md:px-4 py-2.5 md:py-3 border-t border-gray-200 dark:border-gray-800 shrink-0">
-                <Input onMessageSent={(msg) => setPendingMessage(msg)} recipient={recipient} />
+                <Input onMessageSent={(msg) => setPendingMessage(msg)} recipient={recipient} replyingTo={replyingTo} setReplyingTo={setReplyingTo} />
             </div>
         </div>
     );

@@ -6,6 +6,7 @@ const messagesSchema = new mongoose.Schema({
     sender:    { type: String, required: true },   // username
     recipient: { type: String, required: true },   // username
     color:     { type: String, default: "#3b82f6" }, // avatar bg color
+    replyTo:   { type: { sender: String, text: String }, default: null },
     timeStamp: { type: Date, default: Date.now },
     isRead:    { type: Boolean, default: false },
     delivered: { type: Boolean, default: false },

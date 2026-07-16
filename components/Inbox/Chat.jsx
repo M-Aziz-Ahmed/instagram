@@ -69,7 +69,7 @@ function getMessageStatus(msg) {
     return "sent";
 }
 
-export default function Chat({ pendingMessage, recipient, recipientUser, scrollContainerRef }) {
+export default function Chat({ pendingMessage, recipient, recipientUser, scrollContainerRef, replyingTo, setReplyingTo }) {
     const { user } = useUser();
     const { showToast } = useToast();
     const [messages, setMessages]   = useState([]);
@@ -80,6 +80,8 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     const username                   = user?.username;
     const [lightboxSrc, setLightboxSrc] = useState(null);
     const [showScrollBtn, setShowScrollBtn] = useState(false);
+    const [translations, setTranslations] = useState({});
+    const [translatingIdx, setTranslatingIdx] = useState(null);
 
     const isNearBottom = useCallback(() => {
         const el = scrollContainerRef.current;
@@ -117,6 +119,26 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             showToast("Failed to recall message", "error");
         }
     }, [username, showToast]);
+
+    const translateMessage = async (idx, text) => {
+        if (translations[idx]) {
+            setTranslations((prev) => { const n = { ...prev }; delete n[idx]; return n; });
+            return;
+        }
+        setTranslatingIdx(idx);
+        try {
+            const res = await fetch("/api/translate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text, target: "en" }),
+            });
+            const data = await res.json();
+            if (data.translatedText) {
+                setTranslations((prev) => ({ ...prev, [idx]: data.translatedText }));
+            }
+        } catch {}
+        setTranslatingIdx(null);
+    };
 
     const [hasMore, setHasMore] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -494,6 +516,18 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                         )}
                                     </div>
                                 )}
+
+                                {msg.replyTo && (
+                                    <div className={`mb-1 px-3 py-1.5 rounded-2xl text-xs border-l-3 ${
+                                        isMine
+                                            ? "bg-blue-600/30 border-blue-300 text-blue-100"
+                                            : "bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-500 text-gray-600 dark:text-gray-300"
+                                    }`}>
+                                        <p className="font-semibold text-[10px] truncate">{msg.replyTo.sender}</p>
+                                        <p className="truncate opacity-70">{msg.replyTo.text}</p>
+                                    </div>
+                                )}
+
                                 <div
                                     className={`overflow-hidden ${rounding} ${
                                         isMine
@@ -523,23 +557,67 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                         </div>
                                     )}
                                 </div>
-                                {isMine && (
-                                    <div className="flex items-center justify-end gap-0.5 mt-0.5 mr-1">
+
+                                {translations[msg._id] && (
+                                    <div className={`mt-0.5 px-3 py-1.5 rounded-2xl text-xs italic ${
+                                        isMine
+                                            ? "bg-blue-600/20 text-blue-100"
+                                            : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                                    }`}>
+                                        {translations[msg._id]}
+                                    </div>
+                                )}
+
+                                <div className={`flex items-center gap-1 mt-0.5 ${isMine ? "justify-end mr-1" : "justify-start ml-1"}`}>
+                                    <button
+                                        onClick={() => setReplyingTo(msg)}
+                                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors opacity-60 hover:opacity-100"
+                                        title="Reply">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+                                        </svg>
+                                    </button>
+                                    {msg.text && (
+                                        <button
+                                            onClick={() => translateMessage(msg._id, msg.text)}
+                                            className={`p-1 rounded-full transition-colors ${
+                                                translations[msg._id]
+                                                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-500 opacity-100"
+                                                    : "hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 opacity-60 hover:opacity-100"
+                                            }`}
+                                            title={translations[msg._id] ? "Hide translation" : "Translate"}>
+                                            {translatingIdx === msg._id ? (
+                                                <div className="w-3.5 h-3.5 border-2 border-gray-300 dark:border-gray-600 border-t-gray-600 dark:border-t-gray-300 rounded-full animate-spin" />
+                                            ) : (
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="m10.5 21 5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802" />
+                                                </svg>
+                                            )}
+                                        </button>
+                                    )}
+                                    {isMine && (
+                                        <>
+                                            <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                                                {new Date(msg.timeStamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                            </span>
+                                            <TickIcon status={tickStatus} />
+                                            {canRecall(msg) && (
+                                                <button
+                                                    onClick={() => handleRecall(msg)}
+                                                    className="ml-1 text-[10px] text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors font-medium"
+                                                    title="Recall message"
+                                                >
+                                                    Recall
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
+                                    {!isMine && (
                                         <span className="text-[10px] text-gray-400 dark:text-gray-500">
                                             {new Date(msg.timeStamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                         </span>
-                                        <TickIcon status={tickStatus} />
-                                        {canRecall(msg) && (
-                                            <button
-                                                onClick={() => handleRecall(msg)}
-                                                className="ml-1 text-[10px] text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors font-medium"
-                                                title="Recall message"
-                                            >
-                                                Recall
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>

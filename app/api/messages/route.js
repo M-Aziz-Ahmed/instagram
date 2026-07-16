@@ -103,7 +103,7 @@ export async function GET(request) {
 
 export async function POST(request) {
     try {
-        const { text, imageUrl, sender, recipient, color } = await request.json();
+        const { text, imageUrl, sender, recipient, color, replyTo } = await request.json();
 
         if (!sender?.trim())   return Response.json({ error: "Sender is required" }, { status: 400 });
         if (!recipient?.trim()) return Response.json({ error: "Recipient is required" }, { status: 400 });
@@ -116,6 +116,7 @@ export async function POST(request) {
             sender:    sender.trim(),
             recipient: recipient.trim(),
             color:     color || "#3b82f6",
+            replyTo:   (replyTo && replyTo.sender && replyTo.text) ? { sender: replyTo.sender, text: String(replyTo.text).slice(0, 500) } : null,
         });
 
         const preview = text?.trim() ? text.trim().slice(0, 120) : "📷 Image";

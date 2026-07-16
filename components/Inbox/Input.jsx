@@ -6,7 +6,7 @@ import { useUser } from "@/context/UserContext";
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
-export default function Input({ onMessageSent, recipient }) {
+export default function Input({ onMessageSent, recipient, replyingTo, setReplyingTo }) {
     const { user } = useUser();
     const [text, setText]           = useState("");
     const [sending, setSending]     = useState(false);
@@ -100,8 +100,12 @@ export default function Input({ onMessageSent, recipient }) {
 
         const snapshotText = text.trim();
         const snapshotImage = imagePreview;
+        const snapshotReply = replyingTo
+            ? { sender: replyingTo.sender, text: replyingTo.text }
+            : null;
         setText("");
         setImagePreview(null);
+        setReplyingTo(null);
         setSending(true);
 
         if (user && recipient) {
@@ -128,6 +132,7 @@ export default function Input({ onMessageSent, recipient }) {
                 sender: user.username,
                 recipient,
                 color: user.color,
+                replyTo: snapshotReply,
                 timeStamp: new Date().toISOString(),
                 isRead: false,
                 delivered: false,
@@ -145,6 +150,7 @@ export default function Input({ onMessageSent, recipient }) {
                     sender: user.username,
                     recipient,
                     color: user.color,
+                    replyTo: snapshotReply,
                 }),
             });
             if (!res.ok) throw new Error("Send failed");
@@ -154,6 +160,7 @@ export default function Input({ onMessageSent, recipient }) {
             console.error("Failed to send:", err);
             setText(snapshotText);
             setImagePreview(snapshotImage);
+            if (snapshotReply) setReplyingTo({ sender: snapshotReply.sender, text: snapshotReply.text });
             if (onMessageSent) onMessageSent({ _tempId: tempId, _remove: true });
         } finally {
             setSending(false);
@@ -185,6 +192,21 @@ export default function Input({ onMessageSent, recipient }) {
                             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* Reply preview */}
+            {replyingTo && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl border-l-3 border-blue-500">
+                    <div className="flex-1 min-w-0">
+                        <p className="text-[10px] text-blue-500 dark:text-blue-400 font-semibold">Replying to {replyingTo.sender}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{replyingTo.text}</p>
+                    </div>
+                    <button onClick={() => setReplyingTo(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
             )}
 
