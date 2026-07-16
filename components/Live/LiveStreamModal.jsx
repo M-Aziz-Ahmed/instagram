@@ -745,12 +745,12 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                     </button>
 
                     {isHost && hostHasVideo && !isFullscreen && (
-                        <div className="absolute bottom-16 sm:bottom-4 right-3 w-20 h-28 sm:w-28 sm:h-36 rounded-xl overflow-hidden border-2 border-white/20 shadow-lg bg-black">
+                        <div className="absolute bottom-24 sm:bottom-4 right-3 w-20 h-28 sm:w-28 sm:h-36 rounded-xl overflow-hidden border-2 border-white/20 shadow-lg bg-black z-30">
                             <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                         </div>
                     )}
 
-                    <button onClick={() => setChatOpen((v) => !v)} className="sm:hidden absolute bottom-4 right-3 w-10 h-10 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center text-white z-30 fs-hide">
+                    <button onClick={() => setChatOpen((v) => !v)} className="sm:hidden absolute bottom-20 right-3 w-10 h-10 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center text-white z-30 fs-hide">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
                         </svg>
@@ -850,7 +850,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             </div>
 
             {isHost && !isFullscreen && (
-                <div className="flex items-center justify-center gap-3 px-4 py-3 safe-bottom bg-black shrink-0 z-10">
+                <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-3 px-4 pb-5 pt-3 bg-gradient-to-t from-black via-black/80 to-transparent z-40">
                     <button onClick={toggleMute} className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${muted ? "bg-white text-black" : "bg-white/15 text-white"}`}>
                         {muted
                             ? <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M3 3 21 21" /></svg>
