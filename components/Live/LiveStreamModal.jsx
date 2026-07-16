@@ -156,12 +156,18 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                     }
 
                     if (!pc.getSenders().some((s) => s.track?.kind === "video")) {
-                        const c = document.createElement("canvas");
-                        c.width = 2; c.height = 2;
-                        c.getContext("2d").fillStyle = "#000"; c.getContext("2d").fillRect(0, 0, 2, 2);
-                        const ph = c.captureStream(0).getVideoTracks()[0];
-                        pc.addTrack(ph, new MediaStream([ph]));
-                        console.log("[Live HOST] Added placeholder video sender for", viewer);
+                        const existingScreen = screenStreamRef.current?.getVideoTracks()?.[0];
+                        if (existingScreen && existingScreen.readyState === "live") {
+                            pc.addTrack(existingScreen, screenStreamRef.current);
+                            console.log("[Live HOST] Added active screen share track for", viewer);
+                        } else {
+                            const c = document.createElement("canvas");
+                            c.width = 2; c.height = 2;
+                            c.getContext("2d").fillStyle = "#000"; c.getContext("2d").fillRect(0, 0, 2, 2);
+                            const ph = c.captureStream(1).getVideoTracks()[0];
+                            pc.addTrack(ph, new MediaStream([ph]));
+                            console.log("[Live HOST] Added placeholder video sender for", viewer);
+                        }
                     }
 
                     pc.onicecandidate = (e) => {
@@ -263,12 +269,16 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
 
     const stopAll = useCallback(() => {
         localStreamRef.current?.getTracks().forEach((t) => t.stop());
+        localStreamRef.current = null;
         screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+        screenStreamRef.current = null;
         Object.values(pcsRef.current).forEach((pc) => { try { pc.close(); } catch {} });
         pcsRef.current = {};
         viewerPcRef.current?.close();
         viewerPcRef.current = null;
         remoteStreamRef.current = null;
+        setSharing(false);
+        setCameraOff(true);
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     }, []);
 
@@ -369,6 +379,9 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             screenStreamRef.current = null;
             setSharing(false);
             const vt = localStreamRef.current?.getVideoTracks()[0];
+            Object.keys(pcsRef.current).forEach((viewer) => {
+                sendSignal(viewer, "video-change", { active: false });
+            });
             Object.values(pcsRef.current).forEach((pc) => {
                 const sender = findVideoSender(pc);
                 if (sender) sender.replaceTrack(vt || null);
@@ -385,8 +398,10 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                 sendSignal(viewer, "video-change", { active: true });
             });
             st.onended = () => {
-                setSharing(false);
-                screenStreamRef.current = null;
+                if (screenStreamRef.current === screen) {
+                    setSharing(false);
+                    screenStreamRef.current = null;
+                }
                 const vt = localStreamRef.current?.getVideoTracks()[0];
                 Object.values(pcsRef.current).forEach((pc) => {
                     const sender = findVideoSender(pc);
