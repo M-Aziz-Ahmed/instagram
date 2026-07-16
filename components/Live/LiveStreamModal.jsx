@@ -101,7 +101,6 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                                 if (p) p.then(() => {
                                     console.log("[Live VIEWER] autoplay succeeded");
                                     setViewerReady(true);
-                                    remoteVideoRef.current.muted = false;
                                 }).catch((err) => {
                                     console.log("[Live VIEWER] autoplay blocked, waiting for tap:", err?.message);
                                 });
