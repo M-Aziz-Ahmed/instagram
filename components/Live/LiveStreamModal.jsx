@@ -64,6 +64,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const [chatMessages, setChatMessages]   = useState([]);
     const [chatInput, setChatInput]         = useState("");
     const [chatOpen, setChatOpen]           = useState(false);
+    const [replyingTo, setReplyingTo]       = useState(null);
     const [translations, setTranslations]   = useState({});
     const [translatingIdx, setTranslatingIdx] = useState(null);
     const [isFullscreen, setIsFullscreen]   = useState(false);
@@ -298,12 +299,17 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
     const sendChat = async () => {
         if (!chatInput.trim() || !streamId) return;
         const text = chatInput.trim();
+        const replyData = replyingTo
+            ? { username: replyingTo.username, text: replyingTo.text }
+            : null;
         setChatInput("");
+        setReplyingTo(null);
         const data = await apiPost({
             action: "chat",
             text,
             color: user.color || user.avatarColor || "#3b82f6",
             avatarUrl: user.avatarUrl || "",
+            replyTo: replyData,
         });
         if (data?.message) {
             setChatMessages((prev) => [...prev, data.message]);
@@ -791,7 +797,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
 
                                 <div className="flex items-start gap-1 shrink-0 mt-0.5">
                                     <button
-                                        onClick={() => setChatInput(`@${msg.username} `)}
+                                        onClick={() => setReplyingTo(msg)}
                                         className="p-1.5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"
                                         title="Reply">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
@@ -815,8 +821,23 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                         ))}
                     </div>
 
+                    {replyingTo && (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-white/5 border-t border-white/10 shrink-0">
+                            <div className="flex-1 min-w-0 border-l-2 border-blue-500 pl-2">
+                                <p className="text-[10px] text-blue-400 font-medium">Replying to @{replyingTo.username}</p>
+                                <p className="text-[10px] text-white/40 truncate">{replyingTo.text}</p>
+                            </div>
+                            <button onClick={() => setReplyingTo(null)} className="text-white/40 hover:text-white p-1 shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    )}
+
                     <form onSubmit={(e) => { e.preventDefault(); sendChat(); }} className="flex gap-2 px-3 py-2.5 border-t border-white/10 shrink-0">
-                        <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Send a message..."
+                        <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)}
+                            placeholder={replyingTo ? `Reply to @${replyingTo.username}...` : "Send a message..."}
                             className="flex-1 bg-white/10 text-white text-sm rounded-full px-4 py-2.5 outline-none placeholder-white/30 focus:bg-white/15 transition-colors min-w-0" />
                         <button type="submit" disabled={!chatInput.trim()}
                             className="w-10 h-10 rounded-full bg-blue-500 hover:bg-blue-600 disabled:opacity-30 text-white flex items-center justify-center shrink-0">
