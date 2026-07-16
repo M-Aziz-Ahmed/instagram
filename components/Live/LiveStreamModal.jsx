@@ -141,6 +141,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                     if (pcsRef.current[viewer]) {
                         try { pcsRef.current[viewer].close(); } catch {}
                         delete pcsRef.current[viewer];
+                        delete videoSenderRef.current[viewer];
                     }
 
                     const pc = new RTCPeerConnection(ICE_SERVERS);
@@ -158,15 +159,13 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                     if (!pc.getSenders().some((s) => s.track?.kind === "video")) {
                         const existingScreen = screenStreamRef.current?.getVideoTracks()?.[0];
                         if (existingScreen && existingScreen.readyState === "live") {
-                            pc.addTrack(existingScreen, screenStreamRef.current);
+                            const sender = pc.addTrack(existingScreen, screenStreamRef.current);
+                            videoSenderRef.current[viewer] = sender;
                             console.log("[Live HOST] Added active screen share track for", viewer);
                         } else {
-                            const c = document.createElement("canvas");
-                            c.width = 2; c.height = 2;
-                            c.getContext("2d").fillStyle = "#000"; c.getContext("2d").fillRect(0, 0, 2, 2);
-                            const ph = c.captureStream(1).getVideoTracks()[0];
-                            pc.addTrack(ph, new MediaStream([ph]));
-                            console.log("[Live HOST] Added placeholder video sender for", viewer);
+                            const t = pc.addTransceiver("video", { direction: "sendonly" });
+                            videoSenderRef.current[viewer] = t.sender;
+                            console.log("[Live HOST] Added empty video transceiver for", viewer);
                         }
                     }
 
@@ -179,6 +178,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                         if (pc.connectionState === "failed" || pc.connectionState === "closed") {
                             try { pc.close(); } catch {}
                             delete pcsRef.current[viewer];
+                            delete videoSenderRef.current[viewer];
                         }
                     };
 
@@ -274,6 +274,7 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
         screenStreamRef.current = null;
         Object.values(pcsRef.current).forEach((pc) => { try { pc.close(); } catch {} });
         pcsRef.current = {};
+        videoSenderRef.current = {};
         viewerPcRef.current?.close();
         viewerPcRef.current = null;
         remoteStreamRef.current = null;
@@ -330,9 +331,13 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
         }, 500);
     };
 
-    const findVideoSender = (pc) => {
+    const videoSenderRef = useRef({});
+
+    const findVideoSender = (pc, viewer) => {
+        if (viewer && videoSenderRef.current[viewer]) return videoSenderRef.current[viewer];
         return pc.getSenders().find((s) => s.track?.kind === "video") ||
-            pc.getTransceivers().find((t) => t.receiver.track?.kind === "video")?.sender;
+            pc.getTransceivers().find((t) => t.receiver.track?.kind === "video")?.sender ||
+            pc.getTransceivers().find((t) => t.sender)?.sender;
     };
 
     const toggleCamera = async () => {
@@ -344,8 +349,8 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                 localStreamRef.current = remaining.length ? new MediaStream(remaining) : null;
             }
             setCameraOff(true);
-            Object.values(pcsRef.current).forEach((pc) => {
-                const sender = findVideoSender(pc);
+            Object.entries(pcsRef.current).forEach(([viewer, pc]) => {
+                const sender = findVideoSender(pc, viewer);
                 if (sender) sender.replaceTrack(null);
             });
             return;
@@ -360,8 +365,8 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             }
             setCameraOff(false);
             if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
-            Object.values(pcsRef.current).forEach((pc) => {
-                const sender = findVideoSender(pc);
+            Object.entries(pcsRef.current).forEach(([viewer, pc]) => {
+                const sender = findVideoSender(pc, viewer);
                 if (sender) sender.replaceTrack(vt);
             });
         } catch {}
@@ -382,8 +387,8 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
             Object.keys(pcsRef.current).forEach((viewer) => {
                 sendSignal(viewer, "video-change", { active: false });
             });
-            Object.values(pcsRef.current).forEach((pc) => {
-                const sender = findVideoSender(pc);
+            Object.entries(pcsRef.current).forEach(([viewer, pc]) => {
+                const sender = findVideoSender(pc, viewer);
                 if (sender) sender.replaceTrack(vt || null);
             });
             if (localVideoRef.current && localStreamRef.current) localVideoRef.current.srcObject = localStreamRef.current;
@@ -403,14 +408,14 @@ function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose }) {
                     screenStreamRef.current = null;
                 }
                 const vt = localStreamRef.current?.getVideoTracks()[0];
-                Object.values(pcsRef.current).forEach((pc) => {
-                    const sender = findVideoSender(pc);
+                Object.entries(pcsRef.current).forEach(([viewer, pc]) => {
+                    const sender = findVideoSender(pc, viewer);
                     if (sender) sender.replaceTrack(vt || null);
                 });
                 if (localVideoRef.current && localStreamRef.current) localVideoRef.current.srcObject = localStreamRef.current;
             };
-            Object.values(pcsRef.current).forEach((pc) => {
-                const sender = findVideoSender(pc);
+            Object.entries(pcsRef.current).forEach(([viewer, pc]) => {
+                const sender = findVideoSender(pc, viewer);
                 if (sender) sender.replaceTrack(st);
             });
             if (localVideoRef.current) localVideoRef.current.srcObject = screen;
