@@ -14,6 +14,7 @@ export default function EditProfileModal({ onClose }) {
     const [color, setColor]         = useState(user?.avatarColor ?? AVATAR_COLORS[0]);
     const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl ?? "");
     const [lang, setLang]           = useState(user?.language ?? "en");
+    const [autoTranslate, setAutoTranslate] = useState(user?.autoTranslate ?? false);
     const [saving, setSaving]       = useState(false);
     const [uploading, setUploading] = useState(false);
     const [error, setError]         = useState("");
@@ -49,7 +50,7 @@ export default function EditProfileModal({ onClose }) {
             const res = await fetch("/api/auth/profile", {
                 method:  "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body:    JSON.stringify({ bio: bio.trim(), avatarColor: color, avatarUrl, language: lang }),
+                body:    JSON.stringify({ bio: bio.trim(), avatarColor: color, avatarUrl, language: lang, autoTranslate }),
             });
             const data = await res.json();
             if (!res.ok) { setError(data.error); return; }
@@ -196,6 +197,17 @@ export default function EditProfileModal({ onClose }) {
                             <option value="da">Dansk</option>
                             <option value="hu">Magyar</option>
                         </select>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Auto-translate</label>
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">Translate messages & posts automatically</p>
+                        </div>
+                        <button type="button" onClick={() => setAutoTranslate((v) => !v)}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${autoTranslate ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-600"}`}>
+                            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${autoTranslate ? "translate-x-5.5" : "translate-x-0.5"}`} />
+                        </button>
                     </div>
 
                     {error && <p className="text-xs text-red-500">{error}</p>}

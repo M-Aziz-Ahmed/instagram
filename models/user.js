@@ -17,6 +17,7 @@ const userSchema = new mongoose.Schema({
     closeFriends: [{ type: String, default: [] }],
     mutedWords:   [{ type: String, default: [] }],
     language:     { type: String, default: "en" },
+    autoTranslate: { type: Boolean, default: false },
     lastActive:   { type: Date, default: Date.now },
     isOnline:     { type: Boolean, default: false },
     createdAt:   { type: Date, default: Date.now },

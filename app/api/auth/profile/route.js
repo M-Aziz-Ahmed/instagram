@@ -7,7 +7,7 @@ export async function PATCH(request) {
         const session = await getSession();
         if (!session?.userId) return Response.json({ error: "Not authenticated" }, { status: 401 });
 
-        const { bio, avatarColor, avatarUrl, language } = await request.json();
+        const { bio, avatarColor, avatarUrl, language, autoTranslate } = await request.json();
         await connectDB();
 
         const update = {
@@ -16,6 +16,7 @@ export async function PATCH(request) {
         };
         if (avatarUrl !== undefined) update.avatarUrl = avatarUrl;
         if (language) update.language = language;
+        if (autoTranslate !== undefined) update.autoTranslate = autoTranslate;
 
         const user = await User.findByIdAndUpdate(session.userId, update, { new: true })
             .populate("roles").lean();
@@ -28,6 +29,7 @@ export async function PATCH(request) {
                 isVerified: user.isVerified || false, isAdmin: user.isAdmin || false,
                 roles: (user.roles || []).map((r) => ({ id: r._id.toString(), name: r.name, badge: r.badge, color: r.color })),
                 language: user.language || "en",
+                autoTranslate: user.autoTranslate || false,
                 needsSetup: false,
             },
         });

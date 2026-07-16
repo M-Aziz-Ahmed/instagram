@@ -93,6 +93,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     const [translations, setTranslations] = useState({});
     const [translatingIdx, setTranslatingIdx] = useState(null);
+    const autoTranslatingRef = useRef(new Set());
 
     const isNearBottom = useCallback(() => {
         const el = scrollContainerRef.current;
@@ -150,6 +151,26 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         } catch {}
         setTranslatingIdx(null);
     };
+
+    useEffect(() => {
+        if (!user?.autoTranslate || !username) return;
+        messages.forEach((msg) => {
+            if (msg.sender === username) return;
+            if (!msg.text) return;
+            if (translations[msg._id]) return;
+            if (autoTranslatingRef.current.has(msg._id)) return;
+            autoTranslatingRef.current.add(msg._id);
+            fetch("/api/translate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: msg.text, target: user?.language || "en" }),
+            }).then((r) => r.json()).then((data) => {
+                if (data.translatedText && data.translatedText !== msg.text) {
+                    setTranslations((prev) => ({ ...prev, [msg._id]: data.translatedText }));
+                }
+            }).catch(() => {});
+        });
+    }, [messages, user?.autoTranslate, user?.language, username]);
 
     const [hasMore, setHasMore] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);

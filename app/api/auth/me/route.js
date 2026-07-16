@@ -49,6 +49,7 @@ export async function GET(request) {
                 following:   user.following || [],
                 followers:   user.followers || [],
                 language:    user.language || "en",
+                autoTranslate: user.autoTranslate || false,
                 needsSetup: !user.username,
             },
         };

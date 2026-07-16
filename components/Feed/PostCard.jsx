@@ -258,6 +258,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
     const [reacting, setReacting]             = useState(false);
     const [translations, setTranslations]   = useState({});
     const [translatingIdx, setTranslatingIdx] = useState(null);
+    const autoTranslatedRef = useRef(false);
     const hasTrackedView = useRef(false);
     const lastTapRef = useRef(0);
     const singleTapTimer = useRef(null);
@@ -319,6 +320,21 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag }) {
         } catch {}
         setTranslatingIdx(null);
     };
+
+    useEffect(() => {
+        if (!user?.autoTranslate || !post.text || user?.username === post.sender) return;
+        if (autoTranslatedRef.current || translations[post._id]) return;
+        autoTranslatedRef.current = true;
+        fetch("/api/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: post.text, target: user?.language || "en" }),
+        }).then((r) => r.json()).then((data) => {
+            if (data.translatedText && data.translatedText !== post.text) {
+                setTranslations((prev) => ({ ...prev, [post._id]: data.translatedText }));
+            }
+        }).catch(() => {});
+    }, [post._id, post.text, post.sender, user?.autoTranslate, user?.language]);
 
     const handleLike = async () => {
         if (!user || liking) return;
