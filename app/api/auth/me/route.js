@@ -51,6 +51,7 @@ export async function GET(request) {
                 language:    user.language || "en",
                 autoTranslate: user.autoTranslate || false,
                 liveStreamAllowed: user.liveStreamAllowed || false,
+                voiceChatBanned: user.voiceChatBanned || false,
                 needsSetup: !user.username,
             },
         };

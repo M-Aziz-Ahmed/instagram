@@ -158,6 +158,11 @@ const DEFAULT_CHANNELS = [
 const voiceChannels = new Map();
 DEFAULT_CHANNELS.forEach((ch) => voiceChannels.set(ch.id, { ...ch, participants: new Map() }));
 
+// In-memory admin-muted users per channel: { channelId -> Set<username> }
+const channelMutedUsers = new Map();
+
+let channelCounter = 100;
+
 function getChannelState(channelId) {
     const ch = voiceChannels.get(channelId);
     if (!ch) return null;
@@ -171,6 +176,7 @@ function getChannelState(channelId) {
             muted: p.muted,
             deafened: p.deafened,
             speaking: p.speaking,
+            isAdmin: p.isAdmin || false,
         })),
     };
 }
@@ -194,8 +200,45 @@ function broadcastChannelParticipants(channelId) {
     }
 }
 
-io.on("connection", (socket) => {
-    console.log(`[WS] Connected: ${socket.id}`);
+async function isUserAdmin(username) {
+    try {
+        const usersCol = mongoose.connection.db.collection("users");
+        const user = await usersCol.findOne({ username }, { projection: { isAdmin: 1 } });
+        return user?.isAdmin === true;
+    } catch { return false; }
+}
+
+async function isUserBanned(username) {
+    try {
+        const usersCol = mongoose.connection.db.collection("users");
+        const user = await usersCol.findOne(
+            { username },
+            { projection: { voiceChatBanned: 1, voiceChatBannedUntil: 1 } }
+        );
+        if (!user) return false;
+        if (user.voiceChatBanned) {
+            if (user.voiceChatBannedUntil && new Date(user.voiceChatBannedUntil) > new Date()) {
+                return true;
+            } else if (!user.voiceChatBannedUntil) {
+                return true;
+            }
+            // Ban expired, auto-unban
+            if (user.voiceChatBannedUntil && new Date(user.voiceChatBannedUntil) <= new Date()) {
+                await usersCol.updateOne({ username }, {
+                    $set: { voiceChatBanned: false, voiceChatBannedUntil: null, voiceChatBannedReason: "" }
+                });
+                return false;
+            }
+        }
+        return false;
+    } catch { return false; }
+}
+
+io.on("connection", async (socket) => {
+    const username = socket.handshake?.query?.username;
+    const isAdmin = username ? await isUserAdmin(username) : false;
+    socket.data = { ...socket.data, username, isAdmin };
+    console.log(`[WS] Connected: ${socket.id} (admin=${isAdmin})`);
 
     socket.on("join-stream", async ({ streamId, username }) => {
         socket.join(`stream:${streamId}`);
@@ -296,9 +339,18 @@ io.on("connection", (socket) => {
         socket.emit("voice:channels", getAllChannelsState());
     });
 
-    socket.on("voice:join", ({ channelId, username, avatarUrl, color }) => {
+    socket.on("voice:join", async ({ channelId, username, avatarUrl, color }) => {
         const ch = voiceChannels.get(channelId);
         if (!ch) return socket.emit("voice:error", { message: "Channel not found" });
+
+        // Check if user is banned
+        if (await isUserBanned(username)) {
+            return socket.emit("voice:error", { message: "You are banned from voice chat." });
+        }
+
+        // Check if user is muted in this channel
+        const mutedSet = channelMutedUsers.get(channelId);
+        const isMutedByAdmin = mutedSet?.has(username);
 
         // Leave any current channel first
         if (socket.data?.voiceChannel) {
@@ -315,10 +367,11 @@ io.on("connection", (socket) => {
             username,
             avatarUrl: avatarUrl || "",
             color: color || "#3b82f6",
-            muted: false,
+            muted: isMutedByAdmin || false,
             deafened: false,
             speaking: false,
             socketId: socket.id,
+            isAdmin: socket.data.isAdmin || false,
         });
 
         socket.data.voiceChannel = channelId;
@@ -331,6 +384,11 @@ io.on("connection", (socket) => {
         // Broadcast updated participant list to everyone in the channel
         broadcastChannelParticipants(channelId);
         broadcastChannelList();
+
+        // If muted by admin, notify the user
+        if (isMutedByAdmin) {
+            socket.emit("voice:admin-muted", { muted: true });
+        }
 
         console.log(`[VOICE] ${username} joined channel ${channelId} (${ch.participants.size} users)`);
     });
@@ -390,6 +448,197 @@ io.on("connection", (socket) => {
     // WebRTC signaling for voice (peer-to-peer mesh)
     socket.on("voice:signal", ({ to, from, type, data }) => {
         io.to(to).emit("voice:signal", { from, type, data });
+    });
+
+    // ── Voice Channel Admin Events ──────────────────────────────
+
+    socket.on("voice:create-channel", async ({ name }) => {
+        if (!socket.data.isAdmin) return socket.emit("voice:error", { message: "Admin only" });
+        if (!name?.trim()) return socket.emit("voice:error", { message: "Channel name required" });
+
+        const id = `ch-${++channelCounter}`;
+        voiceChannels.set(id, { id, name: name.trim(), participants: new Map() });
+        broadcastChannelList();
+        console.log(`[VOICE] Admin ${socket.data.username} created channel: ${name}`);
+    });
+
+    socket.on("voice:delete-channel", async ({ channelId }) => {
+        if (!socket.data.isAdmin) return socket.emit("voice:error", { message: "Admin only" });
+        const ch = voiceChannels.get(channelId);
+        if (!ch) return;
+
+        // Kick all participants
+        ch.participants.forEach((p, socketId) => {
+            const s = io.sockets.sockets.get(socketId);
+            if (s) {
+                s.leave(`voice:${channelId}`);
+                s.data.voiceChannel = null;
+                s.emit("voice:kicked", { reason: "Channel deleted" });
+            }
+        });
+        ch.participants.clear();
+        voiceChannels.delete(channelId);
+        channelMutedUsers.delete(channelId);
+        broadcastChannelList();
+        console.log(`[VOICE] Admin ${socket.data.username} deleted channel: ${channelId}`);
+    });
+
+    socket.on("voice:admin-kick", async ({ channelId, targetUsername }) => {
+        if (!socket.data.isAdmin) return socket.emit("voice:error", { message: "Admin only" });
+        const ch = voiceChannels.get(channelId);
+        if (!ch) return;
+
+        ch.participants.forEach((p, socketId) => {
+            if (p.username === targetUsername) {
+                const s = io.sockets.sockets.get(socketId);
+                if (s) {
+                    s.leave(`voice:${channelId}`);
+                    s.data.voiceChannel = null;
+                    s.emit("voice:kicked", { reason: "Kicked by admin" });
+                }
+                ch.participants.delete(socketId);
+            }
+        });
+
+        broadcastChannelParticipants(channelId);
+        broadcastChannelList();
+        console.log(`[VOICE] Admin ${socket.data.username} kicked ${targetUsername} from ${channelId}`);
+    });
+
+    socket.on("voice:admin-mute", async ({ channelId, targetUsername, muted }) => {
+        if (!socket.data.isAdmin) return socket.emit("voice:error", { message: "Admin only" });
+        const ch = voiceChannels.get(channelId);
+        if (!ch) return;
+
+        if (!channelMutedUsers.has(channelId)) channelMutedUsers.set(channelId, new Set());
+        const mutedSet = channelMutedUsers.get(channelId);
+
+        if (muted) {
+            mutedSet.add(targetUsername);
+        } else {
+            mutedSet.delete(targetUsername);
+        }
+
+        // Find participant and update
+        ch.participants.forEach((p, socketId) => {
+            if (p.username === targetUsername) {
+                p.muted = muted;
+                if (muted) p.speaking = false;
+                const s = io.sockets.sockets.get(socketId);
+                if (s) s.emit("voice:admin-muted", { muted });
+            }
+        });
+
+        broadcastChannelParticipants(channelId);
+        console.log(`[VOICE] Admin ${socket.data.username} ${muted ? "muted" : "unmuted"} ${targetUsername} in ${channelId}`);
+    });
+
+    socket.on("voice:admin-timeout", async ({ channelId, targetUsername, duration }) => {
+        if (!socket.data.isAdmin) return socket.emit("voice:error", { message: "Admin only" });
+        const ch = voiceChannels.get(channelId);
+        if (!ch) return;
+
+        const until = new Date(Date.now() + (duration || 300) * 1000); // default 5 min
+
+        try {
+            const usersCol = mongoose.connection.db.collection("users");
+            await usersCol.updateOne(
+                { username: targetUsername },
+                { $set: { voiceChatBanned: true, voiceChatBannedUntil: until, voiceChatBannedReason: `Timeout by ${socket.data.username}` } }
+            );
+        } catch (err) {
+            console.error("[VOICE] Timeout DB error:", err.message);
+        }
+
+        // Kick them from the channel
+        ch.participants.forEach((p, socketId) => {
+            if (p.username === targetUsername) {
+                const s = io.sockets.sockets.get(socketId);
+                if (s) {
+                    s.leave(`voice:${channelId}`);
+                    s.data.voiceChannel = null;
+                    s.emit("voice:kicked", { reason: `Timed out for ${Math.round(duration / 60) || 5} minutes` });
+                }
+                ch.participants.delete(socketId);
+            }
+        });
+
+        broadcastChannelParticipants(channelId);
+        broadcastChannelList();
+        io.emit("voice:user-timeout", { username: targetUsername, until: until.toISOString() });
+        console.log(`[VOICE] Admin ${socket.data.username} timed out ${targetUsername} until ${until}`);
+    });
+
+    socket.on("voice:admin-ban", async ({ targetUsername }) => {
+        if (!socket.data.isAdmin) return socket.emit("voice:error", { message: "Admin only" });
+
+        try {
+            const usersCol = mongoose.connection.db.collection("users");
+            await usersCol.updateOne(
+                { username: targetUsername },
+                { $set: { voiceChatBanned: true, voiceChatBannedUntil: null, voiceChatBannedReason: `Banned by ${socket.data.username}` } }
+            );
+        } catch (err) {
+            console.error("[VOICE] Ban DB error:", err.message);
+        }
+
+        // Kick from all channels
+        voiceChannels.forEach((ch, channelId) => {
+            ch.participants.forEach((p, socketId) => {
+                if (p.username === targetUsername) {
+                    const s = io.sockets.sockets.get(socketId);
+                    if (s) {
+                        s.leave(`voice:${channelId}`);
+                        s.data.voiceChannel = null;
+                        s.emit("voice:kicked", { reason: "Banned from voice chat" });
+                    }
+                    ch.participants.delete(socketId);
+                }
+            });
+            broadcastChannelParticipants(channelId);
+        });
+
+        broadcastChannelList();
+        io.emit("voice:user-banned", { username: targetUsername });
+        console.log(`[VOICE] Admin ${socket.data.username} banned ${targetUsername} from voice chat`);
+    });
+
+    socket.on("voice:admin-unban", async ({ targetUsername }) => {
+        if (!socket.data.isAdmin) return socket.emit("voice:error", { message: "Admin only" });
+
+        try {
+            const usersCol = mongoose.connection.db.collection("users");
+            await usersCol.updateOne(
+                { username: targetUsername },
+                { $set: { voiceChatBanned: false, voiceChatBannedUntil: null, voiceChatBannedReason: "" } }
+            );
+        } catch (err) {
+            console.error("[VOICE] Unban DB error:", err.message);
+        }
+
+        io.emit("voice:user-unbanned", { username: targetUsername });
+        console.log(`[VOICE] Admin ${socket.data.username} unbanned ${targetUsername}`);
+    });
+
+    socket.on("voice:get-bans", async () => {
+        if (!socket.data.isAdmin) return socket.emit("voice:error", { message: "Admin only" });
+
+        try {
+            const usersCol = mongoose.connection.db.collection("users");
+            const banned = await usersCol.find(
+                { voiceChatBanned: true },
+                { projection: { username: 1, avatarUrl: 1, avatarColor: 1, voiceChatBannedUntil: 1, voiceChatBannedReason: 1 } }
+            ).toArray();
+            socket.emit("voice:bans-list", banned.map((u) => ({
+                username: u.username,
+                avatarUrl: u.avatarUrl || "",
+                color: u.avatarColor || "#3b82f6",
+                until: u.voiceChatBannedUntil,
+                reason: u.voiceChatBannedReason || "",
+            })));
+        } catch (err) {
+            console.error("[VOICE] Get bans error:", err.message);
+        }
     });
 
     socket.on("disconnect", async () => {

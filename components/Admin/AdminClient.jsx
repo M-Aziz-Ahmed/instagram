@@ -64,14 +64,189 @@ export default function AdminClient() {
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "analytics" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         Analytics
                     </button>
+                    <button onClick={() => setTab("voice")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "voice" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        Voice Chat
+                    </button>
                 </div>
 
                 {tab === "users" && <UsersPanel />}
                 {tab === "roles" && <RolesPanel />}
                 {tab === "analytics" && <AnalyticsPanel />}
+                {tab === "voice" && <VoicePanel />}
+            </div>
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  Voice Chat Panel                                                          */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+function VoicePanel() {
+    const { showToast } = useToast();
+    const [bans, setBans] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchBans = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/admin/users");
+            if (res.ok) {
+                const users = await res.json();
+                setBans(users.filter((u) => u.voiceChatBanned));
+            }
+        } catch (e) { console.error(e); }
+        finally { setLoading(false); }
+    }, []);
+
+    useEffect(() => { fetchBans(); }, [fetchBans]);
+
+    const unbanUser = async (userId, username) => {
+        setBans((prev) => prev.filter((u) => u.id !== userId));
+        try {
+            await fetch("/api/admin/users", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId, voiceChatBanned: false, voiceChatBannedUntil: null, voiceChatBannedReason: "" }),
+            });
+            showToast(`Unbanned ${username} from voice chat`, "success");
+        } catch (e) {
+            showToast("Failed to unban user", "error");
+            fetchBans();
+        }
+    };
+
+    const banUser = async (userId, username) => {
+        try {
+            await fetch("/api/admin/users", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId, voiceChatBanned: true, voiceChatBannedUntil: null, voiceChatBannedReason: "Banned by admin" }),
+            });
+            showToast(`Banned ${username} from voice chat`, "success");
+            fetchBans();
+        } catch (e) {
+            showToast("Failed to ban user", "error");
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            {/* Banned Users */}
+            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+                <div className="px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+                    <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Banned from Voice Chat</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Users who are banned or timed out from using voice channels</p>
+                </div>
+
+                {loading ? (
+                    <div className="flex justify-center py-10">
+                        <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
+                    </div>
+                ) : bans.length === 0 ? (
+                    <div className="py-10 text-center text-sm text-gray-400 dark:text-gray-600">
+                        No users are currently banned from voice chat.
+                    </div>
+                ) : (
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                        {bans.map((u) => (
+                            <div key={u.id} className="flex items-center gap-3 px-4 sm:px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                {u.avatarUrl ? (
+                                    <img src={u.avatarUrl} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
+                                ) : (
+                                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
+                                        style={{ backgroundColor: u.avatarColor || "#3b82f6" }}>
+                                        {u.username?.[0]?.toUpperCase()}
+                                    </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                        <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{u.username}</p>
+                                        {u.voiceChatBannedUntil && (
+                                            <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-[10px] font-medium rounded-full">Timeout</span>
+                                        )}
+                                        {!u.voiceChatBannedUntil && (
+                                            <span className="px-1.5 py-0.5 bg-red-500/20 text-red-600 dark:text-red-400 text-[10px] font-medium rounded-full">Banned</span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                        {u.voiceChatBannedReason || "No reason"}
+                                        {u.voiceChatBannedUntil && ` · Until ${new Date(u.voiceChatBannedUntil).toLocaleString()}`}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => unbanUser(u.id, u.username)}
+                                    className="px-3 py-1.5 bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20 text-xs font-medium rounded-lg transition-colors shrink-0"
+                                >
+                                    Unban
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
-            <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            {/* Quick Ban by Username */}
+            <QuickBanSection onBan={banUser} />
+        </div>
+    );
+}
+
+function QuickBanSection({ onBan }) {
+    const { showToast } = useToast();
+    const [username, setUsername] = useState("");
+    const [searchResults, setSearchResults] = useState([]);
+    const [searching, setSearching] = useState(false);
+
+    const searchUsers = async (q) => {
+        if (!q.trim()) { setSearchResults([]); return; }
+        setSearching(true);
+        try {
+            const res = await fetch(`/api/admin/users`);
+            if (res.ok) {
+                const users = await res.json();
+                setSearchResults(users.filter((u) => u.username?.toLowerCase().includes(q.toLowerCase())).slice(0, 5));
+            }
+        } catch {}
+        setSearching(false);
+    };
+
+    return (
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 sm:p-5">
+            <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 mb-3">Ban User from Voice Chat</h3>
+            <div className="flex gap-2">
+                <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => { setUsername(e.target.value); searchUsers(e.target.value); }}
+                    placeholder="Search username..."
+                    className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-gray-100"
+                />
+            </div>
+            {searchResults.length > 0 && (
+                <div className="mt-2 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    {searchResults.map((u) => (
+                        <div key={u.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                            {u.avatarUrl ? (
+                                <img src={u.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+                            ) : (
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                                    style={{ backgroundColor: u.avatarColor || "#3b82f6" }}>
+                                    {u.username?.[0]?.toUpperCase()}
+                                </div>
+                            )}
+                            <span className="flex-1 text-sm font-medium text-gray-900 dark:text-gray-100">{u.username}</span>
+                            <button
+                                onClick={() => { onBan(u.id, u.username); setUsername(""); setSearchResults([]); }}
+                                className="px-3 py-1 bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 text-xs font-medium rounded-lg transition-colors"
+                            >
+                                Ban
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
