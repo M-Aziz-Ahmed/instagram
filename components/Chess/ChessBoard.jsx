@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import ChessPiece from "./ChessPiece";
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"];
+
+function rcToSquare(row, col) {
+    return FILES[col] + RANKS[row];
+}
 
 function parseFEN(fen) {
     if (!fen) return [];
@@ -16,25 +20,12 @@ function parseFEN(fen) {
             if (/\d/.test(ch)) {
                 for (let i = 0; i < parseInt(ch); i++) row.push(null);
             } else {
-                row.push({
-                    type: ch.toLowerCase(),
-                    color: ch === ch.toUpperCase() ? "w" : "b",
-                });
+                row.push({ type: ch.toLowerCase(), color: ch === ch.toUpperCase() ? "w" : "b" });
             }
         }
         board.push(row);
     }
     return board;
-}
-
-function squareToRC(square) {
-    const file = FILES.indexOf(square[0]);
-    const rank = RANKS.indexOf(square[1]);
-    return { row: rank, col: file };
-}
-
-function rcToSquare(row, col) {
-    return FILES[col] + RANKS[row];
 }
 
 export default function ChessBoard({
@@ -49,14 +40,13 @@ export default function ChessBoard({
     isFlipped,
     onFlip,
     status,
-    orientation,
 }) {
     const boardRef = useRef(null);
     const [dragging, setDragging] = useState(null);
     const [dragOver, setDragOver] = useState(null);
 
     const board = useMemo(() => parseFEN(fen), [fen]);
-    const whitePerspective = (orientation || playerColor || "w") === "w";
+    const whitePerspective = (playerColor || "w") === "w";
     const flipped = isFlipped ? !whitePerspective : whitePerspective;
 
     const displayBoard = useMemo(() => {
@@ -68,28 +58,28 @@ export default function ChessBoard({
     const displayRanks = useMemo(() => flipped ? [...RANKS].reverse() : RANKS, [flipped]);
 
     const isPlayerTurn = turn === playerColor;
-    const gameOver = status && status !== "active";
+    const gameOver = status && status !== "active" && status !== "waiting";
 
-    const handleClick = useCallback((row, col) => {
-        const square = rcToSquare(row, col);
+    const displayToSquare = useCallback((ri, ci) => {
+        const realRow = flipped ? 7 - ri : ri;
+        const realCol = flipped ? 7 - ci : ci;
+        return rcToSquare(realRow, realCol);
+    }, [flipped]);
+
+    const handleClick = useCallback((ri, ci) => {
         if (gameOver) return;
-        if (selectedSquare) {
-            if (legalMoves?.includes(square)) {
-                onMove?.(selectedSquare, square);
-            } else {
-                onSquareClick?.(square);
-            }
-        } else {
-            onSquareClick?.(square);
-        }
-    }, [selectedSquare, legalMoves, onMove, onSquareClick, gameOver]);
+        const square = displayToSquare(ri, ci);
+        onSquareClick?.(square);
+    }, [gameOver, displayToSquare, onSquareClick]);
 
-    const handleDragStart = useCallback((e, row, col) => {
+    const handleDragStart = useCallback((e, ri, ci) => {
         if (gameOver || !isPlayerTurn) return;
-        const square = rcToSquare(row, col);
-        const piece = board[row][col];
+        const square = displayToSquare(ri, ci);
+        const realRow = flipped ? 7 - ri : ri;
+        const realCol = flipped ? 7 - ci : ci;
+        const piece = board[realRow]?.[realCol];
         if (!piece || piece.color !== playerColor) return;
-        setDragging({ row, col, square });
+        setDragging({ ri, ci, square });
         onSquareClick?.(square);
         if (e.dataTransfer) {
             e.dataTransfer.effectAllowed = "move";
@@ -101,34 +91,29 @@ export default function ChessBoard({
             e.dataTransfer.setDragImage(ghost, 0, 0);
             setTimeout(() => document.body.removeChild(ghost), 0);
         }
-    }, [board, playerColor, isPlayerTurn, gameOver, onSquareClick]);
+    }, [board, flipped, playerColor, isPlayerTurn, gameOver, onSquareClick, displayToSquare]);
 
-    const handleDragOver = useCallback((e, row, col) => {
+    const handleDragOver = useCallback((e, ri, ci) => {
         e.preventDefault();
-        setDragOver({ row, col });
+        e.dataTransfer.dropEffect = "move";
+        setDragOver({ ri, ci });
     }, []);
 
-    const handleDrop = useCallback((e, row, col) => {
+    const handleDrop = useCallback((e, ri, ci) => {
         e.preventDefault();
         setDragOver(null);
-        setDragging(null);
         if (gameOver) return;
-        const targetSquare = rcToSquare(row, col);
+        const targetSquare = displayToSquare(ri, ci);
         if (dragging && legalMoves?.includes(targetSquare)) {
             onMove?.(dragging.square, targetSquare);
         }
-    }, [dragging, legalMoves, onMove, gameOver]);
+        setDragging(null);
+    }, [dragging, legalMoves, onMove, gameOver, displayToSquare]);
 
     const handleDragEnd = useCallback(() => {
         setDragging(null);
         setDragOver(null);
     }, []);
-
-    const isInCheck = useMemo(() => {
-        if (!fen) return false;
-        const parts = fen.split(" ");
-        return parts[1] === (playerColor === "w" ? "b" : "w") ? false : parts.includes("K") || parts.includes("k");
-    }, [fen, playerColor]);
 
     const findKingSquare = useCallback((kingColor) => {
         for (let r = 0; r < 8; r++) {
@@ -141,24 +126,13 @@ export default function ChessBoard({
         return null;
     }, [board]);
 
-    const kingInCheckSquare = useMemo(() => {
+    const inCheckKingSquare = useMemo(() => {
         if (!fen) return null;
         const parts = fen.split(" ");
         const activeTurn = parts[1];
-        if (parts.length > 2 && parts.includes("K")) return findKingSquare("w");
-        if (parts.length > 2 && parts.includes("k")) return findKingSquare("b");
-        const chess = board;
-        const turnColor = activeTurn === "w" ? "w" : "b";
-        if (turnColor !== playerColor) return null;
+        if (parts.includes("+")) return findKingSquare(activeTurn === "w" ? "b" : "w");
         return null;
-    }, [fen, board, playerColor, findKingSquare]);
-
-    const handleSquareMouseDown = useCallback((row, col, e) => {
-        e.preventDefault();
-        if (!gameOver && isPlayerTurn) {
-            handleDragStart(e, row, col);
-        }
-    }, [handleDragStart, gameOver, isPlayerTurn]);
+    }, [fen, findKingSquare]);
 
     return (
         <div className="relative select-none">
@@ -177,7 +151,7 @@ export default function ChessBoard({
 
             <div className="flex">
                 <div className="flex flex-col">
-                    {displayRanks.map((rank, ri) => (
+                    {displayRanks.map((rank) => (
                         <div key={rank} className="w-4 h-[calc(100%/8)] flex items-center justify-center text-[10px] font-medium text-gray-400 dark:text-gray-500">
                             {rank}
                         </div>
@@ -188,44 +162,38 @@ export default function ChessBoard({
                     <div className="grid grid-cols-8 grid-rows-8" style={{ aspectRatio: "1" }}>
                         {displayBoard.map((row, ri) =>
                             row.map((piece, ci) => {
-                                const realRow = flipped ? 7 - ri : ri;
-                                const realCol = flipped ? 7 - ci : ci;
-                                const square = rcToSquare(realRow, realCol);
+                                const square = displayToSquare(ri, ci);
                                 const isLight = (ri + ci) % 2 === 0;
                                 const isSelected = selectedSquare === square;
                                 const isLegalMove = legalMoves?.includes(square);
                                 const isLastMoveFrom = lastMove?.from === square;
                                 const isLastMoveTo = lastMove?.to === square;
-                                const isDragOverTarget = dragOver?.row === ri && dragOver?.col === ci;
-                                const isDragSource = dragging?.row === ri && dragging?.col === ci;
-                                const isCheckSquare = findKingSquare(turn) === square && (fen || "").includes(" K ") || (fen || "").includes(" k ");
+                                const isDragOverTarget = dragOver?.ri === ri && dragOver?.ci === ci;
+                                const isDragSource = dragging?.ri === ri && dragging?.ci === ci;
+                                const isKingInCheck = inCheckKingSquare === square && piece?.type === "k";
+
+                                let bgClass = isLight ? "bg-[#f0d9b5]" : "bg-[#b58863]";
+                                if (isSelected || isLastMoveFrom || isLastMoveTo) {
+                                    bgClass = isLight ? "bg-[#f6f669]" : "bg-[#baca2b]";
+                                }
+                                if (isDragOverTarget) {
+                                    bgClass = isLight ? "bg-[#bbcb2b]" : "bg-[#9bac3b]";
+                                }
 
                                 return (
                                     <div
                                         key={`${ri}-${ci}`}
-                                        className={`relative flex items-center justify-center cursor-pointer ${
-                                            isLight
-                                                ? isSelected || isLastMoveFrom || isLastMoveTo
-                                                    ? "bg-yellow-300/70"
-                                                    : isDragOverTarget
-                                                    ? "bg-green-300/60"
-                                                    : "bg-[#f0d9b5]"
-                                                : isSelected || isLastMoveFrom || isLastMoveTo
-                                                    ? "bg-yellow-500/70"
-                                                    : isDragOverTarget
-                                                    ? "bg-green-500/60"
-                                                    : "bg-[#b58863]"
-                                        } ${isCheckSquare && piece?.type === "k" && piece?.color === turn ? "ring-4 ring-red-500/80 ring-inset" : ""}`}
+                                        className={`relative flex items-center justify-center cursor-pointer ${bgClass} ${isKingInCheck ? "ring-4 ring-red-500/80 ring-inset" : ""}`}
                                         onClick={() => handleClick(ri, ci)}
-                                        onMouseDown={(e) => handleSquareMouseDown(ri, ci, e)}
                                         onDragOver={(e) => handleDragOver(e, ri, ci)}
                                         onDrop={(e) => handleDrop(e, ri, ci)}
+                                        onDragLeave={() => setDragOver(null)}
                                     >
                                         {isLegalMove && !piece && !isDragSource && (
-                                            <div className="absolute w-3 h-3 rounded-full bg-gray-500/40 dark:bg-gray-300/40 z-10" />
+                                            <div className="absolute w-3 h-3 rounded-full bg-black/20 dark:bg-white/30 z-10 pointer-events-none" />
                                         )}
                                         {isLegalMove && piece && !isDragSource && (
-                                            <div className="absolute inset-0 rounded-full border-4 border-gray-500/40 dark:border-gray-300/40 z-10 m-1" />
+                                            <div className="absolute inset-0 rounded-full border-[3px] border-black/20 dark:border-white/30 z-10 pointer-events-none" />
                                         )}
                                         {piece && !isDragSource && (
                                             <div

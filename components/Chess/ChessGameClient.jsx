@@ -311,12 +311,15 @@ export default function ChessGameClient({ gameId }) {
 
     const handleSquareClick = useCallback((square) => {
         if (gameOver || !isMyTurn) return;
-        const piece = parseFEN(game?.fen).board;
+        if (!game?.fen) return;
+
+        const boardData = parseFEN(game.fen).board;
         const FILES = ["a","b","c","d","e","f","g","h"];
         const RANKS = ["8","7","6","5","4","3","2","1"];
         const col = FILES.indexOf(square[0]);
         const row = RANKS.indexOf(square[1]);
-        const p = piece[row]?.[col];
+        if (row < 0 || col < 0) return;
+        const clickedPiece = boardData[row]?.[col];
 
         if (selectedSquare === square) {
             setSelectedSquare(null);
@@ -324,18 +327,21 @@ export default function ChessGameClient({ gameId }) {
             return;
         }
 
-        if (p && p.color === myColor) {
+        if (clickedPiece && clickedPiece.color === myColor) {
             setSelectedSquare(square);
             setLegalMoves(getLegalMovesFromFEN(game.fen, square));
         } else if (selectedSquare) {
             if (legalMoves.includes(square)) {
                 handleMove(selectedSquare, square);
+            } else if (clickedPiece && clickedPiece.color === myColor) {
+                setSelectedSquare(square);
+                setLegalMoves(getLegalMovesFromFEN(game.fen, square));
             } else {
                 setSelectedSquare(null);
                 setLegalMoves([]);
             }
         }
-    }, [game, selectedSquare, legalMoves, isMyTurn, gameOver, myColor]);
+    }, [game, selectedSquare, legalMoves, isMyTurn, gameOver, myColor, handleMove]);
 
     const handleMove = useCallback((from, to) => {
         if (!socketRef.current) return;
