@@ -177,6 +177,7 @@ function getChannelState(channelId) {
             deafened: p.deafened,
             speaking: p.speaking,
             isAdmin: p.isAdmin || false,
+            socketId: p.socketId,
         })),
     };
 }

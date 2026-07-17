@@ -288,7 +288,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                     };
                     pc.onicecandidate = (e) => {
                         if (e.candidate) {
-                            s.emit("voice:signal", { to: pcsRef.current.get(from)?._remoteSocketId || "", from: u.username, type: "ice-candidate", data: e.candidate.toJSON() });
+                            s.emit("voice:signal", { to: pcsRef.current.get(from)?._remoteSocketId || "", from: s.id, type: "ice-candidate", data: e.candidate.toJSON() });
                         }
                     };
                 }
@@ -298,7 +298,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
                     pc._remoteSocketId = from;
-                    s.emit("voice:signal", { to: from, from: u.username, type: "answer", data: { type: answer.type, sdp: answer.sdp } });
+                    s.emit("voice:signal", { to: from, from: s.id, type: "answer", data: { type: answer.type, sdp: answer.sdp } });
                 }
             } else if (type === "answer") {
                 const pc = pcsRef.current.get(from);
@@ -418,7 +418,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                 if (e.candidate) {
                     s.emit("voice:signal", {
                         to: p.socketId || p.username,
-                        from: u.username,
+                        from: s.id,
                         type: "ice-candidate",
                         data: e.candidate.toJSON(),
                     });
@@ -436,7 +436,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                 await pc.setLocalDescription(offer);
                 s.emit("voice:signal", {
                     to: p.socketId || p.username,
-                    from: u.username,
+                    from: s.id,
                     type: "offer",
                     data: { type: offer.type, sdp: offer.sdp },
                 });
