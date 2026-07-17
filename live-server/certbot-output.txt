@@ -1,0 +1,19 @@
+Saving debug log to C:\Certbot\log\letsencrypt.log
+Account registered.
+Requesting a certificate for anontweet.duckdns.org
+Waiting 30 seconds for DNS changes to propagate
+
+Successfully received certificate.
+Certificate is saved at: C:\Certbot\live\anontweet.duckdns.org\fullchain.pem
+Key is saved at:         C:\Certbot\live\anontweet.duckdns.org\privkey.pem
+This certificate expires on 2026-10-14.
+These files will be updated when the certificate renews.
+NEXT STEPS:
+- The certificate will need to be renewed before it expires. Certbot can automatically renew the certificate in the background, but you may need to take steps to enable that functionality. See https://certbot.org/renewal-setup for instructions.
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+If you like Certbot, please consider supporting our work by:
+ * Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
+ * Donating to EFF:                    https://eff.org/donate-le
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+EXIT CODE: 0 
