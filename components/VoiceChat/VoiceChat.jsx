@@ -262,16 +262,16 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                 prev.map((p) => p.username === username ? { ...p, speaking } : p)
             );
         };
-        const handleVoiceSignal = async ({ from, type, data }) => {
+        const handleVoiceSignal = async ({ from, fromUsername, type, data }) => {
             const s = socketRef.current;
             const u = userRef.current;
             if (!s || !u) return;
 
             if (type === "offer") {
-                let pc = pcsRef.current.get(from);
+                let pc = pcsRef.current.get(fromUsername);
                 if (!pc || pc.signalingState === "closed") {
                     pc = new RTCPeerConnection(ICE_SERVERS);
-                    pcsRef.current.set(from, pc);
+                    pcsRef.current.set(fromUsername, pc);
 
                     const localStream = localStreamRef.current;
                     if (localStream) {
@@ -282,13 +282,13 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
 
                     pc.ontrack = (e) => {
                         if (e.streams?.[0]) {
-                            peerStreamsRef.current.set(from, e.streams[0]);
-                            attachRemoteAudio(from, e.streams[0]);
+                            peerStreamsRef.current.set(fromUsername, e.streams[0]);
+                            attachRemoteAudio(fromUsername, e.streams[0]);
                         }
                     };
                     pc.onicecandidate = (e) => {
                         if (e.candidate) {
-                            s.emit("voice:signal", { to: pcsRef.current.get(from)?._remoteSocketId || "", from: s.id, type: "ice-candidate", data: e.candidate.toJSON() });
+                            s.emit("voice:signal", { to: from, from: s.id, fromUsername: u.username, type: "ice-candidate", data: e.candidate.toJSON() });
                         }
                     };
                 }
@@ -298,15 +298,15 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
                     pc._remoteSocketId = from;
-                    s.emit("voice:signal", { to: from, from: s.id, type: "answer", data: { type: answer.type, sdp: answer.sdp } });
+                    s.emit("voice:signal", { to: from, from: s.id, fromUsername: u.username, type: "answer", data: { type: answer.type, sdp: answer.sdp } });
                 }
             } else if (type === "answer") {
-                const pc = pcsRef.current.get(from);
+                const pc = pcsRef.current.get(fromUsername);
                 if (pc && pc.signalingState === "have-local-offer") {
                     await pc.setRemoteDescription(new RTCSessionDescription(data));
                 }
             } else if (type === "ice-candidate") {
-                const pc = pcsRef.current.get(from);
+                const pc = pcsRef.current.get(fromUsername);
                 if (pc && pc.signalingState !== "closed") {
                     try { await pc.addIceCandidate(new RTCIceCandidate(data)); } catch {}
                 }
@@ -419,6 +419,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                     s.emit("voice:signal", {
                         to: p.socketId || p.username,
                         from: s.id,
+                        fromUsername: u.username,
                         type: "ice-candidate",
                         data: e.candidate.toJSON(),
                     });
@@ -437,6 +438,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                 s.emit("voice:signal", {
                     to: p.socketId || p.username,
                     from: s.id,
+                    fromUsername: u.username,
                     type: "offer",
                     data: { type: offer.type, sdp: offer.sdp },
                 });
