@@ -146,7 +146,10 @@ export default function ChessGameClient({ gameId }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const timerRef = useRef(null);
+    const gameRef = useRef(null);
     const { ready: stockfishReady, evaluating, getBestMove } = useStockfish(15);
+
+    gameRef.current = game;
 
     const myColor = useMemo(() => {
         if (!game || !user?.username) return null;
@@ -268,11 +271,13 @@ export default function ChessGameClient({ gameId }) {
     }, [game, myColor]);
 
     useEffect(() => {
+        if (!game || game.status !== "active") return;
         timerRef.current = setInterval(() => {
-            if (!game || game.status !== "active") return;
+            const g = gameRef.current;
+            if (!g || g.status !== "active") return;
             setTimers((prev) => {
                 const next = { ...prev };
-                if (game.turn === "w") {
+                if (g.turn === "w") {
                     next.white = Math.max(0, next.white - 1);
                 } else {
                     next.black = Math.max(0, next.black - 1);
@@ -284,15 +289,18 @@ export default function ChessGameClient({ gameId }) {
             });
         }, 1000);
         return () => clearInterval(timerRef.current);
-    }, [game?.status, game?.turn, gameId]);
+    }, [game?.status, gameId]);
 
     useEffect(() => {
-        if (!game || game.status !== "active" || game.mode !== "ai") return;
-        if (game.turn !== "b") return;
+        const g = gameRef.current;
+        if (!g || g.status !== "active" || g.mode !== "ai") return;
+        if (g.turn !== "b") return;
         if (!stockfishReady || evaluating) return;
 
         const timer = setTimeout(() => {
-            getBestMove(game.fen, (move) => {
+            const latest = gameRef.current;
+            if (!latest || latest.turn !== "b") return;
+            getBestMove(latest.fen, (move) => {
                 if (move && move.length >= 4) {
                     const from = move.substring(0, 2);
                     const to = move.substring(2, 4);
@@ -303,11 +311,11 @@ export default function ChessGameClient({ gameId }) {
                         promotion: move.length > 4 ? move[4] : "q",
                     });
                 }
-            }, game.aiDifficulty >= 16 ? 18 : game.aiDifficulty >= 12 ? 15 : game.aiDifficulty >= 8 ? 12 : 8);
+            }, latest.aiDifficulty >= 16 ? 18 : latest.aiDifficulty >= 12 ? 15 : latest.aiDifficulty >= 8 ? 12 : 8);
         }, 500);
 
         return () => clearTimeout(timer);
-    }, [game?.turn, game?.status, game?.mode, game?.fen, stockfishReady, evaluating, gameId]);
+    }, [game?.turn, game?.status, game?.mode, stockfishReady, evaluating, gameId]);
 
     const handleMove = useCallback((from, to) => {
         if (!socketRef.current) return;
