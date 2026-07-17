@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/context/ToastContext";
 import MentionInput from "@/components/shared/MentionInput";
+import VoiceRecorder from "@/components/shared/VoiceRecorder";
 
 const CLOUD_NAME     = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET  = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
@@ -14,6 +15,7 @@ export default function Compose({ onPosted }) {
     const [text, setText]                 = useState("");
     const [preview, setPreview]           = useState(null);
     const [imageFile, setImageFile]       = useState(null);
+    const [audioUrl, setAudioUrl]         = useState("");
     const [posting, setPosting]           = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [error, setError]               = useState("");
@@ -64,7 +66,7 @@ export default function Compose({ onPosted }) {
     const handlePost = async () => {
         // Validate input
         const trimmedText = text.trim();
-        if ((!trimmedText && !imageFile) || posting || !user) return;
+        if ((!trimmedText && !imageFile && !audioUrl) || posting || !user) return;
         
         // Check text length limit
         if (trimmedText.length > 500) {
@@ -92,6 +94,7 @@ export default function Compose({ onPosted }) {
                 body:    JSON.stringify({
                     text:     trimmedText,
                     imageUrl,
+                    audioUrl: audioUrl || "",
                     sender:   user.username,
                     color:    user.color,
                     visibility,
@@ -104,6 +107,7 @@ export default function Compose({ onPosted }) {
             }
             setText("");
             removeImage();
+            setAudioUrl("");
             showToast("Post published", "success");
             if (onPosted) onPosted();
         } catch (err) {
@@ -115,7 +119,7 @@ export default function Compose({ onPosted }) {
         }
     };
 
-    const canPost = (text.trim().length > 0 || !!imageFile) && !posting;
+    const canPost = (text.trim().length > 0 || !!imageFile || !!audioUrl) && !posting;
 
     return (
         <div className="border-b border-gray-200 dark:border-gray-800 p-4">
@@ -167,6 +171,26 @@ export default function Compose({ onPosted }) {
                         </div>
                     )}
 
+                    {audioUrl && !preview && (
+                        <div className="relative inline-flex">
+                            <div className="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 text-blue-500">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                                </svg>
+                                <span className="text-xs text-gray-500 dark:text-gray-400">Voice message</span>
+                            </div>
+                            {!posting && (
+                                <button
+                                    onClick={() => setAudioUrl("")}
+                                    aria-label="Remove audio"
+                                    className="absolute -top-2 -right-2 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-black/80 transition-colors text-xs"
+                                >
+                                    &#x2715;
+                                </button>
+                            )}
+                        </div>
+                    )}
+
                     {error && <p className="text-xs text-red-500">{error}</p>}
 
                     <div className="flex items-center justify-between p-1 border-t border-gray-100 dark:border-gray-800">
@@ -183,6 +207,10 @@ export default function Compose({ onPosted }) {
                                         d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
                                 </svg>
                             </button>
+                            <VoiceRecorder
+                                onRecorded={(url) => setAudioUrl(url)}
+                                maxDuration={60}
+                            />
                             <button
                                 onClick={() => setVisibility(visibility === "public" ? "closeFriends" : "public")}
                                 className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors ${

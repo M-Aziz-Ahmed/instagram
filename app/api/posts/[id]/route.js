@@ -70,7 +70,7 @@ export async function PATCH(request, { params }) {
             return Response.json({ error: "Invalid post ID" }, { status: 400 });
         }
         
-        const { username, action, text, color, parentId, imageUrl, reactionType, commentId } = await request.json();
+        const { username, action, text, color, parentId, imageUrl, audioUrl, reactionType, commentId } = await request.json();
 
         await connectDB();
         const post = await Post.findById(id);
@@ -89,8 +89,9 @@ export async function PATCH(request, { params }) {
         if (action === "comment") {
             const hasText = text?.trim();
             const hasImage = imageUrl;
-            if (!hasText && !hasImage) {
-                return Response.json({ error: "Comment must have text or an image" }, { status: 400 });
+            const hasAudio = audioUrl;
+            if (!hasText && !hasImage && !hasAudio) {
+                return Response.json({ error: "Comment must have text, an image, or audio" }, { status: 400 });
             }
 
             const commenter = await User.findOne({ username }).select("avatarUrl isVerified roles").populate("roles", "name badge color").lean();
@@ -99,6 +100,7 @@ export async function PATCH(request, { params }) {
                 commentId: uid(),
                 text:      text?.trim() ?? "",
                 imageUrl:  imageUrl || "",
+                audioUrl:  audioUrl || "",
                 sender:    username,
                 color:     color || "#3b82f6",
                 avatarUrl: commenter?.avatarUrl || "",

@@ -171,7 +171,7 @@ export async function GET(request) {
 
 export async function POST(request) {
     try {
-        const { text, imageUrl: providedUrl, imageData, sender, color, visibility } = await request.json();
+        const { text, imageUrl: providedUrl, imageData, audioUrl, sender, color, visibility } = await request.json();
 
         if (!sender?.trim()) {
             return Response.json({ error: "Sender is required" }, { status: 400 });
@@ -183,8 +183,8 @@ export async function POST(request) {
             return Response.json({ error: "Text exceeds maximum length of 1000 characters" }, { status: 400 });
         }
         
-        if (!sanitizedText && !providedUrl && !imageData) {
-            return Response.json({ error: "Post must have text or an image" }, { status: 400 });
+        if (!sanitizedText && !providedUrl && !imageData && !audioUrl) {
+            return Response.json({ error: "Post must have text, an image, or audio" }, { status: 400 });
         }
 
         await connectDB();
@@ -207,6 +207,7 @@ export async function POST(request) {
         const post = await Post.create({
             text:     sanitizedText,
             imageUrl,
+            audioUrl: audioUrl || "",
             sender:   sender.trim(),
             color:    color || "#3b82f6",
             avatarUrl: user?.avatarUrl || "",

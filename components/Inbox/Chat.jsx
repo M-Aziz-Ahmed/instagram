@@ -6,6 +6,7 @@ import { useUser } from "@/context/UserContext";
 import { useToast } from "@/context/ToastContext";
 import ImageLightbox from "@/components/shared/ImageLightbox";
 import UserBadges from "@/components/shared/UserBadges";
+import AudioPlayer from "@/components/shared/AudioPlayer";
 
 const RECALL_WINDOW_MS = 60 * 1000;
 
@@ -617,6 +618,11 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                                 priority={false}
                                             />
                                         </button>
+                                    )}
+                                    {msg.audioUrl && !msg.text && !msg.imageUrl && (
+                                        <div className="p-1">
+                                            <AudioPlayer src={msg.audioUrl} isMine={isMine} />
+                                        </div>
                                     )}
                                     {msg.text && (
                                         <div className={`px-4 py-2.5 text-sm leading-snug wrap-break-word ${msg.imageUrl ? "border-t border-white/20" : ""}`}>

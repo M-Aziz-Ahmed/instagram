@@ -10,6 +10,8 @@ import FollowButton from "@/components/shared/FollowButton";
 import ImageLightbox from "@/components/shared/ImageLightbox";
 import ReactionPicker, { ReactionCounts } from "./ReactionPicker";
 import RepostButton from "./RepostButton";
+import VoiceRecorder from "@/components/shared/VoiceRecorder";
+import AudioPlayer from "@/components/shared/AudioPlayer";
 import Link from "next/link";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -65,6 +67,7 @@ function PostAvatar({ sender, color, avatarUrl, author, size = "md" }) {
 function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) {
     const [text, setText]       = useState("");
     const [imageUrl, setImageUrl] = useState("");
+    const [audioUrl, setAudioUrl] = useState("");
     const [uploading, setUploading] = useState(false);
     const fileRef = useRef(null);
 
@@ -95,10 +98,11 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
     };
 
     const handleSubmit = () => {
-        if ((!text.trim() && !imageUrl) || submitting) return;
-        onSubmit({ text: text.trim(), imageUrl });
+        if ((!text.trim() && !imageUrl && !audioUrl) || submitting) return;
+        onSubmit({ text: text.trim(), imageUrl, audioUrl });
         setText("");
         setImageUrl("");
+        setAudioUrl("");
     };
 
     return (
@@ -114,6 +118,20 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
                 )}
             </div>
             <div className="flex-1">
+                {audioUrl && !imageUrl && !text && (
+                    <div className="relative inline-flex mb-1.5">
+                        <div className="px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-600 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5 text-blue-500">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                            </svg>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Voice comment</span>
+                        </div>
+                        <button onClick={() => setAudioUrl("")}
+                            className="absolute -top-1.5 -right-1.5 bg-black/60 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] hover:bg-black/80">
+                            &#x2715;
+                        </button>
+                    </div>
+                )}
                 <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-2xl px-3 py-2 focus-within:border-gray-400 dark:focus-within:border-gray-500 transition-colors bg-gray-50 dark:bg-gray-800">
                     <input
                         type="text"
@@ -135,7 +153,8 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
                             </svg>
                         </button>
                         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
-                        {(text.trim() || imageUrl) && (
+                        <VoiceRecorder onRecorded={(url) => setAudioUrl(url)} maxDuration={60} />
+                        {(text.trim() || imageUrl || audioUrl) && (
                             <button
                                 onClick={handleSubmit}
                                 disabled={submitting || uploading}
@@ -193,6 +212,11 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                             <RichText text={comment.text} onHashtag={onHashtag} className="text-xs text-gray-700 dark:text-gray-300" />
                         )}
                     </div>
+                    {comment.audioUrl && !comment.text && !comment.imageUrl && (
+                        <div className="mt-1 max-w-[250px]">
+                            <AudioPlayer src={comment.audioUrl} />
+                        </div>
+                    )}
                     {comment.imageUrl && (
                         <div className="mt-1 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 max-w-[80vw] sm:max-w-xs cursor-pointer" onClick={() => setCommentLightbox(true)}>
                             <img src={comment.imageUrl} alt="Comment image" className="w-full h-auto block" loading="lazy" />
@@ -473,8 +497,8 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag, serv
         lastTapRef.current = now;
     };
 
-    const handleComment = async ({ text, imageUrl }) => {
-        if ((!text && !imageUrl) || submitting || !user) return;
+    const handleComment = async ({ text, imageUrl, audioUrl }) => {
+        if ((!text && !imageUrl && !audioUrl) || submitting || !user) return;
         setSubmitting(true);
         try {
             const res = await fetch(`/api/posts/${post._id}`, {
@@ -486,6 +510,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag, serv
                     color:    user.color,
                     text:     text || "",
                     imageUrl: imageUrl || "",
+                    audioUrl: audioUrl || "",
                     parentId: replyTo || null,
                 }),
             });
@@ -626,6 +651,12 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag, serv
                                     </svg>
                                 )}
                             </button>
+                        </div>
+                    )}
+
+                    {post.audioUrl && !post.text && !post.imageUrl && (
+                        <div className="mt-2 max-w-xs">
+                            <AudioPlayer src={post.audioUrl} />
                         </div>
                     )}
 

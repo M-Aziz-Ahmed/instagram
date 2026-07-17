@@ -146,6 +146,54 @@ app.delete("/api/streams/:id", async (req, res) => {
 });
 
 // ── Socket.IO ───────────────────────────────────────────────────
+
+// ── Voice Channels (in-memory) ─────────────────────────────────
+const DEFAULT_CHANNELS = [
+    { id: "general", name: "General", participants: new Map() },
+    { id: "gaming", name: "Gaming", participants: new Map() },
+    { id: "music", name: "Music", participants: new Map() },
+    { id: "chill", name: "Chill", participants: new Map() },
+];
+
+const voiceChannels = new Map();
+DEFAULT_CHANNELS.forEach((ch) => voiceChannels.set(ch.id, { ...ch, participants: new Map() }));
+
+function getChannelState(channelId) {
+    const ch = voiceChannels.get(channelId);
+    if (!ch) return null;
+    return {
+        id: ch.id,
+        name: ch.name,
+        participants: Array.from(ch.participants.values()).map((p) => ({
+            username: p.username,
+            avatarUrl: p.avatarUrl,
+            color: p.color,
+            muted: p.muted,
+            deafened: p.deafened,
+            speaking: p.speaking,
+        })),
+    };
+}
+
+function getAllChannelsState() {
+    return Array.from(voiceChannels.values()).map((ch) => ({
+        id: ch.id,
+        name: ch.name,
+        participantCount: ch.participants.size,
+    }));
+}
+
+function broadcastChannelList() {
+    io.emit("voice:channels", getAllChannelsState());
+}
+
+function broadcastChannelParticipants(channelId) {
+    const state = getChannelState(channelId);
+    if (state) {
+        io.to(`voice:${channelId}`).emit("voice:channel-update", state);
+    }
+}
+
 io.on("connection", (socket) => {
     console.log(`[WS] Connected: ${socket.id}`);
 
@@ -243,8 +291,122 @@ io.on("connection", (socket) => {
         });
     });
 
+    // ── Voice Channel Events ────────────────────────────────────
+    socket.on("voice:get-channels", () => {
+        socket.emit("voice:channels", getAllChannelsState());
+    });
+
+    socket.on("voice:join", ({ channelId, username, avatarUrl, color }) => {
+        const ch = voiceChannels.get(channelId);
+        if (!ch) return socket.emit("voice:error", { message: "Channel not found" });
+
+        // Leave any current channel first
+        if (socket.data?.voiceChannel) {
+            const prevCh = voiceChannels.get(socket.data.voiceChannel);
+            if (prevCh) {
+                prevCh.participants.delete(socket.id);
+                socket.leave(`voice:${socket.data.voiceChannel}`);
+                broadcastChannelParticipants(socket.data.voiceChannel);
+                io.to(`voice:${socket.data.voiceChannel}`).emit("voice:user-left", { username: socket.data.username });
+            }
+        }
+
+        ch.participants.set(socket.id, {
+            username,
+            avatarUrl: avatarUrl || "",
+            color: color || "#3b82f6",
+            muted: false,
+            deafened: false,
+            speaking: false,
+            socketId: socket.id,
+        });
+
+        socket.data.voiceChannel = channelId;
+        socket.data.username = username;
+        socket.join(`voice:${channelId}`);
+
+        // Send full channel state to the joiner
+        socket.emit("voice:joined", getChannelState(channelId));
+
+        // Broadcast updated participant list to everyone in the channel
+        broadcastChannelParticipants(channelId);
+        broadcastChannelList();
+
+        console.log(`[VOICE] ${username} joined channel ${channelId} (${ch.participants.size} users)`);
+    });
+
+    socket.on("voice:leave", ({ channelId }) => {
+        const ch = voiceChannels.get(channelId);
+        if (!ch) return;
+
+        const participant = ch.participants.get(socket.id);
+        ch.participants.delete(socket.id);
+        socket.leave(`voice:${channelId}`);
+        socket.data.voiceChannel = null;
+
+        broadcastChannelParticipants(channelId);
+        broadcastChannelList();
+
+        if (participant) {
+            io.to(`voice:${channelId}`).emit("voice:user-left", { username: participant.username });
+        }
+    });
+
+    socket.on("voice:toggle-mute", ({ channelId, muted }) => {
+        const ch = voiceChannels.get(channelId);
+        if (!ch) return;
+        const p = ch.participants.get(socket.id);
+        if (!p) return;
+        p.muted = muted;
+        if (muted) p.speaking = false;
+        broadcastChannelParticipants(channelId);
+    });
+
+    socket.on("voice:toggle-deafen", ({ channelId, deafened }) => {
+        const ch = voiceChannels.get(channelId);
+        if (!ch) return;
+        const p = ch.participants.get(socket.id);
+        if (!p) return;
+        p.deafened = deafened;
+        if (deafened) {
+            p.muted = true;
+            p.speaking = false;
+        }
+        broadcastChannelParticipants(channelId);
+    });
+
+    socket.on("voice:speaking", ({ channelId, speaking }) => {
+        const ch = voiceChannels.get(channelId);
+        if (!ch) return;
+        const p = ch.participants.get(socket.id);
+        if (!p || p.muted) return;
+        p.speaking = speaking;
+        socket.to(`voice:${channelId}`).emit("voice:user-speaking", {
+            username: p.username,
+            speaking,
+        });
+    });
+
+    // WebRTC signaling for voice (peer-to-peer mesh)
+    socket.on("voice:signal", ({ to, from, type, data }) => {
+        io.to(to).emit("voice:signal", { from, type, data });
+    });
+
     socket.on("disconnect", async () => {
         const { streamId, username } = socket.data || {};
+
+        // Clean up voice channel on disconnect
+        if (socket.data?.voiceChannel) {
+            const ch = voiceChannels.get(socket.data.voiceChannel);
+            if (ch) {
+                ch.participants.delete(socket.id);
+                socket.leave(`voice:${socket.data.voiceChannel}`);
+                broadcastChannelParticipants(socket.data.voiceChannel);
+                broadcastChannelList();
+                io.to(`voice:${socket.data.voiceChannel}`).emit("voice:user-left", { username });
+            }
+        }
+
         if (!streamId || !username) return;
 
         try {

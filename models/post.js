@@ -4,6 +4,7 @@ const commentSchema = new mongoose.Schema({
     commentId: { type: String, required: true },
     text:      { type: String, default: "" },
     imageUrl:  { type: String, default: "" },
+    audioUrl:  { type: String, default: "" },
     sender:    { type: String, required: true },
     color:     { type: String, default: "#3b82f6" },
     avatarUrl: { type: String, default: "" },
@@ -17,6 +18,7 @@ const commentSchema = new mongoose.Schema({
 const postSchema = new mongoose.Schema({
     text:      { type: String, default: "" },
     imageUrl:  { type: String, default: "" },
+    audioUrl:  { type: String, default: "" },
     sender:    { type: String, required: true },
     color:     { type: String, default: "#3b82f6" },
     avatarUrl: { type: String, default: "" },

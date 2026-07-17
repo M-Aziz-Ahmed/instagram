@@ -7,8 +7,9 @@ import Input from "./Input";
 import ProfileSetup from "@/components/ProfileSetup";
 import UserBadges from "@/components/shared/UserBadges";
 import { useOnlineStatus, getLastSeenText } from "@/utils/useOnlineStatus";
+import VoiceChat from "@/components/VoiceChat/VoiceChat";
 
-export default function ChatBox({ onBack, recipient, recipientUser }) {
+export default function ChatBox({ onBack, recipient, recipientUser, socket }) {
     const { user, ready } = useUser();
     const [pendingMessage, setPendingMessage] = useState(null);
     const [replyingTo, setReplyingTo]         = useState(null);
@@ -16,6 +17,7 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
     const scrollContainerRef = useRef(null);
     const [isTyping, setIsTyping] = useState(false);
     const [recipientOnlineStatus, setRecipientOnlineStatus] = useState(null);
+    const [voiceOpen, setVoiceOpen] = useState(false);
 
     // Track current user's online status
     useOnlineStatus(user?.username);
@@ -143,6 +145,19 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
                         </svg>
                     </button>
 
+                    <button
+                        onClick={() => setVoiceOpen(v => !v)}
+                        aria-label="Voice chat"
+                        title="Voice chat"
+                        className={`transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center ${voiceOpen ? 'text-green-500' : 'hover:text-gray-900 dark:hover:text-gray-100'}`}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                            strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 md:w-6 md:h-6">
+                            <path strokeLinecap="round" strokeLinejoin="round"
+                                d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                        </svg>
+                    </button>
+
                     <button aria-label="Video call" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                             strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 md:w-6 md:h-6">
@@ -160,6 +175,13 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
                     </button>
                 </div>
             </header>
+
+            {/* ── Voice Chat Panel ────────────────────────────────────────────── */}
+            {voiceOpen && (
+                <div className="border-b border-gray-200 dark:border-gray-800 shrink-0">
+                    <VoiceChat socket={socket} isOpen={voiceOpen} onClose={() => setVoiceOpen(false)} username={user?.username} />
+                </div>
+            )}
 
             {/* ── Messages ────────────────────────────────────────────────── */}
             <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-4">

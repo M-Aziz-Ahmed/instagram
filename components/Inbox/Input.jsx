@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
+import VoiceRecorder from "@/components/shared/VoiceRecorder";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
@@ -12,6 +13,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
     const [sending, setSending]     = useState(false);
     const [imagePreview, setImagePreview] = useState(null);
     const [uploading, setUploading] = useState(false);
+    const [audioUrl, setAudioUrl]   = useState("");
     const fileRef                   = useRef(null);
     const inputRef                  = useRef(null);
     const typingTimeoutRef          = useRef(null);
@@ -93,18 +95,20 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
         setImagePreview(null);
     };
 
-    const canSend = (text.trim() || imagePreview) && !sending && !uploading && user && recipient;
+    const canSend = (text.trim() || imagePreview || audioUrl) && !sending && !uploading && user && recipient;
 
     const handleSend = async () => {
         if (!canSend) return;
 
         const snapshotText = text.trim();
         const snapshotImage = imagePreview;
+        const snapshotAudio = audioUrl;
         const snapshotReply = replyingTo
             ? { sender: replyingTo.sender, text: replyingTo.text }
             : null;
         setText("");
         setImagePreview(null);
+        setAudioUrl("");
         setReplyingTo(null);
         setSending(true);
 
@@ -129,6 +133,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                 _tempId: tempId,
                 text: snapshotText,
                 imageUrl: snapshotImage || "",
+                audioUrl: snapshotAudio || "",
                 sender: user.username,
                 recipient,
                 color: user.color,
@@ -147,6 +152,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                 body: JSON.stringify({
                     text: snapshotText,
                     imageUrl: snapshotImage || "",
+                    audioUrl: snapshotAudio || "",
                     sender: user.username,
                     recipient,
                     color: user.color,
@@ -160,6 +166,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
             console.error("Failed to send:", err);
             setText(snapshotText);
             setImagePreview(snapshotImage);
+            setAudioUrl(snapshotAudio);
             if (snapshotReply) setReplyingTo({ sender: snapshotReply.sender, text: snapshotReply.text });
             if (onMessageSent) onMessageSent({ _tempId: tempId, _remove: true });
         } finally {
@@ -192,6 +199,25 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* Audio preview */}
+            {audioUrl && !imagePreview && (
+                <div className="relative inline-flex self-start">
+                    <div className="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 text-blue-500">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                        </svg>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Voice message</span>
+                    </div>
+                    <button
+                        onClick={() => setAudioUrl("")}
+                        className="absolute -top-2 -right-2 bg-gray-800 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-gray-700 transition-colors shadow"
+                        aria-label="Remove audio"
+                    >
+                        &#x2715;
+                    </button>
                 </div>
             )}
 
@@ -256,15 +282,10 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                         )}
                     </button>
                 ) : (
-                    <button
-                        aria-label="Voice message"
-                        disabled={!user || !recipient}
-                        className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3z" />
-                        </svg>
-                    </button>
+                    <VoiceRecorder
+                        onRecorded={(url) => setAudioUrl(url)}
+                        maxDuration={60}
+                    />
                 )}
             </div>
         </div>
