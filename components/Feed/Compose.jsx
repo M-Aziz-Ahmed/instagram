@@ -5,6 +5,8 @@ import { useUser } from "@/context/UserContext";
 import { useToast } from "@/context/ToastContext";
 import MentionInput from "@/components/shared/MentionInput";
 import VoiceRecorder from "@/components/shared/VoiceRecorder";
+import EmojiPicker from "@/components/shared/EmojiPicker";
+import GifPicker from "@/components/shared/GifPicker";
 
 const CLOUD_NAME     = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET  = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
@@ -20,6 +22,8 @@ export default function Compose({ onPosted }) {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [error, setError]               = useState("");
     const [visibility, setVisibility]     = useState("public");
+    const [showEmoji, setShowEmoji]       = useState(false);
+    const [showGif, setShowGif]           = useState(false);
     const fileRef                         = useRef(null);
 
     const handleFile = (e) => {
@@ -38,6 +42,7 @@ export default function Compose({ onPosted }) {
         setPreview(null);
         setImageFile(null);
         setUploadProgress(0);
+        setShowGif(false);
         if (fileRef.current) fileRef.current.value = "";
     };
 
@@ -66,7 +71,7 @@ export default function Compose({ onPosted }) {
     const handlePost = async () => {
         // Validate input
         const trimmedText = text.trim();
-        if ((!trimmedText && !imageFile && !audioUrl) || posting || !user) return;
+        if ((!trimmedText && !imageFile && !preview && !audioUrl) || posting || !user) return;
         
         // Check text length limit
         if (trimmedText.length > 500) {
@@ -86,6 +91,8 @@ export default function Compose({ onPosted }) {
                     setError("Failed to upload image. Please try again.");
                     return;
                 }
+            } else if (preview) {
+                imageUrl = preview;
             }
             const res = await fetch("/api/posts", {
                 method:  "POST",
@@ -119,7 +126,7 @@ export default function Compose({ onPosted }) {
         }
     };
 
-    const canPost = (text.trim().length > 0 || !!imageFile || !!audioUrl) && !posting;
+    const canPost = (text.trim().length > 0 || !!imageFile || !!preview || !!audioUrl) && !posting;
 
     return (
         <div className="border-b border-gray-200 dark:border-gray-800 p-4">
@@ -194,7 +201,28 @@ export default function Compose({ onPosted }) {
                     {error && <p className="text-xs text-red-500">{error}</p>}
 
                     <div className="flex items-center justify-between p-1 border-t border-gray-100 dark:border-gray-800">
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 relative">
+                            <button
+                                onClick={() => { setShowEmoji(!showEmoji); setShowGif(false); }}
+                                aria-label="Add emoji"
+                                disabled={!user || posting}
+                                className={`p-2 rounded-full transition-colors disabled:opacity-40 ${showEmoji ? "text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20" : "text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"}`}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path strokeLinecap="round" d="M8 14s1.5 2 4 2 4-2 4-2" />
+                                    <line x1="9" y1="9" x2="9.01" y2="9" strokeLinecap="round" />
+                                    <line x1="15" y1="9" x2="15.01" y2="9" strokeLinecap="round" />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={() => { setShowGif(!showGif); setShowEmoji(false); }}
+                                aria-label="Add GIF"
+                                disabled={!user || posting}
+                                className={`px-2 py-1 rounded-full transition-colors disabled:opacity-40 text-xs font-bold ${showGif ? "text-purple-500 bg-purple-50 dark:bg-purple-900/20" : "text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20"}`}
+                            >
+                                GIF
+                            </button>
                             <button
                                 onClick={() => fileRef.current?.click()}
                                 aria-label="Add image"
@@ -225,6 +253,22 @@ export default function Compose({ onPosted }) {
                                 </svg>
                                 {visibility === "closeFriends" ? "Close" : "Public"}
                             </button>
+                            {showEmoji && (
+                                <div className="absolute bottom-full left-0 mb-2 z-30">
+                                    <EmojiPicker
+                                        onEmojiSelect={(emoji) => setText(prev => prev + emoji)}
+                                        onClose={() => setShowEmoji(false)}
+                                    />
+                                </div>
+                            )}
+                            {showGif && (
+                                <div className="absolute bottom-full left-0 mb-2 z-30">
+                                    <GifPicker
+                                        onSelect={(url) => { setPreview(url); setShowGif(false); }}
+                                        onClose={() => setShowGif(false)}
+                                    />
+                                </div>
+                            )}
                         </div>
 
                         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />

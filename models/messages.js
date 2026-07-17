@@ -8,6 +8,14 @@ const messagesSchema = new mongoose.Schema({
     recipient: { type: String, required: true },   // username
     color:     { type: String, default: "#3b82f6" }, // avatar bg color
     replyTo:   { type: { sender: String, text: String }, default: null },
+    reactions: {
+        like:  { type: [String], default: [] },
+        love:  { type: [String], default: [] },
+        laugh: { type: [String], default: [] },
+        fire:  { type: [String], default: [] },
+        sad:   { type: [String], default: [] },
+        angry: { type: [String], default: [] },
+    },
     timeStamp: { type: Date, default: Date.now },
     isRead:    { type: Boolean, default: false },
     delivered: { type: Boolean, default: false },

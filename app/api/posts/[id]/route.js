@@ -277,6 +277,35 @@ export async function PATCH(request, { params }) {
             return Response.json(enriched);
         }
 
+        if (action === "reactComment") {
+            const validReactions = ["like", "love", "laugh", "fire", "sad", "angry"];
+            if (!commentId || !reactionType || !validReactions.includes(reactionType)) {
+                return Response.json({ error: "Invalid comment reaction" }, { status: 400 });
+            }
+            const comment = post.comments.find(c => c.commentId === commentId);
+            if (!comment) return Response.json({ error: "Comment not found" }, { status: 404 });
+
+            if (!comment.reactions) {
+                comment.reactions = { like: [], love: [], laugh: [], fire: [], sad: [], angry: [] };
+            }
+
+            validReactions.forEach(type => {
+                if (!comment.reactions[type]) comment.reactions[type] = [];
+                const idx = comment.reactions[type].indexOf(username);
+                if (idx !== -1) comment.reactions[type].splice(idx, 1);
+            });
+
+            if (!comment.reactions[reactionType]) comment.reactions[reactionType] = [];
+            const idx = comment.reactions[reactionType].indexOf(username);
+            if (idx === -1) {
+                comment.reactions[reactionType].push(username);
+            }
+
+            await post.save();
+            const enriched = await enrichPost(post);
+            return Response.json(enriched);
+        }
+
         return Response.json({ error: "Invalid action" }, { status: 400 });
     } catch (error) {
         console.error(error);

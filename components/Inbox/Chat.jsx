@@ -7,8 +7,18 @@ import { useToast } from "@/context/ToastContext";
 import ImageLightbox from "@/components/shared/ImageLightbox";
 import UserBadges from "@/components/shared/UserBadges";
 import AudioPlayer from "@/components/shared/AudioPlayer";
+import RichText from "@/components/Feed/RichText";
 
 const RECALL_WINDOW_MS = 60 * 1000;
+
+const MSG_REACTIONS = [
+    { type: "like", emoji: "👍" },
+    { type: "love", emoji: "❤️" },
+    { type: "laugh", emoji: "😂" },
+    { type: "fire", emoji: "🔥" },
+    { type: "sad", emoji: "😢" },
+    { type: "angry", emoji: "😠" },
+];
 
 const lastReadKey = (user1, user2) => `chat_read:${[user1, user2].sort().join(":")}`;
 
@@ -152,6 +162,30 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         } catch {}
         setTranslatingIdx(null);
     };
+
+    const handleReactMessage = useCallback(async (msgId, reactionType) => {
+        if (!username) return;
+        setMessages(prev => prev.map(m => {
+            if (m._id !== msgId) return m;
+            const reactions = m.reactions ? { ...m.reactions } : {};
+            for (const type of MSG_REACTIONS.map(r => r.type)) {
+                if (!reactions[type]) reactions[type] = [];
+                const idx = reactions[type].indexOf(username);
+                if (idx !== -1) reactions[type] = reactions[type].filter(u => u !== username);
+            }
+            if (!reactions[reactionType]) reactions[reactionType] = [];
+            const idx = reactions[reactionType].indexOf(username);
+            if (idx === -1) reactions[reactionType] = [...reactions[reactionType], username];
+            return { ...m, reactions };
+        }));
+        try {
+            await fetch("/api/messages", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ sender: username, messageId: msgId, action: "react", reactionType }),
+            });
+        } catch {}
+    }, [username]);
 
     useEffect(() => {
         if (!user?.autoTranslate || !username) return;
@@ -626,7 +660,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                     )}
                                     {msg.text && (
                                         <div className={`px-4 py-2.5 text-sm leading-snug wrap-break-word ${msg.imageUrl ? "border-t border-white/20" : ""}`}>
-                                            {msg.text}
+                                            <RichText text={msg.text} className="text-inherit" />
                                         </div>
                                     )}
                                 </div>
@@ -691,6 +725,31 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                         </span>
                                     )}
                                 </div>
+                                {msg.reactions && (() => {
+                                    const counts = MSG_REACTIONS
+                                        .map(r => ({ ...r, count: msg.reactions[r.type]?.length || 0, users: msg.reactions[r.type] || [] }))
+                                        .filter(r => r.count > 0);
+                                    const myReaction = MSG_REACTIONS.find(r => msg.reactions[r.type]?.includes(username));
+                                    if (counts.length === 0 && !myReaction) return null;
+                                    return (
+                                        <div className={`flex items-center gap-1 mt-0.5 flex-wrap ${isMine ? "justify-end mr-1" : "justify-start ml-1"}`}>
+                                            {counts.map(r => (
+                                                <button
+                                                    key={r.type}
+                                                    onClick={() => handleReactMessage(msg._id, r.type)}
+                                                    className={`inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full transition-colors ${
+                                                        myReaction?.type === r.type
+                                                            ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                                                            : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                                    }`}
+                                                >
+                                                    <span>{r.emoji}</span>
+                                                    <span>{r.count}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         </div>
                     </div>

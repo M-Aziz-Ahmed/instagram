@@ -12,6 +12,8 @@ import ReactionPicker, { ReactionCounts } from "./ReactionPicker";
 import RepostButton from "./RepostButton";
 import VoiceRecorder from "@/components/shared/VoiceRecorder";
 import AudioPlayer from "@/components/shared/AudioPlayer";
+import EmojiPicker from "@/components/shared/EmojiPicker";
+import GifPicker from "@/components/shared/GifPicker";
 import Link from "next/link";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -69,6 +71,8 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
     const [imageUrl, setImageUrl] = useState("");
     const [audioUrl, setAudioUrl] = useState("");
     const [uploading, setUploading] = useState(false);
+    const [showEmoji, setShowEmoji] = useState(false);
+    const [showGif, setShowGif]     = useState(false);
     const fileRef = useRef(null);
 
     const uploadToCloudinary = (file) =>
@@ -142,7 +146,22 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
                         maxLength={300}
                         className="flex-1 bg-transparent text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
                     />
-                    <div className="flex items-center gap-1 ml-2">
+                    <div className="flex items-center gap-1 ml-2 relative">
+                        <button type="button" onClick={() => { setShowEmoji(!showEmoji); setShowGif(false); }}
+                            className={`p-0.5 rounded transition-colors ${showEmoji ? "text-yellow-500" : "text-gray-400 hover:text-yellow-500"}`}
+                            title="Add emoji">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
+                                <circle cx="12" cy="12" r="10" />
+                                <path strokeLinecap="round" d="M8 14s1.5 2 4 2 4-2 4-2" />
+                                <line x1="9" y1="9" x2="9.01" y2="9" strokeLinecap="round" />
+                                <line x1="15" y1="9" x2="15.01" y2="9" strokeLinecap="round" />
+                            </svg>
+                        </button>
+                        <button type="button" onClick={() => { setShowGif(!showGif); setShowEmoji(false); }}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${showGif ? "text-purple-500" : "text-gray-400 hover:text-purple-500"}`}
+                            title="Add GIF">
+                            GIF
+                        </button>
                         <button type="button" onClick={() => fileRef.current?.click()}
                             disabled={uploading}
                             className="text-gray-400 hover:text-blue-500 transition-colors p-0.5"
@@ -154,6 +173,22 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
                         </button>
                         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
                         <VoiceRecorder onRecorded={(url) => setAudioUrl(url)} maxDuration={60} />
+                        {showEmoji && (
+                            <div className="absolute bottom-full right-0 mb-2 z-30">
+                                <EmojiPicker
+                                    onEmojiSelect={(emoji) => setText(prev => prev + emoji)}
+                                    onClose={() => setShowEmoji(false)}
+                                />
+                            </div>
+                        )}
+                        {showGif && (
+                            <div className="absolute bottom-full right-0 mb-2 z-30">
+                                <GifPicker
+                                    onSelect={(url) => { setImageUrl(url); setShowGif(false); }}
+                                    onClose={() => setShowGif(false)}
+                                />
+                            </div>
+                        )}
                         {(text.trim() || imageUrl || audioUrl) && (
                             <button
                                 onClick={handleSubmit}
@@ -186,7 +221,76 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
     );
 }
 
-function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, postId, onDelete }) {
+const COMMENT_REACTIONS = [
+    { type: "like", emoji: "👍" },
+    { type: "love", emoji: "❤️" },
+    { type: "laugh", emoji: "😂" },
+    { type: "fire", emoji: "🔥" },
+    { type: "sad", emoji: "😢" },
+    { type: "angry", emoji: "😠" },
+];
+
+function CommentReactionButton({ comment, user, postId, onReact }) {
+    const [show, setShow] = useState(false);
+    const myReaction = COMMENT_REACTIONS.find(r =>
+        comment.reactions?.[r.type]?.includes(user.username)
+    );
+
+    const handleReact = (type) => {
+        onReact(postId, comment.commentId, type);
+        setShow(false);
+    };
+
+    return (
+        <div className="relative">
+            <button
+                onClick={() => setShow(!show)}
+                onBlur={() => setTimeout(() => setShow(false), 200)}
+                className={`inline-flex items-center text-[11px] font-medium transition-colors px-1.5 py-1 rounded min-h-[28px] ${
+                    myReaction
+                        ? "text-blue-500"
+                        : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                }`}
+            >
+                {myReaction ? myReaction.emoji : "😊"}
+            </button>
+            {show && (
+                <div className="absolute bottom-full left-0 mb-1 bg-white dark:bg-gray-900 rounded-full shadow-xl border border-gray-200 dark:border-gray-700 px-1.5 py-1 flex gap-0.5 z-10">
+                    {COMMENT_REACTIONS.map((r) => (
+                        <button
+                            key={r.type}
+                            onClick={() => handleReact(r.type)}
+                            className={`text-base p-1 hover:scale-125 transition-transform rounded-full ${
+                                myReaction?.type === r.type ? "bg-blue-100 dark:bg-blue-900/30" : "hover:bg-gray-100 dark:hover:bg-gray-800"
+                            }`}
+                        >
+                            {r.emoji}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function CommentReactionCounts({ reactions }) {
+    const counts = COMMENT_REACTIONS
+        .map(r => ({ ...r, count: reactions[r.type]?.length || 0 }))
+        .filter(r => r.count > 0);
+    if (counts.length === 0) return null;
+    return (
+        <div className="flex gap-1 flex-wrap mt-0.5 px-1">
+            {counts.map(r => (
+                <span key={r.type} className="inline-flex items-center gap-0.5 text-[10px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-full px-1.5 py-0.5">
+                    <span className="text-xs">{r.emoji}</span>
+                    <span>{r.count}</span>
+                </span>
+            ))}
+        </div>
+    );
+}
+
+function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, postId, onDelete, onReactComment }) {
     const replies = useMemo(
         () => allComments.filter((c) => c.parentId === comment.commentId),
         [allComments, comment.commentId]
@@ -228,6 +332,9 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                     <div className="flex items-center gap-2 mt-0.5 px-1">
                         <span className="text-gray-300 dark:text-gray-600 text-[11px]">{timeAgo(comment.timeStamp)}</span>
                         {user && (
+                            <CommentReactionButton comment={comment} user={user} postId={postId} onReact={onReactComment} />
+                        )}
+                        {user && (
                             <button
                                 onClick={() => onReply(comment.commentId, comment.sender)}
                                 className="text-[11px] text-gray-400 hover:text-blue-500 font-medium transition-colors px-2 py-1.5 min-h-[36px]"
@@ -244,6 +351,9 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                             </button>
                         )}
                     </div>
+                    {comment.reactions && (
+                        <CommentReactionCounts reactions={comment.reactions} />
+                    )}
                 </div>
             </div>
 
@@ -258,6 +368,7 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                     user={user}
                     postId={postId}
                     onDelete={onDelete}
+                    onReactComment={onReactComment}
                 />
             ))}
         </div>
@@ -557,6 +668,27 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag, serv
         setReplyToName(senderName);
     };
 
+    const handleReactComment = async (postId, commentId, reactionType) => {
+        if (!user) return;
+        try {
+            const res = await fetch(`/api/posts/${post._id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "reactComment",
+                    username: user.username,
+                    commentId,
+                    reactionType,
+                }),
+            });
+            if (res.ok) {
+                setPost(await res.json());
+            }
+        } catch {
+            showToast("Failed to react", "error");
+        }
+    };
+
     const handleDelete = async () => {
         if (!user || deleting) return;
         if (!confirm("Delete this post?")) return;
@@ -787,6 +919,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag, serv
                                             user={user}
                                             postId={post._id}
                                             onDelete={handleDeleteComment}
+                                            onReactComment={handleReactComment}
                                         />
                                     ))}
                                 </div>

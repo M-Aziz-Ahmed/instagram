@@ -156,13 +156,43 @@ export async function POST(request) {
 
 export async function PATCH(request) {
     try {
-        const { sender, recipient } = await request.json();
+        const body = await request.json();
+        const { sender, recipient, action, messageId, reactionType } = body;
+
+        await connectDB();
+
+        if (action === "react" && messageId && reactionType) {
+            const validReactions = ["like", "love", "laugh", "fire", "sad", "angry"];
+            if (!validReactions.includes(reactionType)) {
+                return Response.json({ error: "Invalid reaction type" }, { status: 400 });
+            }
+            const msg = await Message.findById(messageId);
+            if (!msg) return Response.json({ error: "Message not found" }, { status: 404 });
+
+            if (!msg.reactions) {
+                msg.reactions = { like: [], love: [], laugh: [], fire: [], sad: [], angry: [] };
+            }
+
+            validReactions.forEach(type => {
+                if (!msg.reactions[type]) msg.reactions[type] = [];
+                const idx = msg.reactions[type].indexOf(sender);
+                if (idx !== -1) msg.reactions[type].splice(idx, 1);
+            });
+
+            if (!msg.reactions[reactionType]) msg.reactions[reactionType] = [];
+            const idx = msg.reactions[reactionType].indexOf(sender);
+            if (idx === -1) {
+                msg.reactions[reactionType].push(sender);
+            }
+
+            await msg.save();
+            return Response.json(msg.toObject());
+        }
 
         if (!sender || !recipient) {
             return Response.json({ error: "Sender and recipient required" }, { status: 400 });
         }
 
-        await connectDB();
         await Message.updateMany(
             { sender: recipient, recipient: sender, isRead: false },
             { $set: { isRead: true } }
@@ -170,7 +200,7 @@ export async function PATCH(request) {
 
         return Response.json({ ok: true });
     } catch (error) {
-        return Response.json({ error: "Failed to mark messages as read" }, { status: 500 });
+        return Response.json({ error: "Failed to update messages" }, { status: 500 });
     }
 }
 

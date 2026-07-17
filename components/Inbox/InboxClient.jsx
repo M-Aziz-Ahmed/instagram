@@ -200,7 +200,7 @@ export default function InboxClient() {
                                 onClick={() => handleSelectConvo(convo)}
                                 className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 active:bg-gray-100 dark:active:bg-gray-700 transition-colors text-left ${
                                     selectedConvo?.username === convo.username ? "bg-gray-100 dark:bg-gray-800" : ""
-                                } ${targetUser === convo.username ? "bg-gray-100 dark:bg-gray-800" : ""}`}
+                                }`}
                             >
                                 {convo.user?.avatarUrl ? (
                                     <img src={convo.user.avatarUrl} alt="" className="w-14 h-14 rounded-full object-cover shrink-0" />

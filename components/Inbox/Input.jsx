@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import VoiceRecorder from "@/components/shared/VoiceRecorder";
+import EmojiPicker from "@/components/shared/EmojiPicker";
+import GifPicker from "@/components/shared/GifPicker";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
@@ -14,6 +16,8 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
     const [imagePreview, setImagePreview] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [audioUrl, setAudioUrl]   = useState("");
+    const [showEmoji, setShowEmoji] = useState(false);
+    const [showGif, setShowGif]     = useState(false);
     const fileRef                   = useRef(null);
     const inputRef                  = useRef(null);
     const typingTimeoutRef          = useRef(null);
@@ -250,6 +254,54 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                     </svg>
                 </button>
                 <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+
+                {/* Emoji button */}
+                <div className="relative">
+                    <button
+                        onClick={() => { setShowEmoji(!showEmoji); setShowGif(false); }}
+                        disabled={!user || !recipient}
+                        aria-label="Add emoji"
+                        className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ${showEmoji ? "text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20" : "text-gray-500 dark:text-gray-400 hover:text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"}`}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5">
+                            <circle cx="12" cy="12" r="10" />
+                            <path strokeLinecap="round" d="M8 14s1.5 2 4 2 4-2 4-2" />
+                            <line x1="9" y1="9" x2="9.01" y2="9" strokeLinecap="round" />
+                            <line x1="15" y1="9" x2="15.01" y2="9" strokeLinecap="round" />
+                        </svg>
+                    </button>
+                    {showEmoji && (
+                        <div className="absolute bottom-full left-0 mb-2 z-30">
+                            <EmojiPicker
+                                onEmojiSelect={(emoji) => setText(prev => prev + emoji)}
+                                onClose={() => setShowEmoji(false)}
+                            />
+                        </div>
+                    )}
+                </div>
+
+                {/* GIF button */}
+                <div className="relative">
+                    <button
+                        onClick={() => { setShowGif(!showGif); setShowEmoji(false); }}
+                        disabled={!user || !recipient}
+                        aria-label="Add GIF"
+                        className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ${showGif ? "text-purple-500 bg-purple-50 dark:bg-purple-900/20" : "text-gray-500 dark:text-gray-400 hover:text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20"}`}
+                    >
+                        <span className="text-[11px] font-bold">GIF</span>
+                    </button>
+                    {showGif && (
+                        <div className="absolute bottom-full left-0 mb-2 z-30">
+                            <GifPicker
+                                onSelect={(url) => {
+                                    setImagePreview(url);
+                                    setShowGif(false);
+                                }}
+                                onClose={() => setShowGif(false)}
+                            />
+                        </div>
+                    )}
+                </div>
 
                 {/* Text input */}
                 <div className="flex-1 flex items-center bg-gray-100 dark:bg-gray-800 rounded-2xl px-4 py-2 min-h-[44px] focus-within:ring-1 focus-within:ring-gray-300 dark:focus-within:ring-gray-600 transition-shadow">
