@@ -28,6 +28,8 @@ function parseFEN(fen) {
     return board;
 }
 
+
+
 export default function ChessBoard({
     fen,
     turn,
@@ -40,6 +42,8 @@ export default function ChessBoard({
     isFlipped,
     onFlip,
     status,
+    promotionPending,
+    onPromotionChoice,
 }) {
     const boardRef = useRef(null);
     const [dragging, setDragging] = useState(null);
@@ -134,32 +138,29 @@ export default function ChessBoard({
         return null;
     }, [fen, findKingSquare]);
 
+    const isPromotion = promotionPending;
+
     return (
         <div className="relative select-none">
-            <div className="flex items-center mb-1">
-                <div className="flex-1" />
-                <button
-                    onClick={onFlip}
-                    className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                    title="Flip board"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                        <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.598a.75.75 0 0 0-.75.75v3.634a.75.75 0 0 0 1.5 0v-2.033l.312.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm1.23-3.723a.75.75 0 0 0 .219-.53V3.59a.75.75 0 0 0-1.5 0V5.37l-.312-.311A7 7 0 0 0 .885 8.249a.75.75 0 1 0 1.45.388A5.5 5.5 0 0 1 11.506 6.17l.312.311h-2.432a.75.75 0 0 0 0 1.5h3.634a.75.75 0 0 0 .53-.22Z" clipRule="evenodd" />
-                    </svg>
-                </button>
-            </div>
-
             <div className="flex">
                 <div className="flex flex-col">
                     {displayRanks.map((rank) => (
-                        <div key={rank} className="w-4 h-[calc(100%/8)] flex items-center justify-center text-[10px] font-medium text-gray-400 dark:text-gray-500">
+                        <div
+                            key={rank}
+                            className="flex items-center justify-center text-[11px] font-bold"
+                            style={{
+                                width: 16,
+                                height: "12.5%",
+                                color: displayRanks.indexOf(rank) % 2 === 0 ? "#8b7355" : "#a39279",
+                            }}
+                        >
                             {rank}
                         </div>
                     ))}
                 </div>
 
-                <div ref={boardRef} className="relative border border-gray-800 dark:border-gray-600 rounded-sm overflow-hidden">
-                    <div className="grid grid-cols-8 grid-rows-8" style={{ aspectRatio: "1" }}>
+                <div ref={boardRef} className="relative" style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}>
+                    <div className="grid grid-cols-8 grid-rows-8" style={{ aspectRatio: "1", width: "100%" }}>
                         {displayBoard.map((row, ri) =>
                             row.map((piece, ci) => {
                                 const square = displayToSquare(ri, ci);
@@ -172,35 +173,67 @@ export default function ChessBoard({
                                 const isDragSource = dragging?.ri === ri && dragging?.ci === ci;
                                 const isKingInCheck = inCheckKingSquare === square && piece?.type === "k";
 
-                                let bgClass = isLight ? "bg-[#f0d9b5]" : "bg-[#b58863]";
-                                if (isSelected || isLastMoveFrom || isLastMoveTo) {
-                                    bgClass = isLight ? "bg-[#f6f669]" : "bg-[#baca2b]";
-                                }
-                                if (isDragOverTarget) {
-                                    bgClass = isLight ? "bg-[#bbcb2b]" : "bg-[#9bac3b]";
+                                let bgColor;
+                                if (isSelected) {
+                                    bgColor = isLight ? "#f6f669" : "#baca2b";
+                                } else if (isLastMoveFrom || isLastMoveTo) {
+                                    bgColor = isLight ? "#cdd26a" : "#aaa23a";
+                                } else if (isDragOverTarget && dragging) {
+                                    bgColor = isLight ? "#bbcb2b" : "#9bac3b";
+                                } else {
+                                    bgColor = isLight ? "#f0d9b5" : "#b58863";
                                 }
 
                                 return (
                                     <div
                                         key={`${ri}-${ci}`}
-                                        className={`relative flex items-center justify-center cursor-pointer ${bgClass} ${isKingInCheck ? "ring-4 ring-red-500/80 ring-inset" : ""}`}
+                                        className="relative flex items-center justify-center"
+                                        style={{
+                                            backgroundColor: bgColor,
+                                            cursor: "pointer",
+                                        }}
                                         onClick={() => handleClick(ri, ci)}
                                         onDragOver={(e) => handleDragOver(e, ri, ci)}
                                         onDrop={(e) => handleDrop(e, ri, ci)}
                                         onDragLeave={() => setDragOver(null)}
                                     >
+                                        {isKingInCheck && (
+                                            <div
+                                                className="absolute inset-0 pointer-events-none"
+                                                style={{
+                                                    background: "radial-gradient(circle, rgba(255,0,0,0.6) 0%, rgba(255,0,0,0.25) 40%, transparent 70%)",
+                                                }}
+                                            />
+                                        )}
+
                                         {isLegalMove && !piece && !isDragSource && (
-                                            <div className="absolute w-3 h-3 rounded-full bg-black/20 dark:bg-white/30 z-10 pointer-events-none" />
+                                            <div
+                                                className="absolute rounded-full pointer-events-none z-10"
+                                                style={{
+                                                    width: "26%",
+                                                    height: "26%",
+                                                    backgroundColor: "rgba(0,0,0,0.25)",
+                                                }}
+                                            />
                                         )}
                                         {isLegalMove && piece && !isDragSource && (
-                                            <div className="absolute inset-0 rounded-full border-[3px] border-black/20 dark:border-white/30 z-10 pointer-events-none" />
+                                            <div
+                                                className="absolute pointer-events-none z-10"
+                                                style={{
+                                                    inset: 3,
+                                                    borderRadius: "50%",
+                                                    border: "3px solid rgba(0,0,0,0.25)",
+                                                }}
+                                            />
                                         )}
+
                                         {piece && !isDragSource && (
                                             <div
-                                                className="z-20"
+                                                className="z-20 transition-transform duration-75 ease-out"
                                                 draggable={isPlayerTurn && piece.color === playerColor}
                                                 onDragStart={(e) => handleDragStart(e, ri, ci)}
                                                 onDragEnd={handleDragEnd}
+                                                style={{ willChange: "transform" }}
                                             >
                                                 <ChessPiece piece={piece} size={60} />
                                             </div>
@@ -210,6 +243,28 @@ export default function ChessBoard({
                             })
                         )}
                     </div>
+
+                    {isPromotion && (
+                        <div
+                            className="absolute inset-0 flex items-center justify-center z-50"
+                            style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+                        >
+                            <div className="bg-white dark:bg-gray-800 rounded-xl p-3 shadow-2xl border border-gray-200 dark:border-gray-700">
+                                <p className="text-xs text-center text-gray-500 dark:text-gray-400 mb-2 font-medium">Promote to:</p>
+                                <div className="flex gap-1">
+                                    {["q", "r", "b", "n"].map((type) => (
+                                        <button
+                                            key={type}
+                                            onClick={() => onPromotionChoice?.(type)}
+                                            className="w-12 h-12 flex items-center justify-center rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                                        >
+                                            <ChessPiece piece={{ type, color: promotionPending }} size={44} />
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -217,11 +272,30 @@ export default function ChessBoard({
                 <div className="w-4" />
                 <div className="flex-1 flex">
                     {displayFiles.map((file) => (
-                        <div key={file} className="flex-1 text-center text-[10px] font-medium text-gray-400 dark:text-gray-500 py-0.5">
+                        <div
+                            key={file}
+                            className="flex-1 text-center text-[11px] font-bold"
+                            style={{
+                                color: displayFiles.indexOf(file) % 2 === 1 ? "#8b7355" : "#a39279",
+                                paddingTop: 2,
+                            }}
+                        >
                             {file}
                         </div>
                     ))}
                 </div>
+            </div>
+
+            <div className="flex items-center justify-end mt-1">
+                <button
+                    onClick={onFlip}
+                    className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    title="Flip board"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                        <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.598a.75.75 0 0 0-.75.75v3.634a.75.75 0 0 0 1.5 0v-2.033l.312.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm1.23-3.723a.75.75 0 0 0 .219-.53V3.59a.75.75 0 0 0-1.5 0V5.37l-.312-.311A7 7 0 0 0 .885 8.249a.75.75 0 1 0 1.45.388A5.5 5.5 0 0 1 11.506 6.17l.312.311h-2.432a.75.75 0 0 0 0 1.5h3.634a.75.75 0 0 0 .53-.22Z" clipRule="evenodd" />
+                    </svg>
+                </button>
             </div>
         </div>
     );

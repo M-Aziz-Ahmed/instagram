@@ -7,8 +7,7 @@ import ChessBoard from "./ChessBoard";
 import ChessTimer from "./ChessTimer";
 import ChessMoveHistory from "./ChessMoveHistory";
 import ChessChat from "./ChessChat";
-import useStockfish from "./useStockfish";
-import { playMoveSound, playCaptureSound, playCheckSound, playCheckmateSound, playGameStartSound } from "./chessSounds";
+import { playMoveSound, playCaptureSound, playCheckSound, playCheckmateSound, playCastleSound, playPromotionSound, playClickSound, setSoundEnabled } from "./chessSounds";
 
 const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
 
@@ -52,8 +51,8 @@ function getLegalMovesFromFEN(fen, square) {
         board.push(row);
     }
 
-    const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
-    const RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"];
+    const FILES = ["a","b","c","d","e","f","g","h"];
+    const RANKS = ["8","7","6","5","4","3","2","1"];
     const col = FILES.indexOf(square[0]);
     const row = RANKS.indexOf(square[1]);
     const piece = board[row]?.[col];
@@ -132,6 +131,20 @@ function getLegalMovesFromFEN(fen, square) {
     return moves;
 }
 
+function detectPromotion(fen, from, to, playerColor) {
+    const board = parseFEN(fen).board;
+    const FILES = ["a","b","c","d","e","f","g","h"];
+    const RANKS = ["8","7","6","5","4","3","2","1"];
+    const fromCol = FILES.indexOf(from[0]);
+    const fromRow = RANKS.indexOf(from[1]);
+    const piece = board[fromRow]?.[fromCol];
+    if (!piece || piece.type !== "p") return false;
+    const toRow = RANKS.indexOf(to[1]);
+    if (playerColor === "w" && toRow === 0) return true;
+    if (playerColor === "b" && toRow === 7) return true;
+    return false;
+}
+
 export default function ChessGameClient({ gameId }) {
     const { user } = useUser();
     const socketRef = useRef(null);
@@ -145,9 +158,13 @@ export default function ChessGameClient({ gameId }) {
     const [drawOffer, setDrawOffer] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [soundOn, setSoundOn] = useState(true);
+    const [promotionPending, setPromotionPending] = useState(null);
+    const [pendingMove, setPendingMove] = useState(null);
+    const [showGameOver, setShowGameOver] = useState(false);
+    const [lastResultText, setLastResultText] = useState("");
     const timerRef = useRef(null);
     const gameRef = useRef(null);
-    const { ready: stockfishReady, evaluating, getBestMove } = useStockfish(15);
 
     gameRef.current = game;
 
@@ -160,6 +177,12 @@ export default function ChessGameClient({ gameId }) {
 
     const isMyTurn = game?.turn === myColor;
     const gameOver = game?.status && game.status !== "active" && game.status !== "waiting";
+
+    const toggleSound = () => {
+        const next = !soundOn;
+        setSoundOn(next);
+        setSoundEnabled(next);
+    };
 
     useEffect(() => {
         if (!LIVE_SERVER || !user?.username) return;
@@ -175,9 +198,16 @@ export default function ChessGameClient({ gameId }) {
         s.on("chess:move", (data) => {
             if (data.move) {
                 const isCapture = data.move.flags?.includes("c") || data.move.captured;
+                const isCastle = data.move.san?.includes("O-O") || data.move.san?.includes("0-0");
+                const isPromotionMove = data.move.promotion;
                 const isCheck = data.status === "active" && (data.fen?.includes(" K ") || data.fen?.includes(" k "));
+
                 if (data.status === "checkmate") {
                     playCheckmateSound();
+                } else if (isCastle) {
+                    playCastleSound();
+                } else if (isPromotionMove) {
+                    playPromotionSound();
                 } else if (isCheck) {
                     playCheckSound();
                 } else if (isCapture) {
@@ -292,16 +322,39 @@ export default function ChessGameClient({ gameId }) {
     }, [game?.status, gameId]);
 
     useEffect(() => {
-        // AI moves are now handled server-side
-        return;
-    }, [game?.turn, game?.status, game?.mode, stockfishReady, evaluating, gameId]);
+        if (!gameOver || !game) return;
+        const result = getResultText();
+        if (result !== lastResultText) {
+            setLastResultText(result);
+            setShowGameOver(true);
+        }
+    }, [game?.status, game?.winner]);
 
     const handleMove = useCallback((from, to) => {
         if (!socketRef.current) return;
+        if (detectPromotion(game?.fen, from, to, myColor)) {
+            setPromotionPending(myColor);
+            setPendingMove({ from, to });
+            return;
+        }
         socketRef.current.emit("chess:make-move", { gameId, from, to, promotion: "q" });
         setSelectedSquare(null);
         setLegalMoves([]);
-    }, [gameId]);
+    }, [gameId, game?.fen, myColor]);
+
+    const handlePromotionChoice = useCallback((pieceType) => {
+        if (!pendingMove || !socketRef.current) return;
+        socketRef.current.emit("chess:make-move", {
+            gameId,
+            from: pendingMove.from,
+            to: pendingMove.to,
+            promotion: pieceType,
+        });
+        setPromotionPending(null);
+        setPendingMove(null);
+        setSelectedSquare(null);
+        setLegalMoves([]);
+    }, [gameId, pendingMove]);
 
     const handleSquareClick = useCallback((square) => {
         if (gameOver || !isMyTurn) return;
@@ -322,12 +375,14 @@ export default function ChessGameClient({ gameId }) {
         }
 
         if (clickedPiece && clickedPiece.color === myColor) {
+            playClickSound();
             setSelectedSquare(square);
             setLegalMoves(getLegalMovesFromFEN(game.fen, square));
         } else if (selectedSquare) {
             if (legalMoves.includes(square)) {
                 handleMove(selectedSquare, square);
             } else if (clickedPiece && clickedPiece.color === myColor) {
+                playClickSound();
                 setSelectedSquare(square);
                 setLegalMoves(getLegalMovesFromFEN(game.fen, square));
             } else {
@@ -377,10 +432,23 @@ export default function ChessGameClient({ gameId }) {
         return `Game over: ${result}`;
     };
 
+    const getResultIcon = () => {
+        if (!game) return null;
+        const { status, winner } = game;
+        if (status === "checkmate" || status === "resigned" || status === "timeout") {
+            if (winner === user?.username) return "🏆";
+            return "😞";
+        }
+        return "🤝";
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-96">
-                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                <div className="text-center">
+                    <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-xs text-gray-400">Loading game...</p>
+                </div>
             </div>
         );
     }
@@ -389,8 +457,13 @@ export default function ChessGameClient({ gameId }) {
         return (
             <div className="flex items-center justify-center h-96">
                 <div className="text-center">
-                    <p className="text-red-500 mb-2">{error}</p>
-                    <a href="/chess" className="text-blue-500 hover:underline text-sm">Back to lobby</a>
+                    <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center mx-auto mb-3">
+                        <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">{error}</p>
+                    <a href="/chess" className="text-xs text-blue-500 hover:underline">Back to lobby</a>
                 </div>
             </div>
         );
@@ -404,11 +477,47 @@ export default function ChessGameClient({ gameId }) {
     const bottomPlayer = isFlipped ? opponent : me;
     const topColor = isFlipped ? myColor : (myColor === "w" ? "b" : "w");
     const bottomColor = isFlipped ? (myColor === "w" ? "b" : "w") : myColor;
+    const isAIMode = game.mode === "ai";
 
     return (
         <div className="max-w-6xl mx-auto px-4 py-4">
             <div className="flex flex-col lg:flex-row gap-4">
                 <div className="flex-1 max-w-[560px] mx-auto w-full">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                            {isAIMode && (
+                                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+                                    vs Computer
+                                </span>
+                            )}
+                            <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full ${
+                                game.status === "active"
+                                    ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+                                    : game.status === "waiting"
+                                    ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400"
+                                    : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+                            }`}>
+                                {game.status === "active" ? "Live" : game.status === "waiting" ? "Waiting" : "Finished"}
+                            </span>
+                        </div>
+                        <button
+                            onClick={toggleSound}
+                            className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                            title={soundOn ? "Mute sounds" : "Unmute sounds"}
+                        >
+                            {soundOn ? (
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                </svg>
+                            ) : (
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                </svg>
+                            )}
+                        </button>
+                    </div>
+
                     <ChessTimer
                         time={timers[topColor]}
                         isActive={game.turn === topColor}
@@ -430,7 +539,8 @@ export default function ChessGameClient({ gameId }) {
                             isFlipped={isFlipped}
                             onFlip={() => setIsFlipped(!isFlipped)}
                             status={game.status}
-                            orientation={myColor}
+                            promotionPending={promotionPending}
+                            onPromotionChoice={handlePromotionChoice}
                         />
                     </div>
 
@@ -443,61 +553,59 @@ export default function ChessGameClient({ gameId }) {
                     />
 
                     {game.status === "waiting" && (
-                        <div className="mt-3 text-center">
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Waiting for opponent...</p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Share game link or wait for someone to join</p>
-                        </div>
-                    )}
-
-                    {gameOver && (
-                        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-center">
-                            <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">{getResultText()}</p>
-                            <a href="/chess" className="text-xs text-blue-500 hover:underline mt-1 inline-block">Back to lobby</a>
-                        </div>
-                    )}
-
-                    {error && (
-                        <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded text-center">
-                            <p className="text-xs text-red-500">{error}</p>
+                        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-center">
+                            <div className="flex items-center justify-center gap-2 mb-1">
+                                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                                <p className="text-sm font-medium text-blue-700 dark:text-blue-300">Waiting for opponent...</p>
+                            </div>
+                            <p className="text-xs text-blue-500 dark:text-blue-400">Share the game link to invite someone</p>
                         </div>
                     )}
 
                     {isMyTurn && !gameOver && game.status === "active" && (
                         <div className="mt-2 flex items-center justify-center gap-2">
-                            <span className="text-xs text-green-600 dark:text-green-400 font-medium animate-pulse">Your turn</span>
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                            <span className="text-xs text-green-600 dark:text-green-400 font-semibold">Your turn</span>
                         </div>
                     )}
 
-                    <div className="mt-2 flex items-center justify-center gap-2 flex-wrap">
+                    <div className="mt-2 flex items-center justify-center gap-1 flex-wrap">
                         {game.status === "active" && myColor && (
                             <>
                                 <button onClick={handleResign} className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
                                     Resign
                                 </button>
+                                <span className="text-gray-300 dark:text-gray-700">|</span>
                                 <button onClick={handleOfferDraw} className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors">
-                                    Offer Draw
+                                    Draw
                                 </button>
                             </>
                         )}
                     </div>
 
                     {drawOffer && drawOffer !== user?.username && (
-                        <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-center">
-                            <p className="text-xs text-yellow-700 dark:text-yellow-300 mb-2">{drawOffer} offers a draw</p>
+                        <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl text-center border border-yellow-200 dark:border-yellow-800/50">
+                            <p className="text-xs font-medium text-yellow-700 dark:text-yellow-300 mb-2">{drawOffer} offers a draw</p>
                             <div className="flex items-center justify-center gap-2">
-                                <button onClick={handleAcceptDraw} className="px-3 py-1 text-xs font-medium text-white bg-green-500 rounded hover:bg-green-600 transition-colors">
+                                <button onClick={handleAcceptDraw} className="px-4 py-1.5 text-xs font-semibold text-white bg-green-500 rounded-lg hover:bg-green-600 transition-colors shadow-sm">
                                     Accept
                                 </button>
-                                <button onClick={handleDeclineDraw} className="px-3 py-1 text-xs font-medium text-white bg-gray-500 rounded hover:bg-gray-600 transition-colors">
+                                <button onClick={handleDeclineDraw} className="px-4 py-1.5 text-xs font-semibold text-white bg-gray-500 rounded-lg hover:bg-gray-600 transition-colors shadow-sm">
                                     Decline
                                 </button>
                             </div>
                         </div>
                     )}
+
+                    {error && (
+                        <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-center">
+                            <p className="text-xs text-red-500">{error}</p>
+                        </div>
+                    )}
                 </div>
 
                 <div className="w-full lg:w-72 shrink-0">
-                    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+                    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm">
                         <div className="h-64 lg:h-80 border-b border-gray-200 dark:border-gray-700">
                             <ChessMoveHistory
                                 moves={game.moves || []}
@@ -515,6 +623,32 @@ export default function ChessGameClient({ gameId }) {
                     </div>
                 </div>
             </div>
+
+            {showGameOver && gameOver && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.6)" }}>
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl border border-gray-200 dark:border-gray-700 animate-in">
+                        <div className="text-5xl mb-4">{getResultIcon()}</div>
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{getResultText()}</h2>
+                        {game.resultReason && (
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">{game.resultReason}</p>
+                        )}
+                        {game.moves && (
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mb-6">{Math.ceil(game.moves.length / 2)} moves played</p>
+                        )}
+                        <div className="flex flex-col gap-2">
+                            <a href="/chess" className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-colors shadow-md">
+                                Back to Lobby
+                            </a>
+                            <button
+                                onClick={() => setShowGameOver(false)}
+                                className="px-6 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                            >
+                                Stay & Review
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
