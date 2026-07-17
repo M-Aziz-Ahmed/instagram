@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import ChatBox from "./ChatBox";
 import { useSidebar } from "@/context/SidebarContext";
 import UserBadges from "@/components/shared/UserBadges";
+import { setActiveChat } from "@/utils/activeChat";
 
 function timeAgo(date) {
     const diff = (Date.now() - new Date(date)) / 1000;
@@ -36,6 +37,7 @@ export default function InboxClient() {
 
     useEffect(() => {
         if (!user || !selectedConvo) return;
+        setActiveChat(selectedConvo.username);
         const clearTyping = () => {
             fetch("/api/typing", {
                 method: "POST",
@@ -44,7 +46,10 @@ export default function InboxClient() {
             }).catch(() => {});
         };
 
-        return () => clearTyping();
+        return () => {
+            setActiveChat(null);
+            clearTyping();
+        };
     }, [user, selectedConvo?.username]);
 
     const fetchConversations = useCallback(async () => {

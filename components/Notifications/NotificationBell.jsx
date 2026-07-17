@@ -5,6 +5,7 @@ import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 import UserBadges from "@/components/shared/UserBadges";
 import { playNotificationSound, initAudio, toggleNotificationSound, isSoundEnabled } from "@/utils/notificationSound";
+import { getActiveChat } from "@/utils/activeChat";
 
 function timeAgo(date) {
     const diff = (Date.now() - new Date(date)) / 1000;
@@ -57,18 +58,26 @@ export default function NotificationBell({ onNavigate }) {
             const res = await fetch(`/api/notifications?username=${encodeURIComponent(user.username)}`);
             if (res.ok) {
                 const newNotifs = await res.json();
-                const newUnreadCount = newNotifs.filter((n) => !n.read).length;
+                const activeChat = getActiveChat();
+                
+                // Filter out message notifications from the person we're actively chatting with
+                const visibleNotifs = newNotifs.filter((n) => {
+                    if (n.type === "message" && activeChat && n.fromUser === activeChat) return false;
+                    return true;
+                });
+
+                const newUnreadCount = visibleNotifs.filter((n) => !n.read).length;
                 
                 // Play sound if new unread notifications arrived
                 // Skip first poll (prevUnreadCount === -1) to avoid playing sounds for stale notifications
                 if (prevUnreadCount.current >= 0 && newUnreadCount > prevUnreadCount.current) {
-                    const latestNotif = newNotifs.find(n => !n.read);
+                    const latestNotif = visibleNotifs.find(n => !n.read);
                     const soundType = latestNotif?.type || 'default';
                     playNotificationSound(soundType);
                 }
                 
                 prevUnreadCount.current = newUnreadCount;
-                setNotifs(newNotifs);
+                setNotifs(visibleNotifs);
             }
         } catch { /* silent */ }
     }, [user]);

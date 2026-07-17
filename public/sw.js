@@ -2,6 +2,13 @@
 const CACHE_NAME = 'anonfeed-v1';
 const OFFLINE_URL = '/offline.html';
 
+// Active chat tracking — suppress message pushes when user is chatting with sender
+let _activeChat = null;
+try {
+  const chatChannel = new BroadcastChannel('active_chat');
+  chatChannel.onmessage = (e) => { _activeChat = e.data || null; };
+} catch {}
+
 // Install event - cache essential assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -36,6 +43,13 @@ self.addEventListener('push', (event) => {
   try {
     data = { ...data, ...event.data.json() };
   } catch {}
+
+  // Skip message push if user is actively chatting with sender
+  if (data.type === 'message' && data.url && _activeChat) {
+    const urlObj = new URL(data.url, self.location.origin);
+    const chatUser = urlObj.searchParams.get('user');
+    if (chatUser === _activeChat) return;
+  }
 
   event.waitUntil(
     self.registration.showNotification(data.title, {
