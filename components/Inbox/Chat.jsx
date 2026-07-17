@@ -8,6 +8,7 @@ import ImageLightbox from "@/components/shared/ImageLightbox";
 import UserBadges from "@/components/shared/UserBadges";
 import AudioPlayer from "@/components/shared/AudioPlayer";
 import RichText from "@/components/Feed/RichText";
+import { playNotificationSound, initAudio } from "@/utils/notificationSound";
 
 const RECALL_WINDOW_MS = 60 * 1000;
 
@@ -111,6 +112,8 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     const [translations, setTranslations] = useState({});
     const [translatingIdx, setTranslatingIdx] = useState(null);
     const autoTranslatingRef = useRef(new Set());
+    const prevMsgCountRef = useRef(0);
+    const playedSoundForRef = useRef(new Set());
 
     const isNearBottom = useCallback(() => {
         const el = scrollContainerRef.current;
@@ -225,6 +228,8 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         setHasMore(false);
         setOldestTimestamp(null);
         setLoading(true);
+        prevMsgCountRef.current = 0;
+        playedSoundForRef.current.clear();
     }, []);
 
     const syncPendingMessage = useCallback((pm) => {
@@ -519,6 +524,26 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     useEffect(() => {
         resetNewMessagesCount();
     }, [messages, resetNewMessagesCount]);
+
+    // Play sound when new messages arrive from the other person
+    useEffect(() => {
+        if (loading || !messages.length || !username) return;
+        const newMsgs = messages.filter(m => m.sender !== username && !m._sending && m._id);
+        if (prevMsgCountRef.current > 0 && messages.length > prevMsgCountRef.current) {
+            const freshMsgs = newMsgs.filter(m => !playedSoundForRef.current.has(m._id));
+            if (freshMsgs.length > 0) {
+                initAudio();
+                playNotificationSound('message');
+                freshMsgs.forEach(m => playedSoundForRef.current.add(m._id));
+            }
+        }
+        prevMsgCountRef.current = messages.length;
+        // Clean up old IDs to prevent memory leak
+        if (playedSoundForRef.current.size > 100) {
+            const arr = [...playedSoundForRef.current];
+            playedSoundForRef.current = new Set(arr.slice(-50));
+        }
+    }, [messages, username, loading]);
 
     if (loading) {
         return (

@@ -37,7 +37,7 @@ export default function NotificationBell({ onNavigate }) {
     const [open, setOpen]       = useState(false);
     const [soundEnabled, setSoundEnabled] = useState(true);
     const panelRef              = useRef(null);
-    const prevUnreadCount       = useRef(0);
+    const prevUnreadCount       = useRef(-1); // -1 = uninitialized, skip first poll
 
     const unread = notifs.filter((n) => !n.read).length;
 
@@ -60,8 +60,8 @@ export default function NotificationBell({ onNavigate }) {
                 const newUnreadCount = newNotifs.filter((n) => !n.read).length;
                 
                 // Play sound if new unread notifications arrived
-                if (newUnreadCount > prevUnreadCount.current && prevUnreadCount.current > 0) {
-                    // Determine sound type from most recent notification
+                // Skip first poll (prevUnreadCount === -1) to avoid playing sounds for stale notifications
+                if (prevUnreadCount.current >= 0 && newUnreadCount > prevUnreadCount.current) {
                     const latestNotif = newNotifs.find(n => !n.read);
                     const soundType = latestNotif?.type || 'default';
                     playNotificationSound(soundType);
@@ -75,9 +75,6 @@ export default function NotificationBell({ onNavigate }) {
 
     useEffect(() => {
         fetchNotifs();
-        // Initialize prev count on first load
-        prevUnreadCount.current = notifs.filter((n) => !n.read).length;
-        
         const id = setInterval(fetchNotifs, 15000);
         return () => clearInterval(id);
     }, [fetchNotifs]);
@@ -99,6 +96,7 @@ export default function NotificationBell({ onNavigate }) {
                 body: JSON.stringify({ username: user.username }),
             });
             setNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
+            prevUnreadCount.current = 0;
         }
     };
 
@@ -162,6 +160,7 @@ export default function NotificationBell({ onNavigate }) {
                                             body: JSON.stringify({ username: user.username }),
                                         });
                                         setNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
+                                        prevUnreadCount.current = 0;
                                     }}
                                     className="text-xs text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 whitespace-nowrap"
                                 >
