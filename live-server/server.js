@@ -448,7 +448,10 @@ io.on("connection", async (socket) => {
 
     // WebRTC signaling for voice (peer-to-peer mesh)
     socket.on("voice:signal", ({ to, from, fromUsername, type, data }) => {
-        io.to(to).emit("voice:signal", { from, fromUsername, type, data });
+        if (!to || !type) return;
+        const actualFrom = socket.id;
+        const actualFromUsername = socket.data?.username;
+        io.to(to).emit("voice:signal", { from: actualFrom, fromUsername: actualFromUsername, type, data });
     });
 
     // ── Voice Channel Admin Events ──────────────────────────────

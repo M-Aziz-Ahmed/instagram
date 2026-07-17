@@ -23,7 +23,9 @@ export function VoiceChatProvider({ children }) {
         const s = io(LIVE_SERVER, {
             query: { username: user.username },
             transports: ["websocket", "polling"],
-            reconnectionAttempts: 5,
+            reconnectionAttempts: 20,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 10000,
         });
         setSocket(s);
         return () => { s.disconnect(); setSocket(null); };

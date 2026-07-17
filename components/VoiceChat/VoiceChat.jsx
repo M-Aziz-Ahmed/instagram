@@ -204,8 +204,12 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
 
     const socketRef = useRef(socket);
     const userRef = useRef(user);
+    const activeChannelRef = useRef(null);
+    const speakingThrottleRef = useRef(0);
+    const lastJoinedChannelRef = useRef(null);
     useEffect(() => { socketRef.current = socket; }, [socket]);
     useEffect(() => { userRef.current = user; }, [user]);
+    useEffect(() => { activeChannelRef.current = activeChannel; }, [activeChannel]);
 
     const showNotif = useCallback((msg) => {
         setNotification(msg);
@@ -221,7 +225,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         pcsRef.current.clear();
         peerStreamsRef.current.forEach((s) => s.getTracks().forEach((t) => t.stop()));
         peerStreamsRef.current.clear();
-        audioElementsRef.current.forEach((el) => { el.srcObject = null; });
+        audioElementsRef.current.forEach((el) => { el.srcObject = null; el.remove(); });
         audioElementsRef.current.clear();
         analyserRef.current = null;
         if (audioCtxRef.current) { try { audioCtxRef.current.close(); } catch {} }
@@ -254,7 +258,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             if (ps) ps.getTracks().forEach((t) => t.stop());
             peerStreamsRef.current.delete(username);
             const el = audioElementsRef.current.get(username);
-            if (el) { el.srcObject = null; }
+            if (el) { el.srcObject = null; el.remove(); }
             audioElementsRef.current.delete(username);
         };
         const handleUserSpeaking = ({ username, speaking }) => {
@@ -270,6 +274,29 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             if (type === "offer") {
                 let pc = pcsRef.current.get(fromUsername);
                 if (!pc || pc.signalingState === "closed") {
+                    pc = new RTCPeerConnection(ICE_SERVERS);
+                    pcsRef.current.set(fromUsername, pc);
+
+                    const localStream = localStreamRef.current;
+                    if (localStream) {
+                        localStream.getTracks().forEach((track) => {
+                            pc.addTrack(track, localStream);
+                        });
+                    }
+
+                    pc.ontrack = (e) => {
+                        if (e.streams?.[0]) {
+                            peerStreamsRef.current.set(fromUsername, e.streams[0]);
+                            attachRemoteAudio(fromUsername, e.streams[0]);
+                        }
+                    };
+                    pc.onicecandidate = (e) => {
+                        if (e.candidate) {
+                            s.emit("voice:signal", { to: from, from: s.id, fromUsername: u.username, type: "ice-candidate", data: e.candidate.toJSON() });
+                        }
+                    };
+                } else if (pc.signalingState === "stable") {
+                    try { pc.close(); } catch {}
                     pc = new RTCPeerConnection(ICE_SERVERS);
                     pcsRef.current.set(fromUsername, pc);
 
@@ -322,7 +349,47 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = !isMuted; });
             showNotif(isMuted ? "You have been muted by an admin" : "You have been unmuted by an admin");
         };
+        const handleVoiceError = ({ message }) => {
+            showNotif(message || "Voice chat error");
+        };
 
+        const handleDisconnect = () => {
+            pcsRef.current.forEach((pc) => { try { pc.close(); } catch {} });
+            pcsRef.current.clear();
+            peerStreamsRef.current.forEach((s) => s.getTracks().forEach((t) => t.stop()));
+            peerStreamsRef.current.clear();
+            audioElementsRef.current.forEach((el) => { el.srcObject = null; el.remove(); });
+            audioElementsRef.current.clear();
+            if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+            if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
+            analyserRef.current = null;
+            if (audioCtxRef.current) { try { audioCtxRef.current.close(); } catch {} }
+            audioCtxRef.current = null;
+            setParticipants([]);
+        };
+        const handleReconnect = async () => {
+            const s = socketRef.current;
+            const u = userRef.current;
+            const ch = lastJoinedChannelRef.current;
+            if (!s || !u || !ch) return;
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                localStreamRef.current = stream;
+                startSpeakingDetection(stream);
+            } catch { return; }
+
+            s.emit("voice:join", {
+                channelId: ch,
+                username: u.username,
+                avatarUrl: u.avatarUrl,
+                color: u.avatarColor || u.color || "#3b82f6",
+            });
+            showNotif("Reconnected to voice chat");
+        };
+
+        socket.on("disconnect", handleDisconnect);
+        socket.on("reconnect", handleReconnect);
         socket.on("voice:channels", handleChannels);
         socket.on("voice:joined", handleJoined);
         socket.on("voice:channel-update", handleChannelUpdate);
@@ -331,9 +398,12 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         socket.on("voice:signal", handleVoiceSignal);
         socket.on("voice:kicked", handleKicked);
         socket.on("voice:admin-muted", handleAdminMuted);
+        socket.on("voice:error", handleVoiceError);
         socket.emit("voice:get-channels");
 
         return () => {
+            socket.off("disconnect", handleDisconnect);
+            socket.off("reconnect", handleReconnect);
             socket.off("voice:channels", handleChannels);
             socket.off("voice:joined", handleJoined);
             socket.off("voice:channel-update", handleChannelUpdate);
@@ -342,6 +412,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             socket.off("voice:signal", handleVoiceSignal);
             socket.off("voice:kicked", handleKicked);
             socket.off("voice:admin-muted", handleAdminMuted);
+            socket.off("voice:error", handleVoiceError);
         };
     }, [socket, isOpen, cleanup, showNotif]);
 
@@ -377,16 +448,21 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
 
                 if (isSpeaking !== speaking) {
                     speaking = isSpeaking;
-                    const s = socketRef.current;
-                    if (s && activeChannel) {
-                        s.emit("voice:speaking", { channelId: activeChannel, speaking });
+                    const now = Date.now();
+                    if (now - speakingThrottleRef.current > 300) {
+                        speakingThrottleRef.current = now;
+                        const s = socketRef.current;
+                        const ch = activeChannelRef.current;
+                        if (s && ch) {
+                            s.emit("voice:speaking", { channelId: ch, speaking });
+                        }
                     }
                 }
                 animFrameRef.current = requestAnimationFrame(detect);
             };
             detect();
         } catch {}
-    }, [activeChannel]);
+    }, []);
 
     const createPeerConnections = useCallback(async (channelParticipants) => {
         const s = socketRef.current;
@@ -399,6 +475,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         for (const p of channelParticipants) {
             if (p.username === u.username) continue;
             if (pcsRef.current.has(p.username)) continue;
+            if (!p.socketId) continue;
 
             const pc = new RTCPeerConnection(ICE_SERVERS);
             pcsRef.current.set(p.username, pc);
@@ -417,7 +494,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             pc.onicecandidate = (e) => {
                 if (e.candidate) {
                     s.emit("voice:signal", {
-                        to: p.socketId || p.username,
+                        to: p.socketId,
                         from: s.id,
                         fromUsername: u.username,
                         type: "ice-candidate",
@@ -427,7 +504,20 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             };
 
             pc.onconnectionstatechange = () => {
-                if (pc.connectionState === "failed" || pc.connectionState === "closed") {
+                if (pc.connectionState === "failed") {
+                    pc.restartIce();
+                    pc.createOffer({ iceRestart: true }).then((offer) => {
+                        return pc.setLocalDescription(offer);
+                    }).then(() => {
+                        s.emit("voice:signal", {
+                            to: p.socketId,
+                            from: s.id,
+                            fromUsername: u.username,
+                            type: "offer",
+                            data: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+                        });
+                    }).catch(() => {});
+                } else if (pc.connectionState === "closed") {
                     pcsRef.current.delete(p.username);
                 }
             };
@@ -436,7 +526,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 s.emit("voice:signal", {
-                    to: p.socketId || p.username,
+                    to: p.socketId,
                     from: s.id,
                     fromUsername: u.username,
                     type: "offer",
@@ -452,6 +542,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         if (!s || !u) return;
 
         cleanup();
+        lastJoinedChannelRef.current = channelId;
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -487,6 +578,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         if (s && activeChannel) {
             s.emit("voice:leave", { channelId: activeChannel });
         }
+        lastJoinedChannelRef.current = null;
         cleanup();
     }, [activeChannel, cleanup]);
 
