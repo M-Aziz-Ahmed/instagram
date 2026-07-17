@@ -766,7 +766,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                                 className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-blue-500" />
                         </div>
                     )}
-                    {!isHost && (
+            {!isHost && !isFullscreen && (
                         <div>
                             <label className="text-white/60 text-xs font-medium uppercase tracking-wider mb-2 flex items-center justify-between">
                                 <span>Speaker Volume</span>
@@ -835,7 +835,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                         </div>
                     )}
 
-                    <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5 fs-hide">
+                    <div className={`absolute top-3 left-3 flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5 ${isFullscreen ? "hidden" : ""}`}>
                         <div className="w-6 h-6 rounded-full bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
                             {hostUsername?.[0]?.toUpperCase()}
                         </div>
@@ -848,12 +848,12 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                         </div>
                     )}
 
-                    <button onClick={toggleFullscreen} className="fs-exit-btn hidden absolute bottom-4 left-1/2 -translate-x-1/2 items-center gap-2 px-4 py-2.5 bg-black/60 backdrop-blur-sm rounded-full text-white text-xs font-medium z-50">
+                    <button onClick={toggleFullscreen} className={`${isFullscreen ? "flex" : "hidden"} absolute bottom-4 left-1/2 -translate-x-1/2 items-center gap-2 px-4 py-2.5 bg-black/60 backdrop-blur-sm rounded-full text-white text-xs font-medium z-50`}>
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25" /></svg>
                         Exit fullscreen
                     </button>
 
-                    {!chatOpen && !isFullscreen && (
+                    {!chatOpen && (
                         <button onClick={() => setChatOpen(true)} className="sm:hidden absolute bottom-4 right-3 w-11 h-11 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center text-white z-30">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
@@ -862,7 +862,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                     )}
                 </div>
 
-                <div className={`${chatOpen ? (isFullscreen ? "fs-chat-overlay" : "absolute bottom-0 left-0 right-0 z-20 h-[45%]") : "hidden"} sm:relative sm:block sm:z-auto sm:w-72 lg:w-80 bg-gray-950 sm:border-l border-white/10 flex flex-col shrink-0 rounded-t-2xl sm:rounded-none border-t border-white/10 sm:border-t-0`}>
+                <div className={`${chatOpen ? (isFullscreen ? "absolute bottom-14 left-2 right-2 z-20 h-[50%] max-h-[50vh] rounded-2xl border border-white/10 shadow-2xl" : "absolute bottom-0 left-0 right-0 z-20 h-[45%]") : "hidden"} sm:relative sm:block sm:z-auto sm:w-72 lg:w-80 bg-gray-950 sm:border-l border-white/10 flex flex-col shrink-0 rounded-t-2xl sm:rounded-none border-t border-white/10 sm:border-t-0`}>
                     <div className="sm:hidden flex items-center justify-center pt-2 pb-1 shrink-0">
                         <button onClick={() => setChatOpen(false)} className="w-10 h-1 rounded-full bg-white/30" />
                     </div>
