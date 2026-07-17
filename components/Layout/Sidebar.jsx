@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useSidebar } from "@/context/SidebarContext";
+import { useVoiceChat } from "@/context/VoiceChatContext";
 import { useRouter, usePathname } from "next/navigation";
 import EditProfileModal from "@/components/Auth/EditProfileModal";
 import Link from "next/link";
@@ -86,6 +87,14 @@ function BookmarkIcon() {
     );
 }
 
+function VoiceChatIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+        </svg>
+    );
+}
+
 function SunIcon() {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
@@ -123,6 +132,7 @@ export default function Sidebar({ open, onClose }) {
     const { user, logout } = useUser();
     const { theme, toggleTheme } = useTheme();
     const { collapsed, toggleCollapsed } = useSidebar();
+    const { voiceOpen, openVoiceChat, closeVoiceChat } = useVoiceChat();
     const router = useRouter();
     const pathname = usePathname();
     const [editingProfile, setEditingProfile] = useState(false);
@@ -276,6 +286,18 @@ export default function Sidebar({ open, onClose }) {
                             active={isActive("/inbox")}
                             onClick={handleNavClick}
                             badge={unreadCount}
+                        />
+                        <NavItem
+                            icon={<VoiceChatIcon />}
+                            label="Voice Chat"
+                            active={voiceOpen}
+                            onClick={() => {
+                                if (voiceOpen) {
+                                    closeVoiceChat();
+                                } else {
+                                    openVoiceChat();
+                                }
+                            }}
                         />
                         {user?.isAdmin && (
                             <NavItem

@@ -4,6 +4,7 @@ import { UserProvider } from "@/context/UserContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { ToastProvider } from "@/context/ToastContext";
 import { SidebarProvider } from "@/context/SidebarContext";
+import { VoiceChatProvider } from "@/context/VoiceChatContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import OnlineStatusTracker from "@/components/OnlineStatusTracker";
 import { useEffect } from "react";
@@ -27,12 +28,14 @@ export default function Providers({ children }) {
         <ThemeProvider>
             <SidebarProvider>
                 <UserProvider>
-                    <ToastProvider>
-                        <ErrorBoundary>
-                            <OnlineStatusTracker />
-                            {children}
-                        </ErrorBoundary>
-                    </ToastProvider>
+                    <VoiceChatProvider>
+                        <ToastProvider>
+                            <ErrorBoundary>
+                                <OnlineStatusTracker />
+                                {children}
+                            </ErrorBoundary>
+                        </ToastProvider>
+                    </VoiceChatProvider>
                 </UserProvider>
             </SidebarProvider>
         </ThemeProvider>

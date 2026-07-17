@@ -3,12 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter, useSearchParams } from "next/navigation";
-import { io } from "socket.io-client";
 import ChatBox from "./ChatBox";
 import Sidebar from "@/components/Layout/Sidebar";
 import UserBadges from "@/components/shared/UserBadges";
-
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
 
 function timeAgo(date) {
     const diff = (Date.now() - new Date(date)) / 1000;
@@ -36,19 +33,6 @@ export default function InboxClient() {
     const [selectedConvo, setSelectedConvo] = useState(null);
     const [sidebarOpen, setSidebarOpen]     = useState(false);
     const urlInitDoneRef                    = useRef(false);
-
-    // Socket for voice chat
-    const [socket, setSocket] = useState(null);
-    useEffect(() => {
-        if (!LIVE_SERVER || !user?.username) return;
-        const s = io(LIVE_SERVER, {
-            query: { username: user.username },
-            transports: ["websocket", "polling"],
-            reconnectionAttempts: 5,
-        });
-        setSocket(s);
-        return () => { s.disconnect(); setSocket(null); };
-    }, [user?.username]);
 
     useEffect(() => {
         if (!user || !selectedConvo) return;
@@ -260,7 +244,6 @@ export default function InboxClient() {
                     onBack={() => setView("list")}
                     recipient={selectedConvo?.username}
                     recipientUser={selectedConvo?.user}
-                    socket={socket}
                 />
             </main>
 

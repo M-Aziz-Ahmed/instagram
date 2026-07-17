@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/context/UserContext";
+import { useVoiceChat } from "@/context/VoiceChatContext";
 
 const NAV_ITEMS = [
     {
@@ -56,6 +57,7 @@ const NAV_ITEMS = [
 export default function BottomNav() {
     const { user } = useUser();
     const pathname = usePathname();
+    const { voiceOpen, openVoiceChat, closeVoiceChat } = useVoiceChat();
     const [unreadCount, setUnreadCount] = useState(0);
 
     const fetchUnread = useCallback(async () => {
@@ -118,6 +120,20 @@ export default function BottomNav() {
                         </Link>
                     );
                 })}
+
+                <button
+                    onClick={() => voiceOpen ? closeVoiceChat() : openVoiceChat()}
+                    aria-label="Voice chat"
+                    className={`relative flex flex-col items-center justify-center gap-0.5 w-full h-full transition-colors min-h-[44px] ${
+                        voiceOpen
+                            ? "text-green-500"
+                            : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"
+                    }`}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-6 h-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                    </svg>
+                </button>
             </div>
         </nav>
     );
