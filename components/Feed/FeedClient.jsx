@@ -22,6 +22,11 @@ export default function FeedClient() {
     const [redirecting, setRedirecting]       = useState(false);
     const [searchQuery, setSearchQuery]       = useState(null);
 
+    const handleAuthError = useCallback(() => {
+        logout();
+        router.replace("/login");
+    }, [logout, router]);
+
     useEffect(() => {
         if (!ready || redirecting) return;
         if (!user || user.needsSetup) {
@@ -43,11 +48,6 @@ export default function FeedClient() {
         setActiveTag(tag);
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
-
-    const handleAuthError = useCallback(() => {
-        logout();
-        router.replace("/login");
-    }, [logout, router]);
 
     const hasFollowing = user?.following?.length > 0;
 
