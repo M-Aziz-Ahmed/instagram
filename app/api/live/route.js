@@ -2,6 +2,7 @@ import connectDB from "@/utils/db";
 import LiveStream from "@/models/liveStream";
 import User from "@/models/user";
 import Notification from "@/models/notification";
+import { sendPushNotification } from "@/utils/pushNotifications";
 
 export async function POST(request) {
     try {
@@ -38,6 +39,15 @@ export async function POST(request) {
                 text: title || "is live now",
             }));
             await Notification.insertMany(notifs).catch(() => {});
+
+            hostUser.followers.forEach((follower) => {
+                sendPushNotification({
+                    recipientUsername: follower,
+                    type: "live",
+                    fromUser: username,
+                    text: title || "is live now",
+                }).catch(() => {});
+            });
         }
 
         return Response.json({ streamId: stream._id, title: stream.title });

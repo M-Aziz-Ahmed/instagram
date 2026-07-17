@@ -9,6 +9,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 
 const LiveStream = require("./models/liveStream");
+const { sendPushNotification } = require("./push");
 
 const app = express();
 
@@ -507,6 +508,13 @@ io.on("connection", async (socket) => {
         broadcastChannelParticipants(channelId);
         broadcastChannelList();
         console.log(`[VOICE] Admin ${socket.data.username} kicked ${targetUsername} from ${channelId}`);
+
+        sendPushNotification({
+            recipientUsername: targetUsername,
+            type: "voice_kicked",
+            fromUser: socket.data.username,
+            text: `Kicked from #${ch.name}`,
+        }).catch(() => {});
     });
 
     socket.on("voice:admin-mute", async ({ channelId, targetUsername, muted }) => {
@@ -571,6 +579,13 @@ io.on("connection", async (socket) => {
         broadcastChannelList();
         io.emit("voice:user-timeout", { username: targetUsername, until: until.toISOString() });
         console.log(`[VOICE] Admin ${socket.data.username} timed out ${targetUsername} until ${until}`);
+
+        sendPushNotification({
+            recipientUsername: targetUsername,
+            type: "voice_timeout",
+            fromUser: socket.data.username,
+            text: `Timed out for ${Math.round((duration || 300) / 60)} minutes`,
+        }).catch(() => {});
     });
 
     socket.on("voice:admin-ban", async ({ targetUsername }) => {
@@ -605,6 +620,13 @@ io.on("connection", async (socket) => {
         broadcastChannelList();
         io.emit("voice:user-banned", { username: targetUsername });
         console.log(`[VOICE] Admin ${socket.data.username} banned ${targetUsername} from voice chat`);
+
+        sendPushNotification({
+            recipientUsername: targetUsername,
+            type: "voice_banned",
+            fromUser: socket.data.username,
+            text: "Banned from voice chat",
+        }).catch(() => {});
     });
 
     socket.on("voice:admin-unban", async ({ targetUsername }) => {

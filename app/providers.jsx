@@ -7,6 +7,7 @@ import { SidebarProvider } from "@/context/SidebarContext";
 import { VoiceChatProvider } from "@/context/VoiceChatContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import OnlineStatusTracker from "@/components/OnlineStatusTracker";
+import PushNotificationManager from "@/components/PushNotificationManager";
 import { useEffect } from "react";
 
 export default function Providers({ children }) {
@@ -32,6 +33,7 @@ export default function Providers({ children }) {
                         <ToastProvider>
                             <ErrorBoundary>
                                 <OnlineStatusTracker />
+                                <PushNotificationManager />
                                 {children}
                             </ErrorBoundary>
                         </ToastProvider>

@@ -3,6 +3,7 @@ import Post from "@/models/post";
 import User from "@/models/user";
 import Notification from "@/models/notification";
 import { extractMentions } from "@/utils/parseText";
+import { sendPushNotification } from "@/utils/pushNotifications";
 
 function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
@@ -133,6 +134,13 @@ export async function PATCH(request, { params }) {
                     commentId: comment.commentId,
                     text:      text?.trim() ?? "",
                 });
+                sendPushNotification({
+                    recipientUsername: post.sender,
+                    type:      parentId ? "reply" : "comment",
+                    fromUser:  username,
+                    postId:    id,
+                    text:      text?.trim() ?? "",
+                }).catch(() => {});
             }
 
             // Notify mentioned users
@@ -148,6 +156,15 @@ export async function PATCH(request, { params }) {
                     commentId: comment.commentId,
                     text:      text?.trim() ?? "",
                 })));
+                mentions.forEach((recipient) => {
+                    sendPushNotification({
+                        recipientUsername: recipient,
+                        type:     "mention",
+                        fromUser: username,
+                        postId:   id,
+                        text:     text?.trim() ?? "",
+                    }).catch(() => {});
+                });
             }
 
             const enriched = await enrichPost(post);

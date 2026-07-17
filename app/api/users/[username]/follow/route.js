@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/utils/db";
 import User from "@/models/user";
+import Notification from "@/models/notification";
+import { sendPushNotification } from "@/utils/pushNotifications";
 
 export async function POST(request, { params }) {
     try {
@@ -38,6 +40,22 @@ export async function POST(request, { params }) {
             if (!targetUser.followers.includes(currentUsername)) {
                 targetUser.followers.push(currentUsername);
             }
+
+            // Notify target user + push
+            Notification.create({
+                recipient: targetUsername,
+                type: "follow",
+                fromUser: currentUsername,
+                fromColor: currentUser.avatarColor || "#3b82f6",
+                fromAvatarUrl: currentUser.avatarUrl || "",
+                text: "",
+            }).catch(() => {});
+
+            sendPushNotification({
+                recipientUsername: targetUsername,
+                type: "follow",
+                fromUser: currentUsername,
+            }).catch(() => {});
         }
 
         await Promise.all([currentUser.save(), targetUser.save()]);

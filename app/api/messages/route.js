@@ -2,6 +2,7 @@ import connectDB from "@/utils/db";
 import Message from "@/models/messages";
 import Notification from "@/models/notification";
 import { translateBatch } from "@/utils/translate";
+import { sendPushNotification } from "@/utils/pushNotifications";
 
 export async function GET(request) {
     try {
@@ -144,6 +145,14 @@ export async function POST(request) {
             type: "message",
             fromUser: sender.trim(),
             fromColor: color || "#3b82f6",
+            postId: message._id.toString(),
+            text: preview,
+        }).catch(() => {});
+
+        sendPushNotification({
+            recipientUsername: recipient.trim(),
+            type: "message",
+            fromUser: sender.trim(),
             postId: message._id.toString(),
             text: preview,
         }).catch(() => {});

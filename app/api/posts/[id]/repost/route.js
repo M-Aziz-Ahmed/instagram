@@ -3,6 +3,7 @@ import Post from "@/models/post";
 import User from "@/models/user";
 import Notification from "@/models/notification";
 import { extractHashtags, extractMentions } from "@/utils/parseText";
+import { sendPushNotification } from "@/utils/pushNotifications";
 
 export async function POST(request, { params }) {
     try {
@@ -75,6 +76,13 @@ export async function POST(request, { params }) {
                 postId: id,
                 text: repostComment,
             });
+            sendPushNotification({
+                recipientUsername: originalPost.sender,
+                type: "repost",
+                fromUser: username,
+                postId: id,
+                text: repostComment,
+            }).catch(() => {});
         }
 
         // Notify mentioned users in repost comment
@@ -91,6 +99,15 @@ export async function POST(request, { params }) {
                 postId: repost._id.toString(),
                 text: repostComment,
             })));
+            mentions.forEach((recipient) => {
+                sendPushNotification({
+                    recipientUsername: recipient,
+                    type: "mention",
+                    fromUser: username,
+                    postId: repost._id.toString(),
+                    text: repostComment,
+                }).catch(() => {});
+            });
         }
 
         return Response.json({
