@@ -309,6 +309,13 @@ export default function ChessGameClient({ gameId }) {
         return () => clearTimeout(timer);
     }, [game?.turn, game?.status, game?.mode, game?.fen, stockfishReady, evaluating, gameId]);
 
+    const handleMove = useCallback((from, to) => {
+        if (!socketRef.current) return;
+        socketRef.current.emit("chess:make-move", { gameId, from, to, promotion: "q" });
+        setSelectedSquare(null);
+        setLegalMoves([]);
+    }, [gameId]);
+
     const handleSquareClick = useCallback((square) => {
         if (gameOver || !isMyTurn) return;
         if (!game?.fen) return;
@@ -342,13 +349,6 @@ export default function ChessGameClient({ gameId }) {
             }
         }
     }, [game, selectedSquare, legalMoves, isMyTurn, gameOver, myColor, handleMove]);
-
-    const handleMove = useCallback((from, to) => {
-        if (!socketRef.current) return;
-        socketRef.current.emit("chess:make-move", { gameId, from, to, promotion: "q" });
-        setSelectedSquare(null);
-        setLegalMoves([]);
-    }, [gameId]);
 
     const handleSendChat = useCallback((text) => {
         if (!socketRef.current || !user) return;
