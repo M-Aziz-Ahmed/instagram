@@ -95,6 +95,15 @@ function VoiceChatIcon() {
     );
 }
 
+function ChessIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+            <path d="M12 2L9 5H5v3l-2 2 2 2v3h4l3 3 3-3h4v-3l2-2-2-2V5h-4L12 2z" />
+            <circle cx="12" cy="12" r="3" />
+        </svg>
+    );
+}
+
 function SunIcon() {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
@@ -319,6 +328,13 @@ export default function Sidebar({ open, onClose }) {
                                     openVoiceChat();
                                 }
                             }}
+                        />
+                        <NavItem
+                            href="/chess"
+                            icon={<ChessIcon />}
+                            label="Chess"
+                            active={isActive("/chess")}
+                            onClick={handleNavClick}
                         />
                         {user?.isAdmin && (
                             <NavItem

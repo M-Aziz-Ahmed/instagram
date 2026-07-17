@@ -8,7 +8,9 @@ const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const cors = require("cors");
 
+const { Chess } = require("chess.js");
 const LiveStream = require("./models/liveStream");
+const ChessGame = require("./models/chessGame");
 const { sendPushNotification } = require("./push");
 
 const app = express();
@@ -143,6 +145,183 @@ app.delete("/api/streams/:id", async (req, res) => {
     } catch (err) {
         console.error("[API] Failed to end stream:", err.message);
         res.status(500).json({ error: "Failed to end stream" });
+    }
+});
+
+// ── Chess HTTP Routes ──────────────────────────────────────────
+app.get("/api/chess/games", async (req, res) => {
+    try {
+        const { status, username } = req.query;
+        const filter = {};
+        if (status) filter.status = status;
+        if (username) {
+            filter.$or = [
+                { "white.username": username },
+                { "black.username": username },
+            ];
+        }
+        const games = await ChessGame.find(filter)
+            .sort({ createdAt: -1 })
+            .limit(50)
+            .lean();
+        res.json({ games });
+    } catch (err) {
+        console.error("[CHESS API] List games error:", err.message);
+        res.status(500).json({ error: "Failed to fetch games" });
+    }
+});
+
+app.get("/api/chess/games/:id", async (req, res) => {
+    try {
+        const game = await ChessGame.findById(req.params.id).lean();
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        res.json({ game });
+    } catch (err) {
+        console.error("[CHESS API] Get game error:", err.message);
+        res.status(500).json({ error: "Failed to fetch game" });
+    }
+});
+
+app.post("/api/chess/games", async (req, res) => {
+    try {
+        const { username, avatarUrl, avatarColor, timeControl, mode, aiDifficulty, inviteUser } = req.body;
+        if (!username) return res.status(400).json({ error: "Username required" });
+
+        const initial = timeControl?.initial || 600;
+        const increment = timeControl?.increment || 0;
+
+        const game = await ChessGame.create({
+            white: { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#3b82f6" },
+            mode: mode || "multiplayer",
+            aiDifficulty: aiDifficulty || 10,
+            timeControl: { initial, increment },
+            timers: { white: initial, black: initial },
+            invitedBy: inviteUser || "",
+            status: mode === "ai" ? "active" : "waiting",
+            timerLastTick: mode === "ai" ? new Date() : null,
+        });
+
+        res.json({ game });
+    } catch (err) {
+        console.error("[CHESS API] Create game error:", err.message);
+        res.status(500).json({ error: "Failed to create game" });
+    }
+});
+
+app.post("/api/chess/games/:id/join", async (req, res) => {
+    try {
+        const { username, avatarUrl, avatarColor } = req.body;
+        const game = await ChessGame.findById(req.params.id);
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        if (game.status !== "waiting") return res.status(400).json({ error: "Game already started" });
+        if (game.mode === "ai") return res.status(400).json({ error: "Cannot join AI game" });
+        if (game.white.username === username) return res.status(400).json({ error: "Cannot play yourself" });
+
+        game.black = { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#3b82f6" };
+        game.status = "active";
+        game.timerLastTick = new Date();
+        await game.save();
+
+        res.json({ game });
+    } catch (err) {
+        console.error("[CHESS API] Join game error:", err.message);
+        res.status(500).json({ error: "Failed to join game" });
+    }
+});
+
+app.post("/api/chess/games/:id/move", async (req, res) => {
+    try {
+        const { from, to, promotion, username } = req.body;
+        const game = await ChessGame.findById(req.params.id);
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        if (game.status !== "active") return res.status(400).json({ error: "Game not active" });
+
+        const chess = new Chess(game.fen);
+        const isWhiteTurn = chess.turn() === "w";
+        const playerColor = game.white.username === username ? "w" : "b";
+        if (playerColor !== (isWhiteTurn ? "w" : "b")) {
+            return res.status(400).json({ error: "Not your turn" });
+        }
+
+        let moveResult;
+        try {
+            moveResult = chess.move({ from, to, promotion: promotion || "q" });
+        } catch (e) {
+            return res.status(400).json({ error: "Illegal move" });
+        }
+        if (!moveResult) return res.status(400).json({ error: "Illegal move" });
+
+        if (game.timerLastTick) {
+            const elapsed = (Date.now() - new Date(game.timerLastTick).getTime()) / 1000;
+            const increment = game.timeControl.increment || 0;
+            if (isWhiteTurn) {
+                game.timers.white = Math.max(0, game.timers.white - elapsed + increment);
+            } else {
+                game.timers.black = Math.max(0, game.timers.black - elapsed + increment);
+            }
+        }
+
+        const now = new Date();
+        game.fen = chess.fen();
+        game.turn = chess.turn();
+        game.moves.push({
+            from, to, san: moveResult.san, fen: game.fen,
+            notation: moveResult.san, timestamp: now,
+            thinkingMs: game.timerLastTick ? (now.getTime() - new Date(game.timerLastTick).getTime()) : 0,
+        });
+        game.pgn = chess.pgn();
+        game.timerLastTick = now;
+
+        if (chess.isCheckmate()) {
+            game.status = "checkmate";
+            game.result = isWhiteTurn ? "1-0" : "0-1";
+            game.resultReason = "Checkmate";
+            game.winner = isWhiteTurn ? game.white.username : game.black.username;
+        } else if (chess.isStalemate()) {
+            game.status = "stalemate";
+            game.result = "1/2-1/2";
+            game.resultReason = "Stalemate";
+        } else if (chess.isDraw()) {
+            game.status = "draw";
+            game.result = "1/2-1/2";
+            game.resultReason = "Draw";
+        } else if (game.timers.white <= 0 || game.timers.black <= 0) {
+            game.status = "timeout";
+            game.result = game.timers.white <= 0 ? "0-1" : "1-0";
+            game.resultReason = "Timeout";
+            game.winner = game.timers.white <= 0 ? game.black.username : game.white.username;
+        } else {
+            game.status = "active";
+            game.result = "*";
+        }
+
+        await game.save();
+        res.json({ game, move: moveResult });
+    } catch (err) {
+        console.error("[CHESS API] Move error:", err.message);
+        res.status(500).json({ error: "Failed to make move" });
+    }
+});
+
+app.get("/api/chess/games/:id/moves", async (req, res) => {
+    try {
+        const game = await ChessGame.findById(req.params.id).lean();
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        res.json({ moves: game.moves, pgn: game.pgn });
+    } catch (err) {
+        console.error("[CHESS API] Get moves error:", err.message);
+        res.status(500).json({ error: "Failed to fetch moves" });
+    }
+});
+
+app.get("/api/chess/games/:id/chat", async (req, res) => {
+    try {
+        const game = await ChessGame.findById(req.params.id).lean();
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        res.json({ chat: game.chat || [] });
+    } catch (err) {
+        console.error("[CHESS API] Get chat error:", err.message);
+        res.status(500).json({ error: "Failed to fetch chat" });
     }
 });
 
@@ -664,6 +843,214 @@ io.on("connection", async (socket) => {
             })));
         } catch (err) {
             console.error("[VOICE] Get bans error:", err.message);
+        }
+    });
+
+    // ── Chess Socket Events ───────────────────────────────────────
+    socket.on("chess:join-game", async ({ gameId }) => {
+        socket.join(`chess:${gameId}`);
+        socket.data.chessGameId = gameId;
+        console.log(`[CHESS] ${username} joined game room ${gameId}`);
+    });
+
+    socket.on("chess:leave-game", ({ gameId }) => {
+        socket.leave(`chess:${gameId}`);
+        socket.data.chessGameId = null;
+    });
+
+    socket.on("chess:make-move", async ({ gameId, from, to, promotion }) => {
+        try {
+            const game = await ChessGame.findById(gameId);
+            if (!game || game.status !== "active") {
+                return socket.emit("chess:error", { message: "Game not active" });
+            }
+
+            const chess = new Chess(game.fen);
+            const isWhiteTurn = chess.turn() === "w";
+            const playerColor = game.white.username === username ? "w" : "b";
+
+            if (playerColor !== (isWhiteTurn ? "w" : "b")) {
+                return socket.emit("chess:error", { message: "Not your turn" });
+            }
+
+            let moveResult;
+            try {
+                moveResult = chess.move({ from, to, promotion: promotion || "q" });
+            } catch (e) {
+                return socket.emit("chess:error", { message: "Illegal move" });
+            }
+            if (!moveResult) return socket.emit("chess:error", { message: "Illegal move" });
+
+            // Update timer
+            if (game.timerLastTick) {
+                const elapsed = (Date.now() - new Date(game.timerLastTick).getTime()) / 1000;
+                const increment = game.timeControl.increment || 0;
+                if (isWhiteTurn) {
+                    game.timers.white = Math.max(0, game.timers.white - elapsed + increment);
+                } else {
+                    game.timers.black = Math.max(0, game.timers.black - elapsed + increment);
+                }
+            }
+
+            const now = new Date();
+            game.fen = chess.fen();
+            game.turn = chess.turn();
+            game.moves.push({
+                from, to, san: moveResult.san, fen: game.fen,
+                notation: moveResult.san, timestamp: now,
+                thinkingMs: game.timerLastTick ? (now.getTime() - new Date(game.timerLastTick).getTime()) : 0,
+            });
+            game.pgn = chess.pgn();
+            game.timerLastTick = now;
+
+            if (chess.isCheckmate()) {
+                game.status = "checkmate";
+                game.result = isWhiteTurn ? "1-0" : "0-1";
+                game.resultReason = "Checkmate";
+                game.winner = isWhiteTurn ? game.white.username : game.black.username;
+            } else if (chess.isStalemate()) {
+                game.status = "stalemate";
+                game.result = "1/2-1/2";
+                game.resultReason = "Stalemate";
+            } else if (chess.isDraw()) {
+                game.status = "draw";
+                game.result = "1/2-1/2";
+                game.resultReason = "Draw";
+            } else if (game.timers.white <= 0 || game.timers.black <= 0) {
+                game.status = "timeout";
+                game.result = game.timers.white <= 0 ? "0-1" : "1-0";
+                game.resultReason = "Timeout";
+                game.winner = game.timers.white <= 0 ? game.black.username : game.white.username;
+            } else {
+                game.status = "active";
+                game.result = "*";
+            }
+
+            await game.save();
+
+            io.to(`chess:${gameId}`).emit("chess:move", {
+                gameId,
+                move: moveResult,
+                fen: game.fen,
+                turn: game.turn,
+                status: game.status,
+                result: game.result,
+                resultReason: game.resultReason,
+                winner: game.winner,
+                timers: game.timers,
+                moves: game.moves,
+                pgn: game.pgn,
+            });
+        } catch (err) {
+            console.error("[CHESS] Move error:", err.message);
+            socket.emit("chess:error", { message: "Move failed" });
+        }
+    });
+
+    socket.on("chess:chat", async ({ gameId, text, color, avatarUrl }) => {
+        if (!text?.trim()) return;
+        try {
+            const game = await ChessGame.findById(gameId);
+            if (!game) return;
+
+            const msg = {
+                username,
+                color: color || "#3b82f6",
+                avatarUrl: avatarUrl || "",
+                text: text.trim(),
+                createdAt: new Date(),
+            };
+
+            game.chat.push(msg);
+            if (game.chat.length > 100) game.chat = game.chat.slice(-100);
+            await game.save();
+
+            io.to(`chess:${gameId}`).emit("chess:chat", {
+                ...msg,
+                createdAt: msg.createdAt.toISOString(),
+            });
+        } catch (err) {
+            console.error("[CHESS] Chat error:", err.message);
+        }
+    });
+
+    socket.on("chess:resign", async ({ gameId }) => {
+        try {
+            const game = await ChessGame.findById(gameId);
+            if (!game || game.status !== "active") return;
+
+            const isWhite = game.white.username === username;
+            game.status = "resigned";
+            game.result = isWhite ? "0-1" : "1-0";
+            game.resultReason = "Resignation";
+            game.winner = isWhite ? game.black.username : game.white.username;
+            await game.save();
+
+            io.to(`chess:${gameId}`).emit("chess:game-over", {
+                gameId,
+                status: game.status,
+                result: game.result,
+                resultReason: game.resultReason,
+                winner: game.winner,
+            });
+        } catch (err) {
+            console.error("[CHESS] Resign error:", err.message);
+        }
+    });
+
+    socket.on("chess:offer-draw", ({ gameId }) => {
+        io.to(`chess:${gameId}`).except(socket.id).emit("chess:draw-offer", {
+            gameId,
+            from: username,
+        });
+    });
+
+    socket.on("chess:accept-draw", async ({ gameId }) => {
+        try {
+            const game = await ChessGame.findById(gameId);
+            if (!game || game.status !== "active") return;
+
+            game.status = "draw";
+            game.result = "1/2-1/2";
+            game.resultReason = "Draw agreed";
+            await game.save();
+
+            io.to(`chess:${gameId}`).emit("chess:game-over", {
+                gameId,
+                status: game.status,
+                result: game.result,
+                resultReason: game.resultReason,
+                winner: "",
+            });
+        } catch (err) {
+            console.error("[CHESS] Accept draw error:", err.message);
+        }
+    });
+
+    socket.on("chess:decline-draw", ({ gameId }) => {
+        io.to(`chess:${gameId}`).except(socket.id).emit("chess:draw-declined", {
+            gameId,
+            from: username,
+        });
+    });
+
+    socket.on("chess:time-sync", async ({ gameId }) => {
+        try {
+            const game = await ChessGame.findById(gameId);
+            if (!game || game.status !== "active") return;
+
+            if (game.timerLastTick) {
+                const elapsed = (Date.now() - new Date(game.timerLastTick).getTime()) / 1000;
+                const timers = { ...game.timers };
+                if (game.turn === "w") {
+                    timers.white = Math.max(0, timers.white - elapsed);
+                } else {
+                    timers.black = Math.max(0, timers.black - elapsed);
+                }
+                socket.emit("chess:time-sync", { gameId, timers });
+            }
+        } catch (err) {
+            console.error("[CHESS] Time sync error:", err.message);
         }
     });
 

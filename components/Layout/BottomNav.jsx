@@ -134,6 +134,20 @@ export default function BottomNav() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
                     </svg>
                 </button>
+                <Link
+                    href="/chess"
+                    aria-label="Chess"
+                    className={`relative flex flex-col items-center justify-center gap-0.5 w-full h-full transition-colors min-h-[44px] ${
+                        pathname.startsWith("/chess")
+                            ? "text-gray-900 dark:text-gray-100"
+                            : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"
+                    }`}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                        <path d="M12 2L9 5H5v3l-2 2 2 2v3h4l3 3 3-3h4v-3l2-2-2-2V5h-4L12 2z" />
+                        <circle cx="12" cy="12" r="3" />
+                    </svg>
+                </Link>
             </div>
         </nav>
     );
