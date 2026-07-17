@@ -18,12 +18,16 @@ const TYPE_LABEL = {
     like:    "liked your post",
     love:    "loved your post",
     laugh:   "laughed at your post",
-    fire:    "reacted 🔥 to your post",
-    sad:     "reacted 😢 to your post",
-    angry:   "reacted 😠 to your post",
+    fire:    "reacted \ud83d\udd25 to your post",
+    sad:     "reacted \ud83d\ude22 to your post",
+    angry:   "reacted \ud83d\ude20 to your post",
     comment: "commented on your post",
     mention: "mentioned you",
     message: "sent you a message",
+    repost:  "reposted your post",
+    follow:  "started following you",
+    reply:   "replied to your comment",
+    live:    "went live",
 };
 
 export default function NotificationBell({ onNavigate }) {
@@ -195,8 +199,8 @@ export default function NotificationBell({ onNavigate }) {
                                         <span className="font-semibold">{n.fromUser}</span>
                                         <UserBadges isVerified={n.fromUserDoc?.isVerified} isAdmin={n.fromUserDoc?.isAdmin} roles={n.fromUserDoc?.roles || []} size="xs" />
                                         {" "}{TYPE_LABEL[n.type] ?? n.type}
-                                        {n.type === "comment" && n.text && (
-                                            <span className="text-gray-500 dark:text-gray-400">: &ldquo;{n.text.slice(0, 60)}{n.text.length > 60 ? "…" : ""}&rdquo;</span>
+                                        {n.text && (n.type === "comment" || n.type === "repost") && (
+                                            <span className="text-gray-500 dark:text-gray-400">: &ldquo;{n.text.slice(0, 60)}{n.text.length > 60 ? "\u2026" : ""}&rdquo;</span>
                                         )}
                                     </p>
                                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{timeAgo(n.createdAt)}</p>

@@ -627,7 +627,53 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag, serv
                         </div>
                     </div>
 
-                    {post.text && (
+                    {post.isRepost && (
+                        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 0 0-3.7-3.7 48.678 48.678 0 0 0-7.324 0 4.006 4.006 0 0 0-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 0 0 3.7 3.7 48.656 48.656 0 0 0 7.324 0 4.006 4.006 0 0 0 3.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3-3 3" />
+                            </svg>
+                            <span>Reposted</span>
+                        </div>
+                    )}
+
+                    {post.isRepost && post.repostComment && (
+                        <div className="mt-1.5">
+                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+                                <RichText text={post.repostComment} onHashtag={onHashtag} />
+                            </p>
+                        </div>
+                    )}
+
+                    {post.isRepost && post._originalPost ? (
+                        <div className="mt-2 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+                            <div className="px-3 py-2">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                    <PostAvatar sender={post._originalPost.sender} color={post._originalPost.color} avatarUrl={post._originalPost.avatarUrl} author={post._originalPost._author} size="sm" />
+                                    <span className="font-semibold text-xs text-gray-900 dark:text-gray-100">
+                                        {post._originalPost.sender}
+                                    </span>
+                                    <UserBadges isVerified={post._originalPost._author?.isVerified} isAdmin={post._originalPost._author?.isAdmin} roles={post._originalPost._author?.roles || []} size="sm" />
+                                    <span className="text-gray-400 dark:text-gray-500 text-[11px]">{timeAgo(post._originalPost.timeStamp)}</span>
+                                </div>
+                                {post._originalPost.text && (
+                                    <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap">
+                                        <RichText text={post._originalPost.text} onHashtag={onHashtag} />
+                                    </p>
+                                )}
+                                {post._originalPost.imageUrl && (
+                                    <div className="mt-2 rounded-lg overflow-hidden">
+                                        <img src={post._originalPost.imageUrl} alt="" className="w-full h-auto block" loading="lazy" />
+                                    </div>
+                                )}
+                                {post._originalPost.audioUrl && !post._originalPost.text && !post._originalPost.imageUrl && (
+                                    <div className="mt-2 max-w-xs">
+                                        <AudioPlayer src={post._originalPost.audioUrl} />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                    post.text && (
                         <div className="mt-1">
                             <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap">
                                 <RichText text={post.text} onHashtag={onHashtag} />

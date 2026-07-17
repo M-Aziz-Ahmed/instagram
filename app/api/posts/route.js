@@ -11,6 +11,7 @@ async function enrichPosts(posts) {
     posts.forEach((p) => {
         allUsernames.add(p.sender);
         (p.comments || []).forEach((c) => allUsernames.add(c.sender));
+        if (p._originalPost?.sender) allUsernames.add(p._originalPost.sender);
     });
 
     if (allUsernames.size === 0) return posts;
@@ -38,6 +39,10 @@ async function enrichPosts(posts) {
     return posts.map((p) => ({
         ...p,
         _author: userMap[p.sender] || null,
+        _originalPost: p._originalPost ? {
+            ...p._originalPost,
+            _author: userMap[p._originalPost.sender] || null,
+        } : null,
         comments: (p.comments || []).map((c) => ({
             ...c,
             _author: userMap[c.sender] || null,
@@ -135,6 +140,21 @@ export async function GET(request) {
 
         pipeline.push({ $sort: { timeStamp: -1 } });
         pipeline.push({ $limit: limit + 1 });
+
+        // Lookup original post for reposts
+        pipeline.push({
+            $lookup: {
+                from: "posts",
+                localField: "originalPostId",
+                foreignField: "_id",
+                as: "_originalPost",
+            },
+        });
+        pipeline.push({
+            $addFields: {
+                _originalPost: { $first: "$_originalPost" },
+            },
+        });
 
         const rawPosts = await Post.aggregate(pipeline).allowDiskUse(true);
 
