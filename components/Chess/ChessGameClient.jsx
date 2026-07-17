@@ -11,6 +11,8 @@ import { playMoveSound, playCaptureSound, playCheckSound, playCheckmateSound, pl
 
 const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
 
+const INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
 function parseFEN(fen) {
     if (!fen) return { board: [], turn: "w", castling: "", enPassant: "" };
     const parts = fen.split(" ");
@@ -163,10 +165,13 @@ export default function ChessGameClient({ gameId }) {
     const [pendingMove, setPendingMove] = useState(null);
     const [showGameOver, setShowGameOver] = useState(false);
     const [lastResultText, setLastResultText] = useState("");
+    const [reviewIndex, setReviewIndex] = useState(null);
     const timerRef = useRef(null);
     const gameRef = useRef(null);
+    const reviewRef = useRef(null);
 
     gameRef.current = game;
+    reviewRef.current = reviewIndex;
 
     const myColor = useMemo(() => {
         if (!game || !user?.username) return null;
@@ -177,12 +182,103 @@ export default function ChessGameClient({ gameId }) {
 
     const isMyTurn = game?.turn === myColor;
     const gameOver = game?.status && game.status !== "active" && game.status !== "waiting";
+    const isReviewing = reviewIndex !== null;
+
+    const fenHistory = useMemo(() => {
+        if (!game?.moves || game.moves.length === 0) return [game?.fen || INITIAL_FEN];
+        const history = [INITIAL_FEN];
+        for (const move of game.moves) {
+            if (move.fen) history.push(move.fen);
+        }
+        return history;
+    }, [game?.moves, game?.fen]);
+
+    const reviewFen = useMemo(() => {
+        if (!isReviewing) return null;
+        return fenHistory[reviewIndex] || INITIAL_FEN;
+    }, [isReviewing, reviewIndex, fenHistory]);
+
+    const reviewLastMove = useMemo(() => {
+        if (!isReviewing || reviewIndex <= 0 || !game?.moves) return null;
+        const moveIdx = reviewIndex - 1;
+        if (moveIdx < game.moves.length) {
+            return { from: game.moves[moveIdx].from, to: game.moves[moveIdx].to };
+        }
+        return null;
+    }, [isReviewing, reviewIndex, game?.moves]);
+
+    const reviewTurn = useMemo(() => {
+        if (!reviewFen) return game?.turn;
+        const parts = reviewFen.split(" ");
+        return parts[1];
+    }, [reviewFen, game?.turn]);
+
+    const totalReviewPositions = fenHistory.length;
+    const canGoBack = isReviewing && reviewIndex > 0;
+    const canGoForward = isReviewing && reviewIndex < totalReviewPositions - 1;
 
     const toggleSound = () => {
         const next = !soundOn;
         setSoundOn(next);
         setSoundEnabled(next);
     };
+
+    const exitReview = useCallback(() => {
+        setReviewIndex(null);
+    }, []);
+
+    const goToStart = useCallback(() => {
+        if (fenHistory.length > 0) setReviewIndex(0);
+    }, [fenHistory]);
+
+    const goBack = useCallback(() => {
+        if (isReviewing && reviewIndex > 0) setReviewIndex(reviewIndex - 1);
+    }, [isReviewing, reviewIndex]);
+
+    const goForward = useCallback(() => {
+        if (isReviewing && reviewIndex < fenHistory.length - 1) setReviewIndex(reviewIndex + 1);
+    }, [isReviewing, reviewIndex, fenHistory]);
+
+    const goToEnd = useCallback(() => {
+        setReviewIndex(null);
+    }, []);
+
+    const goToMove = useCallback((moveIndex) => {
+        setReviewIndex(moveIndex + 1);
+    }, []);
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+            if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                if (!isReviewing) {
+                    if (fenHistory.length > 1) setReviewIndex(fenHistory.length - 2);
+                } else if (reviewIndex > 0) {
+                    setReviewIndex(reviewIndex - 1);
+                }
+            } else if (e.key === "ArrowRight") {
+                e.preventDefault();
+                if (isReviewing) {
+                    if (reviewIndex < fenHistory.length - 1) {
+                        setReviewIndex(reviewIndex + 1);
+                    } else {
+                        setReviewIndex(null);
+                    }
+                }
+            } else if (e.key === "Home") {
+                e.preventDefault();
+                if (fenHistory.length > 0) setReviewIndex(0);
+            } else if (e.key === "End") {
+                e.preventDefault();
+                setReviewIndex(null);
+            } else if (e.key === "Escape") {
+                setReviewIndex(null);
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isReviewing, reviewIndex, fenHistory]);
 
     useEffect(() => {
         if (!LIVE_SERVER || !user?.username) return;
@@ -237,6 +333,7 @@ export default function ChessGameClient({ gameId }) {
             }
             setSelectedSquare(null);
             setLegalMoves([]);
+            if (reviewRef.current !== null) setReviewIndex(null);
         });
 
         s.on("chess:chat", (msg) => {
@@ -528,13 +625,13 @@ export default function ChessGameClient({ gameId }) {
 
                     <div className="my-2">
                         <ChessBoard
-                            fen={game.fen}
-                            turn={game.turn}
-                            onMove={handleMove}
-                            selectedSquare={selectedSquare}
-                            onSquareClick={handleSquareClick}
-                            lastMove={lastMove}
-                            legalMoves={legalMoves}
+                            fen={isReviewing ? reviewFen : game.fen}
+                            turn={isReviewing ? reviewTurn : game.turn}
+                            onMove={isReviewing ? undefined : handleMove}
+                            selectedSquare={isReviewing ? null : selectedSquare}
+                            onSquareClick={isReviewing ? undefined : handleSquareClick}
+                            lastMove={isReviewing ? reviewLastMove : lastMove}
+                            legalMoves={isReviewing ? [] : legalMoves}
                             playerColor={myColor}
                             isFlipped={isFlipped}
                             onFlip={() => setIsFlipped(!isFlipped)}
@@ -551,6 +648,73 @@ export default function ChessGameClient({ gameId }) {
                         label={bottomPlayer?.username || "Waiting..."}
                         player={bottomPlayer}
                     />
+
+                    <div className="flex items-center justify-center gap-1 mt-2 px-2 py-1.5 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
+                        <button
+                            onClick={goToStart}
+                            disabled={!isReviewing && fenHistory.length <= 1}
+                            className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title="Go to start (Home)"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                            </svg>
+                        </button>
+                        <button
+                            onClick={goBack}
+                            disabled={!canGoBack}
+                            className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title="Previous move (←)"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                            </svg>
+                        </button>
+
+                        <div className="px-3 text-xs font-mono font-medium text-gray-600 dark:text-gray-300 min-w-[60px] text-center select-none">
+                            {isReviewing ? (
+                                <span>
+                                    <span className="text-gray-400 dark:text-gray-500">
+                                        {reviewIndex > 0 ? Math.ceil(reviewIndex / 2) : "Start"}
+                                    </span>
+                                    <span className="text-gray-300 dark:text-gray-600 mx-0.5">/</span>
+                                    <span>{Math.ceil((totalReviewPositions - 1) / 2)}</span>
+                                </span>
+                            ) : (
+                                <span className="text-green-600 dark:text-green-400">Live</span>
+                            )}
+                        </div>
+
+                        <button
+                            onClick={goForward}
+                            disabled={!canGoForward}
+                            className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title="Next move (→)"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                        </button>
+                        <button
+                            onClick={goToEnd}
+                            disabled={!isReviewing}
+                            className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title="Go to live (End)"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                            </svg>
+                        </button>
+
+                        {isReviewing && (
+                            <button
+                                onClick={exitReview}
+                                className="ml-1 px-2 py-1 text-[10px] font-semibold text-blue-500 hover:text-blue-600 bg-blue-50 dark:bg-blue-900/20 rounded-md transition-colors"
+                            >
+                                Live
+                            </button>
+                        )}
+                    </div>
 
                     {game.status === "waiting" && (
                         <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-center">
@@ -609,7 +773,8 @@ export default function ChessGameClient({ gameId }) {
                         <div className="h-64 lg:h-80 border-b border-gray-200 dark:border-gray-700">
                             <ChessMoveHistory
                                 moves={game.moves || []}
-                                currentMoveIndex={-1}
+                                currentMoveIndex={isReviewing ? reviewIndex - 1 : -1}
+                                onMoveClick={goToMove}
                                 orientation={myColor}
                             />
                         </div>
