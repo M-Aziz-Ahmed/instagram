@@ -239,7 +239,8 @@ app.post("/api/chess/games/:id/move", async (req, res) => {
         const chess = new Chess(game.fen);
         const isWhiteTurn = chess.turn() === "w";
         const playerColor = game.white.username === username ? "w" : "b";
-        if (playerColor !== (isWhiteTurn ? "w" : "b")) {
+        const isAIMove = game.mode === "ai" && chess.turn() === "b";
+        if (!isAIMove && playerColor !== (isWhiteTurn ? "w" : "b")) {
             return res.status(400).json({ error: "Not your turn" });
         }
 
@@ -272,24 +273,27 @@ app.post("/api/chess/games/:id/move", async (req, res) => {
         game.pgn = chess.pgn();
         game.timerLastTick = now;
 
-        if (chess.isCheckmate()) {
-            game.status = "checkmate";
-            game.result = isWhiteTurn ? "1-0" : "0-1";
-            game.resultReason = "Checkmate";
-            game.winner = isWhiteTurn ? game.white.username : game.black.username;
-        } else if (chess.isStalemate()) {
-            game.status = "stalemate";
-            game.result = "1/2-1/2";
-            game.resultReason = "Stalemate";
-        } else if (chess.isDraw()) {
-            game.status = "draw";
-            game.result = "1/2-1/2";
-            game.resultReason = "Draw";
-        } else if (game.timers.white <= 0 || game.timers.black <= 0) {
-            game.status = "timeout";
-            game.result = game.timers.white <= 0 ? "0-1" : "1-0";
-            game.resultReason = "Timeout";
-            game.winner = game.timers.white <= 0 ? game.black.username : game.white.username;
+            const whiteName = game.white.username || "White";
+            const blackName = game.mode === "ai" ? "Computer" : (game.black.username || "Black");
+
+            if (chess.isCheckmate()) {
+                game.status = "checkmate";
+                game.result = isWhiteTurn ? "1-0" : "0-1";
+                game.resultReason = "Checkmate";
+                game.winner = isWhiteTurn ? whiteName : blackName;
+            } else if (chess.isStalemate()) {
+                game.status = "stalemate";
+                game.result = "1/2-1/2";
+                game.resultReason = "Stalemate";
+            } else if (chess.isDraw()) {
+                game.status = "draw";
+                game.result = "1/2-1/2";
+                game.resultReason = "Draw";
+            } else if (game.timers.white <= 0 || game.timers.black <= 0) {
+                game.status = "timeout";
+                game.result = game.timers.white <= 0 ? "0-1" : "1-0";
+                game.resultReason = "Timeout";
+                game.winner = game.timers.white <= 0 ? blackName : whiteName;
         } else {
             game.status = "active";
             game.result = "*";
@@ -868,8 +872,9 @@ io.on("connection", async (socket) => {
             const chess = new Chess(game.fen);
             const isWhiteTurn = chess.turn() === "w";
             const playerColor = game.white.username === username ? "w" : "b";
+            const isAIMove = game.mode === "ai" && chess.turn() === "b";
 
-            if (playerColor !== (isWhiteTurn ? "w" : "b")) {
+            if (!isAIMove && playerColor !== (isWhiteTurn ? "w" : "b")) {
                 return socket.emit("chess:error", { message: "Not your turn" });
             }
 
