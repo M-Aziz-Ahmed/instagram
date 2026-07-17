@@ -11,6 +11,12 @@ import RichText from "@/components/Feed/RichText";
 
 const RECALL_WINDOW_MS = 60 * 1000;
 
+function isGifUrl(url) {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    return lower.includes(".gif") || lower.includes("giphy.com") || lower.includes("gifformat");
+}
+
 const MSG_REACTIONS = [
     { type: "like", emoji: "👍" },
     { type: "love", emoji: "❤️" },
@@ -643,14 +649,23 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                             onClick={() => setLightboxSrc(msg.imageUrl)}
                                             className={`block w-full ${msg.text ? "" : "max-w-[300px]"} overflow-hidden rounded-3xl cursor-pointer`}
                                         >
-                                            <Image
-                                                src={msg.imageUrl}
-                                                alt="Photo"
-                                                width={600}
-                                                height={400}
-                                                className="w-full h-auto object-cover"
-                                                priority={false}
-                                            />
+                                            {isGifUrl(msg.imageUrl) ? (
+                                                <img
+                                                    src={msg.imageUrl}
+                                                    alt="GIF"
+                                                    className="w-full h-auto block"
+                                                    loading="lazy"
+                                                />
+                                            ) : (
+                                                <Image
+                                                    src={msg.imageUrl}
+                                                    alt="Photo"
+                                                    width={600}
+                                                    height={400}
+                                                    className="w-full h-auto object-cover"
+                                                    priority={false}
+                                                />
+                                            )}
                                         </button>
                                     )}
                                     {msg.audioUrl && !msg.text && !msg.imageUrl && (
