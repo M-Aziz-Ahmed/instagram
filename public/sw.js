@@ -2,13 +2,6 @@
 const CACHE_NAME = 'anonfeed-v1';
 const OFFLINE_URL = '/offline.html';
 
-// Active chat tracking — suppress message pushes when user is chatting with sender
-let _activeChat = null;
-try {
-  const chatChannel = new BroadcastChannel('active_chat');
-  chatChannel.onmessage = (e) => { _activeChat = e.data || null; };
-} catch {}
-
 // Install event - cache essential assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -37,27 +30,26 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Push notification event
+// Push notification — only show when app is NOT visible
 self.addEventListener('push', (event) => {
   let data = { title: 'AnonFeed', body: '', url: '/', icon: '/icon-192.png' };
   try {
     data = { ...data, ...event.data.json() };
   } catch {}
 
-  // Skip message push if user is actively chatting with sender
-  if (data.type === 'message' && data.url && _activeChat) {
-    const urlObj = new URL(data.url, self.location.origin);
-    const chatUser = urlObj.searchParams.get('user');
-    if (chatUser === _activeChat) return;
-  }
-
   event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body:  data.body,
-      icon:  data.icon  || '/icon-192.png',
-      badge: data.badge || '/icon-192.png',
-      data:  { url: data.url || '/' },
-      vibrate: [100, 50, 100],
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      // If any window is visible (focused/unminimized), skip push — in-app notifications handle it
+      const appVisible = clients.some((c) => c.visibilityState === 'visible');
+      if (appVisible) return;
+
+      return self.registration.showNotification(data.title, {
+        body:  data.body,
+        icon:  data.icon  || '/icon-192.png',
+        badge: data.badge || '/icon-192.png',
+        data:  { url: data.url || '/' },
+        vibrate: [100, 50, 100],
+      });
     })
   );
 });
