@@ -50,6 +50,7 @@ export async function GET(request) {
                 followers:   user.followers || [],
                 language:    user.language || "en",
                 autoTranslate: user.autoTranslate || false,
+                liveStreamAllowed: user.liveStreamAllowed || false,
                 needsSetup: !user.username,
             },
         };
