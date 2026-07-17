@@ -12,17 +12,43 @@ import { useEffect } from "react";
 
 export default function Providers({ children }) {
     useEffect(() => {
-        // Register service worker for PWA
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker
-                .register('/sw.js')
-                .then((registration) => {
-                    console.log('Service Worker registered:', registration);
-                })
-                .catch((error) => {
-                    console.log('Service Worker registration failed:', error);
-                });
+        if (!('serviceWorker' in navigator)) return;
+
+        navigator.serviceWorker.register('/sw.js').then((registration) => {
+            console.log('Service Worker registered:', registration);
+        }).catch((error) => {
+            console.log('Service Worker registration failed:', error);
+        });
+
+        // Tell the service worker when the app is visible/hidden
+        function sendVisibility(visible) {
+            navigator.serviceWorker.controller?.postMessage({
+                type: 'app_visibility',
+                visible,
+            });
         }
+
+        const onVisibilityChange = () => {
+            sendVisibility(document.visibilityState === 'visible');
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        window.addEventListener('focus', () => sendVisibility(true));
+        window.addEventListener('blur', () => sendVisibility(false));
+
+        // Initial state
+        sendVisibility(document.visibilityState === 'visible');
+
+        // Heartbeat every 15s so SW knows client is alive
+        const heartbeat = setInterval(() => {
+            navigator.serviceWorker.controller?.postMessage({ type: 'heartbeat' });
+        }, 15000);
+
+        return () => {
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+            window.removeEventListener('focus', () => sendVisibility(true));
+            window.removeEventListener('blur', () => sendVisibility(false));
+            clearInterval(heartbeat);
+        };
     }, []);
 
     return (
