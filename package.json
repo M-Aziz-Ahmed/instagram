@@ -12,6 +12,7 @@
     "@getbrevo/brevo": "^6.0.2",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
+    "chess.js": "^1.4.0",
     "cloudinary": "^2.10.0",
     "jose": "^6.2.3",
     "mongoose": "^9.7.4",

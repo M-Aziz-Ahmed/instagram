@@ -13,6 +13,33 @@ const LiveStream = require("./models/liveStream");
 const ChessGame = require("./models/chessGame");
 const { sendPushNotification } = require("./push");
 
+const PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 };
+
+function getAIMove(chess, difficulty) {
+    const moves = chess.moves({ verbose: true });
+    if (!moves.length) return null;
+
+    const depth = Math.min(Math.max(difficulty || 10, 1), 20);
+    const candidates = [];
+
+    for (const move of moves) {
+        let score = Math.random() * 50;
+        if (move.captured) {
+            score += PIECE_VALUES[move.captured] * 1.5 - (PIECE_VALUES[move.piece] * 0.5);
+        }
+        if (move.promotion) score += PIECE_VALUES[move.promotion] || 0;
+        if (move.san.includes("+")) score += 30;
+        if (depth > 5 && move.san.includes("#")) score += 10000;
+        candidates.push({ move, score });
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+
+    const topN = Math.max(1, Math.min(candidates.length, Math.ceil(21 - depth)));
+    const pick = candidates[Math.floor(Math.random() * topN)];
+    return pick.move;
+}
+
 const app = express();
 
 let server;
@@ -300,6 +327,44 @@ app.post("/api/chess/games/:id/move", async (req, res) => {
         }
 
         await game.save();
+
+        if (game.mode === "ai" && game.status === "active") {
+            const aiMove = getAIMove(chess, game.aiDifficulty);
+            if (aiMove) {
+                const aiResult = chess.move(aiMove);
+                if (aiResult) {
+                    const aiNow = new Date();
+                    game.fen = chess.fen();
+                    game.turn = chess.turn();
+                    game.moves.push({
+                        from: aiResult.from, to: aiResult.to, san: aiResult.san, fen: game.fen,
+                        notation: aiResult.san, timestamp: aiNow, thinkingMs: 500 + Math.random() * 2000,
+                    });
+                    game.pgn = chess.pgn();
+                    game.timerLastTick = aiNow;
+
+                    if (chess.isCheckmate()) {
+                        game.status = "checkmate";
+                        game.result = "0-1";
+                        game.resultReason = "Checkmate";
+                        game.winner = "Computer";
+                    } else if (chess.isStalemate()) {
+                        game.status = "stalemate";
+                        game.result = "1/2-1/2";
+                        game.resultReason = "Stalemate";
+                    } else if (chess.isDraw()) {
+                        game.status = "draw";
+                        game.result = "1/2-1/2";
+                        game.resultReason = "Draw";
+                    } else {
+                        game.status = "active";
+                        game.result = "*";
+                    }
+                    await game.save();
+                }
+            }
+        }
+
         res.json({ game, move: moveResult });
     } catch (err) {
         console.error("[CHESS API] Move error:", err.message);
@@ -946,6 +1011,69 @@ io.on("connection", async (socket) => {
                 moves: game.moves,
                 pgn: game.pgn,
             });
+
+            if (game.mode === "ai" && game.status === "active") {
+                const aiDelay = 400 + Math.random() * 600;
+                setTimeout(async () => {
+                    try {
+                        const latest = await ChessGame.findById(gameId);
+                        if (!latest || latest.status !== "active") return;
+
+                        const aiChess = new Chess(latest.fen);
+                        const aiMove = getAIMove(aiChess, latest.aiDifficulty);
+                        if (!aiMove) return;
+
+                        const aiResult = aiChess.move(aiMove);
+                        if (!aiResult) return;
+
+                        const aiNow = new Date();
+                        latest.fen = aiChess.fen();
+                        latest.turn = aiChess.turn();
+                        latest.moves.push({
+                            from: aiResult.from, to: aiResult.to, san: aiResult.san, fen: latest.fen,
+                            notation: aiResult.san, timestamp: aiNow, thinkingMs: aiDelay,
+                        });
+                        latest.pgn = aiChess.pgn();
+                        latest.timerLastTick = aiNow;
+
+                        if (aiChess.isCheckmate()) {
+                            latest.status = "checkmate";
+                            latest.result = "0-1";
+                            latest.resultReason = "Checkmate";
+                            latest.winner = "Computer";
+                        } else if (aiChess.isStalemate()) {
+                            latest.status = "stalemate";
+                            latest.result = "1/2-1/2";
+                            latest.resultReason = "Stalemate";
+                        } else if (aiChess.isDraw()) {
+                            latest.status = "draw";
+                            latest.result = "1/2-1/2";
+                            latest.resultReason = "Draw";
+                        } else {
+                            latest.status = "active";
+                            latest.result = "*";
+                        }
+
+                        await latest.save();
+
+                        io.to(`chess:${gameId}`).emit("chess:move", {
+                            gameId,
+                            move: aiResult,
+                            fen: latest.fen,
+                            turn: latest.turn,
+                            status: latest.status,
+                            result: latest.result,
+                            resultReason: latest.resultReason,
+                            winner: latest.winner,
+                            timers: latest.timers,
+                            moves: latest.moves,
+                            pgn: latest.pgn,
+                        });
+                    } catch (err) {
+                        console.error("[CHESS] AI move error:", err.message);
+                    }
+                }, aiDelay);
+            }
         } catch (err) {
             console.error("[CHESS] Move error:", err.message);
             socket.emit("chess:error", { message: "Move failed" });

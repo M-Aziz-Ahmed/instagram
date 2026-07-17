@@ -292,29 +292,8 @@ export default function ChessGameClient({ gameId }) {
     }, [game?.status, gameId]);
 
     useEffect(() => {
-        const g = gameRef.current;
-        if (!g || g.status !== "active" || g.mode !== "ai") return;
-        if (g.turn !== "b") return;
-        if (!stockfishReady || evaluating) return;
-
-        const timer = setTimeout(() => {
-            const latest = gameRef.current;
-            if (!latest || latest.turn !== "b") return;
-            getBestMove(latest.fen, (move) => {
-                if (move && move.length >= 4) {
-                    const from = move.substring(0, 2);
-                    const to = move.substring(2, 4);
-                    socketRef.current?.emit("chess:make-move", {
-                        gameId,
-                        from,
-                        to,
-                        promotion: move.length > 4 ? move[4] : "q",
-                    });
-                }
-            }, latest.aiDifficulty >= 16 ? 18 : latest.aiDifficulty >= 12 ? 15 : latest.aiDifficulty >= 8 ? 12 : 8);
-        }, 500);
-
-        return () => clearTimeout(timer);
+        // AI moves are now handled server-side
+        return;
     }, [game?.turn, game?.status, game?.mode, stockfishReady, evaluating, gameId]);
 
     const handleMove = useCallback((from, to) => {
