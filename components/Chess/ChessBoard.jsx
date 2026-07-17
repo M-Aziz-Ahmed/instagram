@@ -47,7 +47,7 @@ export default function ChessBoard({
 
     const board = useMemo(() => parseFEN(fen), [fen]);
     const whitePerspective = (playerColor || "w") === "w";
-    const flipped = isFlipped ? !whitePerspective : whitePerspective;
+    const flipped = isFlipped ? whitePerspective : !whitePerspective;
 
     const displayBoard = useMemo(() => {
         if (!flipped) return board;
