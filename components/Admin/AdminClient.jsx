@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/context/ToastContext";
 import UserBadges from "@/components/shared/UserBadges";
-import Sidebar from "@/components/Layout/Sidebar";
+import { useSidebar } from "@/context/SidebarContext";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -14,7 +14,7 @@ export default function AdminClient() {
     const { user: me, ready } = useUser();
     const router = useRouter();
     const [tab, setTab] = useState("users");
-    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const { openSidebar } = useSidebar();
 
     if (!ready || !me) {
         return <div className="flex h-dvh items-center justify-center bg-white dark:bg-gray-950">
@@ -29,7 +29,7 @@ export default function AdminClient() {
     }
 
     return (
-        <div className="min-h-dvh bg-gray-50 dark:bg-gray-950 lg:pl-72">
+        <div className="min-h-dvh bg-gray-50 dark:bg-gray-950">
             <header className="sticky top-0 z-20 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-200 dark:border-gray-800 safe-top">
                 <div className="max-w-5xl mx-auto px-4 h-12 sm:h-14 flex items-center gap-3">
                     <Link href="/" className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
@@ -39,7 +39,7 @@ export default function AdminClient() {
                     </Link>
                     <span className="font-bold text-base text-gray-900 dark:text-gray-100 flex-1">Admin Dashboard</span>
                     <button
-                        onClick={() => setSidebarOpen(true)}
+                        onClick={openSidebar}
                         aria-label="Open menu"
                         className="p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                     >

@@ -2,13 +2,14 @@
 
 import { useEffect } from "react";
 import BottomNav from "./BottomNav";
+import Sidebar from "./Sidebar";
 import VoiceChat from "@/components/VoiceChat/VoiceChat";
 import { useSidebar } from "@/context/SidebarContext";
 import { useUser } from "@/context/UserContext";
 import { useVoiceChat } from "@/context/VoiceChatContext";
 
 export default function LayoutWrapper({ children }) {
-    const { collapsed } = useSidebar();
+    const { collapsed, sidebarOpen, closeSidebar } = useSidebar();
     const { user } = useUser();
     const { socket, voiceOpen, closeVoiceChat } = useVoiceChat();
 
@@ -24,6 +25,8 @@ export default function LayoutWrapper({ children }) {
 
     return (
         <>
+            <Sidebar open={sidebarOpen} onClose={closeSidebar} />
+
             <div className={`pb-14 lg:pb-0 ${collapsed ? "lg:pl-20" : "lg:pl-72"}`}>
                 {children}
             </div>

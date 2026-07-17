@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import ChatBox from "./ChatBox";
-import Sidebar from "@/components/Layout/Sidebar";
+import { useSidebar } from "@/context/SidebarContext";
 import UserBadges from "@/components/shared/UserBadges";
 
 function timeAgo(date) {
@@ -31,7 +31,7 @@ export default function InboxClient() {
     const [onlineMap, setOnlineMap] = useState({});
     const [loading, setLoading] = useState(true);
     const [selectedConvo, setSelectedConvo] = useState(null);
-    const [sidebarOpen, setSidebarOpen]     = useState(false);
+    const { openSidebar }                   = useSidebar();
     const urlInitDoneRef                    = useRef(false);
 
     useEffect(() => {
@@ -162,7 +162,7 @@ export default function InboxClient() {
     }
 
     return (
-        <div className="flex h-dvh bg-white dark:bg-gray-950 overflow-hidden lg:pl-72">
+        <div className="flex h-dvh bg-white dark:bg-gray-950 overflow-hidden">
             <aside className={`
                 flex flex-col shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950
                 w-full md:w-80
@@ -171,7 +171,7 @@ export default function InboxClient() {
                 <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
                     <span className="font-semibold text-base tracking-tight text-gray-900 dark:text-gray-100">Inbox</span>
                     <button
-                        onClick={() => setSidebarOpen(true)}
+                        onClick={openSidebar}
                         aria-label="Open menu"
                         className="p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                     >
@@ -246,8 +246,6 @@ export default function InboxClient() {
                     recipientUser={selectedConvo?.user}
                 />
             </main>
-
-            <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         </div>
     );
 }

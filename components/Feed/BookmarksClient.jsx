@@ -4,14 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 import PostCard from "@/components/Feed/PostCard";
-import Sidebar from "@/components/Layout/Sidebar";
+import { useSidebar } from "@/context/SidebarContext";
 
 export default function BookmarksClient() {
     const { user, ready } = useUser();
     const router = useRouter();
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const { openSidebar } = useSidebar();
 
     useEffect(() => {
         if (ready && !user) router.replace("/login");
@@ -45,7 +45,7 @@ export default function BookmarksClient() {
             <header className="sticky top-0 z-20 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-200 dark:border-gray-800 safe-top">
                 <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3">
                     <button
-                        onClick={() => setSidebarOpen(true)}
+                        onClick={openSidebar}
                         aria-label="Open menu"
                         className="p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                     >
@@ -82,8 +82,6 @@ export default function BookmarksClient() {
                     </div>
                 )}
             </main>
-
-            <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         </div>
     );
 }

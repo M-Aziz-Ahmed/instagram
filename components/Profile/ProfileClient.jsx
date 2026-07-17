@@ -7,7 +7,7 @@ import UserBadges from "@/components/shared/UserBadges";
 import FollowButton from "@/components/shared/FollowButton";
 import ImageLightbox from "@/components/shared/ImageLightbox";
 import EditProfileModal from "@/components/Auth/EditProfileModal";
-import Sidebar from "@/components/Layout/Sidebar";
+import { useSidebar } from "@/context/SidebarContext";
 import Link from "next/link";
 
 function colorFromUsername(name = "") {
@@ -140,7 +140,7 @@ export default function ProfileClient({ username }) {
     const [loading, setLoading]               = useState(true);
     const [expanded, setExpanded]             = useState(null);
     const [editingProfile, setEditingProfile] = useState(false);
-    const [sidebarOpen, setSidebarOpen]       = useState(false);
+    const { openSidebar }                     = useSidebar();
     const [avatarLightbox, setAvatarLightbox] = useState(false);
     const [listModal, setListModal]           = useState(null);
 
@@ -208,7 +208,7 @@ export default function ProfileClient({ username }) {
     const expandedPost = expanded ? data?.posts?.find((p) => p._id === expanded) : null;
 
     return (
-        <div className="min-h-dvh bg-white dark:bg-gray-950 lg:pl-72">
+        <div className="min-h-dvh bg-white dark:bg-gray-950">
             {/* Nav */}
             <header className="sticky top-0 z-20 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-200 dark:border-gray-800 safe-top">
                 <div className="max-w-2xl mx-auto px-4 h-12 sm:h-14 flex items-center gap-3">
@@ -219,7 +219,7 @@ export default function ProfileClient({ username }) {
                     </Link>
                     <span className="font-bold text-base text-gray-900 dark:text-gray-100 truncate flex-1">{username}</span>
                     <button
-                        onClick={() => setSidebarOpen(true)}
+                        onClick={openSidebar}
                         aria-label="Open menu"
                         className="p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                     >
@@ -369,8 +369,6 @@ export default function ProfileClient({ username }) {
             {editingProfile && (
                 <EditProfileModal onClose={() => { setEditingProfile(false); fetchProfile(); }} />
             )}
-
-            <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
             {avatarLightbox && profile.avatarUrl && (
                 <ImageLightbox src={profile.avatarUrl} alt={username} onClose={() => setAvatarLightbox(false)} />

@@ -672,8 +672,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag, serv
                                 )}
                             </div>
                         </div>
-                    ) : (
-                    post.text && (
+                    ) : (post.text ? (
                         <div className="mt-1">
                             <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap">
                                 <RichText text={post.text} onHashtag={onHashtag} />
@@ -698,7 +697,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag, serv
                                 )}
                             </button>
                         </div>
-                    )}
+                    ) : null)}
 
                     {post.audioUrl && !post.text && !post.imageUrl && (
                         <div className="mt-2 max-w-xs">

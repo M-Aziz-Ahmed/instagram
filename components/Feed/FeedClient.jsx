@@ -8,16 +8,16 @@ import Feed from "./Feed";
 import TrendingTags from "./TrendingTags";
 import SearchBar from "./SearchBar";
 import NotificationBell from "@/components/Notifications/NotificationBell";
-import Sidebar from "@/components/Layout/Sidebar";
+import { useSidebar } from "@/context/SidebarContext";
 import Link from "next/link";
 import StoryTray from "@/components/Stories/StoryTray";
 
 export default function FeedClient() {
     const { user, ready, logout } = useUser();
     const router                  = useRouter();
+    const { openSidebar }         = useSidebar();
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [activeTag, setActiveTag]           = useState(null);
-    const [sidebarOpen, setSidebarOpen]       = useState(false);
     const [feedType, setFeedType]             = useState("all");
     const [redirecting, setRedirecting]       = useState(false);
     const [searchQuery, setSearchQuery]       = useState(null);
@@ -58,7 +58,7 @@ export default function FeedClient() {
                 <div className="max-w-4xl mx-auto px-3 sm:px-4 h-12 sm:h-14 flex items-center justify-between gap-2 sm:gap-4">
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={() => setSidebarOpen(true)}
+                            onClick={openSidebar}
                             aria-label="Open menu"
                             className="p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                         >
@@ -158,8 +158,6 @@ export default function FeedClient() {
                 </main>
                 <TrendingTags activeTag={activeTag} onTagClick={handleHashtag} />
             </div>
-
-            <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         </div>
     );
 }

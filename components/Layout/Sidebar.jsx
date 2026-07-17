@@ -193,6 +193,18 @@ export default function Sidebar({ open, onClose }) {
         return pathname.startsWith(path);
     };
 
+    // Escape key to close mobile sidebar + body scroll lock
+    useEffect(() => {
+        if (!open) return;
+        const onKey = (e) => { if (e.key === "Escape") onClose(); };
+        document.addEventListener("keydown", onKey);
+        document.body.style.overflow = "hidden";
+        return () => {
+            document.removeEventListener("keydown", onKey);
+            document.body.style.overflow = "";
+        };
+    }, [open, onClose]);
+
     return (
         <>
             {/* Backdrop */}
@@ -240,9 +252,18 @@ export default function Sidebar({ open, onClose }) {
 
                             <div className="flex items-center gap-3">
                                 <button
+                                    onClick={onClose}
+                                    aria-label="Close sidebar"
+                                    className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors lg:hidden"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-5 h-5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                                <button
                                     onClick={toggleCollapsed}
                                     aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                                    className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                    className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors hidden lg:flex"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-5 h-5">
                                         {collapsed ? (
