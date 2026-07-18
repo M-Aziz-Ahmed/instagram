@@ -7,6 +7,7 @@ import ChessBoard from "./ChessBoard";
 import ChessTimer from "./ChessTimer";
 import ChessMoveHistory from "./ChessMoveHistory";
 import ChessChat from "./ChessChat";
+import ChessReviewPanel from "./ChessReviewPanel";
 import { playMoveSound, playCaptureSound, playCheckSound, playCheckmateSound, playCastleSound, playPromotionSound, playClickSound, setSoundEnabled } from "./chessSounds";
 
 const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
@@ -420,13 +421,41 @@ export default function ChessGameClient({ gameId }) {
     }, [game?.status, gameId]);
 
     useEffect(() => {
-        if (!gameOver || !game) return;
+        if (!gameOver || !game || !user?.username) return;
         const result = getResultText();
         if (result !== lastResultText) {
             setLastResultText(result);
             setShowGameOver(true);
+
+            const opponent = myColor === "w" ? game.black?.username : game.white?.username;
+            const timeStr = game.timeControl
+                ? `${Math.floor(game.timeControl.initial / 60)}min` + (game.timeControl.increment ? `|${game.timeControl.increment}` : "")
+                : "";
+            const gameStats = (() => {
+                try {
+                    const { analyseGameMoves } = require("./chessAnalysis");
+                    return analyseGameMoves(game.moves, myColor).stats;
+                } catch { return {}; }
+            })();
+
+            fetch("/api/chess/history", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    username: user.username,
+                    gameId,
+                    opponent: opponent || "Computer",
+                    playerColor: myColor,
+                    result: game.result,
+                    resultReason: game.resultReason || "",
+                    mode: game.mode || "multiplayer",
+                    moves: game.moves?.length ? Math.ceil(game.moves.length / 2) : 0,
+                    timeControl: timeStr,
+                    gameStats,
+                }),
+            }).catch(() => {});
         }
-    }, [game?.status, game?.winner]);
+    }, [game?.status, game?.winner, game?.result, game?.resultReason]);
 
     const handleMove = useCallback((from, to) => {
         if (!socketRef.current) return;
@@ -847,17 +876,28 @@ export default function ChessGameClient({ gameId }) {
             {/* Game over modal */}
             {showGameOver && gameOver && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.6)" }}>
-                    <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl border border-gray-200 dark:border-gray-700 animate-in">
-                        <div className="text-4xl sm:text-5xl mb-3 sm:mb-4">{getResultIcon()}</div>
-                        <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">{getResultText()}</h2>
-                        {game.resultReason && (
-                            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-1">{game.resultReason}</p>
-                        )}
-                        {game.moves && (
-                            <p className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500 mb-5 sm:mb-6">{Math.ceil(game.moves.length / 2)} moves played</p>
-                        )}
-                        <div className="flex flex-col gap-2">
-                            <a href="/chess" className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-colors shadow-md">
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 sm:p-6 max-w-sm w-full shadow-2xl border border-gray-200 dark:border-gray-700 animate-in overflow-y-auto max-h-[95vh]">
+                        <div className="text-center mb-3">
+                            <div className="text-4xl sm:text-5xl mb-2">{getResultIcon()}</div>
+                            <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-1">{getResultText()}</h2>
+                            {game.moves && (
+                                <p className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500">{Math.ceil(game.moves.length / 2)} moves played</p>
+                            )}
+                        </div>
+
+                        <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mb-4">
+                            <ChessReviewPanel
+                                moves={game.moves || []}
+                                playerColor={myColor}
+                                playerName={me?.username || user?.username || "Player"}
+                                opponentName={opponent?.username || "Opponent"}
+                                result={game.result}
+                                resultReason={game.resultReason}
+                            />
+                        </div>
+
+                        <div className="flex flex-col gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                            <a href="/chess" className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-colors shadow-md text-center text-sm">
                                 Back to Lobby
                             </a>
                             <button

@@ -24,6 +24,18 @@ const userSchema = new mongoose.Schema({
     lastActive:   { type: Date, default: Date.now },
     isOnline:     { type: Boolean, default: false },
     createdAt:   { type: Date, default: Date.now },
+    chessGames:  { type: [{
+        gameId:       { type: String, required: true },
+        opponent:     { type: String, default: "" },
+        playerColor:  { type: String, enum: ["w", "b"], required: true },
+        result:       { type: String, enum: ["1-0", "0-1", "1/2-1/2", "*"], default: "*" },
+        resultReason: { type: String, default: "" },
+        mode:         { type: String, enum: ["multiplayer", "ai"], default: "multiplayer" },
+        moves:        { type: Number, default: 0 },
+        timeControl:  { type: String, default: "" },
+        playedAt:     { type: Date, default: Date.now },
+        gameStats:    { type: mongoose.Schema.Types.Mixed, default: {} },
+    }], default: [] },
 });
 
 userSchema.index({ username: 1 }, { sparse: true });

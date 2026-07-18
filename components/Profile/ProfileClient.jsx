@@ -7,6 +7,7 @@ import UserBadges from "@/components/shared/UserBadges";
 import FollowButton from "@/components/shared/FollowButton";
 import ImageLightbox from "@/components/shared/ImageLightbox";
 import EditProfileModal from "@/components/Auth/EditProfileModal";
+import ChessProfileHistory from "@/components/Chess/ChessProfileHistory";
 import { useSidebar } from "@/context/SidebarContext";
 import Link from "next/link";
 
@@ -309,6 +310,9 @@ export default function ProfileClient({ username }) {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Chess History */}
+                        <ChessProfileHistory username={username} />
 
                         {/* Posts grid + list */}
                         {!data?.posts?.length ? (
