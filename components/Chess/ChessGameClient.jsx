@@ -166,6 +166,7 @@ export default function ChessGameClient({ gameId }) {
     const [showGameOver, setShowGameOver] = useState(false);
     const [lastResultText, setLastResultText] = useState("");
     const [reviewIndex, setReviewIndex] = useState(null);
+    const [mobileTab, setMobileTab] = useState("moves");
     const timerRef = useRef(null);
     const gameRef = useRef(null);
     const reviewRef = useRef(null);
@@ -533,10 +534,10 @@ export default function ChessGameClient({ gameId }) {
         if (!game) return null;
         const { status, winner } = game;
         if (status === "checkmate" || status === "resigned" || status === "timeout") {
-            if (winner === user?.username) return "🏆";
-            return "😞";
+            if (winner === user?.username) return "\uD83C\uDFC6";
+            return "\uD83D\uDE1E";
         }
-        return "🤝";
+        return "\uD83E\uDD1D";
     };
 
     if (loading) {
@@ -575,19 +576,22 @@ export default function ChessGameClient({ gameId }) {
     const topColor = isFlipped ? myColor : (myColor === "w" ? "b" : "w");
     const bottomColor = isFlipped ? (myColor === "w" ? "b" : "w") : myColor;
     const isAIMode = game.mode === "ai";
+    const hasMoveReview = game.moves && game.moves.length > 0;
 
     return (
-        <div className="max-w-6xl mx-auto px-4 py-4">
-            <div className="flex flex-col lg:flex-row gap-4">
-                <div className="flex-1 max-w-[560px] mx-auto w-full">
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
+        <div className="w-full max-w-[2000px] mx-auto">
+            <div className="flex flex-col lg:flex-row gap-2 lg:gap-4">
+                {/* Board column */}
+                <div className="w-full lg:flex-1 lg:max-w-[600px] xl:max-w-[700px] mx-auto lg:mx-0">
+                    {/* Top status bar - compact */}
+                    <div className="flex items-center justify-between mb-1 px-1">
+                        <div className="flex items-center gap-1.5">
                             {isAIMode && (
-                                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
-                                    vs Computer
+                                <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+                                    vs AI
                                 </span>
                             )}
-                            <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full ${
+                            <span className={`px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider rounded-full ${
                                 game.status === "active"
                                     ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
                                     : game.status === "waiting"
@@ -599,15 +603,15 @@ export default function ChessGameClient({ gameId }) {
                         </div>
                         <button
                             onClick={toggleSound}
-                            className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                            title={soundOn ? "Mute sounds" : "Unmute sounds"}
+                            className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                            title={soundOn ? "Mute" : "Unmute"}
                         >
                             {soundOn ? (
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                                 </svg>
                             ) : (
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
                                 </svg>
@@ -623,7 +627,7 @@ export default function ChessGameClient({ gameId }) {
                         player={topPlayer}
                     />
 
-                    <div className="my-2">
+                    <div className="my-1 sm:my-2">
                         <ChessBoard
                             fen={isReviewing ? reviewFen : game.fen}
                             turn={isReviewing ? reviewTurn : game.turn}
@@ -649,156 +653,208 @@ export default function ChessGameClient({ gameId }) {
                         player={bottomPlayer}
                     />
 
-                    <div className="flex items-center justify-center gap-1 mt-2 px-2 py-1.5 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
-                        <button
-                            onClick={goToStart}
-                            disabled={!isReviewing && fenHistory.length <= 1}
-                            className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                            title="Go to start (Home)"
-                        >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                            </svg>
-                        </button>
-                        <button
-                            onClick={goBack}
-                            disabled={!canGoBack}
-                            className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                            title="Previous move (←)"
-                        >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                            </svg>
-                        </button>
+                    {/* Review bar - compact on mobile */}
+                    {hasMoveReview && (
+                        <div className="flex items-center justify-center gap-0.5 sm:gap-1 mt-1 sm:mt-2 px-1 sm:px-2 py-1 sm:py-1.5 bg-gray-50 dark:bg-gray-800/50 rounded-lg sm:rounded-xl">
+                            <button
+                                onClick={goToStart}
+                                disabled={!isReviewing && fenHistory.length <= 1}
+                                className="p-1 sm:p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                title="Start"
+                            >
+                                <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={goBack}
+                                disabled={!canGoBack}
+                                className="p-1 sm:p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                title="Back"
+                            >
+                                <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </button>
 
-                        <div className="px-3 text-xs font-mono font-medium text-gray-600 dark:text-gray-300 min-w-[60px] text-center select-none">
-                            {isReviewing ? (
-                                <span>
-                                    <span className="text-gray-400 dark:text-gray-500">
-                                        {reviewIndex > 0 ? Math.ceil(reviewIndex / 2) : "Start"}
+                            <div className="px-2 sm:px-3 text-[10px] sm:text-xs font-mono font-medium text-gray-600 dark:text-gray-300 min-w-[40px] sm:min-w-[60px] text-center select-none">
+                                {isReviewing ? (
+                                    <span>
+                                        <span className="text-gray-400 dark:text-gray-500">
+                                            {reviewIndex > 0 ? Math.ceil(reviewIndex / 2) : "Start"}
+                                        </span>
+                                        <span className="text-gray-300 dark:text-gray-600 mx-0.5">/</span>
+                                        <span>{Math.ceil((totalReviewPositions - 1) / 2)}</span>
                                     </span>
-                                    <span className="text-gray-300 dark:text-gray-600 mx-0.5">/</span>
-                                    <span>{Math.ceil((totalReviewPositions - 1) / 2)}</span>
-                                </span>
-                            ) : (
-                                <span className="text-green-600 dark:text-green-400">Live</span>
+                                ) : (
+                                    <span className="text-green-600 dark:text-green-400">Live</span>
+                                )}
+                            </div>
+
+                            <button
+                                onClick={goForward}
+                                disabled={!canGoForward}
+                                className="p-1 sm:p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                title="Forward"
+                            >
+                                <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={goToEnd}
+                                disabled={!isReviewing}
+                                className="p-1 sm:p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                title="End"
+                            >
+                                <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                                </svg>
+                            </button>
+
+                            {isReviewing && (
+                                <button
+                                    onClick={exitReview}
+                                    className="ml-0.5 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-semibold text-blue-500 hover:text-blue-600 bg-blue-50 dark:bg-blue-900/20 rounded-md transition-colors"
+                                >
+                                    Live
+                                </button>
                             )}
                         </div>
-
-                        <button
-                            onClick={goForward}
-                            disabled={!canGoForward}
-                            className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                            title="Next move (→)"
-                        >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                            </svg>
-                        </button>
-                        <button
-                            onClick={goToEnd}
-                            disabled={!isReviewing}
-                            className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                            title="Go to live (End)"
-                        >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                            </svg>
-                        </button>
-
-                        {isReviewing && (
-                            <button
-                                onClick={exitReview}
-                                className="ml-1 px-2 py-1 text-[10px] font-semibold text-blue-500 hover:text-blue-600 bg-blue-50 dark:bg-blue-900/20 rounded-md transition-colors"
-                            >
-                                Live
-                            </button>
-                        )}
-                    </div>
-
-                    {game.status === "waiting" && (
-                        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-center">
-                            <div className="flex items-center justify-center gap-2 mb-1">
-                                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                                <p className="text-sm font-medium text-blue-700 dark:text-blue-300">Waiting for opponent...</p>
-                            </div>
-                            <p className="text-xs text-blue-500 dark:text-blue-400">Share the game link to invite someone</p>
-                        </div>
                     )}
 
-                    {isMyTurn && !gameOver && game.status === "active" && (
-                        <div className="mt-2 flex items-center justify-center gap-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                            <span className="text-xs text-green-600 dark:text-green-400 font-semibold">Your turn</span>
+                    {/* Inline status + actions */}
+                    <div className="flex items-center justify-between mt-1 sm:mt-2 px-1">
+                        <div className="flex items-center gap-1">
+                            {isMyTurn && !gameOver && game.status === "active" && (
+                                <div className="flex items-center gap-1">
+                                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                                    <span className="text-[10px] sm:text-xs text-green-600 dark:text-green-400 font-semibold">Your turn</span>
+                                </div>
+                            )}
+                            {game.status === "waiting" && (
+                                <div className="flex items-center gap-1">
+                                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                                    <span className="text-[10px] sm:text-xs text-blue-500 font-medium">Waiting for opponent</span>
+                                </div>
+                            )}
                         </div>
-                    )}
-
-                    <div className="mt-2 flex items-center justify-center gap-1 flex-wrap">
-                        {game.status === "active" && myColor && (
-                            <>
-                                <button onClick={handleResign} className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
-                                    Resign
-                                </button>
-                                <span className="text-gray-300 dark:text-gray-700">|</span>
-                                <button onClick={handleOfferDraw} className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors">
-                                    Draw
-                                </button>
-                            </>
-                        )}
+                        <div className="flex items-center gap-0.5">
+                            {game.status === "active" && myColor && (
+                                <>
+                                    <button onClick={handleResign} className="px-2 py-1 text-[10px] sm:text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors">
+                                        Resign
+                                    </button>
+                                    <span className="text-gray-300 dark:text-gray-700 text-xs">|</span>
+                                    <button onClick={handleOfferDraw} className="px-2 py-1 text-[10px] sm:text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md transition-colors">
+                                        Draw
+                                    </button>
+                                </>
+                            )}
+                        </div>
                     </div>
 
+                    {/* Draw offer banner */}
                     {drawOffer && drawOffer !== user?.username && (
-                        <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl text-center border border-yellow-200 dark:border-yellow-800/50">
-                            <p className="text-xs font-medium text-yellow-700 dark:text-yellow-300 mb-2">{drawOffer} offers a draw</p>
+                        <div className="mt-1 sm:mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-center border border-yellow-200 dark:border-yellow-800/50">
+                            <p className="text-[10px] sm:text-xs font-medium text-yellow-700 dark:text-yellow-300 mb-1.5">{drawOffer} offers a draw</p>
                             <div className="flex items-center justify-center gap-2">
-                                <button onClick={handleAcceptDraw} className="px-4 py-1.5 text-xs font-semibold text-white bg-green-500 rounded-lg hover:bg-green-600 transition-colors shadow-sm">
-                                    Accept
-                                </button>
-                                <button onClick={handleDeclineDraw} className="px-4 py-1.5 text-xs font-semibold text-white bg-gray-500 rounded-lg hover:bg-gray-600 transition-colors shadow-sm">
-                                    Decline
-                                </button>
+                                <button onClick={handleAcceptDraw} className="px-3 py-1 text-[10px] sm:text-xs font-semibold text-white bg-green-500 rounded-md hover:bg-green-600 transition-colors">Accept</button>
+                                <button onClick={handleDeclineDraw} className="px-3 py-1 text-[10px] sm:text-xs font-semibold text-white bg-gray-500 rounded-md hover:bg-gray-600 transition-colors">Decline</button>
                             </div>
                         </div>
                     )}
 
                     {error && (
-                        <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-center">
-                            <p className="text-xs text-red-500">{error}</p>
+                        <div className="mt-1 p-1.5 bg-red-50 dark:bg-red-900/20 rounded-md text-center">
+                            <p className="text-[10px] sm:text-xs text-red-500">{error}</p>
                         </div>
                     )}
                 </div>
 
-                <div className="w-full lg:w-72 shrink-0">
-                    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm">
-                        <div className="h-64 lg:h-80 border-b border-gray-200 dark:border-gray-700">
-                            <ChessMoveHistory
-                                moves={game.moves || []}
-                                currentMoveIndex={isReviewing ? reviewIndex - 1 : -1}
-                                onMoveClick={goToMove}
-                                orientation={myColor}
-                            />
+                {/* Side panel - desktop: sidebar, mobile: tabbed panel */}
+                <div className="w-full lg:w-64 xl:w-72 shrink-0">
+                    {/* Mobile tab header */}
+                    <div className="flex lg:hidden border-b border-gray-200 dark:border-gray-700">
+                        <button
+                            onClick={() => setMobileTab("moves")}
+                            className={`flex-1 py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wide transition-colors ${
+                                mobileTab === "moves"
+                                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+                                    : "text-gray-400 dark:text-gray-500"
+                            }`}
+                        >
+                            Moves {game.moves?.length > 0 && <span className="text-gray-400 font-normal">({Math.ceil(game.moves.length / 2)})</span>}
+                        </button>
+                        <button
+                            onClick={() => setMobileTab("chat")}
+                            className={`flex-1 py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wide transition-colors ${
+                                mobileTab === "chat"
+                                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+                                    : "text-gray-400 dark:text-gray-500"
+                            }`}
+                        >
+                            Chat {chatMessages.length > 0 && <span className="text-gray-400 font-normal">({chatMessages.length})</span>}
+                        </button>
+                    </div>
+
+                    {/* Desktop: stacked panels / Mobile: tab content */}
+                    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none lg:rounded-xl overflow-hidden shadow-sm">
+                        {/* Mobile: show active tab */}
+                        <div className="lg:hidden">
+                            {mobileTab === "moves" ? (
+                                <div className="h-[250px] sm:h-[300px]">
+                                    <ChessMoveHistory
+                                        moves={game.moves || []}
+                                        currentMoveIndex={isReviewing ? reviewIndex - 1 : -1}
+                                        onMoveClick={goToMove}
+                                        orientation={myColor}
+                                    />
+                                </div>
+                            ) : (
+                                <div className="h-[250px] sm:h-[300px]">
+                                    <ChessChat
+                                        chat={chatMessages}
+                                        onSendMessage={handleSendChat}
+                                        username={user?.username}
+                                    />
+                                </div>
+                            )}
                         </div>
-                        <div className="h-64 lg:h-80">
-                            <ChessChat
-                                chat={chatMessages}
-                                onSendMessage={handleSendChat}
-                                username={user?.username}
-                            />
+
+                        {/* Desktop: show both stacked */}
+                        <div className="hidden lg:block">
+                            <div className="h-64 xl:h-72 border-b border-gray-200 dark:border-gray-700">
+                                <ChessMoveHistory
+                                    moves={game.moves || []}
+                                    currentMoveIndex={isReviewing ? reviewIndex - 1 : -1}
+                                    onMoveClick={goToMove}
+                                    orientation={myColor}
+                                />
+                            </div>
+                            <div className="h-64 xl:h-72">
+                                <ChessChat
+                                    chat={chatMessages}
+                                    onSendMessage={handleSendChat}
+                                    username={user?.username}
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
+            {/* Game over modal */}
             {showGameOver && gameOver && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.6)" }}>
-                    <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl border border-gray-200 dark:border-gray-700 animate-in">
-                        <div className="text-5xl mb-4">{getResultIcon()}</div>
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{getResultText()}</h2>
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl border border-gray-200 dark:border-gray-700 animate-in">
+                        <div className="text-4xl sm:text-5xl mb-3 sm:mb-4">{getResultIcon()}</div>
+                        <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">{getResultText()}</h2>
                         {game.resultReason && (
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">{game.resultReason}</p>
+                            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-1">{game.resultReason}</p>
                         )}
                         {game.moves && (
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mb-6">{Math.ceil(game.moves.length / 2)} moves played</p>
+                            <p className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500 mb-5 sm:mb-6">{Math.ceil(game.moves.length / 2)} moves played</p>
                         )}
                         <div className="flex flex-col gap-2">
                             <a href="/chess" className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-colors shadow-md">

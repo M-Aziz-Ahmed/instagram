@@ -87,9 +87,10 @@ export default function ChessBoard({
         onSquareClick?.(square);
         if (e.dataTransfer) {
             e.dataTransfer.effectAllowed = "move";
+            const cellSize = boardRef.current ? boardRef.current.offsetWidth / 8 : 60;
             const ghost = document.createElement("div");
-            ghost.style.width = "60px";
-            ghost.style.height = "60px";
+            ghost.style.width = cellSize + "px";
+            ghost.style.height = cellSize + "px";
             ghost.style.opacity = "0.01";
             document.body.appendChild(ghost);
             e.dataTransfer.setDragImage(ghost, 0, 0);
@@ -147,10 +148,9 @@ export default function ChessBoard({
                     {displayRanks.map((rank) => (
                         <div
                             key={rank}
-                            className="flex items-center justify-center text-[11px] font-bold"
+                            className="flex items-center justify-center text-[9px] sm:text-[11px] font-bold"
                             style={{
-                                width: 16,
-                                height: "12.5%",
+                                width: 14,
                                 color: displayRanks.indexOf(rank) % 2 === 0 ? "#8b7355" : "#a39279",
                             }}
                         >
@@ -235,7 +235,7 @@ export default function ChessBoard({
                                                 onDragEnd={handleDragEnd}
                                                 style={{ willChange: "transform" }}
                                             >
-                                                <ChessPiece piece={piece} size={60} />
+                                                <ChessPiece piece={piece} size="auto" />
                                             </div>
                                         )}
                                     </div>
@@ -249,16 +249,16 @@ export default function ChessBoard({
                             className="absolute inset-0 flex items-center justify-center z-50"
                             style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
                         >
-                            <div className="bg-white dark:bg-gray-800 rounded-xl p-3 shadow-2xl border border-gray-200 dark:border-gray-700">
-                                <p className="text-xs text-center text-gray-500 dark:text-gray-400 mb-2 font-medium">Promote to:</p>
-                                <div className="flex gap-1">
+                            <div className="bg-white dark:bg-gray-800 rounded-xl p-2 sm:p-3 shadow-2xl border border-gray-200 dark:border-gray-700">
+                                <p className="text-[10px] sm:text-xs text-center text-gray-500 dark:text-gray-400 mb-1.5 sm:mb-2 font-medium">Promote to:</p>
+                                <div className="flex gap-0.5 sm:gap-1">
                                     {["q", "r", "b", "n"].map((type) => (
                                         <button
                                             key={type}
                                             onClick={() => onPromotionChoice?.(type)}
-                                            className="w-12 h-12 flex items-center justify-center rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                                            className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
                                         >
-                                            <ChessPiece piece={{ type, color: promotionPending }} size={44} />
+                                            <ChessPiece piece={{ type, color: promotionPending }} size={36} />
                                         </button>
                                     ))}
                                 </div>
@@ -269,12 +269,12 @@ export default function ChessBoard({
             </div>
 
             <div className="flex">
-                <div className="w-4" />
+                <div className="w-3.5 sm:w-4" />
                 <div className="flex-1 flex">
                     {displayFiles.map((file) => (
                         <div
                             key={file}
-                            className="flex-1 text-center text-[11px] font-bold"
+                            className="flex-1 text-center text-[9px] sm:text-[11px] font-bold"
                             style={{
                                 color: displayFiles.indexOf(file) % 2 === 1 ? "#8b7355" : "#a39279",
                                 paddingTop: 2,
@@ -286,13 +286,13 @@ export default function ChessBoard({
                 </div>
             </div>
 
-            <div className="flex items-center justify-end mt-1">
+            <div className="flex items-center justify-end mt-0.5">
                 <button
                     onClick={onFlip}
-                    className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                     title="Flip board"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 sm:w-4 sm:h-4">
                         <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H4.598a.75.75 0 0 0-.75.75v3.634a.75.75 0 0 0 1.5 0v-2.033l.312.311a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm1.23-3.723a.75.75 0 0 0 .219-.53V3.59a.75.75 0 0 0-1.5 0V5.37l-.312-.311A7 7 0 0 0 .885 8.249a.75.75 0 1 0 1.45.388A5.5 5.5 0 0 1 11.506 6.17l.312.311h-2.432a.75.75 0 0 0 0 1.5h3.634a.75.75 0 0 0 .53-.22Z" clipRule="evenodd" />
                     </svg>
                 </button>
