@@ -15,3 +15,5 @@ See more: https://nextjs.org/docs/app/guides/local-development
 ✓ Finished filesystem cache database compaction in 42s
 ✓ Finished filesystem cache database compaction in 17.4s
  GET /login 200 in 1750ms (next.js: 1167ms, proxy.ts: 3ms, application-code: 580ms)
+ GET /login 200 in 149ms (next.js: 48ms, proxy.ts: 3ms, application-code: 98ms)
+ GET /login 200 in 43ms (next.js: 2ms, proxy.ts: 2ms, application-code: 38ms)
