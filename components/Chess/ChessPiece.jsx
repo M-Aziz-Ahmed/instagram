@@ -139,7 +139,7 @@ export default function ChessPiece({ piece, size = 45 }) {
     const svg = PIECES[key];
     if (!svg) return null;
 
-    const style = size === "auto" ? { width: "82%", height: "82%" } : { width: size, height: size };
+    const style = size === "auto" ? { width: "100%", height: "100%" } : { width: size, height: size };
 
     return (
         <div style={style} className="pointer-events-none select-none">
