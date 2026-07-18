@@ -1,6 +1,7 @@
 import webPush from "web-push";
 import connectDB from "@/utils/db";
 import PushSubscription from "@/models/pushSubscription";
+import User from "@/models/user";
 
 const VAPID_PUBLIC_KEY  = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
@@ -43,6 +44,16 @@ export async function sendPushNotification({ recipientUsername, type, fromUser, 
 
     try {
         await connectDB();
+
+        // Skip push for messages if recipient was active in the last 3 minutes
+        // (they're on the app — the SW handles suppression, but this is the reliable fallback)
+        if (type === "message") {
+            const recipient = await User.findOne({ username: recipientUsername }).select("lastActive").lean();
+            if (recipient?.lastActive && (Date.now() - new Date(recipient.lastActive).getTime()) < 3 * 60 * 1000) {
+                return;
+            }
+        }
+
         const subscriptions = await PushSubscription.find({ username: recipientUsername });
         if (!subscriptions.length) return;
 

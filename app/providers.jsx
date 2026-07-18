@@ -37,10 +37,10 @@ export default function Providers({ children }) {
             sendVisibility(document.visibilityState === 'visible');
         });
 
-        // Heartbeat every 10s so SW knows client is alive
+        // Heartbeat every 5s so SW always knows client is alive
         const heartbeat = setInterval(() => {
             navigator.serviceWorker.controller?.postMessage({ type: 'heartbeat' });
-        }, 10000);
+        }, 5000);
 
         return () => {
             document.removeEventListener('visibilitychange', onVisibilityChange);

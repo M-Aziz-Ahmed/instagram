@@ -1,5 +1,5 @@
 // Service Worker for PWA
-const CACHE_NAME = 'anonfeed-v2';
+const CACHE_NAME = 'anonfeed-v3';
 const OFFLINE_URL = '/offline.html';
 
 // Install event - cache essential assets
@@ -32,7 +32,7 @@ self.addEventListener('activate', (event) => {
 
 // Client-reported visibility, with timestamp
 let _lastVisibleReport = 0;
-const STALE_MS = 30000; // if no report in 30s, assume app is closed
+const STALE_MS = 45000; // if no report in 45s, assume app is closed
 
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'app_visibility') {
@@ -69,18 +69,21 @@ self.addEventListener('push', (event) => {
 });
 
 async function isAppVisible() {
-  // Check if client reported visible recently
+  // 1. Check if client reported visible recently
   if (_lastVisibleReport > 0 && (Date.now() - _lastVisibleReport) < STALE_MS) {
     return true;
   }
 
-  // Fallback: check if any client window is actually focused
+  // 2. Check if any client window is actually focused
   try {
     const clients = await self.clients.matchAll({ type: 'window' });
-    return clients.some(c => c.focused);
-  } catch {
-    return false;
-  }
+    if (clients.some(c => c.focused)) return true;
+
+    // 3. If no focused client, check if ANY client is visible (tab is foregrounded)
+    if (clients.some(c => c.visibilityState === 'visible')) return true;
+  } catch {}
+
+  return false;
 }
 
 // Notification click — open or focus the relevant page
