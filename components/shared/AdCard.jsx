@@ -22,7 +22,7 @@ function AdsterraAd({ code }) {
                 <iframe
                     ref={iframeRef}
                     width="320"
-                    height="270"
+                    height="250"
                     className="border-0 overflow-hidden"
                     loading="lazy"
                     title="Sponsored"
