@@ -11,7 +11,10 @@ export async function GET(request) {
         const ids = idsParam.split(",").filter(Boolean).slice(0, 50);
         await connectDB();
 
-        const posts = await Post.find({ _id: { $in: ids } }).lean();
+        const posts = await Post.find({
+            _id: { $in: ids },
+            $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
+        }).lean();
         if (posts.length === 0) return Response.json([]);
 
         const authorUsernames = [...new Set(posts.map((p) => p.sender))];

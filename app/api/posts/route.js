@@ -69,6 +69,12 @@ export async function GET(request) {
         const pipeline = [];
         const matchStage = {};
 
+        // Filter out expired posts and closed polls
+        matchStage.$or = [
+            { expiresAt: null },
+            { expiresAt: { $gt: new Date() } },
+        ];
+
         if (tag) {
             matchStage.hashtags = tag.toLowerCase();
         }
@@ -191,7 +197,7 @@ export async function GET(request) {
 
 export async function POST(request) {
     try {
-        const { text, imageUrl: providedUrl, imageData, audioUrl, sender, color, visibility } = await request.json();
+        const { text, imageUrl: providedUrl, imageData, audioUrl, sender, color, visibility, poll, expiresIn } = await request.json();
 
         if (!sender?.trim()) {
             return Response.json({ error: "Sender is required" }, { status: 400 });
@@ -234,6 +240,14 @@ export async function POST(request) {
             hashtags,
             mentions,
             visibility: visibility || "public",
+            ...(poll?.enabled && poll.options?.length >= 2 ? {
+                poll: {
+                    enabled: true,
+                    options: poll.options.map((o) => ({ text: o.text.trim().slice(0, 100), votes: [] })),
+                    expiresAt: expiresIn ? new Date(Date.now() + expiresIn) : null,
+                },
+            } : {}),
+            ...(expiresIn && !poll?.enabled ? { expiresAt: new Date(Date.now() + expiresIn) } : {}),
         });
 
         if (mentions.length > 0) {

@@ -11,7 +11,13 @@ export async function GET(request, { params }) {
 
         await connectDB();
 
-        const query = { sender: username };
+        const query = {
+            sender: username,
+            $or: [
+                { expiresAt: null },
+                { expiresAt: { $gt: new Date() } },
+            ],
+        };
         if (before) query.timeStamp = { $lt: new Date(before) };
 
         const [rawPosts, userDoc, totalPosts] = await Promise.all([

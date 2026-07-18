@@ -23,6 +23,11 @@ const commentSchema = new mongoose.Schema({
     timeStamp: { type: Date, default: Date.now },
 });
 
+const pollOptionSchema = new mongoose.Schema({
+    text:      { type: String, required: true },
+    votes:     { type: [String], default: [] }, // anonymous usernames (or "anonymous:ip" for anon voting)
+}, { _id: false });
+
 const postSchema = new mongoose.Schema({
     text:      { type: String, default: "" },
     imageUrl:  { type: String, default: "" },
@@ -53,6 +58,16 @@ const postSchema = new mongoose.Schema({
     repostComment:  { type: String, default: "" },
     repostCount:    { type: Number, default: 0 },
     
+    // Anonymous poll
+    poll: {
+        enabled:   { type: Boolean, default: false },
+        options:   [pollOptionSchema],
+        expiresAt: { type: Date, default: null },
+    },
+
+    // Auto-delete timer
+    expiresAt: { type: Date, default: null },
+    
     visibility: { type: String, enum: ["public", "closeFriends"], default: "public" },
     timeStamp: { type: Date, default: Date.now },
 });
@@ -60,6 +75,8 @@ const postSchema = new mongoose.Schema({
 postSchema.index({ sender: 1, timeStamp: -1 });
 postSchema.index({ hashtags: 1 });
 postSchema.index({ timeStamp: -1 });
+postSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+postSchema.index({ "poll.expiresAt": 1 }, { expireAfterSeconds: 0 });
 
 const Post = mongoose.models.Post || mongoose.model("Post", postSchema);
 export default Post;

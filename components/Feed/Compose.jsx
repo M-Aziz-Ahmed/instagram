@@ -24,6 +24,9 @@ export default function Compose({ onPosted }) {
     const [visibility, setVisibility]     = useState("public");
     const [showEmoji, setShowEmoji]       = useState(false);
     const [showGif, setShowGif]           = useState(false);
+    const [showPoll, setShowPoll]         = useState(false);
+    const [pollOptions, setPollOptions]   = useState(["", ""]);
+    const [pollExpiry, setPollExpiry]     = useState(null);
     const fileRef                         = useRef(null);
 
     const handleFile = (e) => {
@@ -105,6 +108,14 @@ export default function Compose({ onPosted }) {
                     sender:   user.username,
                     color:    user.color,
                     visibility,
+                    ...(pollOptions.filter(o => o.trim()).length >= 2 && showPoll ? {
+                        poll: {
+                            enabled: true,
+                            options: pollOptions.filter(o => o.trim()).map(t => ({ text: t })),
+                        },
+                        expiresIn: pollExpiry,
+                    } : {}),
+                    ...(pollExpiry && !showPoll ? { expiresIn: pollExpiry } : {}),
                 }),
             });
             if (!res.ok) {
@@ -115,6 +126,9 @@ export default function Compose({ onPosted }) {
             setText("");
             removeImage();
             setAudioUrl("");
+            setShowPoll(false);
+            setPollOptions(["", ""]);
+            setPollExpiry(null);
             showToast("Post published", "success");
             if (onPosted) onPosted();
         } catch (err) {
@@ -126,7 +140,8 @@ export default function Compose({ onPosted }) {
         }
     };
 
-    const canPost = (text.trim().length > 0 || !!imageFile || !!preview || !!audioUrl) && !posting;
+    const hasValidPoll = showPoll && pollOptions.filter(o => o.trim()).length >= 2;
+    const canPost = ((text.trim().length > 0 || !!imageFile || !!preview || !!audioUrl) || hasValidPoll) && !posting;
 
     return (
         <div className="border-b border-gray-200 dark:border-gray-800 p-4">
@@ -200,6 +215,71 @@ export default function Compose({ onPosted }) {
 
                     {error && <p className="text-xs text-red-500">{error}</p>}
 
+                    {showPoll && (
+                        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3 space-y-2">
+                            <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Poll Options</span>
+                                <button onClick={() => { setShowPoll(false); setPollOptions(["", ""]); }}
+                                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs">
+                                    &#x2715;
+                                </button>
+                            </div>
+                            {pollOptions.map((opt, idx) => (
+                                <div key={idx} className="flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-full border-2 border-gray-300 dark:border-gray-600 shrink-0" />
+                                    <input
+                                        type="text"
+                                        value={opt}
+                                        onChange={(e) => {
+                                            const next = [...pollOptions];
+                                            next[idx] = e.target.value.slice(0, 100);
+                                            setPollOptions(next);
+                                        }}
+                                        placeholder={`Option ${idx + 1}`}
+                                        className="flex-1 bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-blue-400 dark:focus:border-blue-500"
+                                    />
+                                    {idx >= 2 && (
+                                        <button onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
+                                            className="text-gray-400 hover:text-red-500 text-xs p-1" aria-label="Remove option">
+                                            &#x2715;
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                            {pollOptions.length < 5 && (
+                                <button
+                                    onClick={() => pollOptions[pollOptions.length - 1].trim() && setPollOptions([...pollOptions, ""])}
+                                    disabled={!pollOptions[pollOptions.length - 1].trim()}
+                                    className="text-xs font-medium text-blue-500 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    + Add option
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {(showPoll || pollExpiry) && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[11px] text-gray-500 dark:text-gray-400">Auto-delete:</span>
+                            {[null, 60000, 180000, 600000, 1800000, 3600000].map((ms) => {
+                                const label = ms === null ? "Never" : ms < 3600000 ? `${ms / 60000}m` : `${ms / 3600000}h`;
+                                return (
+                                    <button
+                                        key={label}
+                                        onClick={() => setPollExpiry(ms)}
+                                        className={`text-[11px] font-medium px-2 py-1 rounded-full transition-colors ${
+                                            pollExpiry === ms
+                                                ? "bg-blue-500 text-white"
+                                                : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                        }`}
+                                    >
+                                        {label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
                     <div className="flex items-center justify-between p-1 border-t border-gray-100 dark:border-gray-800">
                         <div className="flex items-center gap-1 relative">
                             <button
@@ -222,6 +302,16 @@ export default function Compose({ onPosted }) {
                                 className={`px-2 py-1 rounded-full transition-colors disabled:opacity-40 text-xs font-bold ${showGif ? "text-purple-500 bg-purple-50 dark:bg-purple-900/20" : "text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20"}`}
                             >
                                 GIF
+                            </button>
+                            <button
+                                onClick={() => { setShowPoll(!showPoll); setShowEmoji(false); setShowGif(false); }}
+                                aria-label="Add poll"
+                                disabled={!user || posting}
+                                className={`p-2 rounded-full transition-colors disabled:opacity-40 ${showPoll ? "text-orange-500 bg-orange-50 dark:bg-orange-900/20" : "text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20"}`}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+                                </svg>
                             </button>
                             <button
                                 onClick={() => fileRef.current?.click()}

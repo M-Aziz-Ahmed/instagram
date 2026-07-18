@@ -14,6 +14,7 @@ import VoiceRecorder from "@/components/shared/VoiceRecorder";
 import AudioPlayer from "@/components/shared/AudioPlayer";
 import EmojiPicker from "@/components/shared/EmojiPicker";
 import GifPicker from "@/components/shared/GifPicker";
+import PollCard from "./PollCard";
 import Link from "next/link";
 import { timeAgo } from "@/utils/timeAgo";
 
@@ -365,6 +366,28 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                 />
             ))}
         </div>
+    );
+}
+
+function PostCountdown({ expiresAt }) {
+    const [remaining, setRemaining] = useState(() => Date.parse(expiresAt) - Date.now());
+    useEffect(() => {
+        if (remaining <= 0) return;
+        const id = setInterval(() => setRemaining(Date.parse(expiresAt) - Date.now()), 1000);
+        return () => clearInterval(id);
+    }, [expiresAt]);
+    if (remaining <= 0) return <span className="text-red-500 text-[11px] font-medium">Expired</span>;
+    const totalSec = Math.floor(remaining / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return (
+        <span className="inline-flex items-center gap-1 text-[11px] text-orange-500 font-medium">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            {h > 0 ? `${h}h ` : ""}{m}m {String(s).padStart(2, "0")}s
+        </span>
     );
 }
 
@@ -724,6 +747,9 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         </span>
                         <span className="text-gray-400 dark:text-gray-500 text-xs">&middot;</span>
                         <span className="text-gray-400 dark:text-gray-500 text-xs">{timeAgo(post.timeStamp)}</span>
+                        {post.expiresAt && (
+                            <PostCountdown expiresAt={post.expiresAt} />
+                        )}
                         {post.visibility === "closeFriends" && (
                             <span className="inline-flex items-center gap-0.5 text-[11px] text-green-500 font-medium" title="Close Friends only">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
@@ -853,6 +879,13 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                 </div>
                             )}
                         </div>
+                    )}
+
+                    {post.poll?.enabled && (
+                        <PollCard
+                            post={post}
+                            onPollUpdate={(newPoll) => setPost(prev => ({ ...prev, poll: newPoll }))}
+                        />
                     )}
 
                     <div className="flex items-center gap-1 sm:gap-3 mt-3 relative">
