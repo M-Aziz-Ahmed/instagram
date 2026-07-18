@@ -13,239 +13,91 @@ const LiveStream = require("./models/liveStream");
 const ChessGame = require("./models/chessGame");
 const { sendPushNotification } = require("./push");
 
-const PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
-const PST = {
-    p: [
-         0,  0,  0,  0,  0,  0,  0,  0,
-        50, 50, 50, 50, 50, 50, 50, 50,
-        10, 10, 20, 30, 30, 20, 10, 10,
-         5,  5, 10, 25, 25, 10,  5,  5,
-         0,  0,  0, 20, 20,  0,  0,  0,
-         5, -5,-10,  0,  0,-10, -5,  5,
-         5, 10, 10,-20,-20, 10, 10,  5,
-         0,  0,  0,  0,  0,  0,  0,  0,
-    ],
-    n: [
-        -50,-40,-30,-30,-30,-30,-40,-50,
-        -40,-20,  0,  0,  0,  0,-20,-40,
-        -30,  0, 10, 15, 15, 10,  0,-30,
-        -30,  5, 15, 20, 20, 15,  5,-30,
-        -30,  0, 15, 20, 20, 15,  0,-30,
-        -30,  5, 10, 15, 15, 10,  5,-30,
-        -40,-20,  0,  5,  5,  0,-20,-40,
-        -50,-40,-30,-30,-30,-30,-40,-50,
-    ],
-    b: [
-        -20,-10,-10,-10,-10,-10,-10,-20,
-        -10,  0,  0,  0,  0,  0,  0,-10,
-        -10,  0,  5, 10, 10,  5,  0,-10,
-        -10,  5,  5, 10, 10,  5,  5,-10,
-        -10,  0, 10, 10, 10, 10,  0,-10,
-        -10, 10, 10, 10, 10, 10, 10,-10,
-        -10,  5,  0,  0,  0,  0,  5,-10,
-        -20,-10,-10,-10,-10,-10,-10,-20,
-    ],
-    r: [
-         0,  0,  0,  0,  0,  0,  0,  0,
-         5, 10, 10, 10, 10, 10, 10,  5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-         0,  0,  0,  5,  5,  0,  0,  0,
-    ],
-    q: [
-        -20,-10,-10, -5, -5,-10,-10,-20,
-        -10,  0,  0,  0,  0,  0,  0,-10,
-        -10,  0,  5,  5,  5,  5,  0,-10,
-         -5,  0,  5,  5,  5,  5,  0, -5,
-          0,  0,  5,  5,  5,  5,  0, -5,
-        -10,  5,  5,  5,  5,  5,  0,-10,
-        -10,  0,  5,  0,  0,  0,  0,-10,
-        -20,-10,-10, -5, -5,-10,-10,-20,
-    ],
-    k: [
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -20,-30,-30,-40,-40,-30,-30,-20,
-        -10,-20,-20,-20,-20,-20,-20,-10,
-         20, 20,  0,  0,  0,  0, 20, 20,
-         20, 30, 10,  0,  0, 10, 30, 20,
-    ],
-};
+let stockfishEngine = null;
+let stockfishReady = false;
+let stockfishBusy = false;
+let stockfishResolve = null;
 
-function evaluate(chess) {
-    const board = chess.board();
-    let score = 0;
-    let wMat = 0, bMat = 0;
-
-    for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-            const p = board[r][c];
-            if (!p) continue;
-            const val = PIECE_VALUES[p.type] || 0;
-            const sidx = p.color === "w" ? (7 - r) * 8 + c : r * 8 + (7 - c);
-            const pst = PST[p.type];
-            const pos = pst ? pst[sidx] : 0;
-            if (p.color === "w") {
-                score += val + pos;
-                wMat += val;
-            } else {
-                score -= val + pos;
-                bMat += val;
+async function initStockfish() {
+    try {
+        const initEngine = require("stockfish");
+        // Use callback pattern to set listener before WASM init prints the banner
+        const engine = initEngine(function (err, eng) {
+            if (err) { console.error("[SF] Init error:", err); return; }
+            stockfishEngine = eng;
+            stockfishEngine.sendCommand("uci");
+            stockfishEngine.sendCommand("isready");
+            stockfishReady = true;
+            console.log("[SF] Stockfish 18 WASM ready");
+        });
+        engine.listener = function (line) {
+            if (typeof line !== "string") return;
+            if (line.startsWith("bestmove")) {
+                const move = line.split(" ")[1];
+                stockfishBusy = false;
+                if (stockfishResolve) {
+                    const r = stockfishResolve;
+                    stockfishResolve = null;
+                    r(move);
+                }
             }
-        }
-    }
-
-    // King safety in endgame
-    if (wMat < 1500 || bMat < 1500) {
-        const wKing = findKing(board, "w");
-        const bKing = findKing(board, "b");
-        if (wKing) score += (7 - Math.abs(wKing[0] - 3.5)) * 5;
-        if (bKing) score -= (7 - Math.abs(bKing[0] - 3.5)) * 5;
-    }
-
-    return score;
-}
-
-function findKing(board, color) {
-    for (let r = 0; r < 8; r++)
-        for (let c = 0; c < 8; c++)
-            if (board[r][c]?.type === "k" && board[r][c]?.color === color)
-                return [r, c];
-    return null;
-}
-
-function orderMoves(chess, moves) {
-    return moves.sort((a, b) => {
-        let sa = 0, sb = 0;
-        if (a.captured) sa += PIECE_VALUES[a.captured] * 10 - PIECE_VALUES[a.piece];
-        if (b.captured) sb += PIECE_VALUES[b.captured] * 10 - PIECE_VALUES[b.piece];
-        if (a.promotion) sa += 900;
-        if (b.promotion) sb += 900;
-        if (a.san.includes("#")) sa += 100000;
-        if (b.san.includes("#")) sb += 100000;
-        if (a.san.includes("+")) sa += 50;
-        if (b.san.includes("+")) sb += 50;
-        return sb - sa;
-    });
-}
-
-function alphaBeta(chess, depth, alpha, beta, isMax, startTime, limitMs) {
-    if (Date.now() - startTime > limitMs) return null;
-    if (depth === 0 || chess.isGameOver()) {
-        if (chess.isCheckmate()) return isMax ? -100000 + depth : 100000 - depth;
-        if (chess.isDraw() || chess.isStalemate()) return 0;
-        return evaluate(chess);
-    }
-
-    const moves = orderMoves(chess, chess.moves({ verbose: true }));
-
-    if (isMax) {
-        let best = -Infinity;
-        for (const m of moves) {
-            chess.move(m.san);
-            const v = alphaBeta(chess, depth - 1, alpha, beta, false, startTime, limitMs);
-            chess.undo();
-            if (v === null) return null;
-            if (v > best) best = v;
-            if (v > alpha) alpha = v;
-            if (beta <= alpha) break;
-        }
-        return best;
-    } else {
-        let best = Infinity;
-        for (const m of moves) {
-            chess.move(m.san);
-            const v = alphaBeta(chess, depth - 1, alpha, beta, true, startTime, limitMs);
-            chess.undo();
-            if (v === null) return null;
-            if (v < best) best = v;
-            if (v < beta) beta = v;
-            if (beta <= alpha) break;
-        }
-        return best;
+        };
+    } catch (err) {
+        console.error("[SF] Failed to load Stockfish:", err.message);
     }
 }
 
-function getAIMove(chess, difficulty) {
+async function getAIMoveAsync(chess, difficulty) {
     const moves = chess.moves({ verbose: true });
     if (!moves.length) return null;
 
     const clamped = Math.min(Math.max(difficulty || 10, 1), 20);
+    const fen = chess.fen();
+    const timeMs = Math.round(50 + Math.pow(clamped / 4, 2) * 60);
 
-    // Map difficulty to search parameters
-    const configs = {
-        1:  { depth: 1, time: 100,  noise: 200 },
-        4:  { depth: 2, time: 200,  noise: 100 },
-        8:  { depth: 3, time: 500,  noise: 50 },
-        12: { depth: 4, time: 1000, noise: 20 },
-        16: { depth: 5, time: 2000, noise: 5 },
-        20: { depth: 8, time: 4000, noise: 0 },
-    };
-
-    // Interpolate
-    const keys = Object.keys(configs).map(Number).sort((a, b) => a - b);
-    let cfg = configs[keys[0]];
-    for (let i = 0; i < keys.length - 1; i++) {
-        if (clamped >= keys[i] && clamped <= keys[i + 1]) {
-            const t = (clamped - keys[i]) / (keys[i + 1] - keys[i]);
-            const lo = configs[keys[i]];
-            const hi = configs[keys[i + 1]];
-            cfg = {
-                depth: Math.round(lo.depth + (hi.depth - lo.depth) * t),
-                time:  Math.round(lo.time + (hi.time - lo.time) * t),
-                noise: Math.round(lo.noise + (hi.noise - lo.noise) * (1 - t)),
-            };
-            break;
-        }
-    }
-    if (clamped >= keys[keys.length - 1]) cfg = configs[keys[keys.length - 1]];
-
-    const { depth, time: limitMs, noise } = cfg;
-    const startTime = Date.now();
-    const isMax = chess.turn() === "w";
-
-    let bestMove = null;
-    let bestScore = -Infinity;
-
-    // Iterative deepening
-    for (let d = 1; d <= depth; d++) {
-        let found = false;
-        for (const move of moves) {
-            if (Date.now() - startTime > limitMs) break;
-            chess.move(move.san);
-            const v = alphaBeta(chess, d - 1, -Infinity, Infinity, !isMax, startTime, limitMs);
-            chess.undo();
-            if (v === null) continue;
-            found = true;
-            const adjusted = v + (Math.random() - 0.5) * noise;
-            if (adjusted > bestScore || !bestMove) {
-                bestScore = adjusted;
-                bestMove = move;
+    if (stockfishEngine && stockfishReady && !stockfishBusy) {
+        stockfishBusy = true;
+        try {
+            const sfMove = await new Promise((resolve) => {
+                stockfishResolve = resolve;
+                stockfishEngine.sendCommand("stop");
+                stockfishEngine.sendCommand("position fen " + fen);
+                stockfishEngine.sendCommand("go movetime " + timeMs);
+                setTimeout(() => {
+                    if (stockfishResolve) {
+                        const r = stockfishResolve;
+                        stockfishResolve = null;
+                        stockfishEngine.sendCommand("stop");
+                        r(null);
+                    }
+                }, timeMs + 2000);
+            });
+            if (sfMove && sfMove !== "0000") {
+                const from = sfMove.substring(0, 2);
+                const to = sfMove.substring(2, 4);
+                const promo = sfMove.length > 4 ? sfMove[4] : undefined;
+                const result = chess.move({ from, to, promotion: promo || "q" });
+                if (result) return result;
             }
+        } catch (e) {
+            console.error("[SF] Move error:", e.message);
+        } finally {
+            stockfishBusy = false;
         }
-        if (!found) break;
     }
 
-    if (!bestMove) {
-        // Fallback: pick highest material gain
-        const scored = moves.map(m => {
-            let s = Math.random();
-            if (m.captured) s += PIECE_VALUES[m.captured] * 10 - (PIECE_VALUES[m.piece] || 0);
-            if (m.promotion) s += 900;
-            if (m.san.includes("#")) s += 100000;
-            if (m.san.includes("+")) s += 50;
-            return { move: m, score: s };
-        });
-        scored.sort((a, b) => b.score - a.score);
-        bestMove = scored[0].move;
-    }
-
-    return bestMove;
+    // Fallback: pick best move by simple scoring
+    const scored = moves.map((m) => {
+        let s = Math.random() * (21 - clamped);
+        if (m.captured) s += 10000;
+        if (m.promotion) s += 50000;
+        if (m.san.includes("#")) s += 1000000;
+        if (m.san.includes("+")) s += 500;
+        return { move: m, score: s };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    const topN = Math.max(1, Math.ceil(scored.length * (1 - clamped / 25)));
+    return scored[Math.floor(Math.random() * topN)].move;
 }
 
 const app = express();
@@ -1221,14 +1073,13 @@ io.on("connection", async (socket) => {
             });
 
             if (game.mode === "ai" && game.status === "active") {
-                const aiDelay = 400 + Math.random() * 600;
                 setTimeout(async () => {
                     try {
                         const latest = await ChessGame.findById(gameId);
                         if (!latest || latest.status !== "active") return;
 
                         const aiChess = new Chess(latest.fen);
-                        const aiMove = getAIMove(aiChess, latest.aiDifficulty);
+                        const aiMove = await getAIMoveAsync(aiChess, latest.aiDifficulty);
                         if (!aiMove) return;
 
                         const aiResult = aiChess.move(aiMove);
@@ -1239,7 +1090,7 @@ io.on("connection", async (socket) => {
                         latest.turn = aiChess.turn();
                         latest.moves.push({
                             from: aiResult.from, to: aiResult.to, san: aiResult.san, fen: latest.fen,
-                            notation: aiResult.san, timestamp: aiNow, thinkingMs: aiDelay,
+                            notation: aiResult.san, timestamp: aiNow, thinkingMs: 0,
                         });
                         latest.pgn = aiChess.pgn();
                         latest.timerLastTick = aiNow;
@@ -1428,6 +1279,7 @@ io.on("connection", async (socket) => {
 });
 
 // ── Start ───────────────────────────────────────────────────────
+initStockfish();
 server.listen(PORT, () => {
     console.log(`[Live Server] Running on port ${PORT}`);
     console.log(`[Live Server] CORS allowed: ${CORS_ORIGIN}`);

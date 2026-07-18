@@ -36,6 +36,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# stockfish large binaries (>100MB)
+node_modules/stockfish/bin/*.wasm
+live-server/node_modules/stockfish/bin/*.wasm
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

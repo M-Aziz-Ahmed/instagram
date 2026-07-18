@@ -6,7 +6,12 @@ const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
 const VAPID_EMAIL       = process.env.VAPID_EMAIL || "admin@anonfeed.app";
 
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-    webPush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    try {
+        const email = VAPID_EMAIL.startsWith("mailto:") ? VAPID_EMAIL : `mailto:${VAPID_EMAIL}`;
+        webPush.setVapidDetails(email, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    } catch (err) {
+        console.error("[PUSH] VAPID setup error:", err.message);
+    }
 }
 
 /**
