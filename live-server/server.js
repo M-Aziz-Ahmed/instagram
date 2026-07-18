@@ -20,9 +20,9 @@ let stockfishResolve = null;
 
 async function initStockfish() {
     try {
+        // Use "lite" engine (7MB instead of 108MB) — call initEngine with "lite"
         const initEngine = require("stockfish");
-        // Use callback pattern to set listener before WASM init prints the banner
-        const engine = initEngine(function (err, eng) {
+        const engine = initEngine("lite", function (err, eng) {
             if (err) { console.error("[SF] Init error:", err); return; }
             stockfishEngine = eng;
             stockfishEngine.sendCommand("uci");
