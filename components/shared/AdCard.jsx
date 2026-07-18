@@ -11,7 +11,7 @@ function AdsterraAd({ code }) {
 
         const doc = iframe.contentDocument || iframe.contentWindow.document;
         doc.open();
-        doc.write(`<!DOCTYPE html><html><head><style>*{margin:0;padding:0;border:0;}</style></head><body>${code}</body></html>`);
+        doc.write(`<!DOCTYPE html><html><head><style>*{margin:0;padding:0;border:0;overflow:hidden;}html,body{overflow:hidden;width:100%;height:100%;}</style></head><body>${code}</body></html>`);
         doc.close();
     }, [code]);
 
@@ -21,9 +21,9 @@ function AdsterraAd({ code }) {
             <div className="flex justify-center mt-2">
                 <iframe
                     ref={iframeRef}
-                    width="300"
-                    height="250"
-                    className="border-0"
+                    width="320"
+                    height="270"
+                    className="border-0 overflow-hidden"
                     loading="lazy"
                     title="Sponsored"
                 />
