@@ -116,7 +116,7 @@ export async function GET(request) {
             },
         });
 
-        const rawPosts = await Post.aggregate(pipeline).allowDiskUse(true).maxTimeMS(10000);
+        const rawPosts = await Post.aggregate(pipeline).allowDiskUse(true);
 
         const mutedSet = new Set((viewer?.mutedWords || []).map(w => w.toLowerCase()));
         const closeFriendsSet = new Set(viewer?.closeFriends || []);

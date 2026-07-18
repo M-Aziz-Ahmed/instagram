@@ -8,8 +8,6 @@ async function connectDB() {
     if (cached) return cached;
 
     const conn = await mongoose.connect(MONGODB_URI, {
-        maxPoolSize: 20,
-        minPoolSize: 2,
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
     });

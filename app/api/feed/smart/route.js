@@ -2,8 +2,6 @@ import connectDB from "@/utils/db";
 import Post from "@/models/post";
 import User from "@/models/user";
 
-const MAX_TIME_MS = 10000;
-
 async function fetchBatch(matchStage, limit, excludeIds = []) {
     const pipeline = [];
     if (Object.keys(matchStage).length > 0) {
@@ -14,7 +12,7 @@ async function fetchBatch(matchStage, limit, excludeIds = []) {
     }
     pipeline.push({ $sort: { timeStamp: -1 } });
     pipeline.push({ $limit: limit });
-    return Post.aggregate(pipeline).allowDiskUse(true).maxTimeMS(MAX_TIME_MS);
+    return Post.aggregate(pipeline).allowDiskUse(true);
 }
 
 function matchesMutedWords(post, mutedSet) {
@@ -52,7 +50,7 @@ export async function GET(request) {
                 { $match: matchStage },
                 { $sort: { timeStamp: -1 } },
                 { $limit: limit },
-            ]).allowDiskUse(true).maxTimeMS(MAX_TIME_MS);
+            ]).allowDiskUse(true);
 
             return Response.json({
                 posts: await enrichPosts(posts),
@@ -69,7 +67,7 @@ export async function GET(request) {
                 { $match: getDefaultMatch(before) },
                 { $sort: { timeStamp: -1 } },
                 { $limit: limit },
-            ]).allowDiskUse(true).maxTimeMS(MAX_TIME_MS);
+            ]).allowDiskUse(true);
             return Response.json({ posts: await enrichPosts(posts), hasMore: posts.length === limit });
         }
 
@@ -94,7 +92,7 @@ export async function GET(request) {
                 { $match: matchStage },
                 { $sort: { timeStamp: -1 } },
                 { $limit: limit + 10 },
-            ]).allowDiskUse(true).maxTimeMS(MAX_TIME_MS);
+            ]).allowDiskUse(true);
 
             const filtered = posts
                 .filter(p => !matchesMutedWords(p, mutedSet))
@@ -114,15 +112,19 @@ export async function GET(request) {
         };
 
         const likedMatch = {
-            $or: [
-                { likes: username },
-                { "reactions.like": username },
-                { "reactions.love": username },
-                { "reactions.fire": username },
+            $and: [
+                {
+                    $or: [
+                        { likes: username },
+                        { "reactions.like": username },
+                        { "reactions.love": username },
+                        { "reactions.fire": username },
+                    ],
+                },
+                { sender: { $ne: username } },
+                ...Object.keys(timeFilter).length > 0 ? [timeFilter] : [],
+                ...Object.keys(expiryCondition).length > 0 ? [expiryCondition] : [],
             ],
-            sender: { $ne: username },
-            ...timeFilter,
-            ...expiryCondition,
         };
 
         let interestTags = [];
