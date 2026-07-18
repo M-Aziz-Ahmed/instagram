@@ -257,7 +257,8 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
     }, []);
 
     const insertAds = useCallback((postsList) => {
-        if (ads.length === 0 || postsList.length === 0) return postsList;
+        if (postsList.length === 0) return postsList;
+        if (ads.length === 0) return postsList.map((post) => ({ type: "post", data: post }));
 
         const interval = adIntervalRef.current;
         let postsSinceAd = postsSinceAdRef.current;
@@ -318,7 +319,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                 if (data.translations) {
                     setServerTranslations((prev) => ({ ...prev, ...data.translations }));
                 }
-                const newPosts = Array.isArray(data.posts) ? data.posts.filter((p) => p && p._id) : [];
+                const newPosts = Array.isArray(data.posts) ? data.posts : [];
                 if (append) {
                     setPosts((prev) => {
                         const ids = new Set(prev.map((p) => p._id));
