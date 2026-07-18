@@ -7,7 +7,7 @@ const InboxClient = dynamic(() => import("./InboxClient"), {
     ssr: false,
     loading: () => (
         <div className="flex h-dvh items-center justify-center bg-white">
-            <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
         </div>
     ),
 });

@@ -91,9 +91,16 @@ export default function NotificationBell({ onNavigate }) {
     useEffect(() => {
         const handler = (e) => {
             if (panelRef.current && !panelRef.current.contains(e.target)) setOpen(false);
+            if (e.key === "Escape") setOpen(false);
         };
-        if (open) document.addEventListener("mousedown", handler);
-        return () => document.removeEventListener("mousedown", handler);
+        if (open) {
+            document.addEventListener("mousedown", handler);
+            document.addEventListener("keydown", handler);
+        }
+        return () => {
+            document.removeEventListener("mousedown", handler);
+            document.removeEventListener("keydown", handler);
+        };
     }, [open]);
 
     const handleOpen = async () => {

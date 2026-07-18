@@ -33,7 +33,7 @@ export default function InboxClient() {
     const [loading, setLoading] = useState(true);
     const [selectedConvo, setSelectedConvo] = useState(null);
     const { openSidebar }                   = useSidebar();
-    const urlInitDoneRef                    = useRef(false);
+    const prevTargetUserRef                 = useRef(null);
 
     useEffect(() => {
         if (!user || !selectedConvo) return;
@@ -109,11 +109,11 @@ export default function InboxClient() {
     }, [fetchConversations]);
 
     useEffect(() => {
-        if (!targetUser || urlInitDoneRef.current) return;
-        if (selectedConvo?.username === targetUser) {
-            urlInitDoneRef.current = true;
-            return;
-        }
+        if (!targetUser) return;
+        if (targetUser === prevTargetUserRef.current) return;
+        prevTargetUserRef.current = targetUser;
+
+        if (selectedConvo?.username === targetUser) return;
 
         const existing = conversations.find((c) => c.username === targetUser);
         if (existing) {
@@ -133,7 +133,6 @@ export default function InboxClient() {
                 setView("chat");
             });
         }
-        urlInitDoneRef.current = true;
     }, [targetUser, conversations, selectedConvo]);
 
     useEffect(() => {

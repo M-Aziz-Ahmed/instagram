@@ -4,17 +4,36 @@ import { useState } from "react";
 import { useUser } from "@/context/UserContext";
 
 export default function ProfileSetup({ onDone }) {
-    const { user, saveUser, AVATAR_COLORS } = useUser();
+    const { user, reloadUser, AVATAR_COLORS } = useUser();
     const [username, setUsername] = useState(user?.username ?? "");
     const [color, setColor]       = useState(user?.color ?? AVATAR_COLORS[0]);
     const [error, setError]       = useState("");
+    const [saving, setSaving]     = useState(false);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         if (!username.trim()) { setError("Please enter a username."); return; }
         if (username.trim().length < 2) { setError("Username must be at least 2 characters."); return; }
-        saveUser(username, color);
-        if (onDone) onDone();
+        if (username.trim().length > 30) { setError("Username must be 30 characters or less."); return; }
+        if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) { setError("Username can only contain letters, numbers and underscores."); return; }
+        setSaving(true);
+        setError("");
+        try {
+            const res = await fetch("/api/auth/setup", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: username.trim(), avatarColor: color }),
+            });
+            const data = await res.json();
+            if (!res.ok) { setError(data.error || "Failed to save profile."); return; }
+            await reloadUser(data.user);
+            if (onDone) onDone();
+        } catch {
+            setError("Network error. Please try again.");
+        } finally {
+            setSaving(false);
+        }
     };
 
     const initial = username.trim() ? username.trim()[0].toUpperCase() : "?";
@@ -60,7 +79,7 @@ export default function ProfileSetup({ onDone }) {
                                     type="button"
                                     onClick={() => setColor(c)}
                                     className="w-8 h-8 rounded-full transition-transform hover:scale-110 focus:outline-none"
-                                    style={{ backgroundColor: c, boxShadow: color === c ? `0 0 0 3px white, 0 0 0 5px ${c}` : "none" }}
+                                    style={{ backgroundColor: c, boxShadow: color === c ? `0 0 0 3px white, 0 0 0 5px ${c}, 0 0 0 3px var(--ring-color, transparent)` : "none" }}
                                     aria-label={`Pick color ${c}`}
                                 />
                             ))}
@@ -69,9 +88,10 @@ export default function ProfileSetup({ onDone }) {
 
                     <button
                         type="submit"
-                        className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold text-sm py-2.5 rounded-lg transition-colors"
+                        disabled={saving}
+                        className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold text-sm py-2.5 rounded-lg transition-colors disabled:opacity-50"
                     >
-                        {user ? "Save changes" : "Start chatting"}
+                        {saving ? "Saving\u2026" : user ? "Save changes" : "Start chatting"}
                     </button>
 
                     {onDone && (

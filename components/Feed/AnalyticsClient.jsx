@@ -74,7 +74,7 @@ export default function AnalyticsClient() {
     if (!ready || !user) {
         return (
             <div className="flex h-dvh items-center justify-center">
-                <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
             </div>
         );
     }
@@ -93,7 +93,7 @@ export default function AnalyticsClient() {
                     </div>
                 </header>
                 <div className="flex justify-center py-12">
-                    <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                    <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
                 </div>
             </div>
         );

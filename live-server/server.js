@@ -417,7 +417,7 @@ app.post("/api/chess/games/:id/move", async (req, res) => {
         await game.save();
 
         if (game.mode === "ai" && game.status === "active") {
-            const aiMove = getAIMove(chess, game.aiDifficulty);
+            const aiMove = await getAIMoveAsync(chess, game.aiDifficulty);
             if (aiMove) {
                 const aiResult = chess.move(aiMove);
                 if (aiResult) {

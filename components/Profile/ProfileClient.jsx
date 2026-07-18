@@ -8,6 +8,7 @@ import FollowButton from "@/components/shared/FollowButton";
 import ImageLightbox from "@/components/shared/ImageLightbox";
 import EditProfileModal from "@/components/Auth/EditProfileModal";
 import { useSidebar } from "@/context/SidebarContext";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 function colorFromUsername(name = "") {
@@ -68,7 +69,7 @@ function FollowListModal({ username, type, onClose }) {
                 <div className="flex-1 overflow-y-auto">
                     {loading ? (
                         <div className="flex justify-center py-10">
-                            <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                            <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
                         </div>
                     ) : users.length === 0 ? (
                         <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-10">
@@ -136,6 +137,7 @@ function ActiveIndicator({ username }) {
 
 export default function ProfileClient({ username }) {
     const { user } = useUser();
+    const router = useRouter();
     const [data, setData]                     = useState(null);
     const [loading, setLoading]               = useState(true);
     const [expanded, setExpanded]             = useState(null);
@@ -338,7 +340,7 @@ export default function ProfileClient({ username }) {
                                     <div className="border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
                                         {data.posts.map((p) => (
                                             <PostCard key={p._id} post={p} onDeleted={fetchProfile}
-                                                onHashtag={(tag) => { window.location.href = `/?tag=${tag}`; }} />
+                                                onHashtag={(tag) => { router.push(`/?tag=${tag}`); }} />
                                         ))}
                                     </div>
                                 </div>
@@ -353,7 +355,7 @@ export default function ProfileClient({ username }) {
                 <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setExpanded(null)}>
                     <div className="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden max-w-lg w-full max-h-[90dvh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                            <span className="font-bold text-sm">{expandedPost.sender}</span>
+                            <span className="font-bold text-sm text-gray-900 dark:text-gray-100">{expandedPost.sender}</span>
                             <button onClick={() => setExpanded(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center" aria-label="Close">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -361,7 +363,7 @@ export default function ProfileClient({ username }) {
                             </button>
                         </div>
                         <PostCard post={expandedPost} onDeleted={() => { setExpanded(null); fetchProfile(); }}
-                            onHashtag={(tag) => { setExpanded(null); window.location.href = `/?tag=${tag}`; }} />
+                            onHashtag={(tag) => { setExpanded(null); router.push(`/?tag=${tag}`); }} />
                     </div>
                 </div>
             )}

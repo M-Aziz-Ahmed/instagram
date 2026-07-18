@@ -34,10 +34,11 @@ export const metadata = {
     siteName: 'AnonFeed',
     images: [
       {
-        url: '/og-image.jpg',
-        width: 1200,
-        height: 630,
+        url: '/icon-512.svg',
+        width: 512,
+        height: 512,
         alt: 'AnonFeed - Anonymous Social Media',
+        type: 'image/svg+xml',
       }
     ],
   },
@@ -45,7 +46,7 @@ export const metadata = {
     card: 'summary_large_image',
     title: 'AnonFeed - Anonymous Social Media Platform',
     description: 'Say anything. Anonymously. Share your thoughts, stories, and connect with others.',
-    images: ['/og-image.jpg'],
+    images: ['/icon-512.svg'],
     creator: '@anonfeed',
   },
   robots: {

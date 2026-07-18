@@ -1,6 +1,5 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/context/UserContext";
@@ -54,34 +53,10 @@ const NAV_ITEMS = [
     },
 ];
 
-export default function BottomNav() {
+export default function BottomNav({ unreadCount = 0 }) {
     const { user } = useUser();
     const pathname = usePathname();
     const { voiceOpen, openVoiceChat, closeVoiceChat } = useVoiceChat();
-    const [unreadCount, setUnreadCount] = useState(0);
-
-    const fetchUnread = useCallback(async () => {
-        if (!user?.username) return;
-        try {
-            const res = await fetch(`/api/messages/unread?username=${encodeURIComponent(user.username)}`, {
-                credentials: 'include'
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setUnreadCount(data?.total || 0);
-            } else if (res.status === 401) {
-                console.warn("Unauthorized access to unread messages");
-            }
-        } catch (err) {
-            console.error("Failed to fetch unread count:", err);
-        }
-    }, [user]);
-
-    useEffect(() => {
-        fetchUnread();
-        const id = setInterval(fetchUnread, 15000);
-        return () => clearInterval(id);
-    }, [fetchUnread]);
 
     const profileHref = user?.username
         ? `/profile/${encodeURIComponent(user.username)}`

@@ -366,7 +366,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
     if (loading) {
         return (
             <div className="flex justify-center py-16">
-                <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
             </div>
         );
     }
@@ -413,7 +413,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             <div ref={sentinelRef} className="h-1" />
             {loadingMore && (
                 <div className="flex justify-center py-8">
-                    <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                    <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
                 </div>
             )}
             {!hasMore && posts.length > 0 && (

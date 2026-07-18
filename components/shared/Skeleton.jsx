@@ -12,9 +12,9 @@ export default function Skeleton({ className = "", count = 1 }) {
 
 export function PostSkeleton() {
     return (
-        <div className="border-b border-gray-200 dark:border-gray-800 px-4 py-4 animate-pulse">
+        <div className="border-b border-gray-200 dark:border-gray-800 px-4 py-4">
             <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-full skeleton-shrink-0 skeleton-shimmer" />
+                <div className="w-10 h-10 rounded-full shrink-0 skeleton-shimmer" />
                 <div className="flex-1 space-y-3">
                     <div className="flex items-center gap-2">
                         <div className="h-4 w-24 skeleton-shimmer rounded" />
@@ -36,7 +36,7 @@ export function PostSkeleton() {
 
 export function ProfileSkeleton() {
     return (
-        <div className="max-w-2xl mx-auto px-4 py-6 animate-pulse">
+        <div className="max-w-2xl mx-auto px-4 py-6">
             <div className="flex items-start gap-5 mb-6">
                 <div className="w-20 h-20 rounded-full skeleton-shimmer shrink-0" />
                 <div className="flex-1 space-y-3 pt-1">
@@ -59,7 +59,7 @@ export function ProfileSkeleton() {
 
 export function ConversationSkeleton() {
     return (
-        <div className="animate-pulse">
+        <div>
             {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="flex items-center gap-3 px-4 py-3.5 border-b border-gray-100 dark:border-gray-800">
                     <div className="w-14 h-14 rounded-full skeleton-shimmer shrink-0" />

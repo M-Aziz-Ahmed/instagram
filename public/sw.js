@@ -50,7 +50,7 @@ self.addEventListener('message', (event) => {
 
 // Push notification — only show when app is NOT visible
 self.addEventListener('push', (event) => {
-  let data = { title: 'AnonFeed', body: '', url: '/', icon: '/icon-192.png' };
+  let data = { title: 'AnonFeed', body: '', url: '/', icon: '/icon-192.svg' };
   try {
     data = { ...data, ...event.data.json() };
   } catch {}
@@ -60,8 +60,8 @@ self.addEventListener('push', (event) => {
 
     return self.registration.showNotification(data.title, {
       body:  data.body,
-      icon:  data.icon  || '/icon-192.png',
-      badge: data.badge || '/icon-192.png',
+      icon:  data.icon  || '/icon-192.svg',
+      badge: data.badge || '/icon-192.svg',
       data:  { url: data.url || '/' },
       vibrate: [100, 50, 100],
     });

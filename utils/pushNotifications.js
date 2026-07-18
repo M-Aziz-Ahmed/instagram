@@ -49,8 +49,8 @@ export async function sendPushNotification({ recipientUsername, type, fromUser, 
         const payload = JSON.stringify({
             title: titleFor(type, fromUser),
             body:  text || "",
-            icon:  "/icon-192.png",
-            badge: "/icon-192.png",
+            icon:  "/icon-192.svg",
+            badge: "/icon-192.svg",
             url:   urlFor(type, postId, fromUser),
             type,
         });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useUser } from "@/context/UserContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useSidebar } from "@/context/SidebarContext";
@@ -137,7 +137,7 @@ function LogoutIcon() {
     );
 }
 
-export default function Sidebar({ open, onClose }) {
+export default function Sidebar({ open, onClose, unreadCount = 0 }) {
     const { user, logout } = useUser();
     const { theme, toggleTheme } = useTheme();
     const { collapsed, toggleCollapsed } = useSidebar();
@@ -145,41 +145,8 @@ export default function Sidebar({ open, onClose }) {
     const router = useRouter();
     const pathname = usePathname();
     const [editingProfile, setEditingProfile] = useState(false);
-    const [unreadCount, setUnreadCount] = useState(0);
     const [showCloseFriends, setShowCloseFriends] = useState(false);
     const [showMutedWords, setShowMutedWords] = useState(false);
-
-    const fetchUnread = useCallback(async () => {
-        if (!user?.username) return;
-        try {
-            const res = await fetch(`/api/messages/unread?username=${encodeURIComponent(user.username)}`, {
-                credentials: 'include'
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setUnreadCount(data?.total || 0);
-            } else if (res.status === 401) {
-                // Session expired, don't update count
-                console.warn("Unauthorized access to unread messages");
-            }
-        } catch (err) {
-            console.error("Failed to fetch unread count:", err);
-        }
-    }, [user]);
-
-    useEffect(() => {
-        // Use ref to avoid recreating interval when fetchUnread changes
-        const fetchUnreadRef = { current: fetchUnread };
-        
-        queueMicrotask(() => { void fetchUnreadRef.current(); });
-        
-        const id = setInterval(() => {
-            fetchUnreadRef.current = fetchUnread;
-            fetchUnreadRef.current();
-        }, 15000);
-        
-        return () => clearInterval(id);
-    }, [fetchUnread]);
 
     const handleLogout = async () => {
         if (onClose) onClose();

@@ -31,9 +31,12 @@ export default function Providers({ children }) {
         const onVisibilityChange = () => {
             sendVisibility(document.visibilityState === 'visible');
         };
+        const onFocus = () => sendVisibility(true);
+        const onBlur = () => sendVisibility(false);
+
         document.addEventListener('visibilitychange', onVisibilityChange);
-        window.addEventListener('focus', () => sendVisibility(true));
-        window.addEventListener('blur', () => sendVisibility(false));
+        window.addEventListener('focus', onFocus);
+        window.addEventListener('blur', onBlur);
 
         // Initial state
         sendVisibility(document.visibilityState === 'visible');
@@ -45,8 +48,8 @@ export default function Providers({ children }) {
 
         return () => {
             document.removeEventListener('visibilitychange', onVisibilityChange);
-            window.removeEventListener('focus', () => sendVisibility(true));
-            window.removeEventListener('blur', () => sendVisibility(false));
+            window.removeEventListener('focus', onFocus);
+            window.removeEventListener('blur', onBlur);
             clearInterval(heartbeat);
         };
     }, []);

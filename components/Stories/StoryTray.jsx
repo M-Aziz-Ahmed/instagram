@@ -64,7 +64,7 @@ export default function StoryTray() {
 
     return (
         <>
-            <div className="flex gap-4 px-4 py-4 overflow-x-auto scrollbar-hide">
+            <div className="flex gap-4 px-4 py-4 overflow-x-auto scrollbar-hide snap-x snap-proximity">
                 {/* Live streams */}
                 {liveStreams.map((stream) => (
                     <button

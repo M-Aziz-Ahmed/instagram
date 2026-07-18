@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import BottomNav from "./BottomNav";
 import Sidebar from "./Sidebar";
 import VoiceChat from "@/components/VoiceChat/VoiceChat";
@@ -12,6 +12,7 @@ export default function LayoutWrapper({ children }) {
     const { collapsed, sidebarOpen, closeSidebar } = useSidebar();
     const { user } = useUser();
     const { socket, voiceOpen, closeVoiceChat } = useVoiceChat();
+    const [unreadCount, setUnreadCount] = useState(0);
 
     useEffect(() => {
         if (!user) return;
@@ -23,14 +24,37 @@ export default function LayoutWrapper({ children }) {
         return () => clearInterval(id);
     }, [user]);
 
+    // Centralized unread message polling — single source of truth
+    const fetchUnread = useCallback(async () => {
+        if (!user?.username) return;
+        try {
+            const res = await fetch(`/api/messages/unread?username=${encodeURIComponent(user.username)}`, {
+                credentials: 'include'
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setUnreadCount(data?.total || 0);
+            }
+        } catch {
+            // silent — network errors on background poll are expected
+        }
+    }, [user]);
+
+    useEffect(() => {
+        if (!user?.username) return;
+        fetchUnread();
+        const id = setInterval(fetchUnread, 15000);
+        return () => clearInterval(id);
+    }, [fetchUnread, user]);
+
     return (
         <>
-            <Sidebar open={sidebarOpen} onClose={closeSidebar} />
+            <Sidebar open={sidebarOpen} onClose={closeSidebar} unreadCount={unreadCount} />
 
             <div className={`pb-14 lg:pb-0 ${collapsed ? "lg:pl-20" : "lg:pl-72"}`}>
                 {children}
             </div>
-            <BottomNav />
+            <BottomNav unreadCount={unreadCount} />
 
             {/* Voice Chat Panel - slides in from right */}
             <div className={`fixed top-0 right-0 h-full z-50 transition-transform duration-300 ease-in-out ${
