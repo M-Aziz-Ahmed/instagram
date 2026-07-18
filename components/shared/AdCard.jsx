@@ -8,13 +8,14 @@ function AdsterraAd({ code }) {
     useEffect(() => {
         if (!containerRef.current) return;
         const container = containerRef.current;
+        const adZone = container.querySelector(".ad-zone");
+        if (!adZone) return;
         const created = [];
 
         const frag = document.createRange().createContextualFragment(code);
-        container.appendChild(frag);
+        adZone.appendChild(frag);
 
-        const scripts = container.querySelectorAll("script");
-        scripts.forEach((old) => {
+        adZone.querySelectorAll("script").forEach((old) => {
             const s = document.createElement("script");
             if (old.src) s.src = old.src;
             else s.textContent = old.textContent;
@@ -25,16 +26,17 @@ function AdsterraAd({ code }) {
 
         return () => {
             created.forEach((s) => s.remove());
-            container.innerHTML = "";
+            adZone.innerHTML = "";
         };
     }, [code]);
 
     return (
         <div
             ref={containerRef}
-            className="border-b border-gray-200 dark:border-gray-800 px-4 py-4"
+            className="border-b border-gray-200 dark:border-gray-800 px-4 py-3 text-center"
         >
             <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-medium">Sponsored</span>
+            <div className="ad-zone relative flex justify-center items-center mt-2 min-h-[250px]" />
         </div>
     );
 }

@@ -210,8 +210,6 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
     const lastRefreshRef                = useRef(0);
     const viewBatchRef                  = useRef([]);
     const viewTimerRef                  = useRef(null);
-    const adIntervalRef                 = useRef(10 + Math.floor(Math.random() * 6)); // 10-15
-    const postsSinceAdRef               = useRef(0);
 
     const isSmartFeed = !!user && !activeTag && feedType !== "following";
 
@@ -256,27 +254,20 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             .catch(() => {});
     }, []);
 
+    const AD_INTERVAL = 5;
+
     const insertAds = useCallback((postsList) => {
         if (postsList.length === 0) return postsList;
-        if (ads.length === 0) return postsList.map((post) => ({ type: "post", data: post }));
 
-        const interval = adIntervalRef.current;
-        let postsSinceAd = postsSinceAdRef.current;
         const items = [];
-        let adIdx = 0;
-
-        for (const post of postsList) {
-            items.push({ type: "post", data: post });
-            postsSinceAd++;
-            if (postsSinceAd >= interval && ads.length > 0) {
-                items.push({ type: "ad", data: ads[adIdx % ads.length] });
-                adIdx++;
-                postsSinceAd = 0;
-                adIntervalRef.current = 10 + Math.floor(Math.random() * 6);
+        let adCount = 0;
+        for (let i = 0; i < postsList.length; i++) {
+            items.push({ type: "post", data: postsList[i] });
+            if ((i + 1) % AD_INTERVAL === 0 && ads.length > 0) {
+                items.push({ type: "ad", data: ads[Math.floor(i / AD_INTERVAL) % ads.length], adKey: adCount });
+                adCount++;
             }
         }
-
-        postsSinceAdRef.current = postsSinceAd;
         return items;
     }, [ads]);
 
@@ -450,7 +441,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             )}
             {insertAds(posts).map((item, i) =>
                 item.type === "ad" ? (
-                    <AdCard key={`ad-${i}`} ad={item.data} />
+                    <AdCard key={`ad-${item.adKey}-${item.data._id}`} ad={item.data} />
                 ) : item.data?._id ? (
                     <PostCard
                         key={item.data._id}
