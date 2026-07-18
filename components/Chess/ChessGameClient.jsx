@@ -154,6 +154,7 @@ export default function ChessGameClient({ gameId }) {
     const [game, setGame] = useState(null);
     const [selectedSquare, setSelectedSquare] = useState(null);
     const [legalMoves, setLegalMoves] = useState([]);
+    const [colorReady, setColorReady] = useState(false);
     const [isFlipped, setIsFlipped] = useState(false);
     const [lastMove, setLastMove] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
@@ -394,10 +395,11 @@ export default function ChessGameClient({ gameId }) {
     }, [gameId]);
 
     useEffect(() => {
-        if (game && !isFlipped && myColor === "b") {
-            setIsFlipped(true);
+        if (myColor && !colorReady) {
+            setIsFlipped(myColor === "b");
+            setColorReady(true);
         }
-    }, [game, myColor]);
+    }, [myColor, colorReady]);
 
     useEffect(() => {
         if (!game || game.status !== "active") return;
