@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import PostCard from "./PostCard";
 import { PostSkeleton } from "@/components/shared/Skeleton";
+import AdCard from "@/components/shared/AdCard";
 import UserBadges from "@/components/shared/UserBadges";
 import { useUser } from "@/context/UserContext";
 import { timeAgo } from "@/utils/timeAgo";
@@ -200,6 +201,7 @@ function SearchResults({ query, onClear, onHashtag }) {
 export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError, feedType, username, searchQuery, onClearSearch }) {
     const { user } = useUser();
     const [posts, setPosts]             = useState([]);
+    const [ads, setAds]                 = useState([]);
     const [serverTranslations, setServerTranslations] = useState({});
     const [loading, setLoading]         = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -208,6 +210,10 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
     const lastRefreshRef                = useRef(0);
     const viewBatchRef                  = useRef([]);
     const viewTimerRef                  = useRef(null);
+    const adIntervalRef                 = useRef(10 + Math.floor(Math.random() * 6)); // 10-15
+    const postsSinceAdRef               = useRef(0);
+
+    const isSmartFeed = !!user && !activeTag && feedType !== "following";
 
     const handleDelete = useCallback((postId) => {
         setPosts((prev) => prev.filter((p) => p._id !== postId));
@@ -242,29 +248,66 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
         };
     }, [flushViews]);
 
+    // Fetch ads once on mount
+    useEffect(() => {
+        fetch("/api/ads", { cache: "no-store" })
+            .then((r) => r.ok ? r.json() : [])
+            .then((data) => { if (Array.isArray(data)) setAds(data); })
+            .catch(() => {});
+    }, []);
+
+    const insertAds = useCallback((postsList) => {
+        if (ads.length === 0 || postsList.length === 0) return postsList;
+
+        const interval = adIntervalRef.current;
+        let postsSinceAd = postsSinceAdRef.current;
+        const items = [];
+        let adIdx = 0;
+
+        for (const post of postsList) {
+            items.push({ type: "post", data: post });
+            postsSinceAd++;
+            if (postsSinceAd >= interval && ads.length > 0) {
+                items.push({ type: "ad", data: ads[adIdx % ads.length] });
+                adIdx++;
+                postsSinceAd = 0;
+                adIntervalRef.current = 10 + Math.floor(Math.random() * 6);
+            }
+        }
+
+        postsSinceAdRef.current = postsSinceAd;
+        return items;
+    }, [ads]);
+
     const fetchPosts = useCallback(async ({ append = false } = {}) => {
         try {
+            let url;
             const params = new URLSearchParams();
-            if (activeTag) params.set("tag", activeTag);
-            if (feedType === "following" && username) {
-                params.set("feed", "following");
-                params.set("username", username);
-            }
-            if (user?.autoTranslate && user?.language) {
-                params.set("lang", user.language);
-            }
 
-            if (append) {
-                if (posts.length > 0) {
+            if (isSmartFeed) {
+                params.set("username", username || user.username);
+                if (user?.autoTranslate && user?.language) params.set("lang", user.language);
+                if (append && posts.length > 0) {
+                    const oldest = posts[posts.length - 1];
+                    if (oldest?.timeStamp) params.set("before", oldest.timeStamp);
+                }
+                params.set("limit", String(PAGE_SIZE + 10));
+                url = `/api/feed/smart?${params}`;
+            } else {
+                if (activeTag) params.set("tag", activeTag);
+                if (feedType === "following" && username) {
+                    params.set("feed", "following");
+                    params.set("username", username);
+                }
+                if (user?.autoTranslate && user?.language) params.set("lang", user.language);
+                if (append && posts.length > 0) {
                     const oldest = posts[posts.length - 1];
                     if (oldest?.timeStamp) params.set("before", oldest.timeStamp);
                 }
                 params.set("limit", String(PAGE_SIZE));
-            } else {
-                params.set("limit", String(PAGE_SIZE));
+                url = `/api/posts?${params}`;
             }
 
-            const url = `/api/posts${params.toString() ? `?${params}` : ""}`;
             const res = await fetch(url, { cache: "no-store" });
             if (res.status === 401) {
                 onAuthError?.();
@@ -292,7 +335,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [activeTag, onAuthError, feedType, username, posts, user?.autoTranslate, user?.language]);
+    }, [activeTag, onAuthError, feedType, username, posts, user, isSmartFeed]);
 
     useEffect(() => {
         setPosts([]);
@@ -403,16 +446,20 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                     </button>
                 </div>
             )}
-            {posts.map((post) => (
-                <PostCard
-                    key={post._id}
-                    post={post}
-                    onDelete={handleDelete}
-                    onHashtag={onHashtag}
-                    serverTranslation={serverTranslations[post._id]}
-                    trackView={trackView}
-                />
-            ))}
+            {insertAds(posts).map((item, i) =>
+                item.type === "ad" ? (
+                    <AdCard key={`ad-${i}`} ad={item.data} />
+                ) : (
+                    <PostCard
+                        key={item.data._id}
+                        post={item.data}
+                        onDelete={handleDelete}
+                        onHashtag={onHashtag}
+                        serverTranslation={serverTranslations[item.data._id]}
+                        trackView={trackView}
+                    />
+                )
+            )}
             <div ref={sentinelRef} className="h-1" />
             {loadingMore && (
                 <div className="flex justify-center py-8">

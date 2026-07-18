@@ -68,12 +68,17 @@ export default function AdminClient() {
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "voice" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         Voice Chat
                     </button>
+                    <button onClick={() => setTab("ads")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "ads" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        Ads
+                    </button>
                 </div>
 
                 {tab === "users" && <UsersPanel />}
                 {tab === "roles" && <RolesPanel />}
                 {tab === "analytics" && <AnalyticsPanel />}
                 {tab === "voice" && <VoicePanel />}
+                {tab === "ads" && <AdsPanel />}
             </div>
         </div>
     );
@@ -812,6 +817,260 @@ function AnalyticsPanel() {
                     </div>
                 )}
             </div>
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  Ads Panel                                                                 */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+function AdsPanel() {
+    const { showToast } = useToast();
+    const [ads, setAds] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [editingAd, setEditingAd] = useState(null);
+    const [showForm, setShowForm] = useState(false);
+    const [saving, setSaving] = useState(false);
+
+    const emptyAd = {
+        title: "", description: "", imageUrl: "", linkUrl: "", ctaText: "Learn More",
+        adType: "custom", adsterraCode: "", adsenseSlot: "", startDate: "", endDate: "", isActive: true,
+    };
+    const [form, setForm] = useState(emptyAd);
+
+    const fetchAds = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/admin/ads");
+            if (res.ok) setAds(await res.json());
+        } catch {}
+        setLoading(false);
+    }, []);
+
+    useEffect(() => { fetchAds(); }, [fetchAds]);
+
+    const openCreate = () => { setForm(emptyAd); setEditingAd(null); setShowForm(true); };
+    const openEdit = (ad) => {
+        setForm({
+            title: ad.title || "", description: ad.description || "", imageUrl: ad.imageUrl || "",
+            linkUrl: ad.linkUrl || "", ctaText: ad.ctaText || "Learn More", adType: ad.adType || "custom",
+            adsterraCode: ad.adsterraCode || "", adsenseSlot: ad.adsenseSlot || "",
+            startDate: ad.startDate ? new Date(ad.startDate).toISOString().slice(0, 16) : "",
+            endDate: ad.endDate ? new Date(ad.endDate).toISOString().slice(0, 16) : "",
+            isActive: ad.isActive !== false,
+        });
+        setEditingAd(ad); setShowForm(true);
+    };
+
+    const handleSave = async () => {
+        if (!form.title.trim()) { showToast("Title is required", "error"); return; }
+        setSaving(true);
+        try {
+            const body = { ...form };
+            if (body.startDate) body.startDate = new Date(body.startDate).toISOString();
+            if (body.endDate) body.endDate = new Date(body.endDate).toISOString();
+            const url = editingAd ? `/api/admin/ads/${editingAd._id}` : "/api/admin/ads";
+            const res = await fetch(url, {
+                method: editingAd ? "PATCH" : "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            if (res.ok) { showToast(editingAd ? "Ad updated" : "Ad created", "success"); setShowForm(false); fetchAds(); }
+            else { const d = await res.json(); showToast(d.error || "Failed", "error"); }
+        } catch { showToast("Network error", "error"); }
+        setSaving(false);
+    };
+
+    const handleDelete = async (ad) => {
+        if (!confirm(`Delete ad "${ad.title}"?`)) return;
+        try {
+            const res = await fetch(`/api/admin/ads/${ad._id}`, { method: "DELETE" });
+            if (res.ok) { showToast("Ad deleted", "success"); fetchAds(); }
+            else showToast("Failed to delete", "error");
+        } catch { showToast("Network error", "error"); }
+    };
+
+    const toggleActive = async (ad) => {
+        try {
+            await fetch(`/api/admin/ads/${ad._id}`, {
+                method: "PATCH", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ isActive: !ad.isActive }),
+            });
+            fetchAds();
+        } catch {}
+    };
+
+    const typeLabels = { custom: "Custom", adsense: "AdSense", adsterra: "Adsterra" };
+
+    return (
+        <div className="space-y-6">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+                <div className="px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                    <div>
+                        <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Ad Management</h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Create and manage feed ads</p>
+                    </div>
+                    <button onClick={openCreate}
+                        className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg transition-colors">
+                        + New Ad
+                    </button>
+                </div>
+
+                {loading ? (
+                    <div className="flex justify-center py-10">
+                        <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
+                    </div>
+                ) : ads.length === 0 ? (
+                    <div className="py-10 text-center text-sm text-gray-400 dark:text-gray-600">No ads yet.</div>
+                ) : (
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                        {ads.map((ad) => (
+                            <div key={ad._id} className="px-4 sm:px-5 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                {ad.imageUrl ? (
+                                    <img src={ad.imageUrl} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                                ) : (
+                                    <div className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-gray-400">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
+                                        </svg>
+                                    </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{ad.title}</p>
+                                        <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full ${ad.isActive ? "bg-green-500/15 text-green-600 dark:text-green-400" : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"}`}>
+                                            {ad.isActive ? "Active" : "Paused"}
+                                        </span>
+                                        <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-[10px] font-medium rounded-full text-gray-500 dark:text-gray-400">
+                                            {typeLabels[ad.adType] || "Custom"}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                                        {ad.linkUrl || "No link"}{ad.impressions ? ` · ${ad.impressions} views` : ""}{ad.clicks ? ` · ${ad.clicks} clicks` : ""}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                    <button onClick={() => toggleActive(ad)}
+                                        className={`px-2 py-1 text-xs font-medium rounded-lg transition-colors ${ad.isActive ? "text-yellow-600 dark:text-yellow-400 hover:bg-yellow-500/10" : "text-green-600 dark:text-green-400 hover:bg-green-500/10"}`}>
+                                        {ad.isActive ? "Pause" : "Activate"}
+                                    </button>
+                                    <button onClick={() => openEdit(ad)}
+                                        className="px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">Edit</button>
+                                    <button onClick={() => handleDelete(ad)}
+                                        className="px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-500/10 rounded-lg transition-colors">Delete</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {showForm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowForm(false)}>
+                    <div className="bg-white dark:bg-gray-950 rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-950 z-10">
+                            <h3 className="font-bold text-base text-gray-900 dark:text-gray-100">{editingAd ? "Edit Ad" : "Create Ad"}</h3>
+                            <button onClick={() => setShowForm(false)} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Ad Type</label>
+                                <div className="flex gap-2">
+                                    {["custom", "adsense", "adsterra"].map((t) => (
+                                        <button key={t} onClick={() => setForm({ ...form, adType: t })}
+                                            className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-colors ${form.adType === t ? "bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400" : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"}`}>
+                                            {typeLabels[t]}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Title</label>
+                                <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
+                                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors" placeholder="Ad title" maxLength={100} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Description</label>
+                                <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+                                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors resize-none" placeholder="Short description" rows={2} maxLength={300} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Image URL</label>
+                                <input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+                                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors" placeholder="https://..." />
+                            </div>
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Link URL</label>
+                                    <input value={form.linkUrl} onChange={(e) => setForm({ ...form, linkUrl: e.target.value })}
+                                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors" placeholder="https://..." />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">CTA Text</label>
+                                    <input value={form.ctaText} onChange={(e) => setForm({ ...form, ctaText: e.target.value })}
+                                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors" placeholder="Learn More" maxLength={30} />
+                                </div>
+                            </div>
+                            {form.adType === "adsterra" && (
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Adsterra Code (HTML)</label>
+                                    <textarea value={form.adsterraCode} onChange={(e) => setForm({ ...form, adsterraCode: e.target.value })}
+                                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors resize-none font-mono" placeholder='<script src="..."></script>'} rows={4} />
+                                </div>
+                            )}
+                            {form.adType === "adsense" && (
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">AdSense Slot ID</label>
+                                    <input value={form.adsenseSlot} onChange={(e) => setForm({ ...form, adsenseSlot: e.target.value })}
+                                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors" placeholder="1234567890" />
+                                </div>
+                            )}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Start Date</label>
+                                    <input type="datetime-local" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+                                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">End Date</label>
+                                    <input type="datetime-local" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+                                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors" />
+                                </div>
+                            </div>
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <div className={`w-10 h-5 rounded-full relative transition-colors ${form.isActive ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-600"}`}
+                                    onClick={() => setForm({ ...form, isActive: !form.isActive })}>
+                                    <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform ${form.isActive ? "translate-x-5" : "translate-x-0.5"}`} />
+                                </div>
+                                <span className="text-sm text-gray-700 dark:text-gray-300">Active</span>
+                            </label>
+                            {form.title && (
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Preview</label>
+                                    <div className="border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden bg-gray-50 dark:bg-gray-900/50">
+                                        <div className="flex items-center gap-1.5 px-3 pt-2.5"><span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-medium">Sponsored</span></div>
+                                        {form.imageUrl && <img src={form.imageUrl} alt="" className="w-full h-32 object-cover mt-2" />}
+                                        <div className="p-3">
+                                            <h4 className="text-sm font-bold text-gray-900 dark:text-gray-100">{form.title}</h4>
+                                            {form.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{form.description}</p>}
+                                            {form.linkUrl && <span className="inline-block mt-2 text-xs font-semibold text-blue-500">{form.ctaText || "Learn More"}</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            <div className="flex gap-2 pt-2">
+                                <button onClick={() => setShowForm(false)} className="flex-1 py-2.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded-xl text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">Cancel</button>
+                                <button onClick={handleSave} disabled={saving} className="flex-1 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-bold transition-colors disabled:opacity-50">
+                                    {saving ? "Saving..." : editingAd ? "Update" : "Create"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

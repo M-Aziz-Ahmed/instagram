@@ -16,6 +16,7 @@ import EmojiPicker from "@/components/shared/EmojiPicker";
 import GifPicker from "@/components/shared/GifPicker";
 import PollCard from "./PollCard";
 import Link from "next/link";
+import { LoginModal } from "@/components/shared/GuestPrompt";
 import { timeAgo } from "@/utils/timeAgo";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -407,6 +408,8 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
     const [lightboxSrc, setLightboxSrc]       = useState(null);
     const [showReactions, setShowReactions]   = useState(false);
     const [reacting, setReacting]             = useState(false);
+    const [showLoginModal, setShowLoginModal] = useState(false);
+    const [loginAction, setLoginAction]       = useState("interact");
     const [translations, setTranslations]   = useState({});
     const [translatingIdx, setTranslatingIdx] = useState(null);
     const autoTranslatedRef = useRef(false);
@@ -496,7 +499,8 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
     }, [post._id, post.text, post.sender, user?.autoTranslate, user?.language, serverTranslation]);
 
     const handleLike = async () => {
-        if (!user || liking) return;
+        if (!user) { setLoginAction("like"); setShowLoginModal(true); return; }
+        if (liking) return;
         
         // Optimistic update for better UX
         const wasLiked = liked;
@@ -541,7 +545,8 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
     };
 
     const handleReaction = async (reactionType) => {
-        if (!user || reacting) return;
+        if (!user) { setLoginAction("react"); setShowLoginModal(true); return; }
+        if (reacting) return;
         setReacting(true);
         try {
             const res = await fetch(`/api/posts/${post._id}`, {
@@ -895,7 +900,10 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         />
 
                         <button
-                            onClick={() => setShowComments((v) => !v)}
+                            onClick={() => {
+                                if (!user) { setLoginAction("comment"); setShowLoginModal(true); return; }
+                                setShowComments((v) => !v);
+                            }}
                             aria-label="Comments"
                             className="flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-blue-500 transition-colors min-h-[44px] px-2 py-1 rounded-lg animate-press"
                         >
@@ -903,7 +911,18 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                             {(post.comments?.length || 0) > 0 && <span>{post.comments.length}</span>}
                         </button>
 
-                        <RepostButton postId={post._id} onReposted={() => showToast("Reposted to your feed!", "success")} />
+                        {user ? (
+                            <RepostButton postId={post._id} onReposted={() => showToast("Reposted to your feed!", "success")} />
+                        ) : (
+                            <button
+                                onClick={() => { setLoginAction("repost"); setShowLoginModal(true); }}
+                                className="flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-green-500 transition-colors min-h-[44px] px-2 py-1 rounded-lg"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 0 0-3.7-3.7 48.678 48.678 0 0 0-7.324 0 4.006 4.006 0 0 0-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 0 0 3.7 3.7 48.656 48.656 0 0 0 7.324 0 4.006 4.006 0 0 0 3.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3-3 3" />
+                                </svg>
+                            </button>
+                        )}
 
                         {viewCount > 0 && (
                             <span className="flex items-center gap-1 text-sm text-gray-400 dark:text-gray-500 ml-1">
@@ -916,7 +935,18 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         )}
 
                         <div className="ml-auto">
-                            <BookmarkButton postId={post._id} />
+                            {user ? (
+                                <BookmarkButton postId={post._id} />
+                            ) : (
+                                <button
+                                    onClick={() => { setLoginAction("save posts"); setShowLoginModal(true); }}
+                                    className="text-gray-400 dark:text-gray-500 hover:text-yellow-500 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+                                    </svg>
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -977,6 +1007,9 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
 
         {lightboxSrc && (
             <ImageLightbox src={lightboxSrc} alt="Post image" onClose={() => setLightboxSrc(null)} />
+        )}
+        {showLoginModal && (
+            <LoginModal onClose={() => setShowLoginModal(false)} action={loginAction} />
         )}
         </>
     );
