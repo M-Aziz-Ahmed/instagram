@@ -18,23 +18,38 @@ let stockfishReady = false;
 let stockfishBusy = false;
 let stockfishResolve = null;
 
+process.on("unhandledRejection", (err) => {
+    console.error("[SF] Unhandled rejection (non-fatal):", err?.message || err);
+});
+
 async function initStockfish() {
     try {
-        const fs = require("fs");
-        const path = require("path");
-        const wasmPath = path.join(__dirname, "node_modules", "stockfish", "bin", "stockfish-18-lite.wasm");
-        if (!fs.existsSync(wasmPath)) {
-            console.warn("[SF] Stockfish WASM not found, using fallback AI");
+        const sfPath = require("path").join(__dirname, "node_modules", "stockfish", "bin");
+        const liteWasm = require("path").join(sfPath, "stockfish-18-lite.wasm");
+        const singleWasm = require("path").join(sfPath, "stockfish-18-lite-single.wasm");
+
+        let variant = "lite-single";
+        if (require("fs").existsSync(singleWasm)) {
+            variant = "lite-single";
+            console.log("[SF] Using single-threaded WASM (no pthreads)");
+        } else if (require("fs").existsSync(liteWasm)) {
+            variant = "lite";
+        } else {
+            console.warn("[SF] No Stockfish WASM found, using fallback AI");
             return;
         }
+
         const initEngine = require("stockfish");
-        const engine = initEngine("lite", function (err, eng) {
-            if (err) { console.error("[SF] Init error:", err); return; }
+        const engine = initEngine(variant, function (err, eng) {
+            if (err) {
+                console.warn("[SF] Init error:", err.message || err, "- using fallback AI");
+                return;
+            }
             stockfishEngine = eng;
             stockfishEngine.sendCommand("uci");
             stockfishEngine.sendCommand("isready");
             stockfishReady = true;
-            console.log("[SF] Stockfish 18 WASM ready");
+            console.log("[SF] Stockfish 18 WASM ready (variant: " + variant + ")");
         });
         engine.listener = function (line) {
             if (typeof line !== "string") return;
@@ -49,7 +64,7 @@ async function initStockfish() {
             }
         };
     } catch (err) {
-        console.warn("[SF] Failed to load Stockfish, using fallback AI:", err.message);
+        console.warn("[SF] Failed to load Stockfish:", err.message, "- using fallback AI");
     }
 }
 
@@ -64,6 +79,7 @@ async function getAIMoveAsync(chess, difficulty) {
     if (stockfishEngine && stockfishReady && !stockfishBusy) {
         stockfishBusy = true;
         try {
+            console.log("[SF] Requesting move, difficulty=" + clamped + ", time=" + timeMs + "ms");
             const sfMove = await new Promise((resolve) => {
                 stockfishResolve = resolve;
                 stockfishEngine.sendCommand("stop");
@@ -76,23 +92,29 @@ async function getAIMoveAsync(chess, difficulty) {
                         stockfishEngine.sendCommand("stop");
                         r(null);
                     }
-                }, timeMs + 2000);
+                }, timeMs + 3000);
             });
+            console.log("[SF] Stockfish returned:", sfMove);
             if (sfMove && sfMove !== "0000") {
                 const from = sfMove.substring(0, 2);
                 const to = sfMove.substring(2, 4);
                 const promo = sfMove.length > 4 ? sfMove[4] : undefined;
-                const result = chess.move({ from, to, promotion: promo || "q" });
-                if (result) return result;
+                const moveObj = moves.find(m => m.from === from && m.to === to && (!promo || m.promotion === promo));
+                if (moveObj) return moveObj;
             }
         } catch (e) {
             console.error("[SF] Move error:", e.message);
         } finally {
             stockfishBusy = false;
         }
+    } else if (stockfishEngine && stockfishReady) {
+        console.log("[SF] Engine busy, using fallback");
+    } else {
+        console.log("[SF] Engine not ready, using fallback");
     }
 
     // Fallback: pick best move by simple scoring
+    console.log("[AI] Using fallback move picker, difficulty=" + clamped);
     const scored = moves.map((m) => {
         let s = Math.random() * (21 - clamped);
         if (m.captured) s += 10000;
@@ -1079,14 +1101,22 @@ io.on("connection", async (socket) => {
             });
 
             if (game.mode === "ai" && game.status === "active") {
+                const aiDelay = 500 + Math.floor(Math.random() * 1500);
                 setTimeout(async () => {
                     try {
+                        console.log("[AI] Making AI move for game " + gameId);
                         const latest = await ChessGame.findById(gameId);
-                        if (!latest || latest.status !== "active") return;
+                        if (!latest || latest.status !== "active") {
+                            console.log("[AI] Game no longer active, skipping");
+                            return;
+                        }
 
                         const aiChess = new Chess(latest.fen);
                         const aiMove = await getAIMoveAsync(aiChess, latest.aiDifficulty);
-                        if (!aiMove) return;
+                        if (!aiMove) {
+                            console.log("[AI] No move returned!");
+                            return;
+                        }
 
                         const aiResult = aiChess.move(aiMove);
                         if (!aiResult) return;
