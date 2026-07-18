@@ -1018,7 +1018,7 @@ function AdsPanel() {
                                 <div>
                                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Adsterra Code (HTML)</label>
                                     <textarea value={form.adsterraCode} onChange={(e) => setForm({ ...form, adsterraCode: e.target.value })}
-                                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors resize-none font-mono" placeholder='<script src="..."></script>'} rows={4} />
+                                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors resize-none font-mono" placeholder={"<script src=\"...\"></script>"} rows={4} />
                                 </div>
                             )}
                             {form.adType === "adsense" && (

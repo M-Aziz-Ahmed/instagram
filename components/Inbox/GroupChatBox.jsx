@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useToast } from "@/context/ToastContext";
 import { useCall } from "@/context/CallContext";
-import RichText from "./RichText";
+import RichText from "@/components/Feed/RichText";
 import UserBadges from "@/components/shared/UserBadges";
 import AudioPlayer from "@/components/shared/AudioPlayer";
 import ImageLightbox from "@/components/shared/ImageLightbox";
