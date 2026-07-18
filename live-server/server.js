@@ -13,31 +13,172 @@ const LiveStream = require("./models/liveStream");
 const ChessGame = require("./models/chessGame");
 const { sendPushNotification } = require("./push");
 
-const PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 };
+const PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, k: 0, q: 900 };
+const PIECE_SQUARE_TABLES = {
+    p: [
+         0,  0,  0,  0,  0,  0,  0,  0,
+        50, 50, 50, 50, 50, 50, 50, 50,
+        10, 10, 20, 30, 30, 20, 10, 10,
+         5,  5, 10, 25, 25, 10,  5,  5,
+         0,  0,  0, 20, 20,  0,  0,  0,
+         5, -5,-10,  0,  0,-10, -5,  5,
+         5, 10, 10,-20,-20, 10, 10,  5,
+         0,  0,  0,  0,  0,  0,  0,  0,
+    ],
+    n: [
+        -50,-40,-30,-30,-30,-30,-40,-50,
+        -40,-20,  0,  0,  0,  0,-20,-40,
+        -30,  0, 10, 15, 15, 10,  0,-30,
+        -30,  5, 15, 20, 20, 15,  5,-30,
+        -30,  0, 15, 20, 20, 15,  0,-30,
+        -30,  5, 10, 15, 15, 10,  5,-30,
+        -40,-20,  0,  5,  5,  0,-20,-40,
+        -50,-40,-30,-30,-30,-30,-40,-50,
+    ],
+    b: [
+        -20,-10,-10,-10,-10,-10,-10,-20,
+        -10,  0,  0,  0,  0,  0,  0,-10,
+        -10,  0,  5, 10, 10,  5,  0,-10,
+        -10,  5,  5, 10, 10,  5,  5,-10,
+        -10,  0, 10, 10, 10, 10,  0,-10,
+        -10, 10, 10, 10, 10, 10, 10,-10,
+        -10,  5,  0,  0,  0,  0,  5,-10,
+        -20,-10,-10,-10,-10,-10,-10,-20,
+    ],
+    r: [
+         0,  0,  0,  0,  0,  0,  0,  0,
+         5, 10, 10, 10, 10, 10, 10,  5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+         0,  0,  0,  5,  5,  0,  0,  0,
+    ],
+    q: [
+        -20,-10,-10, -5, -5,-10,-10,-20,
+        -10,  0,  0,  0,  0,  0,  0,-10,
+        -10,  0,  5,  5,  5,  5,  0,-10,
+         -5,  0,  5,  5,  5,  5,  0, -5,
+          0,  0,  5,  5,  5,  5,  0, -5,
+        -10,  5,  5,  5,  5,  5,  0,-10,
+        -10,  0,  5,  0,  0,  0,  0,-10,
+        -20,-10,-10, -5, -5,-10,-10,-20,
+    ],
+    k: [
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -20,-30,-30,-40,-40,-30,-30,-20,
+        -10,-20,-20,-20,-20,-20,-20,-10,
+         20, 20,  0,  0,  0,  0, 20, 20,
+         20, 30, 10,  0,  0, 10, 30, 20,
+    ],
+};
+
+function evaluateBoard(chess) {
+    const board = chess.board();
+    let score = 0;
+
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const p = board[r][c];
+            if (!p) continue;
+            const val = PIECE_VALUES[p.type] || 0;
+            const sqIdx = p.color === "w" ? (7 - r) * 8 + c : r * 8 + (7 - c);
+            const table = PIECE_SQUARE_TABLES[p.type];
+            const posBonus = table ? table[sqIdx] : 0;
+            const sign = p.color === "w" ? 1 : -1;
+            score += sign * (val + posBonus);
+        }
+    }
+
+    // Bonus for piece development (knights/bishops out early)
+    const totalMoves = chess.moveNumber();
+    return score;
+}
+
+function minimax(chess, depth, alpha, beta, isMaximizing, startTime, timeLimitMs) {
+    if (Date.now() - startTime > timeLimitMs) return null;
+
+    if (depth === 0 || chess.isGameOver()) {
+        if (chess.isCheckmate()) return isMaximizing ? -100000 + depth : 100000 - depth;
+        if (chess.isDraw() || chess.isStalemate()) return 0;
+        return evaluateBoard(chess);
+    }
+
+    const moves = chess.moves({ verbose: true });
+    moves.sort((a, b) => {
+        let scoreA = 0, scoreB = 0;
+        if (a.captured) scoreA += PIECE_VALUES[a.captured] - (PIECE_VALUES[a.piece] * 0.1);
+        if (b.captured) scoreB += PIECE_VALUES[b.captured] - (PIECE_VALUES[b.piece] * 0.1);
+        if (a.promotion) scoreA += 800;
+        if (b.promotion) scoreB += 800;
+        return scoreB - scoreA;
+    });
+
+    if (isMaximizing) {
+        let maxEval = -Infinity;
+        for (const move of moves) {
+            chess.move(move.san);
+            const result = minimax(chess, depth - 1, alpha, beta, false, startTime, timeLimitMs);
+            chess.undo();
+            if (result === null) return null;
+            maxEval = Math.max(maxEval, result);
+            alpha = Math.max(alpha, result);
+            if (beta <= alpha) break;
+        }
+        return maxEval;
+    } else {
+        let minEval = Infinity;
+        for (const move of moves) {
+            chess.move(move.san);
+            const result = minimax(chess, depth - 1, alpha, beta, true, startTime, timeLimitMs);
+            chess.undo();
+            if (result === null) return null;
+            minEval = Math.min(minEval, result);
+            beta = Math.min(beta, result);
+            if (beta <= alpha) break;
+        }
+        return minEval;
+    }
+}
 
 function getAIMove(chess, difficulty) {
     const moves = chess.moves({ verbose: true });
     if (!moves.length) return null;
 
-    const depth = Math.min(Math.max(difficulty || 10, 1), 20);
-    const candidates = [];
+    const clamped = Math.min(Math.max(difficulty || 10, 1), 20);
+    const searchDepth = Math.max(1, Math.round(clamped / 3));
+    const timeLimitMs = Math.max(200, clamped * 100);
+    const randomness = Math.max(0, 1 - clamped / 20);
+
+    let bestMove = null;
+    let bestScore = -Infinity;
+    const startTime = Date.now();
+
+    const isMaximizing = chess.turn() === "w";
 
     for (const move of moves) {
-        let score = Math.random() * 50;
-        if (move.captured) {
-            score += PIECE_VALUES[move.captured] * 1.5 - (PIECE_VALUES[move.piece] * 0.5);
+        chess.move(move.san);
+        const result = minimax(chess, searchDepth - 1, -Infinity, Infinity, !isMaximizing, startTime, timeLimitMs);
+        chess.undo();
+        if (result === null) break;
+
+        const adjustedScore = result + (Math.random() * randomness * 50);
+        if (adjustedScore > bestScore) {
+            bestScore = adjustedScore;
+            bestMove = move;
         }
-        if (move.promotion) score += PIECE_VALUES[move.promotion] || 0;
-        if (move.san.includes("+")) score += 30;
-        if (depth > 5 && move.san.includes("#")) score += 10000;
-        candidates.push({ move, score });
     }
 
-    candidates.sort((a, b) => b.score - a.score);
+    if (!bestMove) {
+        const randomIdx = Math.floor(Math.random() * moves.length);
+        return moves[randomIdx];
+    }
 
-    const topN = Math.max(1, Math.min(candidates.length, Math.ceil(21 - depth)));
-    const pick = candidates[Math.floor(Math.random() * topN)];
-    return pick.move;
+    return bestMove;
 }
 
 const app = express();

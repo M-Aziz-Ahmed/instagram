@@ -50,8 +50,7 @@ export default function ChessBoard({
     const [dragOver, setDragOver] = useState(null);
 
     const board = useMemo(() => parseFEN(fen), [fen]);
-    const whitePerspective = (playerColor || "w") === "w";
-    const flipped = isFlipped ? whitePerspective : !whitePerspective;
+    const flipped = isFlipped;
 
     const displayBoard = useMemo(() => {
         if (!flipped) return board;
