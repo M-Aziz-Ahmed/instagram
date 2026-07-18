@@ -19,10 +19,6 @@ export default function SearchPageClient() {
     const inputRef = useRef(null);
 
     useEffect(() => {
-        if (ready && !user) router.replace("/login");
-    }, [ready, user, router]);
-
-    useEffect(() => {
         inputRef.current?.focus();
     }, []);
 
@@ -51,7 +47,7 @@ export default function SearchPageClient() {
         return () => clearTimeout(t);
     }, [query, search]);
 
-    if (!ready || !user) {
+    if (!ready) {
         return (
             <div className="flex h-dvh items-center justify-center bg-white dark:bg-gray-950">
                 <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
