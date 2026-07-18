@@ -5,20 +5,46 @@ const SECRET = new TextEncoder().encode(
     process.env.JWT_SECRET || "anonfeed_jwt_secret_change_in_production_32chars"
 );
 
-const PUBLIC_PATHS = ["/login", "/api/auth/send-otp", "/api/auth/verify-otp"];
+const PUBLIC_PATHS = [
+    "/",
+    "/login",
+    "/search",
+    "/tag",
+    "/api/auth",
+    "/api/posts",
+    "/api/feed",
+    "/api/search",
+    "/api/ads",
+    "/api/trending",
+];
+
+function isPublicPath(pathname) {
+    return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
+function isStaticPath(pathname) {
+    return (
+        pathname.startsWith("/_next") ||
+        pathname.startsWith("/favicon") ||
+        pathname.startsWith("/stockfish") ||
+        pathname.endsWith(".ico") ||
+        pathname.endsWith(".js") ||
+        pathname.endsWith(".css") ||
+        pathname.endsWith(".png") ||
+        pathname.endsWith(".jpg") ||
+        pathname.endsWith(".svg") ||
+        pathname.endsWith(".woff2")
+    );
+}
 
 function isApiPath(pathname) {
     return pathname.startsWith("/api/");
 }
 
-export async function proxy(request) {
+export async function middleware(request) {
     const { pathname } = request.nextUrl;
 
-    if (
-        PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
-        pathname.startsWith("/_next") ||
-        pathname.startsWith("/favicon")
-    ) {
+    if (isStaticPath(pathname) || isPublicPath(pathname)) {
         return NextResponse.next();
     }
 
