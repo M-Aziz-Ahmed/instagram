@@ -318,14 +318,15 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                 if (data.translations) {
                     setServerTranslations((prev) => ({ ...prev, ...data.translations }));
                 }
+                const newPosts = Array.isArray(data.posts) ? data.posts.filter((p) => p && p._id) : [];
                 if (append) {
                     setPosts((prev) => {
                         const ids = new Set(prev.map((p) => p._id));
-                        const fresh = data.posts.filter((p) => !ids.has(p._id));
+                        const fresh = newPosts.filter((p) => !ids.has(p._id));
                         return [...prev, ...fresh];
                     });
                 } else {
-                    setPosts(data.posts);
+                    setPosts(newPosts);
                 }
                 setHasMore(data.hasMore);
             }
@@ -368,13 +369,13 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             fetch(`/api/posts?${params}`, { cache: "no-store" })
                 .then((r) => r.ok ? r.json() : null)
                 .then((data) => {
-                    if (!data?.posts) return;
+                    if (!data?.posts || !Array.isArray(data.posts)) return;
                     if (data.translations) {
                         setServerTranslations((prev) => ({ ...prev, ...data.translations }));
                     }
                     setPosts((prev) => {
                         const ids = new Set(prev.map((p) => p._id));
-                        const fresh = data.posts.filter((p) => !ids.has(p._id));
+                        const fresh = data.posts.filter((p) => p && p._id && !ids.has(p._id));
                         if (fresh.length === 0) return prev;
                         return [...fresh, ...prev];
                     });
@@ -449,7 +450,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             {insertAds(posts).map((item, i) =>
                 item.type === "ad" ? (
                     <AdCard key={`ad-${i}`} ad={item.data} />
-                ) : (
+                ) : item.data?._id ? (
                     <PostCard
                         key={item.data._id}
                         post={item.data}
@@ -458,7 +459,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                         serverTranslation={serverTranslations[item.data._id]}
                         trackView={trackView}
                     />
-                )
+                ) : null
             )}
             <div ref={sentinelRef} className="h-1" />
             {loadingMore && (
