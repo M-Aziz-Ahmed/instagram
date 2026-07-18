@@ -133,6 +133,8 @@ export async function PATCH(request, { params }) {
                     postId:    id,
                     commentId: comment.commentId,
                     text:      text?.trim() ?? "",
+                    postText:  post.text?.slice(0, 120) ?? "",
+                    postImageUrl: post.imageUrl || "",
                 });
                 sendPushNotification({
                     recipientUsername: post.sender,
@@ -155,6 +157,8 @@ export async function PATCH(request, { params }) {
                     postId:    id,
                     commentId: comment.commentId,
                     text:      text?.trim() ?? "",
+                    postText:  post.text?.slice(0, 120) ?? "",
+                    postImageUrl: post.imageUrl || "",
                 })));
                 mentions.forEach((recipient) => {
                     sendPushNotification({
@@ -233,6 +237,8 @@ export async function PATCH(request, { params }) {
                         fromColor: color || "#3b82f6",
                         postId:    id,
                         text:      post.text?.slice(0, 80) ?? "",
+                        postText:  post.text?.slice(0, 120) ?? "",
+                        postImageUrl: post.imageUrl || "",
                     });
                 }
             } else {
@@ -277,6 +283,8 @@ export async function PATCH(request, { params }) {
                         fromColor: color || "#3b82f6",
                         postId:    id,
                         text:      post.text?.slice(0, 80) ?? "",
+                        postText:  post.text?.slice(0, 120) ?? "",
+                        postImageUrl: post.imageUrl || "",
                     });
                 }
             } else {

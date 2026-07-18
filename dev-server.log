@@ -1,0 +1,13 @@
+
+> instagram-clone@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.10 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.100.50:3000
+- Environments: .env
+✓ Ready in 4.5s
+⚠ Slow filesystem detected. The benchmark took 387ms. If D:\Work\instagram-clone\.next/dev is a network drive, consider moving it to a local folder.
+See more: https://nextjs.org/docs/app/guides/local-development
+○ Compiling proxy ...
+

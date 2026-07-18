@@ -42,9 +42,9 @@ export default function LayoutWrapper({ children }) {
 
     useEffect(() => {
         if (!user?.username) return;
-        fetchUnread();
         const id = setInterval(fetchUnread, 15000);
-        return () => clearInterval(id);
+        const init = setTimeout(fetchUnread, 0);
+        return () => { clearInterval(id); clearTimeout(init); };
     }, [fetchUnread, user]);
 
     return (

@@ -244,6 +244,8 @@ export async function POST(request) {
                 fromColor: color || "#3b82f6",
                 postId:    post._id.toString(),
                 text:      text?.trim() ?? "",
+                postText:  text?.trim()?.slice(0, 120) ?? "",
+                postImageUrl: "",
             }));
             await Notification.insertMany(notifs);
         }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import UserBadges from "@/components/shared/UserBadges";
 import { playNotificationSound, initAudio, toggleNotificationSound, isSoundEnabled } from "@/utils/notificationSound";
 import { getActiveChat } from "@/utils/activeChat";
@@ -83,9 +84,9 @@ export default function NotificationBell({ onNavigate }) {
     }, [user]);
 
     useEffect(() => {
-        fetchNotifs();
         const id = setInterval(fetchNotifs, 15000);
-        return () => clearInterval(id);
+        const init = setTimeout(fetchNotifs, 0);
+        return () => { clearInterval(id); clearTimeout(init); };
     }, [fetchNotifs]);
 
     useEffect(() => {
@@ -196,8 +197,10 @@ export default function NotificationBell({ onNavigate }) {
                                     setOpen(false);
                                     if (n.type === "message") {
                                         router.push(`/inbox?user=${encodeURIComponent(n.fromUser)}`);
+                                    } else if (n.type === "follow") {
+                                        router.push(`/profile/${encodeURIComponent(n.fromUser)}`);
                                     } else if (n.postId) {
-                                        router.push(`/`);
+                                        router.push(`/post/${n.postId}`);
                                     }
                                 }}
                                 className={`w-full flex items-start gap-3 px-4 py-3 border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left ${!n.read ? "bg-blue-50/40 dark:bg-blue-900/10" : ""}`}
@@ -214,11 +217,36 @@ export default function NotificationBell({ onNavigate }) {
                                         <span className="font-semibold">{n.fromUser}</span>
                                         <UserBadges isVerified={n.fromUserDoc?.isVerified} isAdmin={n.fromUserDoc?.isAdmin} roles={n.fromUserDoc?.roles || []} size="xs" />
                                         {" "}{TYPE_LABEL[n.type] ?? n.type}
-                                        {n.text && (n.type === "comment" || n.type === "repost") && (
-                                            <span className="text-gray-500 dark:text-gray-400">: &ldquo;{n.text.slice(0, 60)}{n.text.length > 60 ? "\u2026" : ""}&rdquo;</span>
-                                        )}
                                     </p>
-                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{timeAgo(n.createdAt)}</p>
+
+                                    {/* Comment/reply preview text */}
+                                    {n.text && (n.type === "comment" || n.type === "reply" || n.type === "mention") && (
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">
+                                            &ldquo;{n.text.slice(0, 80)}{n.text.length > 80 ? "\u2026" : ""}&rdquo;
+                                        </p>
+                                    )}
+
+                                    {/* Post content preview */}
+                                    {(n.postText || n.postImageUrl) && n.type !== "follow" && n.type !== "message" && n.type !== "live" && (
+                                        <div className="flex items-start gap-2 mt-1.5 p-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                                            {n.postImageUrl && (
+                                                <Image
+                                                    src={n.postImageUrl}
+                                                    alt=""
+                                                    width={40}
+                                                    height={40}
+                                                    className="w-10 h-10 rounded-lg object-cover shrink-0 border border-gray-200 dark:border-gray-700"
+                                                />
+                                            )}
+                                            {n.postText && (
+                                                <p className="text-[11px] text-gray-400 dark:text-gray-500 line-clamp-2 leading-relaxed">
+                                                    {n.postText.slice(0, 100)}{n.postText.length > 100 ? "\u2026" : ""}
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{timeAgo(n.createdAt)}</p>
                                 </div>
 
                                 {!n.read && (

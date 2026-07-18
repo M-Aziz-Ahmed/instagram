@@ -75,6 +75,8 @@ export async function POST(request, { params }) {
                 fromAvatarUrl: user.avatarUrl || "",
                 postId: id,
                 text: repostComment,
+                postText: originalPost.text?.slice(0, 120) ?? "",
+                postImageUrl: originalPost.imageUrl || "",
             });
             sendPushNotification({
                 recipientUsername: originalPost.sender,
@@ -98,6 +100,8 @@ export async function POST(request, { params }) {
                 fromAvatarUrl: user.avatarUrl || "",
                 postId: repost._id.toString(),
                 text: repostComment,
+                postText: repostComment?.slice(0, 120) ?? "",
+                postImageUrl: "",
             })));
             mentions.forEach((recipient) => {
                 sendPushNotification({

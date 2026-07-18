@@ -9,6 +9,8 @@ const notificationSchema = new mongoose.Schema({
     postId:     { type: String, default: "" },
     commentId:  { type: String, default: "" },
     text:       { type: String, default: "" },       // comment text or context
+    postText:   { type: String, default: "" },       // preview of the post content
+    postImageUrl: { type: String, default: "" },     // post image thumbnail
     read:       { type: Boolean, default: false },
     createdAt:  { type: Date, default: Date.now },
 });
