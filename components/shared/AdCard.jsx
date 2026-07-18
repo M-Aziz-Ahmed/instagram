@@ -26,6 +26,7 @@ function AdsterraAd({ code }) {
                     className="border-0 overflow-hidden"
                     loading="lazy"
                     title="Sponsored"
+                    
                 />
             </div>
         </div>

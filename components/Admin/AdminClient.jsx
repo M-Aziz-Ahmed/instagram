@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/context/ToastContext";
 import UserBadges from "@/components/shared/UserBadges";
@@ -72,6 +72,10 @@ export default function AdminClient() {
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "ads" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         Ads
                     </button>
+                    <button onClick={() => setTab("logs")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "logs" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        Logs
+                    </button>
                 </div>
 
                 {tab === "users" && <UsersPanel />}
@@ -79,6 +83,7 @@ export default function AdminClient() {
                 {tab === "analytics" && <AnalyticsPanel />}
                 {tab === "voice" && <VoicePanel />}
                 {tab === "ads" && <AdsPanel />}
+                {tab === "logs" && <LogsPanel />}
             </div>
         </div>
     );
@@ -1071,6 +1076,113 @@ function AdsPanel() {
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  Logs Panel                                                                */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+function LogsPanel() {
+    const [source, setSource] = useState("next");
+    const [logs, setLogs] = useState([]);
+    const [levelFilter, setLevelFilter] = useState("");
+    const [autoRefresh, setAutoRefresh] = useState(true);
+    const logContainerRef = useRef(null);
+
+    const fetchLogs = useCallback(async () => {
+        try {
+            if (source === "next") {
+                const params = new URLSearchParams();
+                if (levelFilter) params.set("level", levelFilter);
+                params.set("limit", "300");
+                const res = await fetch(`/api/admin/logs?${params}`);
+                const data = await res.json();
+                if (Array.isArray(data)) setLogs(data);
+            } else {
+                const url = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
+                if (!url) return;
+                const params = new URLSearchParams();
+                if (levelFilter) params.set("level", levelFilter);
+                params.set("limit", "300");
+                const res = await fetch(`${url}/api/logs?${params}`);
+                const data = await res.json();
+                if (Array.isArray(data)) setLogs(data);
+            }
+        } catch {
+            // silent
+        }
+    }, [source, levelFilter]);
+
+    useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+    useEffect(() => {
+        if (!autoRefresh) return;
+        const id = setInterval(fetchLogs, 3000);
+        return () => clearInterval(id);
+    }, [autoRefresh, fetchLogs]);
+
+    useEffect(() => {
+        if (logContainerRef.current) {
+            logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+        }
+    }, [logs]);
+
+    const levelColor = (l) => {
+        if (l === "error") return "text-red-500";
+        if (l === "warn") return "text-yellow-500";
+        return "text-gray-600 dark:text-gray-400";
+    };
+
+    return (
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4">
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+                <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+                    <button onClick={() => setSource("next")}
+                        className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${source === "next" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm" : "text-gray-500 dark:text-gray-400"}`}>
+                        Vercel / Next.js
+                    </button>
+                    <button onClick={() => setSource("live")}
+                        className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${source === "live" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm" : "text-gray-500 dark:text-gray-400"}`}>
+                        Live Server
+                    </button>
+                </div>
+                <select value={levelFilter} onChange={(e) => setLevelFilter(e.target.value)}
+                    className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs text-gray-700 dark:text-gray-300 outline-none">
+                    <option value="">All Levels</option>
+                    <option value="info">Info</option>
+                    <option value="warn">Warn</option>
+                    <option value="error">Error</option>
+                </select>
+                <label className="flex items-center gap-2 cursor-pointer ml-auto">
+                    <div className={`w-9 h-5 rounded-full relative transition-colors ${autoRefresh ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-600"}`}
+                        onClick={() => setAutoRefresh(!autoRefresh)}>
+                        <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform ${autoRefresh ? "translate-x-4" : "translate-x-0.5"}`} />
+                    </div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Auto-refresh</span>
+                </label>
+                <button onClick={fetchLogs} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
+                    </svg>
+                </button>
+            </div>
+
+            <div ref={logContainerRef} className="h-[500px] overflow-y-auto overflow-x-auto bg-gray-950 rounded-xl p-3 font-mono text-xs space-y-0.5">
+                {logs.length === 0 && (
+                    <p className="text-gray-500 text-center py-8">No logs yet.</p>
+                )}
+                {logs.map((log, i) => (
+                    <div key={i} className="flex gap-2 leading-relaxed whitespace-nowrap">
+                        <span className="text-gray-500 shrink-0">{new Date(log.ts).toLocaleTimeString()}</span>
+                        <span className={`font-bold shrink-0 uppercase w-10 text-center ${levelColor(log.level)}`}>{log.level}</span>
+                        <span className="text-gray-300 break-all whitespace-pre-wrap">{log.msg}</span>
+                    </div>
+                ))}
+            </div>
+
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 text-right">{logs.length} entries</p>
         </div>
     );
 }

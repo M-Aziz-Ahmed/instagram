@@ -1,4 +1,5 @@
 require("dotenv").config();
+require("./logBuffer");
 const express = require("express");
 const https = require("https");
 const http = require("http");
@@ -175,9 +176,16 @@ mongoose.connect(MONGODB_URI, {
     process.exit(1);
 });
 
+const { getLogs } = require("./logBuffer");
+
 // ── HTTP Routes ─────────────────────────────────────────────────
 app.get("/health", (req, res) => {
     res.json({ ok: true, uptime: process.uptime() });
+});
+
+app.get("/api/logs", (req, res) => {
+    const { level, since, limit } = req.query;
+    res.json(getLogs({ level, since, limit: parseInt(limit) || 200 }));
 });
 
 app.get("/api/streams", async (req, res) => {
