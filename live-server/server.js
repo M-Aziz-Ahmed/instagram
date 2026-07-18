@@ -20,7 +20,13 @@ let stockfishResolve = null;
 
 async function initStockfish() {
     try {
-        // Use "lite" engine (7MB instead of 108MB) — call initEngine with "lite"
+        const fs = require("fs");
+        const path = require("path");
+        const wasmPath = path.join(__dirname, "node_modules", "stockfish", "bin", "stockfish-18-lite.wasm");
+        if (!fs.existsSync(wasmPath)) {
+            console.warn("[SF] Stockfish WASM not found, using fallback AI");
+            return;
+        }
         const initEngine = require("stockfish");
         const engine = initEngine("lite", function (err, eng) {
             if (err) { console.error("[SF] Init error:", err); return; }
@@ -43,7 +49,7 @@ async function initStockfish() {
             }
         };
     } catch (err) {
-        console.error("[SF] Failed to load Stockfish:", err.message);
+        console.warn("[SF] Failed to load Stockfish, using fallback AI:", err.message);
     }
 }
 
@@ -1279,7 +1285,7 @@ io.on("connection", async (socket) => {
 });
 
 // ── Start ───────────────────────────────────────────────────────
-initStockfish();
+initStockfish().catch(() => {});
 server.listen(PORT, () => {
     console.log(`[Live Server] Running on port ${PORT}`);
     console.log(`[Live Server] CORS allowed: ${CORS_ORIGIN}`);
