@@ -74,10 +74,10 @@ async function isAppVisible() {
     return true;
   }
 
-  // Fallback: check if any client window exists at all
+  // Fallback: check if any client window is actually focused
   try {
     const clients = await self.clients.matchAll({ type: 'window' });
-    return clients.length > 0;
+    return clients.some(c => c.focused);
   } catch {
     return false;
   }

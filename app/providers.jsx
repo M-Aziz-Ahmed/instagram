@@ -14,13 +14,6 @@ export default function Providers({ children }) {
     useEffect(() => {
         if (!('serviceWorker' in navigator)) return;
 
-        navigator.serviceWorker.register('/sw.js').then((registration) => {
-            console.log('Service Worker registered:', registration);
-        }).catch((error) => {
-            console.log('Service Worker registration failed:', error);
-        });
-
-        // Tell the service worker when the app is visible/hidden
         function sendVisibility(visible) {
             navigator.serviceWorker.controller?.postMessage({
                 type: 'app_visibility',
@@ -38,13 +31,16 @@ export default function Providers({ children }) {
         window.addEventListener('focus', onFocus);
         window.addEventListener('blur', onBlur);
 
-        // Initial state
-        sendVisibility(document.visibilityState === 'visible');
+        // Register SW then send initial visibility once it's controlling the page
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+        navigator.serviceWorker.ready.then(() => {
+            sendVisibility(document.visibilityState === 'visible');
+        });
 
-        // Heartbeat every 15s so SW knows client is alive
+        // Heartbeat every 10s so SW knows client is alive
         const heartbeat = setInterval(() => {
             navigator.serviceWorker.controller?.postMessage({ type: 'heartbeat' });
-        }, 15000);
+        }, 10000);
 
         return () => {
             document.removeEventListener('visibilitychange', onVisibilityChange);
