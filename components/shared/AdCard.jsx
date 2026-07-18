@@ -21,7 +21,7 @@ function AdsterraAd({ code }) {
             <div className="flex justify-center mt-2">
                 <iframe
                     ref={iframeRef}
-                    width="320"
+                    width="300"
                     height="250"
                     className="border-0 overflow-hidden"
                     loading="lazy"

@@ -63,13 +63,11 @@ export async function GET(request) {
 
         let viewer = null;
         if (username) {
-            viewer = await User.findOne({ username }).select("mutedWords closeFriends").lean();
+            viewer = await User.findOne({ username }).select("mutedWords closeFriends following").lean();
         }
 
-        const pipeline = [];
         const matchStage = {};
 
-        // Filter out expired posts and closed polls
         matchStage.$or = [
             { expiresAt: null },
             { expiresAt: { $gt: new Date() } },
@@ -89,65 +87,21 @@ export async function GET(request) {
             matchStage.timeStamp = { $lt: new Date(before) };
         }
 
-        if (Object.keys(matchStage).length > 0) {
-            pipeline.push({ $match: matchStage });
-        }
-
-        if (username && viewer?.mutedWords?.length) {
-            const mutedList = viewer.mutedWords.map((w) => w.toLowerCase());
-            const escapedWords = mutedList.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-            const wordPattern = escapedWords.join("|");
-            const wordRegex = `\\b(${wordPattern})\\b`;
-
-            pipeline.push({
-                $match: {
-                    $expr: {
-                        $and: [
-                            {
-                                $not: {
-                                    $regexMatch: {
-                                        input: { $toLower: "$text" },
-                                        regex: wordPattern,
-                                    },
-                                },
-                            },
-                            {
-                                $eq: [
-                                    {
-                                        $size: {
-                                            $filter: {
-                                                input: { $map: { input: "$hashtags", as: "h", in: { $toLower: "$$h" } } },
-                                                cond: { $in: ["$$this", mutedList] },
-                                            },
-                                        },
-                                    },
-                                    0,
-                                ],
-                            },
-                        ],
-                    },
-                },
-            });
-        }
-
+        const extraMatch = {};
         if (username && viewer) {
-            pipeline.push({
-                $match: {
-                    $expr: {
-                        $or: [
-                            { $ne: ["$visibility", "closeFriends"] },
-                            { $in: ["$sender", viewer.closeFriends || []] },
-                            { $eq: ["$sender", username] },
-                        ],
-                    },
-                },
-            });
+            extraMatch.$or = [
+                { visibility: { $ne: "closeFriends" } },
+                { sender: { $in: viewer.closeFriends || [] } },
+                { sender: username },
+            ];
         }
 
+        const pipeline = [];
+        if (Object.keys(matchStage).length > 0) pipeline.push({ $match: matchStage });
+        if (Object.keys(extraMatch).length > 0) pipeline.push({ $match: extraMatch });
         pipeline.push({ $sort: { timeStamp: -1 } });
-        pipeline.push({ $limit: limit + 1 });
+        pipeline.push({ $limit: limit + 10 });
 
-        // Lookup original post for reposts
         pipeline.push({
             $lookup: {
                 from: "posts",
@@ -162,10 +116,31 @@ export async function GET(request) {
             },
         });
 
-        const rawPosts = await Post.aggregate(pipeline).allowDiskUse(true);
+        const rawPosts = await Post.aggregate(pipeline).allowDiskUse(true).maxTimeMS(10000);
 
-        const hasMore = rawPosts.length > limit;
-        const sliced = hasMore ? rawPosts.slice(0, limit) : rawPosts;
+        const mutedSet = new Set((viewer?.mutedWords || []).map(w => w.toLowerCase()));
+        const closeFriendsSet = new Set(viewer?.closeFriends || []);
+
+        const filtered = rawPosts.filter((p) => {
+            if (mutedSet.size > 0) {
+                const text = (p.text || "").toLowerCase();
+                for (const w of mutedSet) {
+                    if (text.includes(w)) return false;
+                }
+                if (p.hashtags) {
+                    for (const h of p.hashtags) {
+                        if (mutedSet.has(h.toLowerCase())) return false;
+                    }
+                }
+            }
+            if (p.visibility === "closeFriends") {
+                if (p.sender !== username && !closeFriendsSet.has(p.sender)) return false;
+            }
+            return true;
+        });
+
+        const hasMore = filtered.length > limit;
+        const sliced = hasMore ? filtered.slice(0, limit) : filtered;
 
         const posts = await enrichPosts(sliced);
 

@@ -2,7 +2,8 @@ import connectDB from "@/utils/db";
 import Post from "@/models/post";
 import User from "@/models/user";
 
-// Helper: fetch N posts from a query, excluding already-seen IDs
+const MAX_TIME_MS = 10000;
+
 async function fetchBatch(matchStage, limit, excludeIds = []) {
     const pipeline = [];
     if (Object.keys(matchStage).length > 0) {
@@ -13,7 +14,28 @@ async function fetchBatch(matchStage, limit, excludeIds = []) {
     }
     pipeline.push({ $sort: { timeStamp: -1 } });
     pipeline.push({ $limit: limit });
-    return Post.aggregate(pipeline).allowDiskUse(true);
+    return Post.aggregate(pipeline).allowDiskUse(true).maxTimeMS(MAX_TIME_MS);
+}
+
+function matchesMutedWords(post, mutedSet) {
+    if (mutedSet.size === 0) return false;
+    const text = (post.text || "").toLowerCase();
+    for (const w of mutedSet) {
+        if (text.includes(w)) return true;
+    }
+    if (post.hashtags) {
+        for (const h of post.hashtags) {
+            if (mutedSet.has(h.toLowerCase())) return true;
+        }
+    }
+    return false;
+}
+
+function isVisibleTo(post, username, closeFriendsSet) {
+    if (post.visibility !== "closeFriends") return true;
+    if (post.sender === username) return true;
+    if (closeFriendsSet.has(post.sender)) return true;
+    return false;
 }
 
 export async function GET(request) {
@@ -23,16 +45,14 @@ export async function GET(request) {
         const username = searchParams.get("username");
         const limit = Math.min(parseInt(searchParams.get("limit") || "20", 10), 50);
         const before = searchParams.get("before");
-        const lang = searchParams.get("lang");
 
-        // If not logged in, return chronological feed
         if (!username) {
             const matchStage = { ...getDefaultMatch(before) };
             const posts = await Post.aggregate([
                 { $match: matchStage },
                 { $sort: { timeStamp: -1 } },
                 { $limit: limit },
-            ]).allowDiskUse(true);
+            ]).allowDiskUse(true).maxTimeMS(MAX_TIME_MS);
 
             return Response.json({
                 posts: await enrichPosts(posts),
@@ -40,7 +60,6 @@ export async function GET(request) {
             });
         }
 
-        // Fetch user data
         const viewer = await User.findOne({ username })
             .select("following mutedWords closeFriends")
             .lean();
@@ -50,62 +69,50 @@ export async function GET(request) {
                 { $match: getDefaultMatch(before) },
                 { $sort: { timeStamp: -1 } },
                 { $limit: limit },
-            ]).allowDiskUse(true);
+            ]).allowDiskUse(true).maxTimeMS(MAX_TIME_MS);
             return Response.json({ posts: await enrichPosts(posts), hasMore: posts.length === limit });
         }
 
         const following = viewer.following || [];
         const timeFilter = before ? { timeStamp: { $lt: new Date(before) } } : {};
+        const mutedSet = new Set((viewer.mutedWords || []).map(w => w.toLowerCase()));
+        const closeFriendsSet = new Set(viewer.closeFriends || []);
 
-        // Muted words filter
-        const mutedWords = (viewer.mutedWords || []).map(w => w.toLowerCase());
-        const escapedMuted = mutedWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-        const mutedPattern = escapedMuted.length > 0 ? escapedMuted.join("|") : null;
-        const mutedWordCondition = mutedPattern ? {
-            $not: {
-                $regexMatch: {
-                    input: { $toLower: "$text" },
-                    regex: mutedPattern,
-                },
-            },
-        } : null;
-
-        // Close friends visibility filter
-        const visibilityCondition = {
-            $or: [
-                { visibility: { $ne: "closeFriends" } },
-                { sender: { $in: viewer.closeFriends || [] } },
-                { sender: username },
-            ],
-        };
-
-        // Expiry filter
         const expiryCondition = {
             $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
         };
 
-        const allSeenIds = [];
-        const allPosts = [];
+        const isColdStart = following.length === 0;
 
-        // Pattern: 3 followed, 2 liked, 2 interest, repeat
-        const PATTERN = [
-            { type: "followed", count: 3 },
-            { type: "liked", count: 2 },
-            { type: "interest", count: 2 },
-        ];
+        if (isColdStart) {
+            const matchStage = {
+                sender: { $ne: username },
+                ...timeFilter,
+                ...expiryCondition,
+            };
+            const posts = await Post.aggregate([
+                { $match: matchStage },
+                { $sort: { timeStamp: -1 } },
+                { $limit: limit + 10 },
+            ]).allowDiskUse(true).maxTimeMS(MAX_TIME_MS);
 
-        const batchSize = limit + 20; // Fetch extra to account for dedup
-        let fetched = 0;
+            const filtered = posts
+                .filter(p => !matchesMutedWords(p, mutedSet))
+                .filter(p => isVisibleTo(p, username, closeFriendsSet))
+                .slice(0, limit);
 
-        // Build batch match stages
+            return Response.json({
+                posts: await enrichPosts(filtered),
+                hasMore: posts.length === limit,
+            });
+        }
+
         const followedMatch = {
             sender: { $in: following },
             ...timeFilter,
             ...expiryCondition,
         };
-        if (mutedWordCondition) followedMatch.$expr = mutedWordCondition;
 
-        // For "liked" posts, find posts the user has liked or reacted to
         const likedMatch = {
             $or: [
                 { likes: username },
@@ -117,11 +124,9 @@ export async function GET(request) {
             ...timeFilter,
             ...expiryCondition,
         };
-        if (mutedWordCondition) likedMatch.$expr = mutedWordCondition;
 
-        // For "interest" — find hashtags from posts the user liked/followed, then fetch posts with those hashtags
         let interestTags = [];
-        if (following.length > 0) {
+        {
             const samplePosts = await Post.find({
                 $or: [{ sender: { $in: following } }, { likes: username }],
                 hashtags: { $exists: true, $ne: [] },
@@ -147,31 +152,31 @@ export async function GET(request) {
             ...timeFilter,
             ...expiryCondition,
         } : null;
-        if (interestMatch && mutedWordCondition) interestMatch.$expr = mutedWordCondition;
 
-        // Fallback: everything else
         const fallbackMatch = {
             sender: { $ne: username },
             ...timeFilter,
             ...expiryCondition,
         };
-        if (mutedWordCondition) fallbackMatch.$expr = mutedWordCondition;
 
-        // Generate pattern slots
+        const PATTERN = [
+            { type: "followed", count: 3 },
+            { type: "liked", count: 2 },
+            { type: "interest", count: 2 },
+        ];
+        const batchSize = limit + 20;
         const slots = [];
         for (let i = 0; i < Math.ceil(batchSize / 7); i++) {
             PATTERN.forEach(p => slots.push(p));
         }
 
-        // Fetch all posts upfront (capped)
         const [followedPosts, likedPosts, interestPosts, fallbackPosts] = await Promise.all([
-            fetchBatch(followedMatch, Math.min(following.length > 0 ? batchSize : 0, 30), []),
-            fetchBatch(likedMatch, Math.min(batchSize, 30), []),
-            interestMatch ? fetchBatch(interestMatch, Math.min(batchSize, 30), []) : Promise.resolve([]),
-            fetchBatch(fallbackMatch, Math.min(batchSize, 30), []),
+            fetchBatch(followedMatch, Math.min(batchSize, 30)),
+            fetchBatch(likedMatch, Math.min(batchSize, 30)),
+            interestMatch ? fetchBatch(interestMatch, Math.min(batchSize, 30)) : Promise.resolve([]),
+            fetchBatch(fallbackMatch, Math.min(batchSize, 30)),
         ]);
 
-        // Interleave by pattern
         const followedPool = [...followedPosts];
         const likedPool = [...likedPosts];
         const interestPool = [...interestPosts];
@@ -200,7 +205,6 @@ export async function GET(request) {
                 }
             }
 
-            // If pool ran out, pull from fallback
             while (added < slot.count && fallbackPool.length > 0) {
                 const post = fallbackPool.shift();
                 const idStr = post._id.toString();
@@ -212,7 +216,6 @@ export async function GET(request) {
             }
         }
 
-        // Fill remaining from fallback if needed
         while (result.length < batchSize && fallbackPool.length > 0) {
             const post = fallbackPool.shift();
             const idStr = post._id.toString();
@@ -222,15 +225,16 @@ export async function GET(request) {
             }
         }
 
-        // Sort by timestamp (maintain chronological within pattern)
         result.sort((a, b) => new Date(b.timeStamp) - new Date(a.timeStamp));
 
-        const sliced = result.slice(0, limit);
+        const sliced = result
+            .filter(p => !matchesMutedWords(p, mutedSet))
+            .filter(p => isVisibleTo(p, username, closeFriendsSet))
+            .slice(0, limit);
+
         const hasMore = result.length > limit || fallbackPool.length > 0 || followedPool.length > 0;
 
-        const enriched = await enrichPosts(sliced);
-
-        return Response.json({ posts: enriched, hasMore });
+        return Response.json({ posts: await enrichPosts(sliced), hasMore });
     } catch (err) {
         console.error("Smart feed error:", err);
         return Response.json({ error: "Failed" }, { status: 500 });

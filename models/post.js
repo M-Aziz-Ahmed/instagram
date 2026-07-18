@@ -77,6 +77,11 @@ postSchema.index({ hashtags: 1 });
 postSchema.index({ timeStamp: -1 });
 postSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 postSchema.index({ "poll.expiresAt": 1 }, { expireAfterSeconds: 0 });
+postSchema.index({ likes: 1 });
+postSchema.index({ "reactions.like": 1 });
+postSchema.index({ "reactions.love": 1 });
+postSchema.index({ "reactions.fire": 1 });
+postSchema.index({ originalPostId: 1 });
 
 const Post = mongoose.models.Post || mongoose.model("Post", postSchema);
 export default Post;
