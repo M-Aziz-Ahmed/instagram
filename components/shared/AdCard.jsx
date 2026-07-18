@@ -2,6 +2,37 @@
 
 import { useEffect, useRef, useState } from "react";
 
+function AdsterraAd({ code }) {
+    const containerRef = useRef(null);
+
+    useEffect(() => {
+        if (!containerRef.current) return;
+        const container = containerRef.current;
+
+        const frag = document.createRange().createContextualFragment(code);
+        container.appendChild(frag);
+
+        const scripts = container.querySelectorAll("script");
+        scripts.forEach((old) => {
+            const s = document.createElement("script");
+            if (old.src) s.src = old.src;
+            else s.textContent = old.textContent;
+            document.body.appendChild(s);
+            old.remove();
+        });
+
+        return () => { container.innerHTML = ""; };
+    }, [code]);
+
+    return (
+        <div ref={containerRef} className="my-4 px-4">
+            <div className="flex items-center gap-1.5 mb-1.5">
+                <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-medium">Ad</span>
+            </div>
+        </div>
+    );
+}
+
 export default function AdCard({ ad }) {
     const ref = useRef(null);
     const [clicked, setClicked] = useState(false);
@@ -54,14 +85,7 @@ export default function AdCard({ ad }) {
 
     // Adsterra
     if (ad.adType === "adsterra" && ad.adsterraCode) {
-        return (
-            <div ref={ref} className="my-4 px-4">
-                <div className="flex items-center gap-1.5 mb-1.5">
-                    <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-medium">Ad</span>
-                </div>
-                <div dangerouslySetInnerHTML={{ __html: ad.adsterraCode }} />
-            </div>
-        );
+        return <AdsterraAd code={ad.adsterraCode} />;
     }
 
     // Custom ad
