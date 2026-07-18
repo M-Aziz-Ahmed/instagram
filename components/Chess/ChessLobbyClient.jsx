@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import ChessProfileHistory from "./ChessProfileHistory";
 
 const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
 
@@ -316,6 +317,12 @@ export default function ChessLobbyClient() {
                     </div>
                 )}
             </div>
+
+            {user?.username && (
+                <div className="mt-8 border-t border-gray-200 dark:border-gray-800 pt-6">
+                    <ChessProfileHistory username={user.username} />
+                </div>
+            )}
         </div>
     );
 }
