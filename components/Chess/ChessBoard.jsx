@@ -44,6 +44,7 @@ export default function ChessBoard({
     status,
     promotionPending,
     onPromotionChoice,
+    moveAnimation,
 }) {
     const boardRef = useRef(null);
     const [dragging, setDragging] = useState(null);
@@ -142,6 +143,21 @@ export default function ChessBoard({
 
     return (
         <div className="relative select-none">
+            <style>{`
+                @keyframes moveFlash {
+                    0% { box-shadow: inset 0 0 0 3px rgba(255,255,0,0.8); }
+                    50% { box-shadow: inset 0 0 0 3px rgba(255,255,0,0.4); }
+                    100% { box-shadow: inset 0 0 0 3px rgba(255,255,0,0); }
+                }
+                .move-flash { animation: moveFlash 1.2s ease-out forwards; }
+                @keyframes moveToast {
+                    0% { opacity: 0; transform: translateY(6px); }
+                    15% { opacity: 1; transform: translateY(0); }
+                    80% { opacity: 1; transform: translateY(0); }
+                    100% { opacity: 0; transform: translateY(-6px); }
+                }
+                .move-toast { animation: moveToast 2s ease-in-out forwards; }
+            `}</style>
             <div className="flex">
                 <div className="flex flex-col">
                     {displayRanks.map((rank) => (
@@ -168,6 +184,7 @@ export default function ChessBoard({
                                 const isLegalMove = legalMoves?.includes(square);
                                 const isLastMoveFrom = lastMove?.from === square;
                                 const isLastMoveTo = lastMove?.to === square;
+                                const isRecentMove = moveAnimation && isLastMoveTo;
                                 const isDragOverTarget = dragOver?.ri === ri && dragOver?.ci === ci;
                                 const isDragSource = dragging?.ri === ri && dragging?.ci === ci;
                                 const isKingInCheck = inCheckKingSquare === square && piece?.type === "k";
@@ -186,7 +203,7 @@ export default function ChessBoard({
                                 return (
                                     <div
                                         key={`${ri}-${ci}`}
-                                        className="relative flex items-center justify-center"
+                                        className={`relative flex items-center justify-center ${isRecentMove ? "move-flash" : ""}`}
                                         style={{
                                             backgroundColor: bgColor,
                                             cursor: "pointer",
@@ -296,6 +313,13 @@ export default function ChessBoard({
                     </svg>
                 </button>
             </div>
+            {moveAnimation && moveAnimation.notation && (
+                <div className="absolute top-1 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+                    <div className="move-toast px-2.5 py-1 bg-black/70 text-white text-xs font-mono font-bold rounded-md shadow-lg backdrop-blur-sm">
+                        {moveAnimation.notation}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

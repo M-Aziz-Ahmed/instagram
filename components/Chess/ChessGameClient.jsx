@@ -169,6 +169,8 @@ export default function ChessGameClient({ gameId }) {
     const [lastResultText, setLastResultText] = useState("");
     const [reviewIndex, setReviewIndex] = useState(null);
     const [mobileTab, setMobileTab] = useState("moves");
+    const [moveAnimation, setMoveAnimation] = useState(null);
+    const [aiThinking, setAiThinking] = useState(false);
     const timerRef = useRef(null);
     const gameRef = useRef(null);
     const reviewRef = useRef(null);
@@ -333,9 +335,12 @@ export default function ChessGameClient({ gameId }) {
             setTimers(data.timers);
             if (data.move) {
                 setLastMove({ from: data.move.from, to: data.move.to });
+                setMoveAnimation({ from: data.move.from, to: data.move.to, notation: data.move.san, key: Date.now() });
+                setTimeout(() => setMoveAnimation(null), 2000);
             }
             setSelectedSquare(null);
             setLegalMoves([]);
+            setAiThinking(false);
             if (reviewRef.current !== null) setReviewIndex(null);
         });
 
@@ -469,7 +474,8 @@ export default function ChessGameClient({ gameId }) {
         socketRef.current.emit("chess:make-move", { gameId, from, to, promotion: "q" });
         setSelectedSquare(null);
         setLegalMoves([]);
-    }, [gameId, game?.fen, myColor]);
+        if (game?.mode === "ai") setAiThinking(true);
+    }, [gameId, game?.fen, game?.mode, myColor]);
 
     const handlePromotionChoice = useCallback((pieceType) => {
         if (!pendingMove || !socketRef.current) return;
@@ -673,6 +679,7 @@ export default function ChessGameClient({ gameId }) {
                             status={game.status}
                             promotionPending={promotionPending}
                             onPromotionChoice={handlePromotionChoice}
+                            moveAnimation={isReviewing ? null : moveAnimation}
                         />
                     </div>
 
@@ -757,7 +764,17 @@ export default function ChessGameClient({ gameId }) {
                     {/* Inline status + actions */}
                     <div className="flex items-center justify-between mt-1 sm:mt-2 px-1">
                         <div className="flex items-center gap-1">
-                            {isMyTurn && !gameOver && game.status === "active" && (
+                            {aiThinking && isAIMode && !gameOver && (
+                                <div className="flex items-center gap-1.5">
+                                    <div className="flex gap-0.5">
+                                        <div className="w-1 h-1 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                                        <div className="w-1 h-1 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                                        <div className="w-1 h-1 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                                    </div>
+                                    <span className="text-[10px] sm:text-xs text-purple-600 dark:text-purple-400 font-semibold">AI is thinking...</span>
+                                </div>
+                            )}
+                            {isMyTurn && !gameOver && game.status === "active" && !aiThinking && (
                                 <div className="flex items-center gap-1">
                                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                                     <span className="text-[10px] sm:text-xs text-green-600 dark:text-green-400 font-semibold">Your turn</span>

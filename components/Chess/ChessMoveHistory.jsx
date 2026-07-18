@@ -2,16 +2,19 @@
 
 import { useRef, useEffect } from "react";
 
-const PIECE_SYMBOLS = {
-    p: "", n: "N", b: "B", r: "R", q: "Q", k: "K",
-};
-
 export default function ChessMoveHistory({ moves, currentMoveIndex, onMoveClick, orientation }) {
     const listRef = useRef(null);
+    const lastMoveRef = useRef(null);
 
     useEffect(() => {
         if (listRef.current) {
             listRef.current.scrollTop = listRef.current.scrollHeight;
+        }
+    }, [moves?.length]);
+
+    useEffect(() => {
+        if (lastMoveRef.current && listRef.current) {
+            lastMoveRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
         }
     }, [moves?.length]);
 
@@ -25,6 +28,10 @@ export default function ChessMoveHistory({ moves, currentMoveIndex, onMoveClick,
             blackIdx: i + 1 < moves.length ? i + 1 : -1,
         });
     }
+
+    const lastPair = pairs.length > 0 ? pairs[pairs.length - 1] : null;
+    const isLatestWhite = lastPair && lastPair.black === null;
+    const latestIdx = moves.length - 1;
 
     return (
         <div className="flex flex-col h-full">
@@ -46,33 +53,47 @@ export default function ChessMoveHistory({ moves, currentMoveIndex, onMoveClick,
                         <p className="text-xs">No moves yet</p>
                     </div>
                 )}
-                {pairs.map((pair) => (
-                    <div key={pair.number} className="flex items-center text-xs font-mono group hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded px-1">
-                        <span className="w-7 text-right pr-1.5 text-gray-400 dark:text-gray-500 shrink-0 select-none text-[10px]">
-                            {pair.number}.
-                        </span>
-                        <button
-                            onClick={() => pair.white && onMoveClick?.(pair.whiteIdx)}
-                            className={`flex-1 px-1.5 py-[3px] rounded text-left transition-colors ${
-                                currentMoveIndex === pair.whiteIdx
-                                    ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold"
-                                    : "text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50"
-                            }`}
+                {pairs.map((pair) => {
+                    const isWhiteLatest = currentMoveIndex < 0 && latestIdx === pair.whiteIdx;
+                    const isBlackLatest = currentMoveIndex < 0 && latestIdx === pair.blackIdx;
+                    const isHighlighted = isWhiteLatest || isBlackLatest;
+
+                    return (
+                        <div
+                            key={pair.number}
+                            ref={isHighlighted ? lastMoveRef : null}
+                            className="flex items-center text-xs font-mono group hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded px-1"
                         >
-                            {pair.white?.san || ""}
-                        </button>
-                        <button
-                            onClick={() => pair.black && onMoveClick?.(pair.blackIdx)}
-                            className={`flex-1 px-1.5 py-[3px] rounded text-left transition-colors ${
-                                currentMoveIndex === pair.blackIdx
-                                    ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold"
-                                    : "text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50"
-                            }`}
-                        >
-                            {pair.black?.san || ""}
-                        </button>
-                    </div>
-                ))}
+                            <span className="w-7 text-right pr-1.5 text-gray-400 dark:text-gray-500 shrink-0 select-none text-[10px]">
+                                {pair.number}.
+                            </span>
+                            <button
+                                onClick={() => pair.white && onMoveClick?.(pair.whiteIdx)}
+                                className={`flex-1 px-1.5 py-[3px] rounded text-left transition-colors ${
+                                    currentMoveIndex === pair.whiteIdx
+                                        ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold"
+                                        : isWhiteLatest
+                                        ? "bg-yellow-50 dark:bg-yellow-900/20 text-gray-900 dark:text-gray-100 font-medium"
+                                        : "text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                                }`}
+                            >
+                                {pair.white?.san || ""}
+                            </button>
+                            <button
+                                onClick={() => pair.black && onMoveClick?.(pair.blackIdx)}
+                                className={`flex-1 px-1.5 py-[3px] rounded text-left transition-colors ${
+                                    currentMoveIndex === pair.blackIdx
+                                        ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold"
+                                        : isBlackLatest
+                                        ? "bg-yellow-50 dark:bg-yellow-900/20 text-gray-900 dark:text-gray-100 font-medium"
+                                        : "text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                                }`}
+                            >
+                                {pair.black?.san || ""}
+                            </button>
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
