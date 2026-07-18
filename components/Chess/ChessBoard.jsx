@@ -229,13 +229,13 @@ export default function ChessBoard({
 
                                         {piece && !isDragSource && (
                                             <div
-                                                className="absolute inset-[8%] z-20 flex items-center justify-center transition-transform duration-75 ease-out"
+                                                className="z-20 transition-transform duration-75 ease-out"
                                                 draggable={isPlayerTurn && piece.color === playerColor}
                                                 onDragStart={(e) => handleDragStart(e, ri, ci)}
                                                 onDragEnd={handleDragEnd}
                                                 style={{ willChange: "transform" }}
                                             >
-                                                <ChessPiece piece={piece} size="auto" />
+                                                <ChessPiece piece={piece} size={60} />
                                             </div>
                                         )}
                                     </div>
