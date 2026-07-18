@@ -195,22 +195,23 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
 
     useEffect(() => {
         if (!user?.autoTranslate || !username) return;
-        messages.forEach((msg) => {
-            if (msg.sender === username) return;
-            if (!msg.text) return;
-            if (translations[msg._id]) return;
-            if (autoTranslatingRef.current.has(msg._id)) return;
-            autoTranslatingRef.current.add(msg._id);
-            fetch("/api/translate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text: msg.text, target: user?.language || "en" }),
-            }).then((r) => r.json()).then((data) => {
-                if (data.translatedText && data.translatedText !== msg.text) {
-                    setTranslations((prev) => ({ ...prev, [msg._id]: data.translatedText }));
-                }
-            }).catch(() => {});
-        });
+        const toTranslate = messages.filter(
+            (msg) => msg.sender !== username && msg.text && !translations[msg._id] && !autoTranslatingRef.current.has(msg._id)
+        );
+        if (toTranslate.length === 0) return;
+
+        toTranslate.forEach((msg) => autoTranslatingRef.current.add(msg._id));
+
+        const items = toTranslate.map((msg) => ({ id: msg._id, text: msg.text }));
+        fetch("/api/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ batch: items, target: user?.language || "en" }),
+        }).then((r) => r.json()).then((data) => {
+            if (data.results) {
+                setTranslations((prev) => ({ ...prev, ...data.results }));
+            }
+        }).catch(() => {});
     }, [messages, user?.autoTranslate, user?.language, username]);
 
     const [hasMore, setHasMore] = useState(false);

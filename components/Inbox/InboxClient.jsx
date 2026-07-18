@@ -7,14 +7,8 @@ import ChatBox from "./ChatBox";
 import { useSidebar } from "@/context/SidebarContext";
 import UserBadges from "@/components/shared/UserBadges";
 import { setActiveChat } from "@/utils/activeChat";
-
-function timeAgo(date) {
-    const diff = (Date.now() - new Date(date)) / 1000;
-    if (diff < 60)    return `${Math.floor(diff)}s`;
-    if (diff < 3600)  return `${Math.floor(diff / 60)}m`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-    return new Date(date).toLocaleDateString([], { month: "short", day: "numeric" });
-}
+import { timeAgo } from "@/utils/timeAgo";
+import { ConversationSkeleton } from "@/components/shared/Skeleton";
 
 function OnlineDot({ username, onlineMap }) {
     const online = onlineMap?.[username]?.isOnline;
@@ -187,9 +181,7 @@ export default function InboxClient() {
 
                 <div className="flex-1 overflow-y-auto">
                     {loading ? (
-                        <div className="flex justify-center py-12">
-                            <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
-                        </div>
+                        <ConversationSkeleton />
                     ) : conversations.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-12 text-gray-400 dark:text-gray-600">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10 mb-2 opacity-40">

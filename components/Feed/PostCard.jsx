@@ -15,17 +15,10 @@ import AudioPlayer from "@/components/shared/AudioPlayer";
 import EmojiPicker from "@/components/shared/EmojiPicker";
 import GifPicker from "@/components/shared/GifPicker";
 import Link from "next/link";
+import { timeAgo } from "@/utils/timeAgo";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-
-function timeAgo(date) {
-    const diff = (Date.now() - new Date(date)) / 1000;
-    if (diff < 60)    return `${Math.floor(diff)}s`;
-    if (diff < 3600)  return `${Math.floor(diff / 60)}m`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-    return new Date(date).toLocaleDateString([], { month: "short", day: "numeric" });
-}
 
 function HeartIcon({ filled }) {
     return (
@@ -375,7 +368,7 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
     );
 }
 
-export default function PostCard({ post: initialPost, onDeleted, onHashtag, serverTranslation, trackView }) {
+export default function PostCard({ post: initialPost, onDelete, onHashtag, serverTranslation, trackView }) {
     const { user } = useUser();
     const { showToast } = useToast();
     const [post, setPost]                     = useState(initialPost);
@@ -701,7 +694,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag, serv
             });
             if (res.ok) {
                 showToast("Post deleted", "success");
-                onDeleted?.();
+                onDelete?.(initialPost._id);
             } else {
                 showToast("Failed to delete post", "error");
             }
@@ -871,7 +864,7 @@ export default function PostCard({ post: initialPost, onDeleted, onHashtag, serv
                         <button
                             onClick={() => setShowComments((v) => !v)}
                             aria-label="Comments"
-                            className="flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-blue-500 transition-colors min-h-[44px] px-2 py-1 rounded-lg"
+                            className="flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-blue-500 transition-colors min-h-[44px] px-2 py-1 rounded-lg animate-press"
                         >
                             <CommentIcon />
                             {(post.comments?.length || 0) > 0 && <span>{post.comments.length}</span>}

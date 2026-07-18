@@ -5,14 +5,7 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import Link from "next/link";
 import UserBadges from "@/components/shared/UserBadges";
-
-function timeAgo(date) {
-    const diff = (Date.now() - new Date(date)) / 1000;
-    if (diff < 60)    return `${Math.floor(diff)}s`;
-    if (diff < 3600)  return `${Math.floor(diff / 60)}m`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-    return new Date(date).toLocaleDateString([], { month: "short", day: "numeric" });
-}
+import { timeAgo } from "@/utils/timeAgo";
 
 export default function SearchPageClient() {
     const { user, ready } = useUser();
@@ -161,8 +154,11 @@ export default function SearchPageClient() {
                 )}
 
                 {query.trim() && !hasResults && !loading && (
-                    <div className="text-center py-16">
-                        <p className="text-gray-400 dark:text-gray-500 text-sm">No results found for &ldquo;{query}&rdquo;</p>
+                    <div className="flex flex-col items-center py-16 text-gray-400 dark:text-gray-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10 mb-3 opacity-40">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                        </svg>
+                        <p className="text-sm">No results found for &ldquo;{query}&rdquo;</p>
                     </div>
                 )}
 

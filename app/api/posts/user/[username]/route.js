@@ -5,15 +5,26 @@ import User from "@/models/user";
 export async function GET(request, { params }) {
     try {
         const { username } = await params;
+        const { searchParams } = new URL(request.url);
+        const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), 100);
+        const before = searchParams.get("before"); // ISO date cursor
+
         await connectDB();
 
-        const [rawPosts, userDoc] = await Promise.all([
-            Post.find({ sender: username }).sort({ timeStamp: -1 }).lean(),
+        const query = { sender: username };
+        if (before) query.timeStamp = { $lt: new Date(before) };
+
+        const [rawPosts, userDoc, totalPosts] = await Promise.all([
+            Post.find(query).sort({ timeStamp: -1 }).limit(limit + 1).lean(),
             User.findOne({ username }).populate("roles").lean(),
+            Post.countDocuments({ sender: username }),
         ]);
 
+        const hasMore = rawPosts.length > limit;
+        const posts = hasMore ? rawPosts.slice(0, limit) : rawPosts;
+
         // Fetch original posts for reposts
-        const repostIds = rawPosts.filter((p) => p.isRepost && p.originalPostId).map((p) => p.originalPostId);
+        const repostIds = posts.filter((p) => p.isRepost && p.originalPostId).map((p) => p.originalPostId);
         let originalPostsMap = {};
         if (repostIds.length > 0) {
             const originalPosts = await Post.find({ _id: { $in: repostIds } }).lean();
@@ -41,7 +52,7 @@ export async function GET(request, { params }) {
             });
         }
 
-        const totalLikes = rawPosts.reduce((sum, p) => sum + p.likes.length, 0);
+        const totalLikes = posts.reduce((sum, p) => sum + p.likes.length, 0);
 
         const profile = userDoc ? {
             username:    userDoc.username,
@@ -67,7 +78,7 @@ export async function GET(request, { params }) {
             roles:      profile.roles,
         } : null;
 
-        const posts = rawPosts.map((p) => ({
+        const enrichedPosts = posts.map((p) => ({
             ...p,
             _author: authorData,
             _originalPost: (p.isRepost && p.originalPostId)
@@ -80,10 +91,12 @@ export async function GET(request, { params }) {
         }));
 
         return Response.json({
-            posts,
+            posts: enrichedPosts,
             totalLikes,
-            postCount: posts.length,
+            postCount: totalPosts,
             profile,
+            hasMore,
+            nextCursor: hasMore && enrichedPosts.length > 0 ? enrichedPosts[enrichedPosts.length - 1].timeStamp : null,
         });
     } catch (error) {
         console.error(error);

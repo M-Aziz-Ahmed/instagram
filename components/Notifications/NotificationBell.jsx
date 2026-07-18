@@ -5,16 +5,9 @@ import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import UserBadges from "@/components/shared/UserBadges";
-import { playNotificationSound, initAudio, toggleNotificationSound, isSoundEnabled } from "@/utils/notificationSound";
 import { getActiveChat } from "@/utils/activeChat";
-
-function timeAgo(date) {
-    const diff = (Date.now() - new Date(date)) / 1000;
-    if (diff < 60)    return `${Math.floor(diff)}s`;
-    if (diff < 3600)  return `${Math.floor(diff / 60)}m`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-    return new Date(date).toLocaleDateString([], { month: "short", day: "numeric" });
-}
+import { playNotificationSound, initAudio } from "@/utils/notificationSound";
+import { timeAgo } from "@/utils/timeAgo";
 
 const TYPE_LABEL = {
     like:    "liked your post",
@@ -84,10 +77,11 @@ export default function NotificationBell({ onNavigate }) {
     }, [user]);
 
     useEffect(() => {
-        const id = setInterval(fetchNotifs, 15000);
+        const interval = open ? 15000 : 60000;
+        const id = setInterval(fetchNotifs, interval);
         const init = setTimeout(fetchNotifs, 0);
         return () => { clearInterval(id); clearTimeout(init); };
-    }, [fetchNotifs]);
+    }, [fetchNotifs, open]);
 
     useEffect(() => {
         const handler = (e) => {
@@ -131,7 +125,7 @@ export default function NotificationBell({ onNavigate }) {
             <button
                 onClick={handleOpen}
                 aria-label="Notifications"
-                className="relative p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="relative p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center animate-press"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                     strokeWidth={1.8} stroke="currentColor" className="w-6 h-6">
@@ -146,7 +140,7 @@ export default function NotificationBell({ onNavigate }) {
             </button>
 
             {open && (
-                <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] max-w-80 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] max-w-80 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden animate-slide-down">
                     <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
                         <span className="font-bold text-sm text-gray-900 dark:text-gray-100">Notifications</span>
                         <div className="flex items-center gap-2">

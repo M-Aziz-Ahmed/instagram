@@ -155,3 +155,29 @@ main {
 .dark {
   color-scheme: dark;
 }
+
+/* Panel slide-down (notification bell, dropdowns) */
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-slide-down {
+  animation: slide-down 0.15s ease-out;
+}
+
+/* Subtle press feedback for buttons */
+.animate-press {
+  transition: transform 0.1s ease;
+}
+.animate-press:active {
+  transform: scale(0.96);
+}
+
+/* Fade-up for content appearing */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 0.2s ease-out;
+}

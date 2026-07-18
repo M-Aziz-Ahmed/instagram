@@ -20,6 +20,7 @@ export async function GET(request) {
 
         const stories = await Story.find(query)
             .sort({ createdAt: -1 })
+            .limit(100)
             .lean();
 
         // Group by sender, latest first

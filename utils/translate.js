@@ -20,20 +20,32 @@ export async function translateText(text, target = "en") {
 }
 
 export async function translateBatch(items, target = "en") {
-    const BATCH_DELAY_MS = 50;
     const results = {};
+    const toTranslate = items.filter(({ text }) => text?.trim());
 
-    await Promise.all(
-        items.map(async ({ id, text }) => {
-            try {
-                const translated = await translateText(text, target);
-                if (translated !== text) {
-                    results[id] = translated;
-                }
-            } catch {}
-            await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
-        })
-    );
+    if (toTranslate.length === 0) return results;
+
+    const allText = toTranslate.map(({ text }) => text.trim()).join("\n===SPLIT===\n");
+    try {
+        const translated = await translateText(allText, target);
+        const parts = translated.split("===SPLIT===");
+        toTranslate.forEach(({ id }, i) => {
+            const t = parts[i]?.trim();
+            if (t && t !== toTranslate[i].text) {
+                results[id] = t;
+            }
+        });
+    } catch {
+        // Fallback: translate individually (no delay)
+        await Promise.all(
+            toTranslate.map(async ({ id, text }) => {
+                try {
+                    const t = await translateText(text, target);
+                    if (t !== text) results[id] = t;
+                } catch {}
+            })
+        );
+    }
 
     return results;
 }

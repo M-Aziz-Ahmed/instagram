@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 import PostCard from "@/components/Feed/PostCard";
+import { PostSkeleton } from "@/components/shared/Skeleton";
 import { useSidebar } from "@/context/SidebarContext";
 
 export default function BookmarksClient() {
@@ -20,12 +21,9 @@ export default function BookmarksClient() {
     const fetchBookmarks = useCallback(async () => {
         if (!user?.bookmarks?.length) { setLoading(false); return; }
         try {
-            const results = await Promise.all(
-                user.bookmarks.map((id) =>
-                    fetch(`/api/posts/${id}`).then((r) => r.ok ? r.json() : null).catch(() => null)
-                )
-            );
-            setPosts(results.filter(Boolean));
+            const ids = user.bookmarks.join(",");
+            const res = await fetch(`/api/posts/bookmarks?ids=${encodeURIComponent(ids)}`);
+            if (res.ok) setPosts(await res.json());
         } catch { /* silent */ }
         setLoading(false);
     }, [user?.bookmarks]);
@@ -59,8 +57,10 @@ export default function BookmarksClient() {
 
             <main className="max-w-2xl mx-auto px-4 py-6">
                 {loading ? (
-                    <div className="flex justify-center py-20">
-                        <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
+                    <div>
+                        <PostSkeleton />
+                        <PostSkeleton />
+                        <PostSkeleton />
                     </div>
                 ) : posts.length === 0 ? (
                     <div className="flex flex-col items-center py-20 text-gray-400 dark:text-gray-500 select-none">
@@ -75,7 +75,7 @@ export default function BookmarksClient() {
                             <PostCard
                                 key={p._id}
                                 post={p}
-                                onDeleted={fetchBookmarks}
+                                onDelete={fetchBookmarks}
                                 onHashtag={(tag) => { window.location.href = `/?tag=${tag}`; }}
                             />
                         ))}

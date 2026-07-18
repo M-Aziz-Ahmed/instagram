@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 import PostCard from "./PostCard";
+import { PostSkeleton } from "@/components/shared/Skeleton";
 
 export default function PostDetailClient({ postId }) {
     const { user, ready } = useUser();
@@ -27,8 +28,24 @@ export default function PostDetailClient({ postId }) {
 
     if (loading) {
         return (
-            <div className="min-h-dvh bg-white dark:bg-gray-950 flex items-center justify-center">
-                <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
+            <div className="min-h-dvh bg-white dark:bg-gray-950">
+                <header className="sticky top-0 z-20 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-200 dark:border-gray-800 safe-top">
+                    <div className="max-w-2xl mx-auto px-4 h-12 sm:h-14 flex items-center gap-3">
+                        <button
+                            onClick={() => router.back()}
+                            aria-label="Go back"
+                            className="p-2 -ml-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                            </svg>
+                        </button>
+                        <span className="font-bold text-sm text-gray-900 dark:text-gray-100">Post</span>
+                    </div>
+                </header>
+                <main className="max-w-2xl mx-auto">
+                    <PostSkeleton />
+                </main>
             </div>
         );
     }

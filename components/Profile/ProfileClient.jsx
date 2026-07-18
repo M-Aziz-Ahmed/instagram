@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import PostCard from "@/components/Feed/PostCard";
 import UserBadges from "@/components/shared/UserBadges";
+import { ProfileSkeleton } from "@/components/shared/Skeleton";
 import FollowButton from "@/components/shared/FollowButton";
 import ImageLightbox from "@/components/shared/ImageLightbox";
 import EditProfileModal from "@/components/Auth/EditProfileModal";
@@ -167,6 +168,10 @@ export default function ProfileClient({ username }) {
         finally { setLoading(false); }
     }, [username]);
 
+    const handleDeletePost = useCallback((postId) => {
+        setData((prev) => prev ? { ...prev, posts: prev.posts.filter((p) => p._id !== postId) } : prev);
+    }, []);
+
     useEffect(() => { fetchProfile(); }, [fetchProfile]);
 
     const handleFollowToggle = useCallback(({ followersCount, followingCount }) => {
@@ -234,9 +239,7 @@ export default function ProfileClient({ username }) {
 
             <main className="max-w-2xl mx-auto px-4 py-6">
                 {loading ? (
-                    <div className="flex justify-center py-20">
-                        <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
-                    </div>
+                    <ProfileSkeleton />
                 ) : (
                     <>
                         {/* Profile header */}
@@ -339,7 +342,7 @@ export default function ProfileClient({ username }) {
                                     <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">All Posts</p>
                                     <div className="border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
                                         {data.posts.map((p) => (
-                                            <PostCard key={p._id} post={p} onDeleted={fetchProfile}
+                                            <PostCard key={p._id} post={p} onDelete={handleDeletePost}
                                                 onHashtag={(tag) => { router.push(`/?tag=${tag}`); }} />
                                         ))}
                                     </div>
@@ -362,7 +365,7 @@ export default function ProfileClient({ username }) {
                                 </svg>
                             </button>
                         </div>
-                        <PostCard post={expandedPost} onDeleted={() => { setExpanded(null); fetchProfile(); }}
+                        <PostCard post={expandedPost} onDelete={(id) => { setExpanded(null); handleDeletePost(id); }}
                             onHashtag={(tag) => { setExpanded(null); router.push(`/?tag=${tag}`); }} />
                     </div>
                 </div>
