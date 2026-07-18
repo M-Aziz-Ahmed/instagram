@@ -3,40 +3,31 @@
 import { useEffect, useRef, useState } from "react";
 
 function AdsterraAd({ code }) {
-    const containerRef = useRef(null);
+    const iframeRef = useRef(null);
 
     useEffect(() => {
-        if (!containerRef.current) return;
-        const container = containerRef.current;
-        const adZone = container.querySelector(".ad-zone");
-        if (!adZone) return;
-        const created = [];
+        const iframe = iframeRef.current;
+        if (!iframe) return;
 
-        const frag = document.createRange().createContextualFragment(code);
-        adZone.appendChild(frag);
-
-        adZone.querySelectorAll("script").forEach((old) => {
-            const s = document.createElement("script");
-            if (old.src) s.src = old.src;
-            else s.textContent = old.textContent;
-            document.body.appendChild(s);
-            created.push(s);
-            old.remove();
-        });
-
-        return () => {
-            created.forEach((s) => s.remove());
-            adZone.innerHTML = "";
-        };
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
+        doc.open();
+        doc.write(`<!DOCTYPE html><html><head><style>*{margin:0;padding:0;border:0;}</style></head><body>${code}</body></html>`);
+        doc.close();
     }, [code]);
 
     return (
-        <div
-            ref={containerRef}
-            className="border-b border-gray-200 dark:border-gray-800 px-4 py-3 text-center"
-        >
+        <div className="border-b border-gray-200 dark:border-gray-800 px-4 py-3 text-center">
             <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-medium">Sponsored</span>
-            <div className="ad-zone relative flex justify-center items-center mt-2 min-h-[250px]" />
+            <div className="flex justify-center mt-2">
+                <iframe
+                    ref={iframeRef}
+                    width="300"
+                    height="250"
+                    className="border-0"
+                    loading="lazy"
+                    title="Sponsored"
+                />
+            </div>
         </div>
     );
 }
