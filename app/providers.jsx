@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/context/ThemeContext";
 import { ToastProvider } from "@/context/ToastContext";
 import { SidebarProvider } from "@/context/SidebarContext";
 import { VoiceChatProvider } from "@/context/VoiceChatContext";
+import CallWrapper from "@/components/CallWrapper";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import OnlineStatusTracker from "@/components/OnlineStatusTracker";
 import PushNotificationManager from "@/components/PushNotificationManager";
@@ -59,7 +60,9 @@ export default function Providers({ children }) {
                             <ErrorBoundary>
                                 <OnlineStatusTracker />
                                 <PushNotificationManager />
-                                {children}
+                                <CallWrapper>
+                                    {children}
+                                </CallWrapper>
                             </ErrorBoundary>
                         </ToastProvider>
                     </VoiceChatProvider>

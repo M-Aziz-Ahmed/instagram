@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
+import { useCall } from "@/context/CallContext";
 import Chat from "./Chat";
 import Input from "./Input";
 import ProfileSetup from "@/components/ProfileSetup";
@@ -10,6 +11,7 @@ import { useOnlineStatus, getLastSeenText } from "@/utils/useOnlineStatus";
 
 export default function ChatBox({ onBack, recipient, recipientUser }) {
     const { user, ready } = useUser();
+    const { startCall } = useCall();
     const [pendingMessage, setPendingMessage] = useState(null);
     const [replyingTo, setReplyingTo]         = useState(null);
     const [editingProfile, setEditingProfile] = useState(false);
@@ -140,7 +142,11 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
                         </svg>
                     </button>
 
-                    <button aria-label="Video call" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center">
+                    <button
+                        onClick={() => recipient && startCall(recipient, "video")}
+                        aria-label="Video call"
+                        className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                    >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                             strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 md:w-6 md:h-6">
                             <path strokeLinecap="round" strokeLinejoin="round"

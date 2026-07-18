@@ -1282,6 +1282,79 @@ io.on("connection", async (socket) => {
         }
     });
 
+    // ── Call Signaling (1:1 + Group) ──────────────────────────────
+    // Map<callId, Set<socketId>>
+    if (!io._callRooms) io._callRooms = new Map();
+
+    socket.on("call:initiate", async (data) => {
+        // data: { callId, caller, recipients: string[], callType: "audio"|"video", groupId?: string }
+        const { callId, caller, recipients, callType, groupId } = data;
+        if (!callId || !caller) return;
+        // Track this call room
+        io._callRooms.set(callId, new Set([socket.id]));
+        // Join the socket into the call room
+        socket.join(`call:${callId}`);
+        socket.data.username = caller;
+        // Notify each recipient
+        recipients.forEach(r => {
+            io.to(r).emit("call:incoming", { callId, caller, callType, groupId, recipients });
+        });
+        // Persist call session
+        try {
+            const CallSession = require("../models/callSession").default || require("../models/callSession");
+            await CallSession.create({ callId, type: groupId ? "group" : "1:1", groupId: groupId || null, caller, recipients, callType, status: "ringing" });
+        } catch (e) { /* model may not exist on live server */ }
+    });
+
+    socket.on("call:accept", (data) => {
+        // data: { callId, username }
+        const { callId } = data;
+        if (!callId) return;
+        socket.join(`call:${callId}`);
+        const room = io._callRooms.get(callId);
+        if (room) room.add(socket.id);
+        // Notify caller that this person accepted
+        io.to(`call:${callId}`).emit("call:accepted", { callId, username: socket.data.username });
+    });
+
+    socket.on("call:reject", (data) => {
+        const { callId } = data;
+        if (!callId) return;
+        io.to(`call:${callId}`).emit("call:rejected", { callId, username: socket.data.username });
+        try {
+            const CallSession = require("../models/callSession").default || require("../models/callSession");
+            CallSession.updateOne({ callId }, { status: "declined", endedAt: new Date() }).catch(() => {});
+        } catch (e) {}
+    });
+
+    socket.on("call:end", (data) => {
+        const { callId } = data;
+        if (!callId) return;
+        io.to(`call:${callId}`).emit("call:ended", { callId, username: socket.data.username });
+        io._callRooms?.delete(callId);
+        try {
+            const CallSession = require("../models/callSession").default || require("../models/callSession");
+            CallSession.updateOne({ callId }, { status: "ended", endedAt: new Date() }).catch(() => {});
+        } catch (e) {}
+    });
+
+    socket.on("call:signal", (data) => {
+        // data: { callId, to, signal }
+        const { callId, to, signal } = data;
+        if (!callId || !to || !signal) return;
+        io.to(to).emit("call:signal", { callId, from: socket.data.username, signal });
+    });
+
+    socket.on("call:mute", (data) => {
+        const { callId, muted, deafened } = data;
+        io.to(`call:${callId}`).emit("call:mute", { callId, username: socket.data.username, muted, deafened });
+    });
+
+    socket.on("call:video-toggle", (data) => {
+        const { callId, videoOn } = data;
+        io.to(`call:${callId}`).emit("call:video-toggle", { callId, username: socket.data.username, videoOn });
+    });
+
     socket.on("disconnect", async () => {
         const { streamId, username } = socket.data || {};
 
@@ -1294,6 +1367,23 @@ io.on("connection", async (socket) => {
                 broadcastChannelParticipants(socket.data.voiceChannel);
                 broadcastChannelList();
                 io.to(`voice:${socket.data.voiceChannel}`).emit("voice:user-left", { username });
+            }
+        }
+
+        // Clean up call rooms on disconnect
+        if (io._callRooms) {
+            for (const [callId, sockets] of io._callRooms) {
+                if (sockets.has(socket.id)) {
+                    sockets.delete(socket.id);
+                    io.to(`call:${callId}`).emit("call:peer-left", { callId, username: socket.data.username });
+                    if (sockets.size === 0) {
+                        io._callRooms.delete(callId);
+                        try {
+                            const CallSession = require("../models/callSession").default || require("../models/callSession");
+                            CallSession.updateOne({ callId }, { status: "ended", endedAt: new Date() }).catch(() => {});
+                        } catch (e) {}
+                    }
+                }
             }
         }
 
