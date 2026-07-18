@@ -13,8 +13,8 @@ const LiveStream = require("./models/liveStream");
 const ChessGame = require("./models/chessGame");
 const { sendPushNotification } = require("./push");
 
-const PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, k: 0, q: 900 };
-const PIECE_SQUARE_TABLES = {
+const PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+const PST = {
     p: [
          0,  0,  0,  0,  0,  0,  0,  0,
         50, 50, 50, 50, 50, 50, 50, 50,
@@ -77,71 +77,97 @@ const PIECE_SQUARE_TABLES = {
     ],
 };
 
-function evaluateBoard(chess) {
+function evaluate(chess) {
     const board = chess.board();
     let score = 0;
+    let wMat = 0, bMat = 0;
 
     for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
             const p = board[r][c];
             if (!p) continue;
             const val = PIECE_VALUES[p.type] || 0;
-            const sqIdx = p.color === "w" ? (7 - r) * 8 + c : r * 8 + (7 - c);
-            const table = PIECE_SQUARE_TABLES[p.type];
-            const posBonus = table ? table[sqIdx] : 0;
-            const sign = p.color === "w" ? 1 : -1;
-            score += sign * (val + posBonus);
+            const sidx = p.color === "w" ? (7 - r) * 8 + c : r * 8 + (7 - c);
+            const pst = PST[p.type];
+            const pos = pst ? pst[sidx] : 0;
+            if (p.color === "w") {
+                score += val + pos;
+                wMat += val;
+            } else {
+                score -= val + pos;
+                bMat += val;
+            }
         }
     }
 
-    // Bonus for piece development (knights/bishops out early)
-    const totalMoves = chess.moveNumber();
+    // King safety in endgame
+    if (wMat < 1500 || bMat < 1500) {
+        const wKing = findKing(board, "w");
+        const bKing = findKing(board, "b");
+        if (wKing) score += (7 - Math.abs(wKing[0] - 3.5)) * 5;
+        if (bKing) score -= (7 - Math.abs(bKing[0] - 3.5)) * 5;
+    }
+
     return score;
 }
 
-function minimax(chess, depth, alpha, beta, isMaximizing, startTime, timeLimitMs) {
-    if (Date.now() - startTime > timeLimitMs) return null;
+function findKing(board, color) {
+    for (let r = 0; r < 8; r++)
+        for (let c = 0; c < 8; c++)
+            if (board[r][c]?.type === "k" && board[r][c]?.color === color)
+                return [r, c];
+    return null;
+}
 
+function orderMoves(chess, moves) {
+    return moves.sort((a, b) => {
+        let sa = 0, sb = 0;
+        if (a.captured) sa += PIECE_VALUES[a.captured] * 10 - PIECE_VALUES[a.piece];
+        if (b.captured) sb += PIECE_VALUES[b.captured] * 10 - PIECE_VALUES[b.piece];
+        if (a.promotion) sa += 900;
+        if (b.promotion) sb += 900;
+        if (a.san.includes("#")) sa += 100000;
+        if (b.san.includes("#")) sb += 100000;
+        if (a.san.includes("+")) sa += 50;
+        if (b.san.includes("+")) sb += 50;
+        return sb - sa;
+    });
+}
+
+function alphaBeta(chess, depth, alpha, beta, isMax, startTime, limitMs) {
+    if (Date.now() - startTime > limitMs) return null;
     if (depth === 0 || chess.isGameOver()) {
-        if (chess.isCheckmate()) return isMaximizing ? -100000 + depth : 100000 - depth;
+        if (chess.isCheckmate()) return isMax ? -100000 + depth : 100000 - depth;
         if (chess.isDraw() || chess.isStalemate()) return 0;
-        return evaluateBoard(chess);
+        return evaluate(chess);
     }
 
-    const moves = chess.moves({ verbose: true });
-    moves.sort((a, b) => {
-        let scoreA = 0, scoreB = 0;
-        if (a.captured) scoreA += PIECE_VALUES[a.captured] - (PIECE_VALUES[a.piece] * 0.1);
-        if (b.captured) scoreB += PIECE_VALUES[b.captured] - (PIECE_VALUES[b.piece] * 0.1);
-        if (a.promotion) scoreA += 800;
-        if (b.promotion) scoreB += 800;
-        return scoreB - scoreA;
-    });
+    const moves = orderMoves(chess, chess.moves({ verbose: true }));
 
-    if (isMaximizing) {
-        let maxEval = -Infinity;
-        for (const move of moves) {
-            chess.move(move.san);
-            const result = minimax(chess, depth - 1, alpha, beta, false, startTime, timeLimitMs);
+    if (isMax) {
+        let best = -Infinity;
+        for (const m of moves) {
+            chess.move(m.san);
+            const v = alphaBeta(chess, depth - 1, alpha, beta, false, startTime, limitMs);
             chess.undo();
-            if (result === null) return null;
-            maxEval = Math.max(maxEval, result);
-            alpha = Math.max(alpha, result);
+            if (v === null) return null;
+            if (v > best) best = v;
+            if (v > alpha) alpha = v;
             if (beta <= alpha) break;
         }
-        return maxEval;
+        return best;
     } else {
-        let minEval = Infinity;
-        for (const move of moves) {
-            chess.move(move.san);
-            const result = minimax(chess, depth - 1, alpha, beta, true, startTime, timeLimitMs);
+        let best = Infinity;
+        for (const m of moves) {
+            chess.move(m.san);
+            const v = alphaBeta(chess, depth - 1, alpha, beta, true, startTime, limitMs);
             chess.undo();
-            if (result === null) return null;
-            minEval = Math.min(minEval, result);
-            beta = Math.min(beta, result);
+            if (v === null) return null;
+            if (v < best) best = v;
+            if (v < beta) beta = v;
             if (beta <= alpha) break;
         }
-        return minEval;
+        return best;
     }
 }
 
@@ -150,32 +176,73 @@ function getAIMove(chess, difficulty) {
     if (!moves.length) return null;
 
     const clamped = Math.min(Math.max(difficulty || 10, 1), 20);
-    const searchDepth = Math.max(1, Math.round(clamped / 3));
-    const timeLimitMs = Math.max(200, clamped * 100);
-    const randomness = Math.max(0, 1 - clamped / 20);
+
+    // Map difficulty to search parameters
+    const configs = {
+        1:  { depth: 1, time: 100,  noise: 200 },
+        4:  { depth: 2, time: 200,  noise: 100 },
+        8:  { depth: 3, time: 500,  noise: 50 },
+        12: { depth: 4, time: 1000, noise: 20 },
+        16: { depth: 5, time: 2000, noise: 5 },
+        20: { depth: 8, time: 4000, noise: 0 },
+    };
+
+    // Interpolate
+    const keys = Object.keys(configs).map(Number).sort((a, b) => a - b);
+    let cfg = configs[keys[0]];
+    for (let i = 0; i < keys.length - 1; i++) {
+        if (clamped >= keys[i] && clamped <= keys[i + 1]) {
+            const t = (clamped - keys[i]) / (keys[i + 1] - keys[i]);
+            const lo = configs[keys[i]];
+            const hi = configs[keys[i + 1]];
+            cfg = {
+                depth: Math.round(lo.depth + (hi.depth - lo.depth) * t),
+                time:  Math.round(lo.time + (hi.time - lo.time) * t),
+                noise: Math.round(lo.noise + (hi.noise - lo.noise) * (1 - t)),
+            };
+            break;
+        }
+    }
+    if (clamped >= keys[keys.length - 1]) cfg = configs[keys[keys.length - 1]];
+
+    const { depth, time: limitMs, noise } = cfg;
+    const startTime = Date.now();
+    const isMax = chess.turn() === "w";
 
     let bestMove = null;
     let bestScore = -Infinity;
-    const startTime = Date.now();
 
-    const isMaximizing = chess.turn() === "w";
-
-    for (const move of moves) {
-        chess.move(move.san);
-        const result = minimax(chess, searchDepth - 1, -Infinity, Infinity, !isMaximizing, startTime, timeLimitMs);
-        chess.undo();
-        if (result === null) break;
-
-        const adjustedScore = result + (Math.random() * randomness * 50);
-        if (adjustedScore > bestScore) {
-            bestScore = adjustedScore;
-            bestMove = move;
+    // Iterative deepening
+    for (let d = 1; d <= depth; d++) {
+        let found = false;
+        for (const move of moves) {
+            if (Date.now() - startTime > limitMs) break;
+            chess.move(move.san);
+            const v = alphaBeta(chess, d - 1, -Infinity, Infinity, !isMax, startTime, limitMs);
+            chess.undo();
+            if (v === null) continue;
+            found = true;
+            const adjusted = v + (Math.random() - 0.5) * noise;
+            if (adjusted > bestScore || !bestMove) {
+                bestScore = adjusted;
+                bestMove = move;
+            }
         }
+        if (!found) break;
     }
 
     if (!bestMove) {
-        const randomIdx = Math.floor(Math.random() * moves.length);
-        return moves[randomIdx];
+        // Fallback: pick highest material gain
+        const scored = moves.map(m => {
+            let s = Math.random();
+            if (m.captured) s += PIECE_VALUES[m.captured] * 10 - (PIECE_VALUES[m.piece] || 0);
+            if (m.promotion) s += 900;
+            if (m.san.includes("#")) s += 100000;
+            if (m.san.includes("+")) s += 50;
+            return { move: m, score: s };
+        });
+        scored.sort((a, b) => b.score - a.score);
+        bestMove = scored[0].move;
     }
 
     return bestMove;
