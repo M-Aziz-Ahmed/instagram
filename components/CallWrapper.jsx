@@ -20,15 +20,16 @@ function CallSocketProvider({ children }) {
                 const { io } = await import("socket.io-client");
                 if (cancelled) return;
                 const wsUrl = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "http://localhost:3001";
-                sock = io(wsUrl, {
+                sock = io({
                     query: { username: user.username },
-                    transports: ["polling", "websocket"],
-                    upgrade: true,
+                    path: "/socket.io",
+                    transports: ["polling"],
+                    upgrade: false,
                     rememberUpgrade: false,
-                    reconnectionAttempts: 15,
+                    reconnectionAttempts: 30,
                     reconnectionDelay: 1000,
-                    reconnectionDelayMax: 10000,
-                    timeout: 20000,
+                    reconnectionDelayMax: 15000,
+                    timeout: 30000,
                 });
                 sock.on("connect", () => {
                     if (!cancelled) setSocket(sock);

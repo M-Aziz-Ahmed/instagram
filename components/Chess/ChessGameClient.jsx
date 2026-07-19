@@ -286,14 +286,15 @@ export default function ChessGameClient({ gameId }) {
     }, [isReviewing, reviewIndex, fenHistory]);
 
     useEffect(() => {
-        if (!LIVE_SERVER || !user?.username) return;
-        const s = io(LIVE_SERVER, {
+        if (!user?.username) return;
+        const s = io({
             query: { username: user.username },
-            transports: ["polling", "websocket"],
-            upgrade: true,
+            path: "/socket.io",
+            transports: ["polling"],
+            upgrade: false,
             rememberUpgrade: false,
-            reconnectionAttempts: 10,
-            timeout: 20000,
+            reconnectionAttempts: 30,
+            timeout: 30000,
             withCredentials: true,
         });
         socketRef.current = s;
@@ -382,7 +383,7 @@ export default function ChessGameClient({ gameId }) {
     useEffect(() => {
         async function fetchGame() {
             try {
-                const res = await fetch(`${LIVE_SERVER}/api/chess/games/${gameId}`);
+                    const res = await fetch(`/api/chess/games/${gameId}`);
                 if (res.ok) {
                     const data = await res.json();
                     setGame(data.game);

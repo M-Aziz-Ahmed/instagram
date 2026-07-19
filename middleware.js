@@ -45,7 +45,7 @@ function isApiPath(pathname) {
 export async function middleware(request) {
     const { pathname } = request.nextUrl;
 
-    if (isStaticPath(pathname) || isPublicPath(pathname)) {
+    if (isStaticPath(pathname) || isPublicPath(pathname) || pathname.startsWith("/socket.io")) {
         return NextResponse.next();
     }
 

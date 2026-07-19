@@ -13,6 +13,10 @@ const nextConfig = {
     async rewrites() {
         return [
             {
+                source: "/socket.io",
+                destination: "https://anontweet.duckdns.org:3001/socket.io",
+            },
+            {
                 source: "/api/:path*",
                 destination: "https://anontweet.duckdns.org:3001/api/:path*",
             },

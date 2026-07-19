@@ -291,14 +291,15 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
             socketRef.current.disconnect();
             socketRef.current = null;
         }
-        if (!LIVE_SERVER || !sid || !username) return null;
+        if (!sid || !username) return null;
 
-        const socket = io(LIVE_SERVER, {
-            transports: ["polling", "websocket"],
-            upgrade: true,
+        const socket = io({
+            path: "/socket.io",
+            transports: ["polling"],
+            upgrade: false,
             rememberUpgrade: false,
             reconnection: true,
-            reconnectionAttempts: 10,
+            reconnectionAttempts: 30,
             reconnectionDelay: 1000,
             timeout: 20000,
         });
@@ -401,7 +402,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
         }
 
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/streams`, {
+            const res = await fetch(`/api/streams`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: user?.username, title: "Live Stream" }),
@@ -663,8 +664,8 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
     const endStream = async () => {
         const sock = socketRef.current;
         const s = stateRef.current;
-        if (s.isHost && s.streamId && LIVE_SERVER) {
-            await fetch(`${LIVE_SERVER}/api/streams/${s.streamId}`, {
+        if (s.isHost && s.streamId) {
+            await fetch(`/api/streams/${s.streamId}`, {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: s.user?.username }),

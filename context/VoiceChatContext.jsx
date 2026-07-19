@@ -19,16 +19,17 @@ export function VoiceChatProvider({ children }) {
     const [voiceOpen, setVoiceOpen] = useState(false);
 
     useEffect(() => {
-        if (!LIVE_SERVER || !user?.username) return;
-        const s = io(LIVE_SERVER, {
+        if (!user?.username) return;
+        const s = io({
             query: { username: user.username },
-            transports: ["polling", "websocket"],
-            upgrade: true,
+            path: "/socket.io",
+            transports: ["polling"],
+            upgrade: false,
             rememberUpgrade: false,
-            reconnectionAttempts: 20,
+            reconnectionAttempts: 30,
             reconnectionDelay: 1000,
-            reconnectionDelayMax: 10000,
-            timeout: 20000,
+            reconnectionDelayMax: 15000,
+            timeout: 30000,
             withCredentials: true,
         });
         setSocket(s);

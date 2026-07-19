@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ChessProfileHistory from "./ChessProfileHistory";
 
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
+const API_BASE = "/api";
 
 const TIME_CONTROLS = [
     { label: "1 min", initial: 60, increment: 0, icon: "⚡" },
@@ -52,7 +52,7 @@ export default function ChessLobbyClient() {
 
     const fetchGames = useCallback(async () => {
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/chess/games?status=waiting`);
+            const res = await fetch(`${API_BASE}/chess/games?status=waiting`);
             if (res.ok) {
                 const data = await res.json();
                 setGames(data.games || []);
@@ -66,7 +66,7 @@ export default function ChessLobbyClient() {
     const fetchMyGames = useCallback(async () => {
         if (!user?.username) return;
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/chess/games?status=active&username=${encodeURIComponent(user.username)}`);
+            const res = await fetch(`${API_BASE}/chess/games?status=active&username=${encodeURIComponent(user.username)}`);
             if (res.ok) {
                 const data = await res.json();
                 setMyGames(data.games || []);
@@ -88,7 +88,7 @@ export default function ChessLobbyClient() {
         if (!user) return;
         setCreating(true);
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/chess/games`, {
+            const res = await fetch(`${API_BASE}/chess/games`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -113,7 +113,7 @@ export default function ChessLobbyClient() {
     const handleJoinGame = async (gameId) => {
         if (!user) return;
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/chess/games/${gameId}/join`, {
+            const res = await fetch(`${API_BASE}/chess/games/${gameId}/join`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
