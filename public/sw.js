@@ -1,5 +1,5 @@
 // Service Worker for PWA
-const CACHE_NAME = 'anonfeed-v3';
+const CACHE_NAME = 'anonfeed-v4';
 const OFFLINE_URL = '/offline.html';
 
 // Install event - cache essential assets
@@ -110,6 +110,11 @@ self.addEventListener('notificationclick', (event) => {
 self.addEventListener('fetch', (event) => {
   // Skip cross-origin requests
   if (!event.request.url.startsWith(self.location.origin)) {
+    return;
+  }
+
+  // Only cache GET requests (Cache API does not support POST/PATCH/etc.)
+  if (event.request.method !== 'GET') {
     return;
   }
 

@@ -64,10 +64,54 @@ router.get("/active", async (req, res) => {
     }
 });
 
-// POST /active (update)
+// POST /active (update) — supports both /active?username=X and /:username/active
 router.post("/active", optionalAuth, async (req, res) => {
     try {
-        const { username } = req.query;
+        const username = req.params.username || req.query.username;
+        const { isOnline } = req.body || {};
+        if (!username) return res.status(400).json({ error: "Username required" });
+
+        const update = { lastActive: new Date() };
+        if (typeof isOnline === "boolean") update.isOnline = isOnline;
+
+        const user = await User.findOneAndUpdate(
+            { username },
+            { $set: update },
+            { new: true, maxTimeMS: 5000 }
+        ).select("username lastActive isOnline").lean();
+
+        if (!user) return res.status(404).json({ error: "User not found" });
+        return res.json({ ok: true, lastActive: user.lastActive, isOnline: user.isOnline });
+    } catch (error) {
+        console.error("Failed to update user activity:", error);
+        return res.status(500).json({ error: "Failed to update activity" });
+    }
+});
+
+// GET /:username/active
+router.get("/:username/active", async (req, res) => {
+    try {
+        const { username } = req.params;
+        if (!username) return res.status(400).json({ error: "Username required" });
+
+        const user = await User.findOne({ username })
+            .select("username lastActive isOnline").lean().maxTimeMS(5000);
+
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        const isActive = user.isOnline && new Date(user.lastActive) > fiveMinutesAgo;
+        return res.json({ username: user.username, isOnline: isActive, lastActive: user.lastActive });
+    } catch (error) {
+        console.error("Failed to get user activity:", error);
+        return res.status(500).json({ error: "Failed to get activity" });
+    }
+});
+
+// POST /:username/active
+router.post("/:username/active", optionalAuth, async (req, res) => {
+    try {
+        const { username } = req.params;
         const { isOnline } = req.body || {};
         if (!username) return res.status(400).json({ error: "Username required" });
 
