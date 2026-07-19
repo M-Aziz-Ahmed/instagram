@@ -221,13 +221,17 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
     const activeChannelRef = useRef(null);
     const speakingThrottleRef = useRef(0);
     const lastJoinedChannelRef = useRef(null);
+    const remoteScreenSharerRef = useRef(null);
     useEffect(() => { socketRef.current = socket; }, [socket]);
     useEffect(() => { userRef.current = user; }, [user]);
     useEffect(() => { activeChannelRef.current = activeChannel; }, [activeChannel]);
+    useEffect(() => { remoteScreenSharerRef.current = remoteScreenSharer; }, [remoteScreenSharer]);
 
+    const notifTimerRef = useRef(null);
     const showNotif = useCallback((msg) => {
+        if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
         setNotification(msg);
-        setTimeout(() => setNotification(null), 3000);
+        notifTimerRef.current = setTimeout(() => setNotification(null), 3000);
     }, []);
 
     const cleanup = useCallback(() => {
@@ -289,7 +293,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             const el = audioElementsRef.current.get(username);
             if (el) { el.srcObject = null; el.remove(); }
             audioElementsRef.current.delete(username);
-            if (remoteScreenSharer === username) {
+            if (remoteScreenSharerRef.current === username) {
                 setRemoteScreenSharer(null);
                 setRemoteScreenStream(null);
             }
@@ -433,6 +437,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             if (!ch) return;
 
             try {
+                localStreamRef.current?.getTracks().forEach((t) => t.stop());
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
                 localStreamRef.current = stream;
                 startSpeakingDetection(stream);
@@ -531,6 +536,8 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
 
     const startSpeakingDetection = useCallback((stream) => {
         try {
+            if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+            if (audioCtxRef.current) { try { audioCtxRef.current.close(); } catch {} }
             audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
             const source = audioCtxRef.current.createMediaStreamSource(stream);
             analyserRef.current = audioCtxRef.current.createAnalyser();
@@ -636,6 +643,20 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                 }
             };
 
+            pc.onnegotiationneeded = async () => {
+                try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    s.emit("voice:signal", {
+                        to: p.socketId,
+                        from: s.id,
+                        fromUsername: u.username,
+                        type: "offer",
+                        data: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+                    });
+                } catch {}
+            };
+
             try {
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
@@ -718,6 +739,8 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = false });
             audioElementsRef.current.forEach((el) => { el.muted = true; });
         } else {
+            setMuted(false);
+            localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true });
             audioElementsRef.current.forEach((el) => { el.muted = false; });
         }
         const s = socketRef.current;
@@ -787,7 +810,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                         }
                     }
                 });
-                s.emit("voice:screen-share", { channelId: activeChannelRef.current, sharing: false });
+                socketRef.current?.emit("voice:screen-share", { channelId: activeChannelRef.current, sharing: false });
             };
 
             pcsRef.current.forEach((pc) => {
@@ -1079,9 +1102,26 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                         <button
                             onClick={() => {
                                 if (pttListening) { setPttListening(false); return; }
-                                setPtt(!ptt);
-                                if (!ptt) { setMuted(true); localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = false; }); }
-                                else { setMuted(false); localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; }); }
+                                const newPtt = !ptt;
+                                setPtt(newPtt);
+                                if (newPtt) {
+                                    setMuted(true);
+                                    localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = false; });
+                                    const s = socketRef.current;
+                                    const ch = activeChannelRef.current;
+                                    if (s && ch) {
+                                        s.emit("voice:toggle-mute", { channelId: ch, muted: true });
+                                        s.emit("voice:speaking", { channelId: ch, speaking: false });
+                                    }
+                                } else {
+                                    setMuted(false);
+                                    localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
+                                    const s = socketRef.current;
+                                    const ch = activeChannelRef.current;
+                                    if (s && ch) {
+                                        s.emit("voice:toggle-mute", { channelId: ch, muted: false });
+                                    }
+                                }
                             }}
                             onContextMenu={(e) => { e.preventDefault(); if (ptt) setPttListening(true); }}
                             className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${

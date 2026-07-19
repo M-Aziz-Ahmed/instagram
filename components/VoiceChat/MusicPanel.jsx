@@ -77,11 +77,14 @@ function loadYtApi() {
     if (typeof window === "undefined") return Promise.resolve();
     if (ytApiReady) return Promise.resolve();
     if (ytApiPromise) return ytApiPromise;
-    ytApiPromise = new Promise((resolve) => {
+    ytApiPromise = new Promise((resolve, reject) => {
         const tag = document.createElement("script");
         tag.src = "https://www.youtube.com/iframe_api";
+        tag.onerror = () => reject(new Error("YouTube API failed to load"));
         document.head.appendChild(tag);
+        const prev = window.onYouTubeIframeAPIReady;
         window.onYouTubeIframeAPIReady = () => {
+            if (prev) prev();
             ytApiReady = true;
             resolve();
         };
@@ -103,6 +106,13 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
     const lastVideoRef = useRef(null);
     const syncIntervalRef = useRef(null);
     const musicStateRef = useRef(initialState);
+    const socketRef = useRef(socket);
+    const channelIdRef = useRef(channelId);
+    const userRef = useRef(user);
+
+    useEffect(() => { socketRef.current = socket; }, [socket]);
+    useEffect(() => { channelIdRef.current = channelId; }, [channelId]);
+    useEffect(() => { userRef.current = user; }, [user]);
 
     const isDJ = musicState?.dj === user?.username;
     const current = musicState?.current;
@@ -144,11 +154,10 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
                     iv_load_policy: 3,
                     modestbranding: 1,
                     rel: 0,
-                    origin: window.location.origin,
                 },
                 events: {
                     onReady: () => {
-                        playerRef.current = true;
+                        playerRef.current = ytPlayerRef.current;
                         setPlayerReady(true);
                     },
                     onStateChange: (e) => {
@@ -165,8 +174,11 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
                             }
                         }
                         if (e.data === window.YT.PlayerState.ENDED) {
-                            if (socket && channelId && musicStateRef.current?.dj === user?.username) {
-                                socket.emit("voice:music:skip", { channelId });
+                            const s = socketRef.current;
+                            const ch = channelIdRef.current;
+                            const u = userRef.current;
+                            if (s && ch && musicStateRef.current?.dj === u?.username) {
+                                s.emit("voice:music:skip", { channelId: ch });
                             }
                         }
                     },
@@ -313,6 +325,16 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
         socket.emit("voice:music:clear", { channelId });
     };
 
+    const volumeTimerRef = useRef(null);
+    const handleVolumeChange = useCallback((e) => {
+        const vol = parseInt(e.target.value) / 100;
+        try { ytPlayerRef.current?.setVolume?.(parseInt(e.target.value)); } catch {}
+        if (volumeTimerRef.current) clearTimeout(volumeTimerRef.current);
+        volumeTimerRef.current = setTimeout(() => {
+            socketRef.current?.emit("voice:music:volume", { channelId: channelIdRef.current, volume: vol });
+        }, 300);
+    }, []);
+
     if (!channelId) return null;
 
     return (
@@ -389,7 +411,7 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
                             max={100}
                             step={1}
                             value={Math.round((musicState?.volume ?? 0.7) * 100)}
-                            onChange={(e) => socket?.emit("voice:music:volume", { channelId, volume: parseInt(e.target.value) / 100 })}
+                            onChange={handleVolumeChange}
                             className="flex-1 h-1 accent-green-500"
                         />
                         <span className="text-[10px] text-gray-600 w-6 text-right">{Math.round((musicState?.volume ?? 0.7) * 100)}%</span>
@@ -452,7 +474,7 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
                         ) : !searching && query.trim() ? (
                             <p className="text-xs text-gray-500 text-center py-8">No results found</p>
                         ) : !searching ? (
-                            <div className="text-center py-8">
+                            <div className="text-center py-8 flex flex-col items-center">
                                 <MusicNoteIcon />
                                 <p className="text-xs text-gray-500 mt-2">Search for songs to add to the queue</p>
                             </div>
