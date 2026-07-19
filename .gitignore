@@ -43,3 +43,6 @@ live-server/node_modules/stockfish/bin/*.wasm
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# duckdns logs
+live-server/duckdns.log

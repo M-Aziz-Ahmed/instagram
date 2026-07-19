@@ -16,6 +16,7 @@ const PUBLIC_PATHS = [
     "/api/search",
     "/api/ads",
     "/api/trending",
+    "/api/hashtags",
 ];
 
 function isPublicPath(pathname) {
