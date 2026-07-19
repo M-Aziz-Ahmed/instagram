@@ -95,7 +95,7 @@ export default function BottomNav({ unreadCount = 0 }) {
     };
 
     return (
-        <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-t border-gray-200 dark:border-gray-800 safe-bottom">
+        <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-t border-gray-200 dark:border-gray-800 safe-bottom lg:hidden">
             <div className="flex items-center justify-around h-14 max-w-lg mx-auto">
                 {NAV_ITEMS.map(({ label, href, icon, desktopOnly }) => {
                     const targetHref = label === "Profile" ? profileHref : href;
