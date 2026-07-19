@@ -22,7 +22,7 @@ function CallSocketProvider({ children }) {
                 const wsUrl = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "http://localhost:3001";
                 sock = io({
                     query: { username: user.username },
-                    path: "/socket.io",
+                    path: "/api/sio",
                     transports: ["polling"],
                     upgrade: false,
                     rememberUpgrade: false,

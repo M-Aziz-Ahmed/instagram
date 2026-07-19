@@ -294,14 +294,14 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
         if (!sid || !username) return null;
 
         const socket = io({
-            path: "/socket.io",
+            path: "/api/sio",
             transports: ["polling"],
             upgrade: false,
             rememberUpgrade: false,
             reconnection: true,
             reconnectionAttempts: 30,
             reconnectionDelay: 1000,
-            timeout: 20000,
+            timeout: 30000,
         });
 
         socket.on("connect", () => {
@@ -402,7 +402,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
         }
 
         try {
-            const res = await fetch(`/api/streams`, {
+            const res = await fetch(`${LIVE_SERVER}/api/streams`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: user?.username, title: "Live Stream" }),
@@ -664,8 +664,8 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
     const endStream = async () => {
         const sock = socketRef.current;
         const s = stateRef.current;
-        if (s.isHost && s.streamId) {
-            await fetch(`/api/streams/${s.streamId}`, {
+        if (s.isHost && s.streamId && LIVE_SERVER) {
+            await fetch(`${LIVE_SERVER}/api/streams/${s.streamId}`, {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: s.user?.username }),

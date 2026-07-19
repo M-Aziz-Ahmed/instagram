@@ -17,6 +17,7 @@ const PUBLIC_PATHS = [
     "/api/ads",
     "/api/trending",
     "/api/hashtags",
+    "/api/sio",
 ];
 
 function isPublicPath(pathname) {
@@ -45,7 +46,7 @@ function isApiPath(pathname) {
 export async function middleware(request) {
     const { pathname } = request.nextUrl;
 
-    if (isStaticPath(pathname) || isPublicPath(pathname) || pathname.startsWith("/socket.io")) {
+    if (isStaticPath(pathname) || isPublicPath(pathname)) {
         return NextResponse.next();
     }
 

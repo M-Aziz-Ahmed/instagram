@@ -19,10 +19,10 @@ export function VoiceChatProvider({ children }) {
     const [voiceOpen, setVoiceOpen] = useState(false);
 
     useEffect(() => {
-        if (!user?.username) return;
+        if (!LIVE_SERVER || !user?.username) return;
         const s = io({
             query: { username: user.username },
-            path: "/socket.io",
+            path: "/api/sio",
             transports: ["polling"],
             upgrade: false,
             rememberUpgrade: false,
