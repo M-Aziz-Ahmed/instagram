@@ -204,6 +204,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
 
     const localStreamRef  = useRef(null);
     const screenStreamRef = useRef(null);
+    const remoteVideoRef = useRef(null);
     const peerStreamsRef  = useRef(new Map());
     const pcsRef         = useRef(new Map());
     const audioElementsRef = useRef(new Map());
@@ -256,6 +257,9 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
     }, []);
 
     useEffect(() => () => cleanup(), [cleanup]);
+
+    // When panel closes, keep the user in the channel but hide the UI
+    // Voice:leave only happens on explicit disconnect (leaveChannel button)
 
     // Socket event listeners
     useEffect(() => {
@@ -803,6 +807,13 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         };
     }, [ptt, pttKey, activeChannel]);
 
+    // Sync remote screen share video element with stream
+    useEffect(() => {
+        if (remoteVideoRef.current && remoteScreenStream) {
+            remoteVideoRef.current.srcObject = remoteScreenStream;
+        }
+    }, [remoteScreenStream]);
+
     const handleCreateChannel = useCallback(() => {
         const s = socketRef.current;
         if (!s || !newChannelName.trim()) return;
@@ -818,10 +829,8 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         s.emit("voice:delete-channel", { channelId: channel.id });
     }, []);
 
-    if (!isOpen) return null;
-
     return (
-        <div className="flex flex-col h-full bg-gray-950 text-white">
+        <div className={`flex flex-col h-full bg-gray-950 text-white ${!isOpen ? "invisible" : ""}`}>
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-2">
@@ -951,7 +960,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                 <div className="border-t border-white/10 px-3 py-2 shrink-0">
                     <div className="relative rounded-xl overflow-hidden bg-black">
                         <video
-                            ref={(el) => { if (el) el.srcObject = remoteScreenStream; }}
+                            ref={remoteVideoRef}
                             autoPlay
                             playsInline
                             className="w-full max-h-40 object-contain"

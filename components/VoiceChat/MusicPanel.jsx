@@ -95,6 +95,7 @@ export default function MusicPanel({ socket, channelId, user }) {
     const [searching, setSearching] = useState(false);
     const [musicState, setMusicState] = useState(null);
     const [activeTab, setActiveTab] = useState("search");
+    const [playerReady, setPlayerReady] = useState(false);
 
     const playerRef = useRef(null);
     const ytPlayerRef = useRef(null);
@@ -141,6 +142,7 @@ export default function MusicPanel({ socket, channelId, user }) {
                 events: {
                     onReady: () => {
                         playerRef.current = true;
+                        setPlayerReady(true);
                     },
                     onStateChange: (e) => {
                         // Auto-advance when video ends
@@ -158,6 +160,7 @@ export default function MusicPanel({ socket, channelId, user }) {
 
         return () => {
             destroyed = true;
+            setPlayerReady(false);
             if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
             if (ytPlayerRef.current) {
                 try { ytPlayerRef.current.destroy?.(); } catch {}
@@ -212,7 +215,7 @@ export default function MusicPanel({ socket, channelId, user }) {
         try {
             player.setVolume(Math.round((musicState?.volume ?? 0.7) * 100));
         } catch {}
-    }, [musicState, current, playing]);
+    }, [musicState, current, playing, playerReady]);
 
     // Periodic sync drift correction when playing
     useEffect(() => {

@@ -748,6 +748,11 @@ io.on("connection", async (socket) => {
         // Send full channel state to the joiner
         socket.emit("voice:joined", getChannelState(channelId));
 
+        // Send current music state to the joiner
+        if (io._voiceMusic?.has(channelId)) {
+            broadcastMusicState(channelId);
+        }
+
         // Broadcast updated participant list to everyone in the channel
         broadcastChannelParticipants(channelId);
         broadcastChannelList();
