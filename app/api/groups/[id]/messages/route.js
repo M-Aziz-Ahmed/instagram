@@ -70,6 +70,11 @@ export async function POST(request, { params }) {
             return Response.json({ error: "Not a member" }, { status: 403 });
         }
 
+        const senderRole = group.members.find(m => m.username === sender)?.role;
+        if (group.permissions?.whoCanSend === "admin" && senderRole !== "admin") {
+            return Response.json({ error: "Only admins can send messages" }, { status: 403 });
+        }
+
         const msg = await GroupMessage.create({
             groupId: id,
             sender,

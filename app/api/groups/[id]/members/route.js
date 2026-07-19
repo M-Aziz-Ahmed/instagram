@@ -14,7 +14,9 @@ export async function POST(request, { params }) {
         const isAdmin = group.members.find(m => m.username === username)?.role === "admin";
 
         if (action === "add") {
-            if (!isAdmin) return Response.json({ error: "Not authorized" }, { status: 403 });
+            if (group.permissions?.whoCanAdd === "admin" && !isAdmin) {
+                return Response.json({ error: "Only admins can add members" }, { status: 403 });
+            }
             if (group.members.find(m => m.username === memberUsername)) {
                 return Response.json({ error: "Already a member" }, { status: 400 });
             }

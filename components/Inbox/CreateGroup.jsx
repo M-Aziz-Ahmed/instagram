@@ -1,43 +1,76 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useToast } from "@/context/ToastContext";
 
-const AVATAR_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#06b6d4"];
+const CLOUDINARY_UPLOAD = `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`;
+const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
 export default function CreateGroup({ user, onClose, onCreated }) {
     const { showToast } = useToast();
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
-    const [avatarColor] = useState(() => AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]);
     const [selectedMembers, setSelectedMembers] = useState([]);
-    const [searchQuery, setSearchQuery] = useState("");
-    const [searchResults, setSearchResults] = useState([]);
-    const [searching, setSearching] = useState(false);
+    const [dmContacts, setDmContacts] = useState([]);
+    const [contactSearch, setContactSearch] = useState("");
+    const [loadingContacts, setLoadingContacts] = useState(true);
     const [creating, setCreating] = useState(false);
-    const searchTimeout = useRef(null);
+    const [avatarUrl, setAvatarUrl] = useState("");
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const fileInputRef = useRef(null);
 
-    const handleSearch = useCallback((query) => {
-        setSearchQuery(query);
-        if (searchTimeout.current) clearTimeout(searchTimeout.current);
-        if (!query.trim()) { setSearchResults([]); return; }
-        searchTimeout.current = setTimeout(async () => {
-            setSearching(true);
+    useEffect(() => {
+        (async () => {
             try {
-                const res = await fetch(`/api/users/search?username=${encodeURIComponent(query.trim())}&limit=8`);
+                const res = await fetch(`/api/messages?username=${user.username}`);
                 const data = await res.json();
-                const filtered = (data.users || []).filter(
-                    u => u.username !== user.username && !selectedMembers.find(m => m.username === u.username)
-                );
-                setSearchResults(filtered);
-            } catch { setSearchResults([]); }
-            setSearching(false);
-        }, 300);
-    }, [user, selectedMembers]);
+                const contacts = (Array.isArray(data) ? data : []).map(c => ({
+                    username: c.username,
+                    avatarUrl: c.avatarUrl || "",
+                    color: c.avatarColor || "#3b82f6",
+                    lastMessage: c.lastMessage?.text || "",
+                }));
+                setDmContacts(contacts);
+            } catch { /* silent */ }
+            setLoadingContacts(false);
+        })();
+    }, [user.username]);
+
+    const filteredContacts = dmContacts.filter(c =>
+        c.username.toLowerCase().includes(contactSearch.toLowerCase()) &&
+        c.username !== user.username &&
+        !selectedMembers.find(m => m.username === c.username)
+    );
+
+    const handleAvatarUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) {
+            showToast("Image must be under 5MB", "error");
+            return;
+        }
+        setUploadingAvatar(true);
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("upload_preset", UPLOAD_PRESET);
+            const res = await fetch(CLOUDINARY_UPLOAD, { method: "POST", body: formData });
+            const data = await res.json();
+            if (data.secure_url) {
+                setAvatarUrl(data.secure_url);
+            } else {
+                showToast("Upload failed", "error");
+            }
+        } catch {
+            showToast("Upload failed", "error");
+        }
+        setUploadingAvatar(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    };
 
     const addMember = (member) => {
-        setSelectedMembers(prev => [...prev, { username: member.username, avatarUrl: member.avatarUrl || "", color: member.avatarColor || "#3b82f6" }]);
-        setSearchQuery(""); setSearchResults([]);
+        setSelectedMembers(prev => [...prev, { username: member.username, avatarUrl: member.avatarUrl || "", color: member.color || "#3b82f6" }]);
+        setContactSearch("");
     };
 
     const removeMember = (username) => {
@@ -56,6 +89,7 @@ export default function CreateGroup({ user, onClose, onCreated }) {
                     description: description.trim(),
                     creator: user.username,
                     members: selectedMembers.map(m => m.username),
+                    avatarUrl,
                 }),
             });
             if (res.ok) {
@@ -75,7 +109,6 @@ export default function CreateGroup({ user, onClose, onCreated }) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
             <div className="bg-white dark:bg-gray-950 rounded-2xl w-full max-w-md mx-4 shadow-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800">
                     <h2 className="font-bold text-lg text-gray-900 dark:text-gray-100">New Group</h2>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1" aria-label="Close">
@@ -85,8 +118,30 @@ export default function CreateGroup({ user, onClose, onCreated }) {
                     </button>
                 </div>
 
-                {/* Body */}
                 <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                    {/* Group Avatar */}
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="relative w-16 h-16 rounded-full bg-gray-200 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0 border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
+                        >
+                            {avatarUrl ? (
+                                <img src={avatarUrl} alt="Group" className="w-full h-full object-cover" />
+                            ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-gray-400">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                </svg>
+                            )}
+                            {uploadingAvatar && (
+                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                </div>
+                            )}
+                        </button>
+                        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                        <div className="text-xs text-gray-400 dark:text-gray-500">Tap to upload group photo<br />(max 5MB)</div>
+                    </div>
+
                     {/* Group Name */}
                     <div>
                         <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Group Name *</label>
@@ -109,30 +164,40 @@ export default function CreateGroup({ user, onClose, onCreated }) {
                         />
                     </div>
 
-                    {/* Add Members */}
+                    {/* Add Members from DM contacts */}
                     <div>
-                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Add Members</label>
+                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Add from your chats</label>
                         <input
-                            type="text" value={searchQuery} onChange={e => handleSearch(e.target.value)}
-                            placeholder="Search by username..."
+                            type="text" value={contactSearch} onChange={e => setContactSearch(e.target.value)}
+                            placeholder="Filter your conversations..."
                             className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
                         />
-                        {searching && <p className="text-xs text-gray-400 mt-1">Searching...</p>}
-                        {searchResults.length > 0 && (
-                            <div className="mt-2 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                {searchResults.map(u => (
-                                    <button
-                                        key={u.username}
-                                        onClick={() => addMember(u)}
-                                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left"
-                                    >
-                                        <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-xs font-bold text-white overflow-hidden shrink-0"
-                                            style={{ backgroundColor: u.avatarColor || "#3b82f6" }}>
-                                            {u.avatarUrl ? <img src={u.avatarUrl} alt="" className="w-full h-full object-cover" /> : u.username[0]?.toUpperCase()}
-                                        </div>
-                                        <span className="text-sm text-gray-900 dark:text-gray-100">{u.username}</span>
-                                    </button>
-                                ))}
+                        {loadingContacts ? (
+                            <p className="text-xs text-gray-400 mt-2">Loading your chats...</p>
+                        ) : (
+                            <div className="mt-2 max-h-40 overflow-y-auto bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                                {filteredContacts.length === 0 ? (
+                                    <p className="text-xs text-gray-400 p-3 text-center">
+                                        {dmContacts.length === 0 ? "No conversations yet" : "No matching contacts"}
+                                    </p>
+                                ) : (
+                                    filteredContacts.map(c => (
+                                        <button
+                                            key={c.username}
+                                            onClick={() => addMember(c)}
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left"
+                                        >
+                                            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white overflow-hidden shrink-0"
+                                                style={{ backgroundColor: c.color }}>
+                                                {c.avatarUrl ? <img src={c.avatarUrl} alt="" className="w-full h-full object-cover" /> : c.username[0]?.toUpperCase()}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <span className="text-sm text-gray-900 dark:text-gray-100 block">{c.username}</span>
+                                                {c.lastMessage && <span className="text-[11px] text-gray-400 truncate block">{c.lastMessage}</span>}
+                                            </div>
+                                        </button>
+                                    ))
+                                )}
                             </div>
                         )}
                     </div>
@@ -152,7 +217,6 @@ export default function CreateGroup({ user, onClose, onCreated }) {
                     )}
                 </div>
 
-                {/* Footer */}
                 <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-800">
                     <button
                         onClick={handleCreate}

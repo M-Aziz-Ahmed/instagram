@@ -50,6 +50,9 @@ export async function PATCH(request, { params }) {
         const isAdmin = group.members.find(m => m.username === username)?.role === "admin";
 
         if (action === "addMember") {
+            if (group.permissions?.whoCanAdd === "admin" && !isAdmin) {
+                return Response.json({ error: "Only admins can add members" }, { status: 403 });
+            }
             const userDoc = await User.findOne({ username: updates.memberUsername }).select("username avatarUrl avatarColor").lean();
             if (!userDoc) return Response.json({ error: "User not found" }, { status: 404 });
             if (group.members.find(m => m.username === updates.memberUsername)) {
@@ -104,6 +107,14 @@ export async function PATCH(request, { params }) {
             if (updates.name) group.name = updates.name.trim().slice(0, 50);
             if (updates.description !== undefined) group.description = updates.description.trim().slice(0, 200);
             if (updates.avatarUrl !== undefined) group.avatarUrl = updates.avatarUrl;
+            await group.save();
+            return Response.json(group);
+        }
+
+        if (action === "updatePermissions") {
+            if (!isAdmin) return Response.json({ error: "Not authorized" }, { status: 403 });
+            if (updates.whoCanSend) group.permissions.whoCanSend = updates.whoCanSend;
+            if (updates.whoCanAdd) group.permissions.whoCanAdd = updates.whoCanAdd;
             await group.save();
             return Response.json(group);
         }

@@ -129,7 +129,9 @@ router.patch("/:id", verifyToken, async (req, res) => {
         const isAdmin = group.members.find((m) => m.username === username)?.role === "admin";
 
         if (action === "addMember") {
-            if (!isAdmin) return res.status(403).json({ error: "Not authorized" });
+            if (group.permissions?.whoCanAdd === "admin" && !isAdmin) {
+                return res.status(403).json({ error: "Only admins can add members" });
+            }
             const userDoc = await User.findOne({ username: updates.memberUsername }).select("username avatarUrl avatarColor").lean();
             if (!userDoc) return res.status(404).json({ error: "User not found" });
             if (group.members.find((m) => m.username === updates.memberUsername)) {
@@ -174,6 +176,14 @@ router.patch("/:id", verifyToken, async (req, res) => {
             if (updates.name) group.name = updates.name.trim().slice(0, 50);
             if (updates.description !== undefined) group.description = updates.description.trim().slice(0, 200);
             if (updates.avatarUrl !== undefined) group.avatarUrl = updates.avatarUrl;
+            await group.save();
+            return res.json(group);
+        }
+
+        if (action === "updatePermissions") {
+            if (!isAdmin) return res.status(403).json({ error: "Not authorized" });
+            if (updates.whoCanSend) group.permissions.whoCanSend = updates.whoCanSend;
+            if (updates.whoCanAdd) group.permissions.whoCanAdd = updates.whoCanAdd;
             await group.save();
             return res.json(group);
         }
@@ -283,6 +293,11 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
             return res.status(403).json({ error: "Not a member" });
         }
 
+        const senderRole = group.members.find((m) => m.username === sender)?.role;
+        if (group.permissions?.whoCanSend === "admin" && senderRole !== "admin") {
+            return res.status(403).json({ error: "Only admins can send messages" });
+        }
+
         const msg = await GroupMessage.create({
             groupId: id,
             sender,
@@ -344,7 +359,9 @@ router.post("/:id/members", verifyToken, async (req, res) => {
         if (!group) return res.status(404).json({ error: "Group not found" });
 
         const isAdmin = group.members.find((m) => m.username === username)?.role === "admin";
-        if (!isAdmin) return res.status(403).json({ error: "Not authorized" });
+        if (group.permissions?.whoCanAdd === "admin" && !isAdmin) {
+            return res.status(403).json({ error: "Only admins can add members" });
+        }
 
         if (group.members.find((m) => m.username === memberUsername)) {
             return res.status(400).json({ error: "Already a member" });

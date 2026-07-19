@@ -20,6 +20,10 @@ const groupChatSchema = new mongoose.Schema({
         imageUrl: { type: String, default: "" },
         timeStamp:{ type: Date, default: Date.now },
     },
+    permissions: {
+        whoCanSend:  { type: String, enum: ["all", "admin"], default: "all" },
+        whoCanAdd:   { type: String, enum: ["all", "admin"], default: "all" },
+    },
     pinned:     { type: Boolean, default: false },
     mutedBy:    { type: [String], default: [] },
     createdAt:  { type: Date, default: Date.now },
