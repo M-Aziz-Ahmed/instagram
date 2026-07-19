@@ -297,10 +297,10 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                             }}
                         />
                         <NavItem
-                            href="/chess"
+                            href="/games"
                             icon={<ChessIcon />}
-                            label="Chess"
-                            active={isActive("/chess")}
+                            label="Games"
+                            active={isActive("/games") || isActive("/chess") || isActive("/connect4")}
                             onClick={handleNavClick}
                         />
                         {user?.isAdmin && (

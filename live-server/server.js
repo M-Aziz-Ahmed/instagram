@@ -12,6 +12,9 @@ const cors = require("cors");
 const { Chess } = require("chess.js");
 const LiveStream = require("./models/liveStream");
 const ChessGame = require("./models/chessGame");
+const Connect4Game = require("./models/connect4Game");
+const connect4Logic = require("./connect4Logic");
+const { getAIMove: getConnect4AIMove } = require("./connect4AI");
 const { sendPushNotification } = require("./push");
 
 let stockfishEngine = null;
@@ -508,6 +511,81 @@ app.get("/api/chess/games/:id/chat", async (req, res) => {
     } catch (err) {
         console.error("[CHESS API] Get chat error:", err.message);
         res.status(500).json({ error: "Failed to fetch chat" });
+    }
+});
+
+// ── Connect Four HTTP Routes ───────────────────────────────────
+app.get("/api/connect4/games", async (req, res) => {
+    try {
+        const { status, username } = req.query;
+        const filter = {};
+        if (status) filter.status = status;
+        if (username) {
+            filter.$or = [
+                { "red.username": username },
+                { "yellow.username": username },
+            ];
+        }
+        const games = await Connect4Game.find(filter)
+            .sort({ createdAt: -1 })
+            .limit(50)
+            .lean();
+        res.json({ games });
+    } catch (err) {
+        console.error("[C4 API] List games error:", err.message);
+        res.status(500).json({ error: "Failed to fetch games" });
+    }
+});
+
+app.get("/api/connect4/games/:id", async (req, res) => {
+    try {
+        const game = await Connect4Game.findById(req.params.id).lean();
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        res.json({ game });
+    } catch (err) {
+        console.error("[C4 API] Get game error:", err.message);
+        res.status(500).json({ error: "Failed to fetch game" });
+    }
+});
+
+app.post("/api/connect4/games", async (req, res) => {
+    try {
+        const { username, avatarUrl, avatarColor, mode, aiDifficulty, inviteUser } = req.body;
+        if (!username) return res.status(400).json({ error: "Username required" });
+
+        const game = await Connect4Game.create({
+            red: { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#ef4444" },
+            mode: mode || "multiplayer",
+            aiDifficulty: aiDifficulty || 3,
+            invitedBy: inviteUser || "",
+            status: mode === "ai" ? "active" : "waiting",
+            yellow: mode === "ai" ? { username: "Computer", avatarUrl: "", avatarColor: "#eab308" } : undefined,
+        });
+
+        res.json({ game });
+    } catch (err) {
+        console.error("[C4 API] Create game error:", err.message);
+        res.status(500).json({ error: "Failed to create game" });
+    }
+});
+
+app.post("/api/connect4/games/:id/join", async (req, res) => {
+    try {
+        const { username, avatarUrl, avatarColor } = req.body;
+        const game = await Connect4Game.findById(req.params.id);
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        if (game.status !== "waiting") return res.status(400).json({ error: "Game already started" });
+        if (game.mode === "ai") return res.status(400).json({ error: "Cannot join AI game" });
+        if (game.red.username === username) return res.status(400).json({ error: "Cannot play yourself" });
+
+        game.yellow = { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#eab308" };
+        game.status = "active";
+        await game.save();
+
+        res.json({ game });
+    } catch (err) {
+        console.error("[C4 API] Join game error:", err.message);
+        res.status(500).json({ error: "Failed to join game" });
     }
 });
 
@@ -1345,6 +1423,161 @@ io.on("connection", async (socket) => {
             }
         } catch (err) {
             console.error("[CHESS] Time sync error:", err.message);
+        }
+    });
+
+    // ── Connect Four Socket Events ────────────────────────────────
+    socket.on("connect4:join-game", ({ gameId }) => {
+        socket.join(`connect4:${gameId}`);
+        socket.data.connect4GameId = gameId;
+        console.log(`[C4] ${username} joined game room ${gameId}`);
+    });
+
+    socket.on("connect4:leave-game", ({ gameId }) => {
+        socket.leave(`connect4:${gameId}`);
+        socket.data.connect4GameId = null;
+    });
+
+    function finalizeConnect4(game, moveResult, color) {
+        if (moveResult.win) {
+            game.status = "win";
+            game.winner = color === "r" ? game.red.username : game.yellow.username;
+            game.result = color === "r" ? "1-0" : "0-1";
+            game.resultReason = "Four in a row";
+            game.winningCells = moveResult.win;
+        } else if (connect4Logic.isBoardFull(moveResult.board)) {
+            game.status = "draw";
+            game.result = "1/2-1/2";
+            game.resultReason = "Board full";
+        } else {
+            game.status = "active";
+            game.result = "*";
+        }
+    }
+
+    socket.on("connect4:make-move", async ({ gameId, column }) => {
+        try {
+            const game = await Connect4Game.findById(gameId);
+            if (!game || game.status !== "active") {
+                return socket.emit("connect4:error", { message: "Game not active" });
+            }
+
+            const playerColor = game.red.username === username ? "r" : game.yellow.username === username ? "y" : null;
+            const isAIGame = game.mode === "ai";
+
+            if (!playerColor) return socket.emit("connect4:error", { message: "Not a player" });
+            if (game.turn !== playerColor) return socket.emit("connect4:error", { message: "Not your turn" });
+
+            const board = game.board.map((row) => row.map((c) => c || null));
+            const moveResult = connect4Logic.applyMove(board, column, playerColor);
+            if (!moveResult) return socket.emit("connect4:error", { message: "Column full" });
+
+            game.board = moveResult.board;
+            game.turn = playerColor === "r" ? "y" : "r";
+            game.moves.push({ column, row: moveResult.row, color: playerColor, timestamp: new Date() });
+            finalizeConnect4(game, moveResult, playerColor);
+            await game.save();
+
+            io.to(`connect4:${gameId}`).emit("connect4:move", {
+                gameId,
+                board: game.board,
+                turn: game.turn,
+                move: { column, row: moveResult.row, color: playerColor },
+                status: game.status,
+                result: game.result,
+                resultReason: game.resultReason,
+                winner: game.winner,
+                winningCells: game.winningCells,
+                moves: game.moves,
+            });
+
+            if (isAIGame && game.status === "active" && game.turn === "y") {
+                const aiDelay = 500 + Math.floor(Math.random() * 900);
+                setTimeout(async () => {
+                    try {
+                        const latest = await Connect4Game.findById(gameId);
+                        if (!latest || latest.status !== "active" || latest.turn !== "y") return;
+
+                        const aiBoard = latest.board.map((row) => row.map((c) => c || null));
+                        const aiCol = getConnect4AIMove(aiBoard, "y", latest.aiDifficulty);
+                        if (aiCol == null) return;
+
+                        const aiResult = connect4Logic.applyMove(aiBoard, aiCol, "y");
+                        if (!aiResult) return;
+
+                        latest.board = aiResult.board;
+                        latest.turn = "r";
+                        latest.moves.push({ column: aiCol, row: aiResult.row, color: "y", timestamp: new Date() });
+                        finalizeConnect4(latest, aiResult, "y");
+                        await latest.save();
+
+                        io.to(`connect4:${gameId}`).emit("connect4:move", {
+                            gameId,
+                            board: latest.board,
+                            turn: latest.turn,
+                            move: { column: aiCol, row: aiResult.row, color: "y" },
+                            status: latest.status,
+                            result: latest.result,
+                            resultReason: latest.resultReason,
+                            winner: latest.winner,
+                            winningCells: latest.winningCells,
+                            moves: latest.moves,
+                        });
+                    } catch (err) {
+                        console.error("[C4] AI move error:", err.message);
+                    }
+                }, aiDelay);
+            }
+        } catch (err) {
+            console.error("[C4] Move error:", err.message);
+            socket.emit("connect4:error", { message: "Move failed" });
+        }
+    });
+
+    socket.on("connect4:resign", async ({ gameId }) => {
+        try {
+            const game = await Connect4Game.findById(gameId);
+            if (!game || game.status !== "active") return;
+
+            const playerColor = game.red.username === username ? "r" : game.yellow.username === username ? "y" : null;
+            if (!playerColor) return;
+
+            game.status = "resigned";
+            game.winner = playerColor === "r" ? game.yellow.username : game.red.username;
+            game.result = playerColor === "r" ? "0-1" : "1-0";
+            game.resultReason = "Resignation";
+            await game.save();
+
+            io.to(`connect4:${gameId}`).emit("connect4:game-over", {
+                gameId,
+                status: game.status,
+                result: game.result,
+                resultReason: game.resultReason,
+                winner: game.winner,
+            });
+        } catch (err) {
+            console.error("[C4] Resign error:", err.message);
+        }
+    });
+
+    socket.on("connect4:chat", async ({ gameId, text, color, avatarUrl }) => {
+        if (!text?.trim()) return;
+        try {
+            const game = await Connect4Game.findById(gameId);
+            if (!game) return;
+            const msg = {
+                username,
+                color: color || "#3b82f6",
+                avatarUrl: avatarUrl || "",
+                text: text.trim().slice(0, 500),
+                createdAt: new Date(),
+            };
+            game.chat.push(msg);
+            if (game.chat.length > 200) game.chat = game.chat.slice(-200);
+            await game.save();
+            io.to(`connect4:${gameId}`).emit("connect4:chat", msg);
+        } catch (err) {
+            console.error("[C4] Chat error:", err.message);
         }
     });
 
