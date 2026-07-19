@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import UserBadges from "@/components/shared/UserBadges";
 import { getActiveChat } from "@/utils/activeChat";
-import { playNotificationSound, initAudio } from "@/utils/notificationSound";
+import { playNotificationSound, initAudio, isSoundEnabled } from "@/utils/notificationSound";
 import { timeAgo } from "@/utils/timeAgo";
 
 const TYPE_LABEL = {

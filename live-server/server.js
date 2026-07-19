@@ -604,6 +604,7 @@ io.on("connection", async (socket) => {
     const username = socket.handshake?.query?.username;
     const isAdmin = username ? await isUserAdmin(username) : false;
     socket.data = { ...socket.data, username, isAdmin };
+    if (username) socket.join(username);
     console.log(`[WS] Connected: ${socket.id} (admin=${isAdmin})`);
 
     socket.on("join-stream", async ({ streamId, username }) => {
@@ -1322,7 +1323,6 @@ io.on("connection", async (socket) => {
         io._callRooms.set(callId, new Set([socket.id]));
         // Join the socket into the call room
         socket.join(`call:${callId}`);
-        socket.data.username = caller;
         // Notify each recipient
         recipients.forEach(r => {
             io.to(r).emit("call:incoming", { callId, caller, callType, groupId, recipients });

@@ -13,7 +13,6 @@ const callSessionSchema = new mongoose.Schema({
     duration:   { type: Number, default: 0 },
 });
 
-callSessionSchema.index({ callId: 1 });
 callSessionSchema.index({ status: 1, startedAt: -1 });
 callSessionSchema.index({ recipients: 1, status: 1 });
 
