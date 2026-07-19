@@ -34,6 +34,27 @@ const GAMES = [
         emoji: "\u269B\uFE0F",
         gradient: "from-amber-600 to-orange-800",
     },
+    {
+        href: "/reversi",
+        title: "Reversi",
+        desc: "Flip discs to own the board. vs friends or AI.",
+        emoji: "\u26AB",
+        gradient: "from-emerald-600 to-green-800",
+    },
+    {
+        href: "/battleship",
+        title: "Battleship",
+        desc: "Hunt and sink the enemy fleet. vs friends or AI.",
+        emoji: "\uD83D\uDEA2",
+        gradient: "from-cyan-600 to-blue-800",
+    },
+    {
+        href: "/hangman",
+        title: "Hangman",
+        desc: "Guess the hidden word before it's too late.",
+        emoji: "\uD83D\uDD24",
+        gradient: "from-purple-600 to-fuchsia-800",
+    },
 ];
 
 export default function GamesPage() {

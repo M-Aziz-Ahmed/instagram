@@ -70,8 +70,8 @@ function getAIMove(board, aiColor, difficulty) {
         return moves[Math.floor(Math.random() * moves.length)].path;
     }
 
-    const depthMap = { 2: 3, 3: 5, 4: 6, 5: 8 };
-    const depth = depthMap[clamped] || 5;
+    const depthMap = { 2: 2, 3: 4, 4: 6, 5: 8 };
+    const depth = depthMap[clamped] || 4;
 
     const { path } = minimax(board, depth, -Infinity, Infinity, aiColor, aiColor);
     return path || moves[Math.floor(Math.random() * moves.length)].path;

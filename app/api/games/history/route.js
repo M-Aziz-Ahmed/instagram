@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/utils/db";
 import User from "@/models/user";
 
-const VALID_GAMES = ["connect4", "tictactoe", "checkers"];
+const VALID_GAMES = ["connect4", "tictactoe", "checkers", "reversi", "battleship", "hangman"];
 
 export async function GET(request) {
     try {

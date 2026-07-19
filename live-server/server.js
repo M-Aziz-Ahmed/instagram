@@ -21,6 +21,14 @@ const { getAIMove: getTictactoeAIMove } = require("./tictactoeAI");
 const CheckersGame = require("./models/checkersGame");
 const checkersLogic = require("./checkersLogic");
 const { getAIMove: getCheckersAIMove } = require("./checkersAI");
+const ReversiGame = require("./models/reversiGame");
+const reversiLogic = require("./reversiLogic");
+const { getAIMove: getReversiAIMove } = require("./reversiAI");
+const BattleshipGame = require("./models/battleshipGame");
+const battleshipLogic = require("./battleshipLogic");
+const { getAIMove: getBattleshipAIMove } = require("./battleshipAI");
+const HangmanGame = require("./models/hangmanGame");
+const hangmanLogic = require("./hangmanLogic");
 const { sendPushNotification } = require("./push");
 
 let stockfishEngine = null;
@@ -716,6 +724,188 @@ app.post("/api/checkers/games/:id/join", async (req, res) => {
     } catch (err) {
         console.error("[CHK API] Join error:", err.message);
         res.status(500).json({ error: "Failed to join game" });
+    }
+});
+
+// ── Reversi HTTP Routes ────────────────────────────────────────
+app.get("/api/reversi/games", async (req, res) => {
+    try {
+        const { status, username } = req.query;
+        const filter = {};
+        if (status) filter.status = status;
+        if (username) filter.$or = [{ "black.username": username }, { "white.username": username }];
+        const games = await ReversiGame.find(filter).sort({ createdAt: -1 }).limit(50).lean();
+        res.json({ games });
+    } catch (err) {
+        console.error("[REV API] List error:", err.message);
+        res.status(500).json({ error: "Failed to fetch games" });
+    }
+});
+
+app.get("/api/reversi/games/:id", async (req, res) => {
+    try {
+        const game = await ReversiGame.findById(req.params.id).lean();
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        res.json({ game });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch game" });
+    }
+});
+
+app.post("/api/reversi/games", async (req, res) => {
+    try {
+        const { username, avatarUrl, avatarColor, mode, aiDifficulty, inviteUser } = req.body;
+        if (!username) return res.status(400).json({ error: "Username required" });
+        const game = await ReversiGame.create({
+            black: { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#111827" },
+            mode: mode || "multiplayer",
+            aiDifficulty: aiDifficulty || 3,
+            invitedBy: inviteUser || "",
+            status: mode === "ai" ? "active" : "waiting",
+            white: mode === "ai" ? { username: "Computer", avatarUrl: "", avatarColor: "#e5e7eb" } : undefined,
+        });
+        res.json({ game });
+    } catch (err) {
+        console.error("[REV API] Create error:", err.message);
+        res.status(500).json({ error: "Failed to create game" });
+    }
+});
+
+app.post("/api/reversi/games/:id/join", async (req, res) => {
+    try {
+        const { username, avatarUrl, avatarColor } = req.body;
+        const game = await ReversiGame.findById(req.params.id);
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        if (game.status !== "waiting") return res.status(400).json({ error: "Game already started" });
+        if (game.mode === "ai") return res.status(400).json({ error: "Cannot join AI game" });
+        if (game.black.username === username) return res.status(400).json({ error: "Cannot play yourself" });
+        game.white = { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#e5e7eb" };
+        game.status = "active";
+        await game.save();
+        res.json({ game });
+    } catch (err) {
+        console.error("[REV API] Join error:", err.message);
+        res.status(500).json({ error: "Failed to join game" });
+    }
+});
+
+// ── Battleship HTTP Routes ─────────────────────────────────────
+app.get("/api/battleship/games", async (req, res) => {
+    try {
+        const { status, username } = req.query;
+        const filter = {};
+        if (status) filter.status = status;
+        if (username) filter.$or = [{ "p1.username": username }, { "p2.username": username }];
+        const games = await BattleshipGame.find(filter).sort({ createdAt: -1 }).limit(50).lean();
+        res.json({ games });
+    } catch (err) {
+        console.error("[BS API] List error:", err.message);
+        res.status(500).json({ error: "Failed to fetch games" });
+    }
+});
+
+app.get("/api/battleship/games/:id", async (req, res) => {
+    try {
+        const game = await BattleshipGame.findById(req.params.id).lean();
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        const viewer = req.query.username;
+        if (game.boards) {
+            const sanitize = (b, revealShips) => ({
+                grid: revealShips ? b.grid : b.grid.map((row) => row.map((c) => (c === "S" ? "~" : c))),
+                shots: b.shots,
+            });
+            const mine = viewer && game.p1.username === viewer ? "p1" : viewer && game.p2.username === viewer ? "p2" : null;
+            game.boards = {
+                p1: sanitize(game.boards.p1, mine === "p1"),
+                p2: sanitize(game.boards.p2, mine === "p2"),
+            };
+        }
+        res.json({ game });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch game" });
+    }
+});
+
+app.post("/api/battleship/games", async (req, res) => {
+    try {
+        const { username, avatarUrl, avatarColor, mode, aiDifficulty, inviteUser } = req.body;
+        if (!username) return res.status(400).json({ error: "Username required" });
+        const game = await BattleshipGame.create({
+            p1: { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#3b82f6" },
+            mode: mode || "multiplayer",
+            aiDifficulty: aiDifficulty || 3,
+            invitedBy: inviteUser || "",
+            status: mode === "ai" ? "active" : "waiting",
+            p2: mode === "ai" ? { username: "Computer", avatarUrl: "", avatarColor: "#ef4444" } : undefined,
+        });
+        res.json({ game });
+    } catch (err) {
+        console.error("[BS API] Create error:", err.message);
+        res.status(500).json({ error: "Failed to create game" });
+    }
+});
+
+app.post("/api/battleship/games/:id/join", async (req, res) => {
+    try {
+        const { username, avatarUrl, avatarColor } = req.body;
+        const game = await BattleshipGame.findById(req.params.id);
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        if (game.status !== "waiting") return res.status(400).json({ error: "Game already started" });
+        if (game.mode === "ai") return res.status(400).json({ error: "Cannot join AI game" });
+        if (game.p1.username === username) return res.status(400).json({ error: "Cannot play yourself" });
+        game.p2 = { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#ef4444" };
+        game.status = "active";
+        await game.save();
+        res.json({ game });
+    } catch (err) {
+        console.error("[BS API] Join error:", err.message);
+        res.status(500).json({ error: "Failed to join game" });
+    }
+});
+
+// ── Hangman HTTP Routes ────────────────────────────────────────
+app.get("/api/hangman/games", async (req, res) => {
+    try {
+        const { status, username } = req.query;
+        const filter = {};
+        if (status) filter.status = status;
+        if (username) filter.player = username;
+        const games = await HangmanGame.find(filter).sort({ createdAt: -1 }).limit(50).lean();
+        res.json({ games });
+    } catch (err) {
+        console.error("[HM API] List error:", err.message);
+        res.status(500).json({ error: "Failed to fetch games" });
+    }
+});
+
+app.get("/api/hangman/games/:id", async (req, res) => {
+    try {
+        const game = await HangmanGame.findById(req.params.id).lean();
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        game.wordLength = (game.word || "").length;
+        game.masked = (game.word || "").split("").map((c) => (game.guessed.includes(c) ? c : "")).join("|");
+        if (game.status === "active") game.word = "";
+        res.json({ game });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch game" });
+    }
+});
+
+app.post("/api/hangman/games", async (req, res) => {
+    try {
+        const { username, avatarUrl, avatarColor, mode, aiDifficulty, inviteUser } = req.body;
+        if (!username) return res.status(400).json({ error: "Username required" });
+        const game = await HangmanGame.create({
+            player: { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#3b82f6" },
+            mode: mode || "ai",
+            aiDifficulty: aiDifficulty || 3,
+            invitedBy: inviteUser || "",
+            status: "active",
+        });
+        res.json({ game });
+    } catch (err) {
+        console.error("[HM API] Create error:", err.message);
+        res.status(500).json({ error: "Failed to create game" });
     }
 });
 
@@ -1935,6 +2125,271 @@ io.on("connection", async (socket) => {
             io.to(`checkers:${gameId}`).emit("checkers:chat", msg);
         } catch (err) {
             console.error("[CHK] Chat error:", err.message);
+        }
+    });
+
+    // ── Reversi Socket Events ──────────────────────────────────────
+    socket.on("reversi:join-game", ({ gameId }) => { socket.join(`reversi:${gameId}`); });
+    socket.on("reversi:leave-game", ({ gameId }) => { socket.leave(`reversi:${gameId}`); });
+
+    function finalizeReversi(game) {
+        const board = game.board.map((row) => row.map((c) => c || null));
+        const canB = reversiLogic.hasAnyMove(board, "b");
+        const canW = reversiLogic.hasAnyMove(board, "w");
+        if (!canB && !canW) {
+            const w = reversiLogic.getWinner(board);
+            game.status = w === "draw" ? "draw" : "win";
+            if (w === "draw") { game.result = "1/2-1/2"; game.resultReason = "Board full"; }
+            else {
+                game.winner = w === "b" ? game.black.username : game.white.username;
+                game.result = w === "b" ? "1-0" : "0-1";
+                game.resultReason = "Most discs";
+            }
+            return true;
+        }
+        return false;
+    }
+
+    async function reversiAdvanceTurn(game) {
+        const board = game.board.map((row) => row.map((c) => c || null));
+        const nextColor = game.turn === "b" ? "w" : "b";
+        if (reversiLogic.hasAnyMove(board, nextColor)) game.turn = nextColor;
+    }
+
+    socket.on("reversi:make-move", async ({ gameId, r, c }) => {
+        try {
+            const game = await ReversiGame.findById(gameId);
+            if (!game || game.status !== "active") return socket.emit("reversi:error", { message: "Game not active" });
+            const color = game.black.username === username ? "b" : game.white.username === username ? "w" : null;
+            if (!color) return socket.emit("reversi:error", { message: "Not a player" });
+            if (game.turn !== color) return socket.emit("reversi:error", { message: "Not your turn" });
+
+            const board = game.board.map((row) => row.map((cc) => cc || null));
+            const applied = reversiLogic.applyMove(board, { r, c }, color);
+            if (!applied) return socket.emit("reversi:error", { message: "Illegal move" });
+
+            game.board = applied.board;
+            game.moveCount += 1;
+            game.lastMove = { r, c, color, flips: applied.flips };
+            await reversiAdvanceTurn(game);
+            const over = finalizeReversi(game);
+            await game.save();
+
+            io.to(`reversi:${gameId}`).emit("reversi:move", {
+                gameId, board: game.board, turn: game.turn, lastMove: game.lastMove,
+                status: game.status, result: game.result, resultReason: game.resultReason,
+                winner: game.winner, moveCount: game.moveCount,
+            });
+
+            if (!over && game.mode === "ai" && game.status === "active") {
+                const aiLoop = async () => {
+                    const latest = await ReversiGame.findById(gameId);
+                    if (!latest || latest.status !== "active" || latest.turn !== "w") return;
+                    const aiBoard = latest.board.map((row) => row.map((cc) => cc || null));
+                    const aiMove = getReversiAIMove(aiBoard, "w", latest.aiDifficulty);
+                    if (!aiMove) return;
+                    const aiApplied = reversiLogic.applyMove(aiBoard, aiMove, "w");
+                    if (!aiApplied) return;
+                    latest.board = aiApplied.board;
+                    latest.moveCount += 1;
+                    latest.lastMove = { r: aiMove.r, c: aiMove.c, color: "w", flips: aiApplied.flips };
+                    await reversiAdvanceTurn(latest);
+                    finalizeReversi(latest);
+                    await latest.save();
+                    io.to(`reversi:${gameId}`).emit("reversi:move", {
+                        gameId, board: latest.board, turn: latest.turn, lastMove: latest.lastMove,
+                        status: latest.status, result: latest.result, resultReason: latest.resultReason,
+                        winner: latest.winner, moveCount: latest.moveCount,
+                    });
+                    if (latest.status === "active" && latest.turn === "w") setTimeout(aiLoop, 600);
+                };
+                setTimeout(aiLoop, 500 + Math.floor(Math.random() * 600));
+            }
+        } catch (err) {
+            console.error("[REV] Move error:", err.message);
+            socket.emit("reversi:error", { message: "Move failed" });
+        }
+    });
+
+    socket.on("reversi:resign", async ({ gameId }) => {
+        try {
+            const game = await ReversiGame.findById(gameId);
+            if (!game || game.status !== "active") return;
+            const color = game.black.username === username ? "b" : game.white.username === username ? "w" : null;
+            if (!color) return;
+            game.status = "resigned";
+            game.winner = color === "b" ? game.white.username : game.black.username;
+            game.result = color === "b" ? "0-1" : "1-0";
+            game.resultReason = "Resignation";
+            await game.save();
+            io.to(`reversi:${gameId}`).emit("reversi:game-over", { gameId, status: game.status, result: game.result, resultReason: game.resultReason, winner: game.winner });
+        } catch (err) {
+            console.error("[REV] Resign error:", err.message);
+        }
+    });
+
+    socket.on("reversi:chat", async ({ gameId, text, color, avatarUrl }) => {
+        if (!text?.trim()) return;
+        try {
+            const game = await ReversiGame.findById(gameId);
+            if (!game) return;
+            const msg = { username, color: color || "#3b82f6", avatarUrl: avatarUrl || "", text: text.trim().slice(0, 500), createdAt: new Date() };
+            game.chat.push(msg);
+            if (game.chat.length > 200) game.chat = game.chat.slice(-200);
+            await game.save();
+            io.to(`reversi:${gameId}`).emit("reversi:chat", msg);
+        } catch (err) {
+            console.error("[REV] Chat error:", err.message);
+        }
+    });
+
+    // ── Battleship Socket Events ───────────────────────────────────
+    socket.on("battleship:join-game", ({ gameId }) => { socket.join(`battleship:${gameId}`); });
+    socket.on("battleship:leave-game", ({ gameId }) => { socket.leave(`battleship:${gameId}`); });
+
+    socket.on("battleship:fire", async ({ gameId, r, c }) => {
+        try {
+            const game = await BattleshipGame.findById(gameId);
+            if (!game || game.status !== "active") return socket.emit("battleship:error", { message: "Game not active" });
+            const me = game.p1.username === username ? "p1" : game.p2.username === username ? "p2" : null;
+            if (!me) return socket.emit("battleship:error", { message: "Not a player" });
+            if (game.turn !== me) return socket.emit("battleship:error", { message: "Not your turn" });
+
+            const target = me === "p1" ? "p2" : "p1";
+            const boards = game.boards;
+            const result = battleshipLogic.applyShot(boards[target], r, c);
+            if (result.error) return socket.emit("battleship:error", { message: result.error });
+
+            game.moveCount += 1;
+            game.lastShot = { by: me, r, c, hit: result.hit };
+            game.markModified("boards");
+
+            if (result.sunk) {
+                game.status = "win";
+                game.winner = me === "p1" ? game.p1.username : game.p2.username;
+                game.result = me === "p1" ? "1-0" : "0-1";
+                game.resultReason = "Fleet destroyed";
+            } else if (!result.hit) {
+                game.turn = target;
+            }
+            await game.save();
+
+            io.to(`battleship:${gameId}`).emit("battleship:shot", {
+                gameId, target, r, c, hit: result.hit, turn: game.turn,
+                status: game.status, result: game.result, resultReason: game.resultReason,
+                winner: game.winner, moveCount: game.moveCount,
+                p1Shots: game.boards.p1.shots, p2Shots: game.boards.p2.shots,
+            });
+
+            if (game.mode === "ai" && game.status === "active" && game.turn === "p2") {
+                const aiLoop = async () => {
+                    const latest = await BattleshipGame.findById(gameId);
+                    if (!latest || latest.status !== "active" || latest.turn !== "p2") return;
+                    const aiShot = getBattleshipAIMove(latest.boards.p1, latest.aiDifficulty);
+                    if (!aiShot) return;
+                    const aiRes = battleshipLogic.applyShot(latest.boards.p1, aiShot[0], aiShot[1]);
+                    if (aiRes.error) return;
+                    latest.moveCount += 1;
+                    latest.lastShot = { by: "p2", r: aiShot[0], c: aiShot[1], hit: aiRes.hit };
+                    latest.markModified("boards");
+                    if (aiRes.sunk) {
+                        latest.status = "win";
+                        latest.winner = latest.p2.username;
+                        latest.result = "0-1";
+                        latest.resultReason = "Fleet destroyed";
+                    } else if (!aiRes.hit) {
+                        latest.turn = "p1";
+                    }
+                    await latest.save();
+                    io.to(`battleship:${gameId}`).emit("battleship:shot", {
+                        gameId, target: "p1", r: aiShot[0], c: aiShot[1], hit: aiRes.hit, turn: latest.turn,
+                        status: latest.status, result: latest.result, resultReason: latest.resultReason,
+                        winner: latest.winner, moveCount: latest.moveCount,
+                        p1Shots: latest.boards.p1.shots, p2Shots: latest.boards.p2.shots,
+                    });
+                    if (latest.status === "active" && latest.turn === "p2") setTimeout(aiLoop, 700);
+                };
+                setTimeout(aiLoop, 600 + Math.floor(Math.random() * 600));
+            }
+        } catch (err) {
+            console.error("[BS] Fire error:", err.message);
+            socket.emit("battleship:error", { message: "Shot failed" });
+        }
+    });
+
+    socket.on("battleship:resign", async ({ gameId }) => {
+        try {
+            const game = await BattleshipGame.findById(gameId);
+            if (!game || game.status !== "active") return;
+            const me = game.p1.username === username ? "p1" : game.p2.username === username ? "p2" : null;
+            if (!me) return;
+            game.status = "resigned";
+            game.winner = me === "p1" ? game.p2.username : game.p1.username;
+            game.result = me === "p1" ? "0-1" : "1-0";
+            game.resultReason = "Resignation";
+            await game.save();
+            io.to(`battleship:${gameId}`).emit("battleship:game-over", { gameId, status: game.status, result: game.result, resultReason: game.resultReason, winner: game.winner });
+        } catch (err) {
+            console.error("[BS] Resign error:", err.message);
+        }
+    });
+
+    socket.on("battleship:chat", async ({ gameId, text, color, avatarUrl }) => {
+        if (!text?.trim()) return;
+        try {
+            const game = await BattleshipGame.findById(gameId);
+            if (!game) return;
+            const msg = { username, color: color || "#3b82f6", avatarUrl: avatarUrl || "", text: text.trim().slice(0, 500), createdAt: new Date() };
+            game.chat.push(msg);
+            if (game.chat.length > 200) game.chat = game.chat.slice(-200);
+            await game.save();
+            io.to(`battleship:${gameId}`).emit("battleship:chat", msg);
+        } catch (err) {
+            console.error("[BS] Chat error:", err.message);
+        }
+    });
+
+    // ── Hangman Socket Events ──────────────────────────────────────
+    socket.on("hangman:join-game", ({ gameId }) => { socket.join(`hangman:${gameId}`); });
+    socket.on("hangman:leave-game", ({ gameId }) => { socket.leave(`hangman:${gameId}`); });
+
+    socket.on("hangman:guess", async ({ gameId, letter }) => {
+        try {
+            const game = await HangmanGame.findById(gameId);
+            if (!game || game.status !== "active") return socket.emit("hangman:error", { message: "Game not active" });
+            if (game.player.username !== username) return socket.emit("hangman:error", { message: "Not a player" });
+
+            const result = hangmanLogic.applyGuess(game.word, game.guessed, letter);
+            if (result.error) return socket.emit("hangman:error", { message: result.error });
+
+            game.guessed = result.guessed;
+            if (!result.correct) game.wrong += 1;
+            game.moveCount += 1;
+
+            if (result.won) {
+                game.status = "win";
+                game.winner = game.player.username;
+                game.result = "1-0";
+                game.resultReason = "Word solved";
+            } else if (game.wrong >= hangmanLogic.MAX_WRONG) {
+                game.status = "loss";
+                game.result = "0-1";
+                game.resultReason = "Out of guesses";
+            }
+            await game.save();
+
+            io.to(`hangman:${gameId}`).emit("hangman:update", {
+                gameId, guessed: game.guessed, wrong: game.wrong,
+                letter: result.letter, correct: result.correct,
+                status: game.status, result: game.result, resultReason: game.resultReason,
+                winner: game.winner, moveCount: game.moveCount,
+                wordLength: game.word.length,
+                masked: game.word.split("").map((c) => (game.guessed.includes(c) ? c : "")).join("|"),
+                word: game.status !== "active" ? game.word : undefined,
+            });
+        } catch (err) {
+            console.error("[HM] Guess error:", err.message);
+            socket.emit("hangman:error", { message: "Guess failed" });
         }
     });
 

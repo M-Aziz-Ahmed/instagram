@@ -13,6 +13,9 @@ const GAME_PATHS = {
     connect4: "/connect4/game",
     tictactoe: "/tictactoe/game",
     checkers: "/checkers/game",
+    reversi: "/reversi/game",
+    battleship: "/battleship/game",
+    hangman: "/hangman/game",
 };
 
 function formatDate(dateStr) {
