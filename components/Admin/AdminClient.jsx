@@ -273,6 +273,11 @@ function UsersPanel() {
     const [search, setSearch]     = useState("");
     const [editing, setEditing]   = useState(null);
     const [saving, setSaving]     = useState(false);
+    const [showCreate, setShowCreate] = useState(false);
+    const [createEmail, setCreateEmail] = useState("");
+    const [createPin, setCreatePin]     = useState("");
+    const [createUser, setCreateUser]   = useState("");
+    const [creating, setCreating]       = useState(false);
 
     useEffect(() => {
         if (!editing) return;
@@ -356,6 +361,28 @@ function UsersPanel() {
         }
     };
 
+    const handleCreateUser = async (e) => {
+        e.preventDefault();
+        if (!createEmail.trim() || !createPin.trim() || creating) return;
+        setCreating(true);
+        try {
+            const res = await fetch("/api/admin/users", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: createEmail.trim(), pin: createPin.trim(), username: createUser.trim() }),
+            });
+            const data = await res.json();
+            if (!res.ok) { showToast(data.error, "error"); return; }
+            showToast(`User ${data.user.email} created`, "success");
+            setCreateEmail(""); setCreatePin(""); setCreateUser("");
+            setShowCreate(false);
+            refresh();
+        } catch (e) {
+            console.error(e);
+            showToast("Failed to create user", "error");
+        } finally { setCreating(false); }
+    };
+
     return (
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800">
             <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-3">
@@ -363,7 +390,32 @@ function UsersPanel() {
                     placeholder="Search users\u2026"
                     className="flex-1 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-black dark:focus:border-gray-500 transition-colors" />
                 <span className="text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">{filtered.length} user{filtered.length !== 1 && "s"}</span>
+                <button onClick={() => setShowCreate(!showCreate)}
+                    className="shrink-0 px-3 py-2 bg-black dark:bg-gray-100 text-white dark:text-gray-900 text-xs font-semibold rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors">
+                    {showCreate ? "Cancel" : "+ Create"}
+                </button>
             </div>
+
+            {showCreate && (
+                <form onSubmit={handleCreateUser} className="p-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex flex-col gap-3">
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Create user with PIN</p>
+                    <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+                        <input type="email" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)}
+                            placeholder="Email" required autoFocus
+                            className="flex-1 min-w-0 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg px-3 py-2 text-sm outline-none focus:border-black dark:focus:border-gray-500" />
+                        <input type="text" value={createPin} onChange={(e) => setCreatePin(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                            placeholder="PIN (4-8 digits)" required
+                            className="w-36 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-black dark:focus:border-gray-500" />
+                        <input type="text" value={createUser} onChange={(e) => setCreateUser(e.target.value)}
+                            placeholder="Username (optional)"
+                            className="w-40 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg px-3 py-2 text-sm outline-none focus:border-black dark:focus:border-gray-500" />
+                        <button type="submit" disabled={creating || !createEmail.trim() || !createPin.trim()}
+                            className="shrink-0 px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
+                            {creating ? "Creating\u2026" : "Create"}
+                        </button>
+                    </div>
+                </form>
+            )}
 
             {loading ? (
                 <div className="flex justify-center py-12">
@@ -386,6 +438,7 @@ function UsersPanel() {
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{u.username || "(no username)"}</span>
                                     <UserBadges isVerified={u.isVerified} isAdmin={u.isAdmin} roles={u.roles} />
+                                    {u.hasPin && <span className="text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded font-medium">PIN</span>}
                                 </div>
                                 <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{u.email}</p>
                             </div>

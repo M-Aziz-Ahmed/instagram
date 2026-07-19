@@ -27,6 +27,7 @@ const userSchema = new mongoose.Schema({
     referredBy:  { type: String, default: null },
     inviteCode:  { type: String, default: null, sparse: true },
     inviteCount: { type: Number, default: 0 },
+    pin:         { type: String, default: null },
     chessGames:  { type: [{
         gameId:       { type: String, required: true },
         opponent:     { type: String, default: "" },

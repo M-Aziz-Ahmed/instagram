@@ -1,6 +1,7 @@
 import connectDB from "@/utils/db";
 import User from "@/models/user";
 import { getSession } from "@/utils/session";
+import bcrypt from "bcryptjs";
 
 async function requireAdmin() {
     const session = await getSession();
@@ -20,6 +21,7 @@ export async function GET() {
         id:         u._id.toString(),
         username:   u.username,
         email:      u.email,
+        hasPin:     !!u.pin,
         isVerified: u.isVerified || false,
         isAdmin:    u.isAdmin || false,
         liveStreamAllowed: u.liveStreamAllowed || false,
@@ -30,6 +32,39 @@ export async function GET() {
         avatarUrl:  u.avatarUrl || "",
         roles:      (u.roles || []).map((r) => ({ id: r._id.toString(), name: r.name, badge: r.badge, color: r.color })),
     })));
+}
+
+// POST /api/admin/users — create a new user with email + PIN
+export async function POST(request) {
+    const admin = await requireAdmin();
+    if (!admin) return Response.json({ error: "Forbidden" }, { status: 403 });
+
+    const { email, pin, username } = await request.json();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return Response.json({ error: "Valid email required" }, { status: 400 });
+    }
+    if (!pin || pin.length < 4 || pin.length > 8 || !/^\d+$/.test(pin)) {
+        return Response.json({ error: "PIN must be 4-8 digits" }, { status: 400 });
+    }
+
+    const existing = await User.findOne({ email: email.toLowerCase() });
+    if (existing) {
+        return Response.json({ error: "Email already registered" }, { status: 409 });
+    }
+
+    const hashedPin = await bcrypt.hash(pin, 10);
+    const user = await User.create({
+        email: email.toLowerCase(),
+        username: username?.trim() || "",
+        pin: hashedPin,
+    });
+
+    return Response.json({ ok: true, user: {
+        id: user._id.toString(),
+        username: user.username,
+        email: user.email,
+        hasPin: true,
+    }});
 }
 
 // PATCH /api/admin/users  — update a user (verify, assign roles, make admin)

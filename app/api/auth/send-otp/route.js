@@ -1,5 +1,6 @@
 import connectDB from "@/utils/db";
 import OTP from "@/models/otp";
+import User from "@/models/user";
 import { sendOTPEmail } from "@/utils/email";
 
 function generateCode() {
@@ -14,6 +15,12 @@ export async function POST(request) {
         }
 
         await connectDB();
+
+        // Check if user has a PIN — skip OTP, client will ask for PIN
+        const existingUser = await User.findOne({ email: email.toLowerCase() }).select("pin").lean();
+        if (existingUser?.pin) {
+            return Response.json({ ok: true, hasPin: true });
+        }
 
         // Rate limit: max 3 OTPs per email in last 10 minutes
         const recent = await OTP.countDocuments({

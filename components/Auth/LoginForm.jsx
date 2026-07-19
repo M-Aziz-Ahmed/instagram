@@ -8,6 +8,8 @@ export default function LoginForm({ onSuccess }) {
     const [step, setStep]         = useState("email");
     const [email, setEmail]       = useState("");
     const [otp, setOtp]           = useState(["", "", "", "", "", ""]);
+    const [pin, setPin]           = useState("");
+    const [hasPin, setHasPin]     = useState(false);
     const [inviteCode, setInviteCode] = useState("");
     const [loading, setLoading]   = useState(false);
     const [error, setError]       = useState("");
@@ -28,8 +30,13 @@ export default function LoginForm({ onSuccess }) {
             });
             const data = await res.json();
             if (!res.ok) { setError(data.error); return; }
-            setStep("otp");
-            startCooldown();
+            if (data.hasPin) {
+                setHasPin(true);
+                setStep("pin");
+            } else {
+                setStep("otp");
+                startCooldown();
+            }
         } catch {
             setError("Network error. Try again.");
         } finally {
@@ -82,12 +89,33 @@ export default function LoginForm({ onSuccess }) {
             const data = await res.json();
             if (!res.ok) { setError(data.error); setOtp(["","","","","",""]); inputRefs.current[0]?.focus(); return; }
             
-            // Set user data immediately from response to avoid race condition
             await reloadUser(data.user);
-            
-            // Small delay to ensure cookie is fully set before navigation
             await new Promise(resolve => setTimeout(resolve, 100));
-            
+            onSuccess?.(data.needsSetup);
+        } catch {
+            setError("Network error. Try again.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handlePinSubmit = async (e) => {
+        e?.preventDefault();
+        if (!pin.trim() || loading) return;
+        setLoading(true);
+        setError("");
+        try {
+            const res = await fetch("/api/auth/verify-pin", {
+                method:  "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body:    JSON.stringify({ email: email.trim(), pin: pin.trim() }),
+            });
+            const data = await res.json();
+            if (!res.ok) { setError(data.error); setPin(""); return; }
+
+            await reloadUser(data.user);
+            await new Promise(resolve => setTimeout(resolve, 100));
             onSuccess?.(data.needsSetup);
         } catch {
             setError("Network error. Try again.");
@@ -135,6 +163,48 @@ export default function LoginForm({ onSuccess }) {
                         {loading ? "Sending\u2026" : "Continue"}
                     </button>
                 </form>
+            ) : step === "pin" ? (
+                <form onSubmit={handlePinSubmit} className="flex flex-col gap-5">
+                    <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                            Enter the PIN for <span className="font-semibold text-gray-900 dark:text-gray-100">{email}</span>
+                        </p>
+                        <input
+                            type="password"
+                            value={pin}
+                            onChange={(e) => { setPin(e.target.value.replace(/\D/g, "").slice(0, 8)); setError(""); }}
+                            placeholder="PIN"
+                            autoFocus
+                            inputMode="numeric"
+                            maxLength={8}
+                            className="w-full border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-center text-xl font-mono tracking-widest rounded-xl px-4 py-3 outline-none focus:border-black dark:focus:border-gray-500 transition-colors"
+                        />
+                    </div>
+
+                    {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+
+                    {loading && (
+                        <div className="flex justify-center">
+                            <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-700 dark:border-t-gray-300 rounded-full animate-spin" />
+                        </div>
+                    )}
+
+                    <div className="flex flex-col gap-2 items-center">
+                        <button
+                            type="submit"
+                            disabled={!pin.trim() || loading}
+                            className="w-full bg-black dark:bg-gray-100 text-white dark:text-gray-900 font-bold py-3 rounded-xl disabled:opacity-40 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
+                        >
+                            {loading ? "Verifying\u2026" : "Log in"}
+                        </button>
+                        <button
+                            onClick={() => { setStep("email"); setPin(""); setError(""); setHasPin(false); }}
+                            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                        >
+                            {"\u2190"} Change email
+                        </button>
+                    </div>
+                </form>
             ) : (
                 <div className="flex flex-col gap-5">
                     <div>
@@ -172,7 +242,7 @@ export default function LoginForm({ onSuccess }) {
                             onClick={() => { setStep("email"); setOtp(["","","","","",""]); setError(""); }}
                             className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
                         >
-                            \u2190 Change email
+                            {"\u2190"} Change email
                         </button>
                         <button
                             onClick={() => { if (!resendCooldown) { setOtp(["","","","","",""]); handleSendOTP(); } }}
