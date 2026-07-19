@@ -1451,6 +1451,7 @@ app.use("/api/chess/history", apiLimiter, require("./routes/chess"));
 app.use("/api/debug", require("./routes/debug"));
 app.use("/api/live", apiLimiter, require("./routes/live"));
 app.use("/api/translate", apiLimiter, require("./routes/translate"));
+app.use("/api/invites", apiLimiter, require("./routes/invites"));
 
 // ── Start ───────────────────────────────────────────────────────
 initStockfish().catch(() => {});

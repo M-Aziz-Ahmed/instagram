@@ -8,9 +8,11 @@ import { ProfileSkeleton } from "@/components/shared/Skeleton";
 import FollowButton from "@/components/shared/FollowButton";
 import ImageLightbox from "@/components/shared/ImageLightbox";
 import EditProfileModal from "@/components/Auth/EditProfileModal";
+import InviteManager from "@/components/shared/InviteManager";
 import { useSidebar } from "@/context/SidebarContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Compose from "@/components/Feed/Compose";
 
 function colorFromUsername(name = "") {
     const palette = ["#f97316","#ec4899","#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444","#3b82f6"];
@@ -146,6 +148,8 @@ export default function ProfileClient({ username }) {
     const { openSidebar }                     = useSidebar();
     const [avatarLightbox, setAvatarLightbox] = useState(false);
     const [listModal, setListModal]           = useState(null);
+    const [showCompose, setShowCompose]       = useState(false);
+    const [showInviteManager, setShowInviteManager] = useState(false);
 
     const isOwn = user?.username === username;
 
@@ -284,6 +288,29 @@ export default function ProfileClient({ username }) {
                                     )}
                                 </div>
 
+                                {isOwn && (
+                                    <div className="mt-3 flex items-center gap-2">
+                                        <button
+                                            onClick={() => setShowInviteManager(true)}
+                                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                                            </svg>
+                                            Invite Friends
+                                        </button>
+                                        <Link
+                                            href="/referrals"
+                                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+                                            </svg>
+                                            Stats
+                                        </Link>
+                                    </div>
+                                )}
+
                                 {profile.bio && (
                                     <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-3">{profile.bio}</p>
                                 )}
@@ -385,6 +412,45 @@ export default function ProfileClient({ username }) {
                     type={listModal}
                     onClose={() => setListModal(null)}
                 />
+            )}
+
+            {isOwn && (
+                <button
+                    onClick={() => setShowCompose(true)}
+                    className="fixed bottom-24 right-5 z-30 w-14 h-14 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg shadow-blue-500/30 flex items-center justify-center transition-all active:scale-95"
+                    aria-label="New post"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                </button>
+            )}
+
+            {showInviteManager && (
+                <InviteManager isOpen={showInviteManager} onClose={() => setShowInviteManager(false)} />
+            )}
+
+            {isOwn && showCompose && (
+                <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center" onClick={() => setShowCompose(false)}>
+                    <div
+                        className="bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85dvh] overflow-y-auto"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800 sticky top-0 bg-white dark:bg-gray-900 z-10">
+                            <span className="font-bold text-sm text-gray-900 dark:text-gray-100">New Post</span>
+                            <button
+                                onClick={() => setShowCompose(false)}
+                                className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                aria-label="Close"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <Compose onPosted={() => { setShowCompose(false); fetchProfile(); }} />
+                    </div>
+                </div>
             )}
         </div>
     );

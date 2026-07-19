@@ -8,6 +8,7 @@ export default function LoginForm({ onSuccess }) {
     const [step, setStep]         = useState("email");
     const [email, setEmail]       = useState("");
     const [otp, setOtp]           = useState(["", "", "", "", "", ""]);
+    const [inviteCode, setInviteCode] = useState("");
     const [loading, setLoading]   = useState(false);
     const [error, setError]       = useState("");
     const [resendCooldown, setResendCooldown] = useState(0);
@@ -76,7 +77,7 @@ export default function LoginForm({ onSuccess }) {
                 method:  "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
-                body:    JSON.stringify({ email: email.trim(), code }),
+                body:    JSON.stringify({ email: email.trim(), code, inviteCode: inviteCode.trim() || undefined }),
             });
             const data = await res.json();
             if (!res.ok) { setError(data.error); setOtp(["","","","","",""]); inputRefs.current[0]?.focus(); return; }
@@ -110,6 +111,19 @@ export default function LoginForm({ onSuccess }) {
                             placeholder="you@example.com"
                             autoFocus
                             className="w-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-xl px-4 py-3 text-sm outline-none focus:border-black dark:focus:border-gray-500 transition-colors"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                            Invite code <span className="font-normal text-gray-400 dark:text-gray-500">(optional)</span>
+                        </label>
+                        <input
+                            type="text"
+                            value={inviteCode}
+                            onChange={(e) => setInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
+                            placeholder="XXXXXXXX"
+                            maxLength={8}
+                            className="w-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-xl px-4 py-3 text-sm font-mono tracking-wider outline-none focus:border-black dark:focus:border-gray-500 transition-colors"
                         />
                     </div>
                     {error && <p className="text-xs text-red-500">{error}</p>}

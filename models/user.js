@@ -24,6 +24,9 @@ const userSchema = new mongoose.Schema({
     lastActive:   { type: Date, default: Date.now },
     isOnline:     { type: Boolean, default: false },
     createdAt:   { type: Date, default: Date.now },
+    referredBy:  { type: String, default: null },
+    inviteCode:  { type: String, default: null, sparse: true },
+    inviteCount: { type: Number, default: 0 },
     chessGames:  { type: [{
         gameId:       { type: String, required: true },
         opponent:     { type: String, default: "" },

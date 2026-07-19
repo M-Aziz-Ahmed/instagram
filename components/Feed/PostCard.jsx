@@ -6,6 +6,7 @@ import { useToast } from "@/context/ToastContext";
 import RichText from "./RichText";
 import UserBadges from "@/components/shared/UserBadges";
 import BookmarkButton from "@/components/shared/BookmarkButton";
+import ShareButton from "@/components/shared/ShareButton";
 import FollowButton from "@/components/shared/FollowButton";
 import ImageLightbox from "@/components/shared/ImageLightbox";
 import ReactionPicker, { ReactionCounts } from "./ReactionPicker";
@@ -923,6 +924,12 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                 </svg>
                             </button>
                         )}
+
+                        <ShareButton
+                            postId={post._id}
+                            text={post.text}
+                            imageUrl={post.imageUrl}
+                        />
 
                         {viewCount > 0 && (
                             <span className="flex items-center gap-1 text-sm text-gray-400 dark:text-gray-500 ml-1">

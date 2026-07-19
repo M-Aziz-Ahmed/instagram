@@ -73,7 +73,7 @@ export default function GifPicker({ onSelect, onClose, className = "" }) {
         <div
             ref={containerRef}
             className={`bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden ${className}`}
-            style={{ width: 340, maxHeight: 400 }}
+            style={{ maxWidth: 340, width: '100%', maxHeight: 400 }}
         >
             {/* Search */}
             <div className="p-2 border-b border-gray-100 dark:border-gray-800">

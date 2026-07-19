@@ -52,6 +52,9 @@ export async function GET(request) {
                 autoTranslate: user.autoTranslate || false,
                 liveStreamAllowed: user.liveStreamAllowed || false,
                 voiceChatBanned: user.voiceChatBanned || false,
+                inviteCode:  user.inviteCode || null,
+                inviteCount: user.inviteCount || 0,
+                referredBy:  user.referredBy || null,
                 needsSetup: !user.username,
             },
         };

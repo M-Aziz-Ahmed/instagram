@@ -23,6 +23,9 @@ const userSchema = new mongoose.Schema({
     autoTranslate: { type: Boolean, default: false },
     lastActive:   { type: Date, default: Date.now },
     isOnline:     { type: Boolean, default: false },
+    inviteCode:   { type: String, default: null, unique: true, sparse: true },
+    referredBy:   { type: String, default: null },
+    inviteCount:  { type: Number, default: 0 },
     createdAt:   { type: Date, default: Date.now },
     chessGames:  { type: [{
         gameId:       { type: String, required: true },

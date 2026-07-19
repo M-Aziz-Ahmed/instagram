@@ -159,7 +159,7 @@ export default function EmojiPicker({ onEmojiSelect, onClose, className = "" }) 
         <div
             ref={containerRef}
             className={`bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden ${className}`}
-            style={{ width: 340, maxHeight: 420 }}
+            style={{ maxWidth: 340, width: '100%', maxHeight: 420 }}
         >
             {/* Search + skin tone */}
             <div className="flex items-center gap-2 p-2 border-b border-gray-100 dark:border-gray-800">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/context/ToastContext";
 import MentionInput from "@/components/shared/MentionInput";
@@ -28,6 +28,19 @@ export default function Compose({ onPosted }) {
     const [pollOptions, setPollOptions]   = useState(["", ""]);
     const [pollExpiry, setPollExpiry]     = useState(null);
     const fileRef                         = useRef(null);
+
+    useEffect(() => {
+        const handler = () => {
+            document.getElementById("compose")?.scrollIntoView({ behavior: "smooth" });
+            const textarea = document.getElementById("compose")?.querySelector("textarea");
+            if (textarea) {
+                textarea.focus();
+                textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+            }
+        };
+        window.addEventListener("open-compose", handler);
+        return () => window.removeEventListener("open-compose", handler);
+    }, []);
 
     const handleFile = (e) => {
         const file = e.target.files?.[0];
@@ -144,7 +157,7 @@ export default function Compose({ onPosted }) {
     const canPost = ((text.trim().length > 0 || !!imageFile || !!preview || !!audioUrl) || hasValidPoll) && !posting;
 
     return (
-        <div className="border-b border-gray-200 dark:border-gray-800 p-4">
+        <div id="compose" className="border-b border-gray-200 dark:border-gray-800 p-4">
             <div className="flex gap-3">
                 <div
                     className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-sm select-none mt-0.5"
@@ -280,8 +293,8 @@ export default function Compose({ onPosted }) {
                         </div>
                     )}
 
-                    <div className="flex items-center justify-between p-1 border-t border-gray-100 dark:border-gray-800">
-                        <div className="flex items-center gap-1 relative">
+                    <div className="flex items-center justify-between p-1 border-t border-gray-100 dark:border-gray-800 overflow-hidden">
+                        <div className="flex items-center gap-1 relative overflow-x-auto flex-shrink min-w-0">
                             <button
                                 onClick={() => { setShowEmoji(!showEmoji); setShowGif(false); }}
                                 aria-label="Add emoji"
@@ -366,7 +379,7 @@ export default function Compose({ onPosted }) {
                         <button
                             onClick={handlePost}
                             disabled={!canPost}
-                            className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-bold px-5 py-1.5 rounded-full hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors min-w-16 flex items-center justify-center"
+                            className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-bold px-5 py-1.5 rounded-full hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors min-w-0 sm:min-w-16 shrink-0 flex items-center justify-center"
                         >
                             {posting ? (
                                 <span className="flex items-center gap-1.5">
