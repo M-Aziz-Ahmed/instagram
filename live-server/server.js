@@ -151,8 +151,25 @@ const PORT = process.env.PORT || 3001;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 
 const cookieParser = require("cookie-parser");
-app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+const ALLOWED_ORIGINS = [
+    "https://anontweet.vercel.app",
+    "https://anontweet.duckdns.org",
+    "http://localhost:3000",
+    "http://localhost:3001",
+];
+app.use(cors({
+    origin: function (origin, callback) {
+        if (!origin || ALLOWED_ORIGINS.includes(origin) || origin.endsWith(".duckdns.org")) {
+            callback(null, true);
+        } else {
+            callback(null, true); // allow all in dev; tighten in production
+        }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-API-Key"],
+}));
+app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
 
 const io = new Server(server, {
@@ -1412,25 +1429,27 @@ io.on("connection", async (socket) => {
 });
 
 // ── API Routes ───────────────────────────────────────────────────
-app.use("/api/auth", require("./routes/auth"));
-app.use("/api/posts", require("./routes/posts"));
-app.use("/api/feed", require("./routes/feed"));
-app.use("/api/users", require("./routes/users"));
-app.use("/api/admin", require("./routes/admin"));
-app.use("/api/messages", require("./routes/messages"));
-app.use("/api/groups", require("./routes/groups"));
-app.use("/api/stories", require("./routes/stories"));
-app.use("/api/search", require("./routes/search"));
-app.use("/api/hashtags", require("./routes/hashtags"));
-app.use("/api/notifications", require("./routes/notifications"));
-app.use("/api/typing", require("./routes/typing"));
-app.use("/api/push", require("./routes/push"));
-app.use("/api/ads", require("./routes/ads"));
-app.use("/api/analytics", require("./routes/analytics"));
-app.use("/api/chess/history", require("./routes/chess"));
+const { apiLimiter, authLimiter } = require("./middleware/rateLimit");
+
+app.use("/api/auth", authLimiter, require("./routes/auth"));
+app.use("/api/posts", apiLimiter, require("./routes/posts"));
+app.use("/api/feed", apiLimiter, require("./routes/feed"));
+app.use("/api/users", apiLimiter, require("./routes/users"));
+app.use("/api/admin", apiLimiter, require("./routes/admin"));
+app.use("/api/messages", apiLimiter, require("./routes/messages"));
+app.use("/api/groups", apiLimiter, require("./routes/groups"));
+app.use("/api/stories", apiLimiter, require("./routes/stories"));
+app.use("/api/search", apiLimiter, require("./routes/search"));
+app.use("/api/hashtags", apiLimiter, require("./routes/hashtags"));
+app.use("/api/notifications", apiLimiter, require("./routes/notifications"));
+app.use("/api/typing", apiLimiter, require("./routes/typing"));
+app.use("/api/push", apiLimiter, require("./routes/push"));
+app.use("/api/ads", apiLimiter, require("./routes/ads"));
+app.use("/api/analytics", apiLimiter, require("./routes/analytics"));
+app.use("/api/chess/history", apiLimiter, require("./routes/chess"));
 app.use("/api/debug", require("./routes/debug"));
-app.use("/api/live", require("./routes/live"));
-app.use("/api/translate", require("./routes/translate"));
+app.use("/api/live", apiLimiter, require("./routes/live"));
+app.use("/api/translate", apiLimiter, require("./routes/translate"));
 
 // ── Start ───────────────────────────────────────────────────────
 initStockfish().catch(() => {});
