@@ -278,6 +278,215 @@ router.delete("/:id", verifyToken, async (req, res) => {
     }
 });
 
+// PATCH /:id  — unified action dispatcher (mirrors Next.js API route)
+router.patch("/:id", optionalAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!id || !/^[0-9a-fA-F]{24}$/.test(id)) {
+            return res.status(400).json({ error: "Invalid post ID" });
+        }
+
+        const { username: bodyUsername, action, text, color, parentId, imageUrl, audioUrl, reactionType, commentId } = req.body;
+
+        const post = await Post.findById(id);
+        if (!post) return res.status(404).json({ error: "Not found" });
+
+        const username = bodyUsername || (req.userId ? (await User.findById(req.userId).select("username").lean())?.username : null);
+
+        if (action === "view") {
+            post.viewCount = (post.viewCount || 0) + 1;
+            await post.save();
+            return res.json({ viewCount: post.viewCount });
+        }
+
+        if (!username) {
+            return res.status(400).json({ error: "Username required" });
+        }
+
+        if (action === "comment") {
+            const hasText = text?.trim();
+            const hasImage = imageUrl;
+            const hasAudio = audioUrl;
+            if (!hasText && !hasImage && !hasAudio) {
+                return res.status(400).json({ error: "Comment must have text, an image, or audio" });
+            }
+
+            const commenter = await User.findOne({ username }).select("username avatarColor avatarUrl isVerified roles").populate("roles", "name badge color").lean();
+
+            const comment = {
+                commentId: uid(),
+                text:      text?.trim() ?? "",
+                imageUrl:  imageUrl || "",
+                audioUrl:  audioUrl || "",
+                sender:    username,
+                color:     commenter?.avatarColor || color || "#3b82f6",
+                avatarUrl: commenter?.avatarUrl || "",
+                parentId:  parentId || null,
+                likes:     [],
+                replies:   0,
+                mentions:  extractMentions(text || ""),
+            };
+            post.comments.push(comment);
+
+            if (parentId) {
+                const parentComment = post.comments.find(c => c.commentId === parentId);
+                if (parentComment) parentComment.replies = (parentComment.replies || 0) + 1;
+            }
+
+            await post.save();
+
+            if (post.sender !== username) {
+                await Notification.create({
+                    recipient: post.sender,
+                    type:      parentId ? "reply" : "comment",
+                    fromUser:  username,
+                    fromColor: commenter?.avatarColor || color || "#3b82f6",
+                    fromAvatarUrl: commenter?.avatarUrl || "",
+                    postId:    id,
+                    commentId: comment.commentId,
+                    text:      text?.trim() ?? "",
+                    postText:  post.text?.slice(0, 120) ?? "",
+                    postImageUrl: post.imageUrl || "",
+                });
+            }
+
+            const enriched = await enrichPost(post);
+            return res.json(enriched);
+        }
+
+        if (action === "deleteComment") {
+            const comment = post.comments.find(c => c.commentId === commentId);
+            post.comments = post.comments.filter((c) => c.commentId !== commentId && c.parentId !== commentId);
+
+            if (comment?.parentId) {
+                const parentComment = post.comments.find(c => c.commentId === comment.parentId);
+                if (parentComment && parentComment.replies > 0) parentComment.replies -= 1;
+            }
+
+            await post.save();
+            const enriched = await enrichPost(post);
+            return res.json(enriched);
+        }
+
+        if (action === "react") {
+            const validReactions = ["like", "love", "laugh", "fire", "sad", "angry"];
+            if (!reactionType || !validReactions.includes(reactionType)) {
+                return res.status(400).json({ error: "Invalid reaction type" });
+            }
+
+            if (!post.reactions) {
+                post.reactions = { like: [], love: [], laugh: [], fire: [], sad: [], angry: [] };
+            }
+
+            validReactions.forEach(type => {
+                if (!post.reactions[type]) post.reactions[type] = [];
+                const idx = post.reactions[type].indexOf(username);
+                if (idx !== -1) post.reactions[type].splice(idx, 1);
+            });
+
+            if (!post.reactions[reactionType]) post.reactions[reactionType] = [];
+            const idx = post.reactions[reactionType].indexOf(username);
+
+            if (idx === -1) {
+                post.reactions[reactionType].push(username);
+                if (reactionType === "like" && !post.likes.includes(username)) {
+                    post.likes.push(username);
+                }
+                if (post.sender !== username) {
+                    await Notification.create({
+                        recipient: post.sender,
+                        type:      reactionType,
+                        fromUser:  username,
+                        fromColor: color || "#3b82f6",
+                        postId:    id,
+                        text:      post.text?.slice(0, 80) ?? "",
+                        postText:  post.text?.slice(0, 120) ?? "",
+                        postImageUrl: post.imageUrl || "",
+                    });
+                }
+            } else {
+                post.reactions[reactionType].splice(idx, 1);
+                if (reactionType === "like") {
+                    const legacyIdx = post.likes.indexOf(username);
+                    if (legacyIdx !== -1) post.likes.splice(legacyIdx, 1);
+                }
+            }
+
+            await post.save();
+            const enriched = await enrichPost(post);
+            return res.json(enriched);
+        }
+
+        // Legacy like (no action or action=like)
+        if (action === "like" || !action) {
+            if (!post.reactions) {
+                post.reactions = { like: [], love: [], laugh: [], fire: [], sad: [], angry: [] };
+            }
+            if (!post.reactions.like) post.reactions.like = [];
+
+            const idx = post.reactions.like.indexOf(username);
+            const isLiking = idx === -1;
+
+            if (isLiking) {
+                post.reactions.like.push(username);
+                if (!post.likes.includes(username)) post.likes.push(username);
+                if (post.sender !== username) {
+                    await Notification.create({
+                        recipient: post.sender,
+                        type:      "like",
+                        fromUser:  username,
+                        fromColor: color || "#3b82f6",
+                        postId:    id,
+                        text:      post.text?.slice(0, 80) ?? "",
+                        postText:  post.text?.slice(0, 120) ?? "",
+                        postImageUrl: post.imageUrl || "",
+                    });
+                }
+            } else {
+                post.reactions.like.splice(idx, 1);
+                const legacyIdx = post.likes.indexOf(username);
+                if (legacyIdx !== -1) post.likes.splice(legacyIdx, 1);
+            }
+
+            await post.save();
+            const enriched = await enrichPost(post);
+            return res.json(enriched);
+        }
+
+        if (action === "reactComment") {
+            const validReactions = ["like", "love", "laugh", "fire", "sad", "angry"];
+            if (!commentId || !reactionType || !validReactions.includes(reactionType)) {
+                return res.status(400).json({ error: "Invalid comment reaction" });
+            }
+            const comment = post.comments.find(c => c.commentId === commentId);
+            if (!comment) return res.status(404).json({ error: "Comment not found" });
+
+            if (!comment.reactions) {
+                comment.reactions = { like: [], love: [], laugh: [], fire: [], sad: [], angry: [] };
+            }
+
+            validReactions.forEach(type => {
+                if (!comment.reactions[type]) comment.reactions[type] = [];
+                const idx = comment.reactions[type].indexOf(username);
+                if (idx !== -1) comment.reactions[type].splice(idx, 1);
+            });
+
+            if (!comment.reactions[reactionType]) comment.reactions[reactionType] = [];
+            const idx = comment.reactions[reactionType].indexOf(username);
+            if (idx === -1) comment.reactions[reactionType].push(username);
+
+            await post.save();
+            const enriched = await enrichPost(post);
+            return res.json(enriched);
+        }
+
+        return res.status(400).json({ error: "Invalid action" });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed to update post" });
+    }
+});
+
 // POST /:id/like
 router.post("/:id/like", verifyToken, async (req, res) => {
     try {

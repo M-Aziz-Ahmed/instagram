@@ -303,6 +303,12 @@ export function CallProvider({ children, socket }) {
                 const stream = localStreamRef.current || await getLocalStream(true, callStateRef.current?.callType === "video");
                 if (!stream) return;
 
+                // If we already have a PC for this peer in a non-closed state, close it first
+                const existing = peerConnections.current[from];
+                if (existing && existing.signalingState !== "closed") {
+                    try { existing.close(); } catch {}
+                }
+
                 const pc = createPeerConnection(from, stream, false);
                 await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
                 const answer = await pc.createAnswer();
@@ -318,13 +324,13 @@ export function CallProvider({ children, socket }) {
             } else if (signal.type === "answer") {
                 // We received an answer to our offer
                 const pc = peerConnections.current[from];
-                if (pc) {
+                if (pc && pc.signalingState === "have-local-offer") {
                     await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
                     setCallState(prev => prev ? { ...prev, status: "connecting" } : null);
                 }
             } else if (signal.type === "candidate") {
                 const pc = peerConnections.current[from];
-                if (pc && signal.candidate) {
+                if (pc && signal.candidate && pc.signalingState !== "closed") {
                     await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
                 }
             }
