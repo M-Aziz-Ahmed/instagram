@@ -195,6 +195,8 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
     const [notification, setNotification] = useState(null);
     const [screenStream, setScreenStream] = useState(null);
     const [sharing, setSharing] = useState(false);
+    const [remoteScreenSharer, setRemoteScreenSharer] = useState(null);
+    const [remoteScreenStream, setRemoteScreenStream] = useState(null);
     const [ptt, setPtt] = useState(false);
     const [pttKey, setPttKey] = useState(" ");
     const [pttActive, setPttActive] = useState(false);
@@ -249,6 +251,8 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         setParticipants([]);
         setMuted(false);
         setDeafened(false);
+        setRemoteScreenSharer(null);
+        setRemoteScreenStream(null);
     }, []);
 
     useEffect(() => () => cleanup(), [cleanup]);
@@ -275,6 +279,10 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             const el = audioElementsRef.current.get(username);
             if (el) { el.srcObject = null; el.remove(); }
             audioElementsRef.current.delete(username);
+            if (remoteScreenSharer === username) {
+                setRemoteScreenSharer(null);
+                setRemoteScreenStream(null);
+            }
         };
         const handleUserSpeaking = ({ username, speaking }) => {
             setParticipants((prev) =>
@@ -298,11 +306,21 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                             pc.addTrack(track, localStream);
                         });
                     }
+                    if (screenStreamRef.current) {
+                        const vt = screenStreamRef.current.getVideoTracks()[0];
+                        if (vt) pc.addTrack(vt, screenStreamRef.current);
+                    }
 
                     pc.ontrack = (e) => {
                         if (e.streams?.[0]) {
                             peerStreamsRef.current.set(fromUsername, e.streams[0]);
-                            attachRemoteAudio(fromUsername, e.streams[0]);
+                            const vt = e.streams[0].getVideoTracks()[0];
+                            if (vt) {
+                                setRemoteScreenSharer(fromUsername);
+                                setRemoteScreenStream(e.streams[0]);
+                            } else {
+                                attachRemoteAudio(fromUsername, e.streams[0]);
+                            }
                         }
                     };
                     pc.onicecandidate = (e) => {
@@ -321,11 +339,21 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                             pc.addTrack(track, localStream);
                         });
                     }
+                    if (screenStreamRef.current) {
+                        const vt = screenStreamRef.current.getVideoTracks()[0];
+                        if (vt) pc.addTrack(vt, screenStreamRef.current);
+                    }
 
                     pc.ontrack = (e) => {
                         if (e.streams?.[0]) {
                             peerStreamsRef.current.set(fromUsername, e.streams[0]);
-                            attachRemoteAudio(fromUsername, e.streams[0]);
+                            const vt = e.streams[0].getVideoTracks()[0];
+                            if (vt) {
+                                setRemoteScreenSharer(fromUsername);
+                                setRemoteScreenStream(e.streams[0]);
+                            } else {
+                                attachRemoteAudio(fromUsername, e.streams[0]);
+                            }
                         }
                     };
                     pc.onicecandidate = (e) => {
@@ -381,6 +409,8 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             if (audioCtxRef.current) { try { audioCtxRef.current.close(); } catch {} }
             audioCtxRef.current = null;
             setParticipants([]);
+            setRemoteScreenSharer(null);
+            setRemoteScreenStream(null);
         };
         const handleReconnect = async () => {
             const s = socketRef.current;
@@ -515,10 +545,24 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                 pc.addTrack(track, localStream);
             });
 
+            // Include screen share track if active
+            if (screenStreamRef.current) {
+                const videoTrack = screenStreamRef.current.getVideoTracks()[0];
+                if (videoTrack) {
+                    pc.addTrack(videoTrack, screenStreamRef.current);
+                }
+            }
+
             pc.ontrack = (e) => {
                 if (e.streams?.[0]) {
                     peerStreamsRef.current.set(p.username, e.streams[0]);
-                    attachRemoteAudio(p.username, e.streams[0]);
+                    const videoTrack = e.streams[0].getVideoTracks()[0];
+                    if (videoTrack) {
+                        setRemoteScreenSharer(p.username);
+                        setRemoteScreenStream(e.streams[0]);
+                    } else {
+                        attachRemoteAudio(p.username, e.streams[0]);
+                    }
                 }
             };
 
@@ -672,11 +716,11 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             setScreenStream(null);
             setSharing(false);
             pcsRef.current.forEach((pc) => {
-                const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-                if (sender) {
-                    const localStream = localStreamRef.current;
-                    const audioTrack = localStream?.getAudioTracks()[0];
-                    sender.replaceTrack(audioTrack || null);
+                const senders = pc.getSenders();
+                for (const sender of senders) {
+                    if (sender.track?.kind === "video") {
+                        try { sender.replaceTrack(null); } catch {}
+                    }
                 }
             });
             s.emit("voice:screen-share", { channelId: activeChannelRef.current, sharing: false });
@@ -698,15 +742,19 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                 setScreenStream(null);
                 setSharing(false);
                 pcsRef.current.forEach((pc) => {
-                    const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-                    if (sender) sender.replaceTrack(null);
+                    for (const sender of pc.getSenders()) {
+                        if (sender.track?.kind === "video") {
+                            try { sender.replaceTrack(null); } catch {}
+                        }
+                    }
                 });
+                s.emit("voice:screen-share", { channelId: activeChannelRef.current, sharing: false });
             };
 
             pcsRef.current.forEach((pc) => {
-                const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-                if (sender) {
-                    sender.replaceTrack(videoTrack);
+                const videoSender = pc.getSenders().find((s) => s.track?.kind === "video");
+                if (videoSender) {
+                    videoSender.replaceTrack(videoTrack);
                 } else {
                     pc.addTrack(videoTrack, stream);
                 }
@@ -882,7 +930,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                 </div>
             )}
 
-            {/* Screen Share Preview */}
+            {/* Screen Share Preview - local */}
             {sharing && screenStream && (
                 <div className="border-t border-white/10 px-3 py-2 shrink-0">
                     <div className="relative rounded-xl overflow-hidden bg-black">
@@ -898,9 +946,24 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                 </div>
             )}
 
-            {/* Music Panel */}
-            {musicOpen && activeChannel && (
-                <div className="h-72 border-t border-white/10 shrink-0">
+            {/* Remote Screen Share */}
+            {remoteScreenSharer && remoteScreenStream && !sharing && (
+                <div className="border-t border-white/10 px-3 py-2 shrink-0">
+                    <div className="relative rounded-xl overflow-hidden bg-black">
+                        <video
+                            ref={(el) => { if (el) el.srcObject = remoteScreenStream; }}
+                            autoPlay
+                            playsInline
+                            className="w-full max-h-40 object-contain"
+                        />
+                        <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-blue-500 rounded text-[9px] text-white font-medium">@{remoteScreenSharer} is sharing</div>
+                    </div>
+                </div>
+            )}
+
+            {/* Music Panel - always mounted when in channel for audio sync, visually hidden when closed */}
+            {activeChannel && (
+                <div className={musicOpen ? "h-72 border-t border-white/10 shrink-0" : "h-0 overflow-hidden"}>
                     <MusicPanel socket={socket} channelId={activeChannel} user={user} />
                 </div>
             )}
