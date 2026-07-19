@@ -10,8 +10,13 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import OnlineStatusTracker from "@/components/OnlineStatusTracker";
 import PushNotificationManager from "@/components/PushNotificationManager";
 import { useEffect } from "react";
+import { installLogInterceptor } from "@/utils/logInterceptor";
 
 export default function Providers({ children }) {
+    useEffect(() => {
+        installLogInterceptor();
+    }, []);
+
     useEffect(() => {
         if (!('serviceWorker' in navigator)) return;
 

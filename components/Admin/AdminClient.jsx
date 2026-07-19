@@ -1093,23 +1093,23 @@ function LogsPanel() {
 
     const fetchLogs = useCallback(async () => {
         try {
+            const params = new URLSearchParams();
+            if (levelFilter) params.set("level", levelFilter);
+            params.set("limit", "300");
+
+            let res;
             if (source === "next") {
-                const params = new URLSearchParams();
-                if (levelFilter) params.set("level", levelFilter);
-                params.set("limit", "300");
-                const res = await fetch(`/api/admin/logs?${params}`);
-                const data = await res.json();
-                if (Array.isArray(data)) setLogs(data);
-            } else {
+                res = await fetch(`/api/admin/logs?${params}`);
+            } else if (source === "live") {
                 const url = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
                 if (!url) return;
-                const params = new URLSearchParams();
-                if (levelFilter) params.set("level", levelFilter);
-                params.set("limit", "300");
-                const res = await fetch(`${url}/api/logs?${params}`);
-                const data = await res.json();
-                if (Array.isArray(data)) setLogs(data);
+                res = await fetch(`${url}/api/logs?${params}`);
+            } else {
+                res = await fetch(`/api/admin/logs/client?${params}`);
             }
+
+            const data = await res.json();
+            if (Array.isArray(data)) setLogs(data);
         } catch {
             // silent
         }
@@ -1146,6 +1146,10 @@ function LogsPanel() {
                     <button onClick={() => setSource("live")}
                         className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${source === "live" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm" : "text-gray-500 dark:text-gray-400"}`}>
                         Live Server
+                    </button>
+                    <button onClick={() => setSource("client")}
+                        className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${source === "client" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm" : "text-gray-500 dark:text-gray-400"}`}>
+                        Frontend
                     </button>
                 </div>
                 <select value={levelFilter} onChange={(e) => setLevelFilter(e.target.value)}
