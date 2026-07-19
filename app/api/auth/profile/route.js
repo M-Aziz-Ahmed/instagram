@@ -18,7 +18,7 @@ export async function PATCH(request) {
         if (language) update.language = language;
         if (autoTranslate !== undefined) update.autoTranslate = autoTranslate;
 
-        const user = await User.findByIdAndUpdate(session.userId, update, { new: true })
+        const user = await User.findByIdAndUpdate(session.userId, update, { returnDocument: 'after' })
             .populate("roles").lean();
 
         return Response.json({

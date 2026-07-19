@@ -151,7 +151,7 @@ router.patch("/ads", requireAdmin, async (req, res) => {
         const { id, ...updates } = req.body;
         if (!id) return res.status(400).json({ error: "id required" });
 
-        const ad = await Ad.findByIdAndUpdate(id, { ...updates, updatedAt: new Date() }, { new: true }).lean();
+        const ad = await Ad.findByIdAndUpdate(id, { ...updates, updatedAt: new Date() }, { returnDocument: 'after' }).lean();
         if (!ad) return res.status(404).json({ error: "Ad not found" });
         return res.json(ad);
     } catch (error) {
@@ -192,7 +192,7 @@ router.patch("/ads/:id", requireAdmin, async (req, res) => {
             ...(endDate !== undefined && { endDate: endDate || null }),
             ...(isActive !== undefined && { isActive }),
             updatedAt: new Date(),
-        }, { new: true }).lean();
+        }, { returnDocument: 'after' }).lean();
 
         if (!ad) return res.status(404).json({ error: "Ad not found" });
         return res.json(ad);

@@ -39,7 +39,7 @@ export async function POST(request) {
         };
         if (avatarUrl) update.avatarUrl = avatarUrl;
 
-        const user = await User.findByIdAndUpdate(session.userId, update, { new: true }).populate("roles");
+        const user = await User.findByIdAndUpdate(session.userId, update, { returnDocument: 'after' }).populate("roles");
 
         return Response.json({
             user: {

@@ -766,7 +766,7 @@ router.post("/:id/comment/:commentId/react", verifyToken, async (req, res) => {
 router.post("/:id/view", async (req, res) => {
     try {
         const { id } = req.params;
-        const post = await Post.findByIdAndUpdate(id, { $inc: { viewCount: 1 } }, { new: true });
+        const post = await Post.findByIdAndUpdate(id, { $inc: { viewCount: 1 } }, { returnDocument: 'after' });
         if (!post) return res.status(404).json({ error: "Not found" });
         return res.json({ viewCount: post.viewCount });
     } catch (error) {

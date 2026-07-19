@@ -77,7 +77,7 @@ router.post("/active", optionalAuth, async (req, res) => {
         const user = await User.findOneAndUpdate(
             { username },
             { $set: update },
-            { new: true, maxTimeMS: 5000 }
+            { returnDocument: 'after', maxTimeMS: 5000 }
         ).select("username lastActive isOnline").lean();
 
         if (!user) return res.status(404).json({ error: "User not found" });
@@ -121,7 +121,7 @@ router.post("/:username/active", optionalAuth, async (req, res) => {
         const user = await User.findOneAndUpdate(
             { username },
             { $set: update },
-            { new: true, maxTimeMS: 5000 }
+            { returnDocument: 'after', maxTimeMS: 5000 }
         ).select("username lastActive isOnline").lean();
 
         if (!user) return res.status(404).json({ error: "User not found" });

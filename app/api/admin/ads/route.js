@@ -68,7 +68,7 @@ export async function PATCH(request) {
         if (!id) return Response.json({ error: "id required" }, { status: 400 });
 
         await connectDB();
-        const ad = await Ad.findByIdAndUpdate(id, { ...updates, updatedAt: new Date() }, { new: true }).lean();
+        const ad = await Ad.findByIdAndUpdate(id, { ...updates, updatedAt: new Date() }, { returnDocument: 'after' }).lean();
         if (!ad) return Response.json({ error: "Ad not found" }, { status: 404 });
         return Response.json(ad);
     } catch (err) {

@@ -10,7 +10,7 @@ export async function POST(request) {
             await Typing.findOneAndUpdate(
                 { username },
                 { typingTo, updatedAt: new Date() },
-                { upsert: true, new: true, maxTimeMS: 5000 }
+                { upsert: true, returnDocument: 'after', maxTimeMS: 5000 }
             );
         } else {
             await Typing.deleteOne({ username }).maxTimeMS(5000);

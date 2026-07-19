@@ -234,7 +234,7 @@ router.post("/setup", verifyToken, async (req, res) => {
         };
         if (avatarUrl) update.avatarUrl = avatarUrl;
 
-        const user = await User.findByIdAndUpdate(req.userId, update, { new: true }).populate("roles");
+        const user = await User.findByIdAndUpdate(req.userId, update, { returnDocument: 'after' }).populate("roles");
 
         return res.json({
             user: sendUserPayload(user),
@@ -258,7 +258,7 @@ router.patch("/profile", verifyToken, async (req, res) => {
         if (language) update.language = language;
         if (autoTranslate !== undefined) update.autoTranslate = autoTranslate;
 
-        const user = await User.findByIdAndUpdate(req.userId, update, { new: true })
+        const user = await User.findByIdAndUpdate(req.userId, update, { returnDocument: 'after' })
             .populate("roles").lean();
 
         return res.json({

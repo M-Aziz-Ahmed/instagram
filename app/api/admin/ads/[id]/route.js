@@ -34,7 +34,7 @@ export async function PATCH(request, { params }) {
             ...(endDate !== undefined && { endDate: endDate || null }),
             ...(isActive !== undefined && { isActive }),
             updatedAt: new Date(),
-        }, { new: true }).lean();
+        }, { returnDocument: 'after' }).lean();
 
         if (!ad) return Response.json({ error: "Ad not found" }, { status: 404 });
         return Response.json(ad);

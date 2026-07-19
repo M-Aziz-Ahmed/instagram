@@ -21,7 +21,7 @@ export async function POST(request, { params }) {
         const user = await User.findOneAndUpdate(
             { username },
             { $set: update },
-            { new: true, maxTimeMS: 5000 }
+            { returnDocument: 'after', maxTimeMS: 5000 }
         ).select("username lastActive isOnline").lean();
 
         if (!user) {

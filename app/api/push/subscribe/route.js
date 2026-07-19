@@ -31,7 +31,7 @@ export async function POST(req) {
                 keys: subscription.keys,
                 userAgent: userAgent || "",
             },
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
         );
 
         return NextResponse.json({ ok: true });

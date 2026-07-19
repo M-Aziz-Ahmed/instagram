@@ -25,7 +25,7 @@ router.post("/subscribe", verifyToken, async (req, res) => {
                 keys: subscription.keys,
                 userAgent: userAgent || "",
             },
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
         );
 
         return res.json({ ok: true });
