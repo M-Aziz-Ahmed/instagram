@@ -1624,6 +1624,16 @@ app.use("/api/invites", apiLimiter, require("./routes/invites"));
 
 // ── Start ───────────────────────────────────────────────────────
 initStockfish().catch(() => {});
+
+// Start Caddy reverse proxy if available
+const caddyPath = path.join(__dirname, "caddy.exe");
+if (fs.existsSync(caddyPath)) {
+    const { spawn } = require("child_process");
+    const caddy = spawn(caddyPath, ["run"], { cwd: __dirname, stdio: "ignore", detached: true });
+    caddy.unref();
+    console.log("[Caddy] Reverse proxy started (443 → " + PORT + ")");
+}
+
 server.listen(PORT, () => {
     console.log(`[Live Server] Running on port ${PORT}`);
     console.log(`[Live Server] CORS allowed: ${CORS_ORIGIN}`);
