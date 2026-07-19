@@ -1,5 +1,4 @@
 const MAX_LOGS = 500;
-
 const logs = [];
 
 function pushLog(level, args) {
