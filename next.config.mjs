@@ -14,7 +14,7 @@ const nextConfig = {
         return [
             {
                 source: "/api/:path*",
-                destination: "https://anontweet.duckdns.org:3001/api/:path*",
+                destination: "https://anontweet.duckdns.org/api/:path*",
             },
         ];
     },
