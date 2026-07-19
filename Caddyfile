@@ -5,6 +5,9 @@ anontweet.duckdns.org {
             read_timeout 86400s
             write_timeout 86400s
         }
+        # Keep socket.io / WebSocket connections alive and unbuffered
+        header_up Connection {http.request.header.Connection}
+        flush_interval -1
     }
 }
 
@@ -13,5 +16,6 @@ anontweet.duckdns.org {
         transport http {
             tls_insecure_skip_verify
         }
+        flush_interval -1
     }
 }

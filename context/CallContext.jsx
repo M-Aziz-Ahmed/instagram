@@ -2,16 +2,9 @@
 
 import { createContext, useContext, useState, useRef, useCallback, useEffect } from "react";
 import { useUser } from "./UserContext";
+import { ICE_SERVERS } from "@/utils/iceServers";
 
 const CallContext = createContext(null);
-
-const ICE_SERVERS = {
-    iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-    ],
-};
 
 export function CallProvider({ children, socket }) {
     const { user } = useUser();

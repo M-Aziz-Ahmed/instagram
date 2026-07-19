@@ -3,17 +3,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import MusicPanel from "./MusicPanel";
+import { ICE_SERVERS } from "@/utils/iceServers";
 
 const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "";
-
-const ICE_SERVERS = {
-    iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-        { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-    ],
-};
 
 function SpeakingIndicator({ speaking }) {
     return (
