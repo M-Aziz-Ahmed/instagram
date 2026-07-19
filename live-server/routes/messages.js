@@ -125,6 +125,60 @@ router.post("/", verifyToken, async (req, res) => {
     }
 });
 
+// PATCH / — unified action dispatcher (react, mark-read)
+router.patch("/", async (req, res) => {
+    try {
+        const { sender, recipient, messageId, action, reactionType } = req.body;
+
+        // Mark messages as read when opening a conversation
+        if (sender && recipient) {
+            await Message.updateMany(
+                { sender: recipient, recipient: sender, isRead: false },
+                { $set: { isRead: true } }
+            );
+            return res.json({ ok: true });
+        }
+
+        // React to a message
+        if (action === "react" && messageId && reactionType) {
+            const validReactions = ["like", "love", "laugh", "fire", "sad", "angry"];
+            if (!validReactions.includes(reactionType)) {
+                return res.status(400).json({ error: "Invalid reaction" });
+            }
+            if (!sender) return res.status(400).json({ error: "Sender required" });
+
+            const msg = await Message.findById(messageId);
+            if (!msg) return res.status(404).json({ error: "Message not found" });
+
+            if (!msg.reactions) {
+                msg.reactions = { like: [], love: [], laugh: [], fire: [], sad: [], angry: [] };
+            }
+
+            // Remove from all other reaction types
+            validReactions.forEach(type => {
+                if (!msg.reactions[type]) msg.reactions[type] = [];
+                const idx = msg.reactions[type].indexOf(sender);
+                if (idx !== -1) msg.reactions[type].splice(idx, 1);
+            });
+
+            // Toggle the selected reaction
+            if (!msg.reactions[reactionType]) msg.reactions[reactionType] = [];
+            const idx = msg.reactions[reactionType].indexOf(sender);
+            if (idx === -1) {
+                msg.reactions[reactionType].push(sender);
+            }
+
+            await msg.save();
+            return res.json({ reactions: msg.reactions });
+        }
+
+        return res.status(400).json({ error: "Invalid request" });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
 // PATCH /:id/read
 router.patch("/:id/read", verifyToken, async (req, res) => {
     try {

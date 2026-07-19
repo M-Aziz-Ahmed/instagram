@@ -37,7 +37,7 @@ router.get("/", verifyToken, async (req, res) => {
 // PATCH /read
 router.patch("/read", verifyToken, async (req, res) => {
     try {
-        const username = (await User.findById(req.userId).select("username").lean())?.username;
+        const username = req.body?.username || (await User.findById(req.userId).select("username").lean())?.username;
         if (!username) return res.status(400).json({ error: "Username required" });
 
         await Notification.updateMany({ recipient: username, read: false }, { read: true });

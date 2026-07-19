@@ -279,6 +279,33 @@ router.post("/:username/muted-words", verifyToken, async (req, res) => {
     }
 });
 
+// PATCH /:username/muted-words — add or remove
+router.patch("/:username/muted-words", verifyToken, async (req, res) => {
+    try {
+        const { username } = req.params;
+        const userDoc = await User.findById(req.userId).select("username");
+        if (userDoc?.username !== username) return res.status(403).json({ error: "Unauthorized" });
+
+        const { word, action } = req.body;
+        const normalized = (word || "").toLowerCase().replace(/^#/, "").trim();
+        if (!normalized) return res.status(400).json({ error: "Word required" });
+
+        const user = await User.findOne({ username });
+        if (!user) return res.status(404).json({ error: "Not found" });
+
+        if (action === "remove") {
+            user.mutedWords = user.mutedWords.filter((w) => w !== normalized);
+        } else {
+            if (!user.mutedWords.includes(normalized)) user.mutedWords.push(normalized);
+        }
+        await user.save();
+        return res.json({ mutedWords: user.mutedWords });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
 // DELETE /:username/muted-words/:word
 router.delete("/:username/muted-words/:word", verifyToken, async (req, res) => {
     try {

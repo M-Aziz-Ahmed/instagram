@@ -101,7 +101,7 @@ export default function NotificationBell({ onNavigate }) {
     const handleOpen = async () => {
         setOpen((v) => !v);
         if (!open && unread > 0 && user) {
-            await fetch("/api/notifications", {
+            await fetch("/api/notifications/read", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: user.username }),
@@ -165,7 +165,7 @@ export default function NotificationBell({ onNavigate }) {
                                 <button
                                     onClick={async () => {
                                         if (!user) return;
-                                        await fetch("/api/notifications", {
+                                        await fetch("/api/notifications/read", {
                                             method: "PATCH",
                                             headers: { "Content-Type": "application/json" },
                                             body: JSON.stringify({ username: user.username }),

@@ -335,6 +335,66 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
     }
 });
 
+// PATCH /:id/messages — unified action dispatcher (read, react, delete)
+router.patch("/:id/messages", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { action, readBy, username, messageId, reactionType } = req.body;
+
+        if (action === "read" && readBy) {
+            await GroupMessage.updateMany(
+                { groupId: id, sender: { $ne: readBy }, readBy: { $ne: readBy } },
+                { $addToSet: { readBy } }
+            );
+            return res.json({ ok: true });
+        }
+
+        if (action === "react" && messageId && reactionType) {
+            const validReactions = ["like", "love", "laugh", "fire", "sad", "angry"];
+            if (!validReactions.includes(reactionType)) {
+                return res.status(400).json({ error: "Invalid reaction" });
+            }
+            if (!username) return res.status(400).json({ error: "Username required" });
+
+            const msg = await GroupMessage.findById(messageId);
+            if (!msg) return res.status(404).json({ error: "Message not found" });
+
+            if (!msg.reactions) {
+                msg.reactions = { like: [], love: [], laugh: [], fire: [], sad: [], angry: [] };
+            }
+
+            validReactions.forEach(type => {
+                if (!msg.reactions[type]) msg.reactions[type] = [];
+                const idx = msg.reactions[type].indexOf(username);
+                if (idx !== -1) msg.reactions[type].splice(idx, 1);
+            });
+
+            if (!msg.reactions[reactionType]) msg.reactions[reactionType] = [];
+            const idx = msg.reactions[reactionType].indexOf(username);
+            if (idx === -1) {
+                msg.reactions[reactionType].push(username);
+            }
+
+            await msg.save();
+            return res.json({ reactions: msg.reactions });
+        }
+
+        if (action === "delete" && messageId) {
+            const msg = await GroupMessage.findById(messageId);
+            if (!msg) return res.status(404).json({ error: "Message not found" });
+            if (msg.sender !== username) return res.status(403).json({ error: "Unauthorized" });
+
+            await GroupMessage.findByIdAndDelete(messageId);
+            return res.json({ ok: true });
+        }
+
+        return res.status(400).json({ error: "Invalid request" });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
 // GET /:id/members
 router.get("/:id/members", verifyToken, async (req, res) => {
     try {

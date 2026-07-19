@@ -77,6 +77,57 @@ router.post("/", verifyToken, async (req, res) => {
     }
 });
 
+// PATCH /:id — unified action dispatcher (view, reply)
+router.patch("/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { username, action, text } = req.body;
+
+        if (!username) return res.status(400).json({ error: "Username required" });
+
+        const story = await Story.findById(id);
+        if (!story) return res.status(404).json({ error: "Not found" });
+
+        if (action === "view") {
+            if (!story.views.includes(username)) {
+                story.views.push(username);
+                await story.save();
+            }
+            return res.json(story);
+        }
+
+        if (action === "reply") {
+            story.replies.push({ fromUser: username, text: text || "" });
+            await story.save();
+
+            if (story.sender !== username) {
+                Notification.create({
+                    recipient: story.sender,
+                    type: "message",
+                    fromUser: username,
+                    fromColor: story.color,
+                    postId: story._id.toString(),
+                    text: text?.slice(0, 80) || "Replied to your story",
+                }).catch(() => {});
+
+                Message.create({
+                    text: text || "Replied to your story",
+                    sender: username,
+                    recipient: story.sender,
+                    color: story.color,
+                }).catch(() => {});
+            }
+
+            return res.json(story);
+        }
+
+        return res.status(400).json({ error: "Invalid action" });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed to update story" });
+    }
+});
+
 // DELETE /:id
 router.delete("/:id", verifyToken, async (req, res) => {
     try {
