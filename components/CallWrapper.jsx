@@ -20,11 +20,10 @@ function CallSocketProvider({ children }) {
                 const { io } = await import("socket.io-client");
                 if (cancelled) return;
                 const wsUrl = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "http://localhost:3001";
-                sock = io({
+                sock = io(wsUrl, {
                     query: { username: user.username },
-                    path: "/api/sio",
-                    transports: ["polling"],
-                    upgrade: false,
+                    transports: ["polling", "websocket"],
+                    upgrade: true,
                     rememberUpgrade: false,
                     reconnectionAttempts: 30,
                     reconnectionDelay: 1000,

@@ -293,10 +293,9 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
         }
         if (!sid || !username) return null;
 
-        const socket = io({
-            path: "/api/sio",
-            transports: ["polling"],
-            upgrade: false,
+        const socket = io(LIVE_SERVER, {
+            transports: ["polling", "websocket"],
+            upgrade: true,
             rememberUpgrade: false,
             reconnection: true,
             reconnectionAttempts: 30,

@@ -20,11 +20,10 @@ export function VoiceChatProvider({ children }) {
 
     useEffect(() => {
         if (!LIVE_SERVER || !user?.username) return;
-        const s = io({
+        const s = io(LIVE_SERVER, {
             query: { username: user.username },
-            path: "/api/sio",
-            transports: ["polling"],
-            upgrade: false,
+            transports: ["polling", "websocket"],
+            upgrade: true,
             rememberUpgrade: false,
             reconnectionAttempts: 30,
             reconnectionDelay: 1000,
