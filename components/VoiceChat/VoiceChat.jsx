@@ -193,6 +193,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
     const [showCreateChannel, setShowCreateChannel] = useState(false);
     const [newChannelName, setNewChannelName] = useState("");
     const [notification, setNotification] = useState(null);
+    const [socketConnected, setSocketConnected] = useState(false);
     const [screenStream, setScreenStream] = useState(null);
     const [sharing, setSharing] = useState(false);
     const [remoteScreenSharer, setRemoteScreenSharer] = useState(null);
@@ -423,8 +424,12 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         const handleReconnect = async () => {
             const s = socketRef.current;
             const u = userRef.current;
+            if (!s || !u) return;
+
+            s.emit("voice:get-channels");
+
             const ch = lastJoinedChannelRef.current;
-            if (!s || !u || !ch) return;
+            if (!ch) return;
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -441,6 +446,12 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             showNotif("Reconnected to voice chat");
         };
 
+        const handleConnect = () => setSocketConnected(true);
+        const handleDisconnectStatus = () => setSocketConnected(false);
+
+        setSocketConnected(socket.connected);
+        socket.on("connect", handleConnect);
+        socket.on("disconnect", handleDisconnectStatus);
         socket.on("disconnect", handleDisconnect);
         socket.on("reconnect", handleReconnect);
         socket.on("voice:channels", handleChannels);
@@ -452,7 +463,6 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         socket.on("voice:kicked", handleKicked);
         socket.on("voice:admin-muted", handleAdminMuted);
         socket.on("voice:error", handleVoiceError);
-        socket.emit("voice:get-channels");
 
         const handleMusicState = (state) => {
             if (state.addedSong) showNotif(`${state.addedBy} added a song to the queue`);
@@ -467,7 +477,27 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         socket.on("voice:music:queue-add", handleMusicQueueAdd);
         socket.on("voice:music:queue-remove", handleMusicQueueRemove);
 
+        const fetchChannels = () => socket.emit("voice:get-channels");
+        if (socket.connected) {
+            fetchChannels();
+        } else {
+            socket.once("connect", fetchChannels);
+        }
+
+        let retryTimer = null;
+        retryTimer = setInterval(() => {
+            if (socket.connected) {
+                fetchChannels();
+                clearInterval(retryTimer);
+                retryTimer = null;
+            }
+        }, 2000);
+
         return () => {
+            if (retryTimer) clearInterval(retryTimer);
+            socket.off("connect", handleConnect);
+            socket.off("connect", fetchChannels);
+            socket.off("disconnect", handleDisconnectStatus);
             socket.off("disconnect", handleDisconnect);
             socket.off("reconnect", handleReconnect);
             socket.off("voice:channels", handleChannels);
@@ -838,6 +868,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${socketConnected ? "bg-green-400" : "bg-yellow-400 animate-pulse"}`} />
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 text-green-400">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
                     </svg>
@@ -919,7 +950,10 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                         isAdmin={isAdmin}
                     />
                 ))}
-                {channels.length === 0 && (
+                {channels.length === 0 && !socketConnected && (
+                    <p className="text-xs text-yellow-400/80 text-center py-4">Connecting to voice server...</p>
+                )}
+                {channels.length === 0 && socketConnected && (
                     <p className="text-xs text-gray-500 text-center py-4">No channels yet</p>
                 )}
             </div>
