@@ -150,8 +150,10 @@ if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
 const PORT = process.env.PORT || 3001;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 
+const cookieParser = require("cookie-parser");
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+app.use(cookieParser());
 
 const io = new Server(server, {
     cors: {
@@ -1386,10 +1388,7 @@ io.on("connection", async (socket) => {
                     io.to(`call:${callId}`).emit("call:peer-left", { callId, username: socket.data.username });
                     if (sockets.size === 0) {
                         io._callRooms.delete(callId);
-                        try {
-                            const CallSession = require("../models/callSession").default || require("../models/callSession");
-                            CallSession.updateOne({ callId }, { status: "ended", endedAt: new Date() }).catch(() => {});
-                        } catch (e) {}
+                        try { const CallSession = require("./models/callSession"); CallSession.updateOne({ callId }, { status: "ended", endedAt: new Date() }).catch(() => {}); } catch (e) {}
                     }
                 }
             }
@@ -1411,6 +1410,27 @@ io.on("connection", async (socket) => {
         console.log(`[WS] Disconnected: ${socket.id} (${username})`);
     });
 });
+
+// ── API Routes ───────────────────────────────────────────────────
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/posts", require("./routes/posts"));
+app.use("/api/feed", require("./routes/feed"));
+app.use("/api/users", require("./routes/users"));
+app.use("/api/admin", require("./routes/admin"));
+app.use("/api/messages", require("./routes/messages"));
+app.use("/api/groups", require("./routes/groups"));
+app.use("/api/stories", require("./routes/stories"));
+app.use("/api/search", require("./routes/search"));
+app.use("/api/hashtags", require("./routes/hashtags"));
+app.use("/api/notifications", require("./routes/notifications"));
+app.use("/api/typing", require("./routes/typing"));
+app.use("/api/push", require("./routes/push"));
+app.use("/api/ads", require("./routes/ads"));
+app.use("/api/analytics", require("./routes/analytics"));
+app.use("/api/chess/history", require("./routes/chess"));
+app.use("/api/debug", require("./routes/debug"));
+app.use("/api/live", require("./routes/live"));
+app.use("/api/translate", require("./routes/translate"));
 
 // ── Start ───────────────────────────────────────────────────────
 initStockfish().catch(() => {});
