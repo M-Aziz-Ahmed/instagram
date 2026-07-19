@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
+import MusicPanel from "./MusicPanel";
 
 const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "";
 
@@ -192,8 +193,15 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
     const [showCreateChannel, setShowCreateChannel] = useState(false);
     const [newChannelName, setNewChannelName] = useState("");
     const [notification, setNotification] = useState(null);
+    const [screenStream, setScreenStream] = useState(null);
+    const [sharing, setSharing] = useState(false);
+    const [ptt, setPtt] = useState(false);
+    const [pttKey, setPttKey] = useState(" ");
+    const [pttActive, setPttActive] = useState(false);
+    const [musicOpen, setMusicOpen] = useState(false);
 
     const localStreamRef  = useRef(null);
+    const screenStreamRef = useRef(null);
     const peerStreamsRef  = useRef(new Map());
     const pcsRef         = useRef(new Map());
     const audioElementsRef = useRef(new Map());
@@ -221,6 +229,13 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
         localStreamRef.current?.getTracks().forEach((t) => t.stop());
         localStreamRef.current = null;
+        if (screenStreamRef.current) {
+            screenStreamRef.current.getTracks().forEach((t) => t.stop());
+            screenStreamRef.current = null;
+        }
+        setScreenStream(null);
+        setSharing(false);
+        setPttActive(false);
         pcsRef.current.forEach((pc) => { try { pc.close(); } catch {} });
         pcsRef.current.clear();
         peerStreamsRef.current.forEach((s) => s.getTracks().forEach((t) => t.stop()));
@@ -401,6 +416,19 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         socket.on("voice:error", handleVoiceError);
         socket.emit("voice:get-channels");
 
+        const handleMusicState = (state) => {
+            if (state.addedSong) showNotif(`${state.addedBy} added a song to the queue`);
+        };
+        const handleMusicQueueAdd = (data) => {
+            if (data.addedBy !== userRef.current?.username) showNotif(`${data.addedBy} added "${data.song?.title || "a song"}" to queue`);
+        };
+        const handleMusicQueueRemove = (data) => {
+            if (data.removedBy !== userRef.current?.username) showNotif(`${data.removedBy} removed "${data.song?.title || "a song"}" from queue`);
+        };
+        socket.on("voice:music:state", handleMusicState);
+        socket.on("voice:music:queue-add", handleMusicQueueAdd);
+        socket.on("voice:music:queue-remove", handleMusicQueueRemove);
+
         return () => {
             socket.off("disconnect", handleDisconnect);
             socket.off("reconnect", handleReconnect);
@@ -413,6 +441,9 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             socket.off("voice:kicked", handleKicked);
             socket.off("voice:admin-muted", handleAdminMuted);
             socket.off("voice:error", handleVoiceError);
+            socket.off("voice:music:state", handleMusicState);
+            socket.off("voice:music:queue-add", handleMusicQueueAdd);
+            socket.off("voice:music:queue-remove", handleMusicQueueRemove);
         };
     }, [socket, isOpen, cleanup, showNotif]);
 
@@ -629,6 +660,101 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         }
     }, [activeChannel, participants]);
 
+    const toggleScreenShare = useCallback(async () => {
+        const s = socketRef.current;
+        if (!s || !activeChannelRef.current) return;
+
+        if (sharing) {
+            if (screenStreamRef.current) {
+                screenStreamRef.current.getTracks().forEach((t) => t.stop());
+                screenStreamRef.current = null;
+            }
+            setScreenStream(null);
+            setSharing(false);
+            pcsRef.current.forEach((pc) => {
+                const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+                if (sender) {
+                    const localStream = localStreamRef.current;
+                    const audioTrack = localStream?.getAudioTracks()[0];
+                    sender.replaceTrack(audioTrack || null);
+                }
+            });
+            s.emit("voice:screen-share", { channelId: activeChannelRef.current, sharing: false });
+            return;
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+            const videoTrack = stream.getVideoTracks()[0];
+            screenStreamRef.current = stream;
+            setScreenStream(stream);
+            setSharing(true);
+
+            videoTrack.onended = () => {
+                if (screenStreamRef.current) {
+                    screenStreamRef.current.getTracks().forEach((t) => t.stop());
+                    screenStreamRef.current = null;
+                }
+                setScreenStream(null);
+                setSharing(false);
+                pcsRef.current.forEach((pc) => {
+                    const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+                    if (sender) sender.replaceTrack(null);
+                });
+            };
+
+            pcsRef.current.forEach((pc) => {
+                const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+                if (sender) {
+                    sender.replaceTrack(videoTrack);
+                } else {
+                    pc.addTrack(videoTrack, stream);
+                }
+            });
+
+            s.emit("voice:screen-share", { channelId: activeChannelRef.current, sharing: true });
+        } catch {
+            setSharing(false);
+        }
+    }, [sharing]);
+
+    useEffect(() => {
+        if (!ptt || !activeChannel) return;
+        const handleKeyDown = (e) => {
+            if (e.repeat) return;
+            if (e.code === pttKey || e.key === pttKey) {
+                e.preventDefault();
+                setPttActive(true);
+                localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; });
+                const s = socketRef.current;
+                const ch = activeChannelRef.current;
+                if (s && ch) {
+                    s.emit("voice:toggle-mute", { channelId: ch, muted: false });
+                    s.emit("voice:speaking", { channelId: ch, speaking: true });
+                }
+            }
+        };
+        const handleKeyUp = (e) => {
+            if (e.code === pttKey || e.key === pttKey) {
+                e.preventDefault();
+                setPttActive(false);
+                localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = false; });
+                const s = socketRef.current;
+                const ch = activeChannelRef.current;
+                if (s && ch) {
+                    s.emit("voice:toggle-mute", { channelId: ch, muted: true });
+                    s.emit("voice:speaking", { channelId: ch, speaking: false });
+                }
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        document.addEventListener("keyup", handleKeyUp);
+        return () => {
+            document.removeEventListener("keydown", handleKeyDown);
+            document.removeEventListener("keyup", handleKeyUp);
+        };
+    }, [ptt, pttKey, activeChannel]);
+
     const handleCreateChannel = useCallback(() => {
         const s = socketRef.current;
         if (!s || !newChannelName.trim()) return;
@@ -657,6 +783,17 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                     <span className="text-sm font-semibold">Voice Channels</span>
                 </div>
                 <div className="flex items-center gap-1">
+                    {activeChannel && (
+                        <button
+                            onClick={() => setMusicOpen(!musicOpen)}
+                            className={`p-1 transition-colors ${musicOpen ? "text-green-400" : "text-white/40 hover:text-green-400"}`}
+                            title="Music"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66a2.25 2.25 0 0 0 1.632-2.163Zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 0 1-1.632 2.163l-1.32.377a1.803 1.803 0 1 1-.99-3.467l2.31-.66A2.25 2.25 0 0 0 9 15.553Z" />
+                            </svg>
+                        </button>
+                    )}
                     {isAdmin && (
                         <button
                             onClick={() => setShowCreateChannel(!showCreateChannel)}
@@ -745,10 +882,55 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                 </div>
             )}
 
+            {/* Screen Share Preview */}
+            {sharing && screenStream && (
+                <div className="border-t border-white/10 px-3 py-2 shrink-0">
+                    <div className="relative rounded-xl overflow-hidden bg-black">
+                        <video
+                            ref={(el) => { if (el) el.srcObject = screenStream; }}
+                            autoPlay
+                            playsInline
+                            muted
+                            className="w-full max-h-40 object-contain"
+                        />
+                        <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-blue-500 rounded text-[9px] text-white font-medium">SHARING</div>
+                    </div>
+                </div>
+            )}
+
+            {/* Music Panel */}
+            {musicOpen && activeChannel && (
+                <div className="h-72 border-t border-white/10 shrink-0">
+                    <MusicPanel socket={socket} channelId={activeChannel} user={user} />
+                </div>
+            )}
+
             {/* Controls */}
             {activeChannel && (
                 <div className="shrink-0 border-t border-white/10 px-4 py-3 safe-bottom">
                     <div className="flex items-center justify-center gap-2">
+                        <button
+                            onClick={toggleScreenShare}
+                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                                sharing ? "bg-blue-500 text-white" : "bg-white/10 text-white hover:bg-white/20"
+                            }`}
+                            title={sharing ? "Stop sharing" : "Share screen"}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0v1.036a1 1 0 0 1-.473.862l-2.277 1.366a1 1 0 0 1-1.09 0L11.14 7.148a1 1 0 0 0-1.09 0L4.473 9.148A1 1 0 0 1 4 8.286V5.25" />
+                            </svg>
+                        </button>
+                        <button
+                            onClick={() => { setPtt(!ptt); if (!ptt) { setMuted(true); localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = false; }); } else { setMuted(false); localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; }); } }}
+                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                                ptt ? (pttActive ? "bg-green-500 text-white" : "bg-yellow-500 text-white") : "bg-white/10 text-white hover:bg-white/20"
+                            }`}
+                            title={ptt ? "Push-to-talk ON (hold key to speak)" : "Enable push-to-talk"}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                            </svg>
+                        </button>
                         <button
                             onClick={toggleMute}
                             className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${

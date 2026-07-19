@@ -769,6 +769,30 @@ io.on("connection", async (socket) => {
         socket.leave(`voice:${channelId}`);
         socket.data.voiceChannel = null;
 
+        // Transfer DJ if the leaving user was the DJ
+        if (io._voiceMusic && participant) {
+            const musicState = io._voiceMusic.get(channelId);
+            if (musicState && musicState.dj === participant.username) {
+                const remaining = Array.from(ch.participants.values());
+                if (remaining.length > 0) {
+                    musicState.dj = remaining[0].username;
+                } else {
+                    musicState.dj = null;
+                    musicState.playing = false;
+                    musicState.queue = [];
+                    musicState.current = null;
+                }
+                io.to(`voice:${channelId}`).emit("voice:music:state", {
+                    queue: musicState.queue,
+                    current: musicState.current,
+                    playing: musicState.playing,
+                    position: musicState.position,
+                    dj: musicState.dj,
+                    volume: musicState.volume,
+                });
+            }
+        }
+
         broadcastChannelParticipants(channelId);
         broadcastChannelList();
 
@@ -849,6 +873,7 @@ io.on("connection", async (socket) => {
         ch.participants.clear();
         voiceChannels.delete(channelId);
         channelMutedUsers.delete(channelId);
+        if (io._voiceMusic) io._voiceMusic.delete(channelId);
         broadcastChannelList();
         console.log(`[VOICE] Admin ${socket.data.username} deleted channel: ${channelId}`);
     });
@@ -1381,6 +1406,175 @@ io.on("connection", async (socket) => {
     socket.on("call:video-toggle", (data) => {
         const { callId, videoOn } = data;
         io.to(`call:${callId}`).emit("call:video-toggle", { callId, username: socket.data.username, videoOn });
+    });
+
+    // ── Voice Music System ──────────────────────────────────────────
+    // In-memory music state per channel
+    if (!io._voiceMusic) io._voiceMusic = new Map();
+    const getMusicState = (channelId) => {
+        if (!io._voiceMusic.has(channelId)) {
+            io._voiceMusic.set(channelId, {
+                queue: [],
+                current: null,
+                playing: false,
+                position: 0,
+                dj: null,
+                volume: 0.7,
+                updatedAt: Date.now(),
+            });
+        }
+        return io._voiceMusic.get(channelId);
+    };
+
+    socket.on("voice:music:add", ({ channelId, song }) => {
+        if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
+        const state = getMusicState(channelId);
+        const entry = {
+            id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+            title: song.title || "Unknown",
+            duration: song.duration || 0,
+            thumbnail: song.thumbnail || "",
+            videoId: song.videoId || "",
+            addedBy: socket.data.username,
+        };
+        state.queue.push(entry);
+        if (!state.dj) state.dj = socket.data.username;
+        io.to(`voice:${channelId}`).emit("voice:music:state", {
+            queue: state.queue,
+            current: state.current,
+            playing: state.playing,
+            position: state.playing && state.current ? (state.position + (Date.now() - state.updatedAt) / 1000) : state.position,
+            dj: state.dj,
+            volume: state.volume,
+        });
+    });
+
+    socket.on("voice:music:play", ({ channelId, songId }) => {
+        if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
+        const state = getMusicState(channelId);
+        if (state.dj !== socket.data.username) return;
+        if (songId) {
+            const idx = state.queue.findIndex((s) => s.id === songId);
+            if (idx === -1) return;
+            const [song] = state.queue.splice(idx, 1);
+            state.current = song;
+        }
+        state.playing = true;
+        state.position = 0;
+        state.updatedAt = Date.now();
+        io.to(`voice:${channelId}`).emit("voice:music:state", {
+            queue: state.queue,
+            current: state.current,
+            playing: true,
+            position: 0,
+            dj: state.dj,
+            volume: state.volume,
+        });
+    });
+
+    socket.on("voice:music:pause", ({ channelId }) => {
+        if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
+        const state = getMusicState(channelId);
+        if (state.dj !== socket.data.username) return;
+        state.position += (Date.now() - state.updatedAt) / 1000;
+        state.playing = false;
+        state.updatedAt = Date.now();
+        io.to(`voice:${channelId}`).emit("voice:music:state", {
+            queue: state.queue,
+            current: state.current,
+            playing: false,
+            position: state.position,
+            dj: state.dj,
+            volume: state.volume,
+        });
+    });
+
+    socket.on("voice:music:skip", ({ channelId }) => {
+        if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
+        const state = getMusicState(channelId);
+        if (state.dj !== socket.data.username && !socket.data.isAdmin) return;
+        const prev = state.current;
+        state.current = state.queue.length > 0 ? state.queue.shift() : null;
+        state.playing = !!state.current;
+        state.position = 0;
+        state.updatedAt = Date.now();
+        if (prev) {
+            state.queue.push({ ...prev, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7) });
+        }
+        io.to(`voice:${channelId}`).emit("voice:music:state", {
+            queue: state.queue,
+            current: state.current,
+            playing: state.playing,
+            position: 0,
+            dj: state.dj,
+            volume: state.volume,
+        });
+    });
+
+    socket.on("voice:music:remove", ({ channelId, songId }) => {
+        if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
+        const state = getMusicState(channelId);
+        const idx = state.queue.findIndex((s) => s.id === songId);
+        if (idx === -1) return;
+        if (state.queue[idx].addedBy !== socket.data.username && state.dj !== socket.data.username && !socket.data.isAdmin) return;
+        state.queue.splice(idx, 1);
+        io.to(`voice:${channelId}`).emit("voice:music:state", {
+            queue: state.queue,
+            current: state.current,
+            playing: state.playing,
+            position: state.playing && state.current ? (state.position + (Date.now() - state.updatedAt) / 1000) : state.position,
+            dj: state.dj,
+            volume: state.volume,
+        });
+    });
+
+    socket.on("voice:music:volume", ({ channelId, volume }) => {
+        if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
+        const state = getMusicState(channelId);
+        if (state.dj !== socket.data.username) return;
+        state.volume = Math.max(0, Math.min(1, volume));
+        io.to(`voice:${channelId}`).emit("voice:music:state", {
+            queue: state.queue,
+            current: state.current,
+            playing: state.playing,
+            position: state.playing && state.current ? (state.position + (Date.now() - state.updatedAt) / 1000) : state.position,
+            dj: state.dj,
+            volume: state.volume,
+        });
+    });
+
+    socket.on("voice:music:transfer-dj", ({ channelId, toUsername }) => {
+        if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
+        const state = getMusicState(channelId);
+        if (state.dj !== socket.data.username) return;
+        state.dj = toUsername;
+        io.to(`voice:${channelId}`).emit("voice:music:state", {
+            queue: state.queue,
+            current: state.current,
+            playing: state.playing,
+            position: state.playing && state.current ? (state.position + (Date.now() - state.updatedAt) / 1000) : state.position,
+            dj: state.dj,
+            volume: state.volume,
+        });
+    });
+
+    socket.on("voice:music:clear", ({ channelId }) => {
+        if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
+        const state = getMusicState(channelId);
+        if (state.dj !== socket.data.username) return;
+        state.queue = [];
+        state.current = null;
+        state.playing = false;
+        state.position = 0;
+        state.updatedAt = Date.now();
+        io.to(`voice:${channelId}`).emit("voice:music:state", {
+            queue: [],
+            current: null,
+            playing: false,
+            position: 0,
+            dj: state.dj,
+            volume: state.volume,
+        });
     });
 
     socket.on("disconnect", async () => {
