@@ -13,6 +13,5 @@ const pushSubscriptionSchema = new mongoose.Schema({
 });
 
 pushSubscriptionSchema.index({ endpoint: 1 }, { unique: true });
-pushSubscriptionSchema.index({ username: 1 });
 
 module.exports = mongoose.models.PushSubscription || mongoose.model("PushSubscription", pushSubscriptionSchema);

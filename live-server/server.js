@@ -130,6 +130,7 @@ async function getAIMoveAsync(chess, difficulty) {
 }
 
 const app = express();
+app.set('trust proxy', 1);
 
 let server;
 const certDir = __dirname;
