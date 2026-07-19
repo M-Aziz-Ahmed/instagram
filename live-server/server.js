@@ -168,7 +168,7 @@ app.use(cors({
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-API-Key"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-Requested-With"],
 }));
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
@@ -179,12 +179,13 @@ const io = new Server(server, {
         methods: ["GET", "POST"],
         credentials: true,
     },
-    pingInterval: 10000,
-    pingTimeout: 5000,
+    pingInterval: 25000,
+    pingTimeout: 20000,
+    allowEIO3: true,
 });
 
 // ── MongoDB ─────────────────────────────────────────────────────
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://39.62.217.128:27017";
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://azizahmed:I_hateyou2@localhost:27017/?authSource=admin";
 
 mongoose.connect(MONGODB_URI, {
     maxPoolSize: 10,

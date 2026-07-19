@@ -294,10 +294,13 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
         if (!LIVE_SERVER || !sid || !username) return null;
 
         const socket = io(LIVE_SERVER, {
-            transports: ["websocket", "polling"],
+            transports: ["polling", "websocket"],
+            upgrade: true,
+            rememberUpgrade: false,
             reconnection: true,
             reconnectionAttempts: 10,
             reconnectionDelay: 1000,
+            timeout: 20000,
         });
 
         socket.on("connect", () => {

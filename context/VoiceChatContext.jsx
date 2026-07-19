@@ -22,10 +22,14 @@ export function VoiceChatProvider({ children }) {
         if (!LIVE_SERVER || !user?.username) return;
         const s = io(LIVE_SERVER, {
             query: { username: user.username },
-            transports: ["websocket", "polling"],
+            transports: ["polling", "websocket"],
+            upgrade: true,
+            rememberUpgrade: false,
             reconnectionAttempts: 20,
             reconnectionDelay: 1000,
             reconnectionDelayMax: 10000,
+            timeout: 20000,
+            withCredentials: true,
         });
         setSocket(s);
         return () => { s.disconnect(); setSocket(null); };

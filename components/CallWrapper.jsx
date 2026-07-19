@@ -22,10 +22,13 @@ function CallSocketProvider({ children }) {
                 const wsUrl = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "http://localhost:3001";
                 sock = io(wsUrl, {
                     query: { username: user.username },
-                    transports: ["websocket", "polling"],
+                    transports: ["polling", "websocket"],
+                    upgrade: true,
+                    rememberUpgrade: false,
                     reconnectionAttempts: 15,
                     reconnectionDelay: 1000,
                     reconnectionDelayMax: 10000,
+                    timeout: 20000,
                 });
                 sock.on("connect", () => {
                     if (!cancelled) setSocket(sock);

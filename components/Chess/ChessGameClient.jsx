@@ -289,8 +289,12 @@ export default function ChessGameClient({ gameId }) {
         if (!LIVE_SERVER || !user?.username) return;
         const s = io(LIVE_SERVER, {
             query: { username: user.username },
-            transports: ["websocket", "polling"],
+            transports: ["polling", "websocket"],
+            upgrade: true,
+            rememberUpgrade: false,
             reconnectionAttempts: 10,
+            timeout: 20000,
+            withCredentials: true,
         });
         socketRef.current = s;
 
