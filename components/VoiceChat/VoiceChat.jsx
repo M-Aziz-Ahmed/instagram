@@ -201,6 +201,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
     const [ptt, setPtt] = useState(false);
     const [pttKey, setPttKey] = useState(" ");
     const [pttActive, setPttActive] = useState(false);
+    const [pttListening, setPttListening] = useState(false);
     const [musicOpen, setMusicOpen] = useState(false);
     const [initialMusicState, setInitialMusicState] = useState(null);
 
@@ -841,12 +842,48 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         };
     }, [ptt, pttKey, activeChannel]);
 
+    // PTT key capture mode
+    useEffect(() => {
+        if (!pttListening) return;
+        const handleCapture = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setPttKey(e.code);
+            setPttListening(false);
+        };
+        const handleKeyDown = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        };
+        document.addEventListener("keydown", handleCapture, { capture: true, once: true });
+        document.addEventListener("keyup", handleKeyDown, { capture: true });
+        return () => {
+            document.removeEventListener("keydown", handleCapture, { capture: true });
+            document.removeEventListener("keyup", handleKeyDown, { capture: true });
+        };
+    }, [pttListening]);
+
     // Sync remote screen share video element with stream
     useEffect(() => {
         if (remoteVideoRef.current && remoteScreenStream) {
             remoteVideoRef.current.srcObject = remoteScreenStream;
         }
     }, [remoteScreenStream]);
+
+    const formatKey = (code) => {
+        if (!code) return "?";
+        const map = {
+            " ": "Space", "ShiftLeft": "Shift", "ShiftRight": "Shift",
+            "ControlLeft": "Ctrl", "ControlRight": "Ctrl",
+            "AltLeft": "Alt", "AltRight": "Alt",
+            "MetaLeft": "Win", "MetaRight": "Win",
+        };
+        if (map[code]) return map[code];
+        if (code.startsWith("Key")) return code.slice(3);
+        if (code.startsWith("Digit")) return code.slice(5);
+        if (code.startsWith("F") && code.length <= 3) return code;
+        return code.replace("Arrow", "").replace("Left", " L").replace("Right", " R");
+    };
 
     const handleCreateChannel = useCallback(() => {
         const s = socketRef.current;
@@ -1004,6 +1041,15 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                             className="w-full max-h-40 object-contain"
                         />
                         <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-blue-500 rounded text-[9px] text-white font-medium">@{remoteScreenSharer} is sharing</div>
+                        <button
+                            onClick={() => { remoteVideoRef.current?.requestFullscreen?.(); }}
+                            className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center rounded bg-black/50 hover:bg-black/70 text-white transition-colors"
+                            title="Fullscreen"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                            </svg>
+                        </button>
                     </div>
                 </div>
             )}
@@ -1031,11 +1077,19 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                             </svg>
                         </button>
                         <button
-                            onClick={() => { setPtt(!ptt); if (!ptt) { setMuted(true); localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = false; }); } else { setMuted(false); localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; }); } }}
+                            onClick={() => {
+                                if (pttListening) { setPttListening(false); return; }
+                                setPtt(!ptt);
+                                if (!ptt) { setMuted(true); localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = false; }); }
+                                else { setMuted(false); localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = true; }); }
+                            }}
+                            onContextMenu={(e) => { e.preventDefault(); if (ptt) setPttListening(true); }}
                             className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                                ptt ? (pttActive ? "bg-green-500 text-white" : "bg-yellow-500 text-white") : "bg-white/10 text-white hover:bg-white/20"
+                                pttListening ? "bg-orange-500 text-white animate-pulse"
+                                : ptt ? (pttActive ? "bg-green-500 text-white" : "bg-yellow-500 text-white")
+                                : "bg-white/10 text-white hover:bg-white/20"
                             }`}
-                            title={ptt ? "Push-to-talk ON (hold key to speak)" : "Enable push-to-talk"}
+                            title={pttListening ? "Press any key..." : ptt ? `PTT: ${formatKey(pttKey)} (right-click to change)` : "Enable push-to-talk"}
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
