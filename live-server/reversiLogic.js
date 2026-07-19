@@ -14,6 +14,15 @@ function inBounds(r, c) {
     return r >= 0 && r < SIZE && c >= 0 && c < SIZE;
 }
 
+function initialBoard() {
+    const board = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+    board[3][3] = "w";
+    board[3][4] = "b";
+    board[4][3] = "b";
+    board[4][4] = "w";
+    return board;
+}
+
 function other(color) {
     return color === "b" ? "w" : "b";
 }
