@@ -531,6 +531,7 @@ let channelCounter = 100;
 function getChannelState(channelId) {
     const ch = voiceChannels.get(channelId);
     if (!ch) return null;
+    const music = io._voiceMusic?.get(channelId);
     return {
         id: ch.id,
         name: ch.name,
@@ -544,6 +545,16 @@ function getChannelState(channelId) {
             isAdmin: p.isAdmin || false,
             socketId: p.socketId,
         })),
+        music: music ? {
+            queue: music.queue,
+            current: music.current,
+            playing: music.playing,
+            position: music.playing && music.startedAt ? (Date.now() - music.startedAt) / 1000 : music.position,
+            startedAt: music.startedAt,
+            dj: music.dj,
+            volume: music.volume,
+            videoId: music.current?.videoId || null,
+        } : null,
     };
 }
 
@@ -1532,6 +1543,11 @@ io.on("connection", async (socket) => {
         state.playing = false;
         state.position = 0;
         state.startedAt = null;
+        broadcastMusicState(channelId);
+    });
+
+    socket.on("voice:music:get-state", ({ channelId }) => {
+        if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
         broadcastMusicState(channelId);
     });
 

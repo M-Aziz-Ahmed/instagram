@@ -89,11 +89,11 @@ function loadYtApi() {
     return ytApiPromise;
 }
 
-export default function MusicPanel({ socket, channelId, user }) {
+export default function MusicPanel({ socket, channelId, user, initialState }) {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState([]);
     const [searching, setSearching] = useState(false);
-    const [musicState, setMusicState] = useState(null);
+    const [musicState, setMusicState] = useState(initialState);
     const [activeTab, setActiveTab] = useState("search");
     const [playerReady, setPlayerReady] = useState(false);
 
@@ -102,6 +102,7 @@ export default function MusicPanel({ socket, channelId, user }) {
     const containerRef = useRef(null);
     const lastVideoRef = useRef(null);
     const syncIntervalRef = useRef(null);
+    const musicStateRef = useRef(initialState);
 
     const isDJ = musicState?.dj === user?.username;
     const current = musicState?.current;
@@ -109,9 +110,15 @@ export default function MusicPanel({ socket, channelId, user }) {
     const playing = musicState?.playing || false;
 
     useEffect(() => {
+        musicStateRef.current = musicState;
+    }, [musicState]);
+
+    useEffect(() => {
         if (!socket || !channelId) return;
         const handleState = (state) => setMusicState(state);
         socket.on("voice:music:state", handleState);
+        // Request current state on mount to avoid race conditions
+        socket.emit("voice:music:get-state", { channelId });
         return () => socket.off("voice:music:state", handleState);
     }, [socket, channelId]);
 
@@ -145,9 +152,20 @@ export default function MusicPanel({ socket, channelId, user }) {
                         setPlayerReady(true);
                     },
                     onStateChange: (e) => {
-                        // Auto-advance when video ends
+                        if (e.data === window.YT.PlayerState.PLAYING) {
+                            const ms = musicStateRef.current;
+                            if (ms?.current?.videoId && ms?.startedAt) {
+                                const expected = ms.playing
+                                    ? (Date.now() - ms.startedAt) / 1000
+                                    : ms.position || 0;
+                                const ct = e.target.getCurrentTime?.() || 0;
+                                if (Math.abs(ct - expected) > 3) {
+                                    e.target.seekTo(expected, true);
+                                }
+                            }
+                        }
                         if (e.data === window.YT.PlayerState.ENDED) {
-                            if (socket && channelId && isDJ) {
+                            if (socket && channelId && musicStateRef.current?.dj === user?.username) {
                                 socket.emit("voice:music:skip", { channelId });
                             }
                         }
@@ -176,12 +194,19 @@ export default function MusicPanel({ socket, channelId, user }) {
         if (!player || !player.getIframe) return;
 
         const videoId = current?.videoId || null;
+        const pos = musicState?.position || 0;
+
+        if (!videoId) {
+            lastVideoRef.current = null;
+            try { player.stopVideo?.(); } catch {}
+            return;
+        }
 
         // Load new video
-        if (videoId && videoId !== lastVideoRef.current) {
+        if (videoId !== lastVideoRef.current) {
             lastVideoRef.current = videoId;
             try {
-                player.loadVideoById({ videoId, startSeconds: musicState?.position || 0 });
+                player.loadVideoById({ videoId, startSeconds: pos });
                 player.setVolume(Math.round((musicState?.volume ?? 0.7) * 100));
             } catch {}
         }
@@ -190,7 +215,6 @@ export default function MusicPanel({ socket, channelId, user }) {
         if (videoId) {
             try {
                 if (playing) {
-                    const pos = musicState?.position || 0;
                     const currentTime = player.getCurrentTime?.() || 0;
                     if (Math.abs(currentTime - pos) > 3) {
                         player.seekTo(pos, true);
@@ -202,7 +226,6 @@ export default function MusicPanel({ socket, channelId, user }) {
                     if (player.getPlayerState?.() === 1) {
                         player.pauseVideo();
                     }
-                    const pos = musicState?.position || 0;
                     const currentTime = player.getCurrentTime?.() || 0;
                     if (Math.abs(currentTime - pos) > 2) {
                         player.seekTo(pos, true);
@@ -225,7 +248,11 @@ export default function MusicPanel({ socket, channelId, user }) {
             syncIntervalRef.current = setInterval(() => {
                 const player = ytPlayerRef.current;
                 if (!player || !player.getIframe) return;
-                const expected = (Date.now() - musicState.startedAt) / 1000;
+                const ms = musicStateRef.current;
+                if (!ms?.startedAt) return;
+                const expected = ms.playing
+                    ? (Date.now() - ms.startedAt) / 1000
+                    : ms.position || 0;
                 const actual = player.getCurrentTime?.() || 0;
                 if (Math.abs(actual - expected) > 4) {
                     try { player.seekTo(expected, true); } catch {}

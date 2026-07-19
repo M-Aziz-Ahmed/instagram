@@ -201,6 +201,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
     const [pttKey, setPttKey] = useState(" ");
     const [pttActive, setPttActive] = useState(false);
     const [musicOpen, setMusicOpen] = useState(false);
+    const [initialMusicState, setInitialMusicState] = useState(null);
 
     const localStreamRef  = useRef(null);
     const screenStreamRef = useRef(null);
@@ -269,6 +270,9 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
         const handleJoined = (state) => {
             setActiveChannel(state.id);
             setParticipants(state.participants);
+            if (state.music) {
+                setInitialMusicState(state.music);
+            }
         };
         const handleChannelUpdate = (state) => {
             setParticipants(state.participants);
@@ -973,7 +977,7 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
             {/* Music Panel - always mounted when in channel for audio sync, visually hidden when closed */}
             {activeChannel && (
                 <div className={musicOpen ? "h-72 border-t border-white/10 shrink-0" : "h-0 overflow-hidden"}>
-                    <MusicPanel socket={socket} channelId={activeChannel} user={user} />
+                        <MusicPanel socket={socket} channelId={activeChannel} user={user} initialState={initialMusicState} />
                 </div>
             )}
 
