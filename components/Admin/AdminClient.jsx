@@ -363,7 +363,7 @@ function UsersPanel() {
 
     const handleCreateUser = async (e) => {
         e.preventDefault();
-        if (!createEmail.trim() || !createPin.trim() || creating) return;
+        if (!createEmail.trim() || !createPin.trim() || !createUser.trim() || creating) return;
         setCreating(true);
         try {
             const res = await fetch("/api/admin/users", {
@@ -403,13 +403,13 @@ function UsersPanel() {
                         <input type="email" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)}
                             placeholder="Email" required autoFocus
                             className="flex-1 min-w-0 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg px-3 py-2 text-sm outline-none focus:border-black dark:focus:border-gray-500" />
+                        <input type="text" value={createUser} onChange={(e) => setCreateUser(e.target.value.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 30))}
+                            placeholder="Username" required
+                            className="w-40 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg px-3 py-2 text-sm outline-none focus:border-black dark:focus:border-gray-500" />
                         <input type="text" value={createPin} onChange={(e) => setCreatePin(e.target.value.replace(/\D/g, "").slice(0, 8))}
                             placeholder="PIN (4-8 digits)" required
                             className="w-36 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:border-black dark:focus:border-gray-500" />
-                        <input type="text" value={createUser} onChange={(e) => setCreateUser(e.target.value)}
-                            placeholder="Username (optional)"
-                            className="w-40 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg px-3 py-2 text-sm outline-none focus:border-black dark:focus:border-gray-500" />
-                        <button type="submit" disabled={creating || !createEmail.trim() || !createPin.trim()}
+                        <button type="submit" disabled={creating || !createEmail.trim() || !createPin.trim() || !createUser.trim()}
                             className="shrink-0 px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
                             {creating ? "Creating\u2026" : "Create"}
                         </button>

@@ -46,17 +46,26 @@ export async function POST(request) {
     if (!pin || pin.length < 4 || pin.length > 8 || !/^\d+$/.test(pin)) {
         return Response.json({ error: "PIN must be 4-8 digits" }, { status: 400 });
     }
+    if (!username || username.trim().length < 2) {
+        return Response.json({ error: "Username required (min 2 chars)" }, { status: 400 });
+    }
 
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) {
         return Response.json({ error: "Email already registered" }, { status: 409 });
     }
 
+    const existingUsername = await User.findOne({ username: username.trim().toLowerCase() });
+    if (existingUsername) {
+        return Response.json({ error: "Username already taken" }, { status: 409 });
+    }
+
     const hashedPin = await bcrypt.hash(pin, 10);
     const user = await User.create({
         email: email.toLowerCase(),
-        username: username?.trim() || "",
+        username: username.trim(),
         pin: hashedPin,
+        isVerified: true,
     });
 
     return Response.json({ ok: true, user: {
