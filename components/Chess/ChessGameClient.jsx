@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useUser } from "@/context/UserContext";
 import { io } from "socket.io-client";
+import { Chess } from "chess.js";
 import ChessBoard from "./ChessBoard";
 import ChessTimer from "./ChessTimer";
 import ChessMoveHistory from "./ChessMoveHistory";
@@ -35,117 +36,24 @@ function parseFEN(fen) {
 
 function getLegalMovesFromFEN(fen, square) {
     if (!fen || !square) return [];
-    const parts = fen.split(" ");
-    const activeColor = parts[1];
-    const castling = parts[2];
-    const enPassant = parts[3];
-
-    const board = [];
-    const rows = parts[0].split("/");
-    for (let r = 0; r < 8; r++) {
-        const row = [];
-        for (const ch of rows[r]) {
-            if (/\d/.test(ch)) {
-                for (let i = 0; i < parseInt(ch); i++) row.push(null);
-            } else {
-                row.push({ type: ch.toLowerCase(), color: ch === ch.toUpperCase() ? "w" : "b" });
-            }
-        }
-        board.push(row);
+    try {
+        const chess = new Chess(fen);
+        const moves = chess.moves({ square, verbose: true });
+        return moves.map((m) => m.to);
+    } catch {
+        return [];
     }
-
-    const FILES = ["a","b","c","d","e","f","g","h"];
-    const RANKS = ["8","7","6","5","4","3","2","1"];
-    const col = FILES.indexOf(square[0]);
-    const row = RANKS.indexOf(square[1]);
-    const piece = board[row]?.[col];
-    if (!piece || piece.color !== activeColor) return [];
-
-    const moves = [];
-    const inBounds = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
-    const canCapture = (r, c) => board[r][c] && board[r][c].color !== activeColor;
-    const isEmpty = (r, c) => !board[r][c];
-
-    const addMove = (r, c) => {
-        if (inBounds(r, c) && (isEmpty(r, c) || canCapture(r, c))) {
-            moves.push(FILES[c] + RANKS[r]);
-        }
-    };
-
-    const addSliding = (dr, dc) => {
-        let r = row + dr, c = col + dc;
-        while (inBounds(r, c)) {
-            if (isEmpty(r, c)) {
-                moves.push(FILES[c] + RANKS[r]);
-            } else if (canCapture(r, c)) {
-                moves.push(FILES[c] + RANKS[r]);
-                break;
-            } else break;
-            r += dr; c += dc;
-        }
-    };
-
-    if (piece.type === "p") {
-        const dir = activeColor === "w" ? -1 : 1;
-        const startRow = activeColor === "w" ? 6 : 1;
-        if (inBounds(row + dir, col) && isEmpty(row + dir, col)) {
-            moves.push(FILES[col] + RANKS[row + dir]);
-            if (row === startRow && isEmpty(row + 2 * dir, col)) {
-                moves.push(FILES[col] + RANKS[row + 2 * dir]);
-            }
-        }
-        if (inBounds(row + dir, col - 1) && canCapture(row + dir, col - 1)) {
-            moves.push(FILES[col - 1] + RANKS[row + dir]);
-        }
-        if (inBounds(row + dir, col + 1) && canCapture(row + dir, col + 1)) {
-            moves.push(FILES[col + 1] + RANKS[row + dir]);
-        }
-        if (enPassant !== "-") {
-            const epCol = FILES.indexOf(enPassant[0]);
-            const epRow = RANKS.indexOf(enPassant[1]);
-            if (epRow === row + dir && Math.abs(epCol - col) === 1) {
-                moves.push(FILES[epCol] + RANKS[epRow]);
-            }
-        }
-    } else if (piece.type === "n") {
-        const knightMoves = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
-        for (const [dr, dc] of knightMoves) addMove(row + dr, col + dc);
-    } else if (piece.type === "b") {
-        addSliding(-1, -1); addSliding(-1, 1); addSliding(1, -1); addSliding(1, 1);
-    } else if (piece.type === "r") {
-        addSliding(-1, 0); addSliding(1, 0); addSliding(0, -1); addSliding(0, 1);
-    } else if (piece.type === "q") {
-        addSliding(-1, -1); addSliding(-1, 1); addSliding(1, -1); addSliding(1, 1);
-        addSliding(-1, 0); addSliding(1, 0); addSliding(0, -1); addSliding(0, 1);
-    } else if (piece.type === "k") {
-        const kingMoves = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
-        for (const [dr, dc] of kingMoves) addMove(row + dr, col + dc);
-        if (square === (activeColor === "w" ? "e1" : "e8")) {
-            const baseRow = activeColor === "w" ? 7 : 0;
-            if (castling.includes(activeColor === "w" ? "K" : "k") && isEmpty(baseRow, 5) && isEmpty(baseRow, 6)) {
-                moves.push("g" + RANKS[baseRow]);
-            }
-            if (castling.includes(activeColor === "w" ? "Q" : "q") && isEmpty(baseRow, 3) && isEmpty(baseRow, 2) && isEmpty(baseRow, 1)) {
-                moves.push("c" + RANKS[baseRow]);
-            }
-        }
-    }
-
-    return moves;
 }
 
 function detectPromotion(fen, from, to, playerColor) {
-    const board = parseFEN(fen).board;
-    const FILES = ["a","b","c","d","e","f","g","h"];
-    const RANKS = ["8","7","6","5","4","3","2","1"];
-    const fromCol = FILES.indexOf(from[0]);
-    const fromRow = RANKS.indexOf(from[1]);
-    const piece = board[fromRow]?.[fromCol];
-    if (!piece || piece.type !== "p") return false;
-    const toRow = RANKS.indexOf(to[1]);
-    if (playerColor === "w" && toRow === 0) return true;
-    if (playerColor === "b" && toRow === 7) return true;
-    return false;
+    if (!fen || !from || !to) return false;
+    try {
+        const chess = new Chess(fen);
+        const moves = chess.moves({ square: from, verbose: true });
+        return moves.some((m) => m.to === to && m.promotion);
+    } catch {
+        return false;
+    }
 }
 
 export default function ChessGameClient({ gameId }) {
@@ -188,6 +96,17 @@ export default function ChessGameClient({ gameId }) {
     const isMyTurn = game?.turn === myColor;
     const gameOver = game?.status && game.status !== "active" && game.status !== "waiting";
     const isReviewing = reviewIndex !== null;
+
+    const inCheck = useMemo(() => {
+        if (!game?.fen || gameOver) return false;
+        try {
+            return new Chess(game.fen).inCheck();
+        } catch {
+            return false;
+        }
+    }, [game?.fen, gameOver]);
+
+    const iAmInCheck = inCheck && game?.turn === myColor;
 
     const fenHistory = useMemo(() => {
         if (!game?.moves || game.moves.length === 0) return [game?.fen || INITIAL_FEN];
@@ -778,7 +697,13 @@ export default function ChessGameClient({ gameId }) {
                                     <span className="text-[10px] sm:text-xs text-purple-600 dark:text-purple-400 font-semibold">AI is thinking...</span>
                                 </div>
                             )}
-                            {isMyTurn && !gameOver && game.status === "active" && !aiThinking && (
+                            {iAmInCheck && !gameOver && game.status === "active" && !aiThinking && (
+                                <div className="flex items-center gap-1">
+                                    <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                                    <span className="text-[10px] sm:text-xs text-red-600 dark:text-red-400 font-bold">Check! Move your king to safety</span>
+                                </div>
+                            )}
+                            {isMyTurn && !iAmInCheck && !gameOver && game.status === "active" && !aiThinking && (
                                 <div className="flex items-center gap-1">
                                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                                     <span className="text-[10px] sm:text-xs text-green-600 dark:text-green-400 font-semibold">Your turn</span>

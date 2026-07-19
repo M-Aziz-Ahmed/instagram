@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useMemo } from "react";
+import { Chess } from "chess.js";
 import ChessPiece from "./ChessPiece";
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -133,9 +134,14 @@ export default function ChessBoard({
 
     const inCheckKingSquare = useMemo(() => {
         if (!fen) return null;
-        const parts = fen.split(" ");
-        const activeTurn = parts[1];
-        if (parts.includes("+")) return findKingSquare(activeTurn === "w" ? "b" : "w");
+        try {
+            const chess = new Chess(fen);
+            if (chess.inCheck()) {
+                return findKingSquare(chess.turn());
+            }
+        } catch {
+            return null;
+        }
         return null;
     }, [fen, findKingSquare]);
 
