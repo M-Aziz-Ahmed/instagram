@@ -20,6 +20,20 @@ const GAMES = [
         emoji: "\uD83D\uDD34",
         gradient: "from-blue-600 to-indigo-700",
     },
+    {
+        href: "/tictactoe",
+        title: "Tic-Tac-Toe",
+        desc: "Three in a row to win. vs friends or unbeatable AI.",
+        emoji: "\u2B55\uFE0F",
+        gradient: "from-emerald-500 to-teal-700",
+    },
+    {
+        href: "/checkers",
+        title: "Checkers",
+        desc: "Mandatory captures, crown your kings. vs friends or AI.",
+        emoji: "\u269B\uFE0F",
+        gradient: "from-amber-600 to-orange-800",
+    },
 ];
 
 export default function GamesPage() {

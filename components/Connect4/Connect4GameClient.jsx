@@ -132,6 +132,30 @@ export default function Connect4GameClient({ gameId }) {
         if (gameOver) setShowGameOver(true);
     }, [gameOver]);
 
+    useEffect(() => {
+        if (!gameOver || !game || !user?.username || !myColor || reportedRef.current) return;
+        reportedRef.current = true;
+        let outcome = "draw";
+        if (game.status === "win" || game.status === "resigned") {
+            outcome = game.winner === user.username ? "win" : "loss";
+        }
+        const opponent = myColor === "r" ? game.yellow?.username : game.red?.username;
+        fetch("/api/games/history", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: user.username,
+                game: "connect4",
+                gameId,
+                opponent: opponent || (game.mode === "ai" ? "Computer" : ""),
+                outcome,
+                resultReason: game.resultReason || "",
+                mode: game.mode || "multiplayer",
+                moves: game.moves?.length || 0,
+            }),
+        }).catch(() => {});
+    }, [gameOver, game?.status, game?.winner, myColor, user?.username, gameId]);
+
     const handleDrop = useCallback((column) => {
         if (!socketRef.current || !canPlay) return;
         socketRef.current.emit("connect4:make-move", { gameId, column });

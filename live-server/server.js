@@ -15,6 +15,12 @@ const ChessGame = require("./models/chessGame");
 const Connect4Game = require("./models/connect4Game");
 const connect4Logic = require("./connect4Logic");
 const { getAIMove: getConnect4AIMove } = require("./connect4AI");
+const TictactoeGame = require("./models/tictactoeGame");
+const tictactoeLogic = require("./tictactoeLogic");
+const { getAIMove: getTictactoeAIMove } = require("./tictactoeAI");
+const CheckersGame = require("./models/checkersGame");
+const checkersLogic = require("./checkersLogic");
+const { getAIMove: getCheckersAIMove } = require("./checkersAI");
 const { sendPushNotification } = require("./push");
 
 let stockfishEngine = null;
@@ -585,6 +591,130 @@ app.post("/api/connect4/games/:id/join", async (req, res) => {
         res.json({ game });
     } catch (err) {
         console.error("[C4 API] Join game error:", err.message);
+        res.status(500).json({ error: "Failed to join game" });
+    }
+});
+
+// ── Tic-Tac-Toe HTTP Routes ────────────────────────────────────
+app.get("/api/tictactoe/games", async (req, res) => {
+    try {
+        const { status, username } = req.query;
+        const filter = {};
+        if (status) filter.status = status;
+        if (username) filter.$or = [{ "x.username": username }, { "o.username": username }];
+        const games = await TictactoeGame.find(filter).sort({ createdAt: -1 }).limit(50).lean();
+        res.json({ games });
+    } catch (err) {
+        console.error("[TTT API] List error:", err.message);
+        res.status(500).json({ error: "Failed to fetch games" });
+    }
+});
+
+app.get("/api/tictactoe/games/:id", async (req, res) => {
+    try {
+        const game = await TictactoeGame.findById(req.params.id).lean();
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        res.json({ game });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch game" });
+    }
+});
+
+app.post("/api/tictactoe/games", async (req, res) => {
+    try {
+        const { username, avatarUrl, avatarColor, mode, aiDifficulty, inviteUser } = req.body;
+        if (!username) return res.status(400).json({ error: "Username required" });
+        const game = await TictactoeGame.create({
+            x: { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#3b82f6" },
+            mode: mode || "multiplayer",
+            aiDifficulty: aiDifficulty || 3,
+            invitedBy: inviteUser || "",
+            status: mode === "ai" ? "active" : "waiting",
+            o: mode === "ai" ? { username: "Computer", avatarUrl: "", avatarColor: "#ef4444" } : undefined,
+        });
+        res.json({ game });
+    } catch (err) {
+        console.error("[TTT API] Create error:", err.message);
+        res.status(500).json({ error: "Failed to create game" });
+    }
+});
+
+app.post("/api/tictactoe/games/:id/join", async (req, res) => {
+    try {
+        const { username, avatarUrl, avatarColor } = req.body;
+        const game = await TictactoeGame.findById(req.params.id);
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        if (game.status !== "waiting") return res.status(400).json({ error: "Game already started" });
+        if (game.mode === "ai") return res.status(400).json({ error: "Cannot join AI game" });
+        if (game.x.username === username) return res.status(400).json({ error: "Cannot play yourself" });
+        game.o = { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#ef4444" };
+        game.status = "active";
+        await game.save();
+        res.json({ game });
+    } catch (err) {
+        console.error("[TTT API] Join error:", err.message);
+        res.status(500).json({ error: "Failed to join game" });
+    }
+});
+
+// ── Checkers HTTP Routes ───────────────────────────────────────
+app.get("/api/checkers/games", async (req, res) => {
+    try {
+        const { status, username } = req.query;
+        const filter = {};
+        if (status) filter.status = status;
+        if (username) filter.$or = [{ "red.username": username }, { "black.username": username }];
+        const games = await CheckersGame.find(filter).sort({ createdAt: -1 }).limit(50).lean();
+        res.json({ games });
+    } catch (err) {
+        console.error("[CHK API] List error:", err.message);
+        res.status(500).json({ error: "Failed to fetch games" });
+    }
+});
+
+app.get("/api/checkers/games/:id", async (req, res) => {
+    try {
+        const game = await CheckersGame.findById(req.params.id).lean();
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        res.json({ game });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch game" });
+    }
+});
+
+app.post("/api/checkers/games", async (req, res) => {
+    try {
+        const { username, avatarUrl, avatarColor, mode, aiDifficulty, inviteUser } = req.body;
+        if (!username) return res.status(400).json({ error: "Username required" });
+        const game = await CheckersGame.create({
+            red: { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#ef4444" },
+            mode: mode || "multiplayer",
+            aiDifficulty: aiDifficulty || 3,
+            invitedBy: inviteUser || "",
+            status: mode === "ai" ? "active" : "waiting",
+            black: mode === "ai" ? { username: "Computer", avatarUrl: "", avatarColor: "#1f2937" } : undefined,
+        });
+        res.json({ game });
+    } catch (err) {
+        console.error("[CHK API] Create error:", err.message);
+        res.status(500).json({ error: "Failed to create game" });
+    }
+});
+
+app.post("/api/checkers/games/:id/join", async (req, res) => {
+    try {
+        const { username, avatarUrl, avatarColor } = req.body;
+        const game = await CheckersGame.findById(req.params.id);
+        if (!game) return res.status(404).json({ error: "Game not found" });
+        if (game.status !== "waiting") return res.status(400).json({ error: "Game already started" });
+        if (game.mode === "ai") return res.status(400).json({ error: "Cannot join AI game" });
+        if (game.red.username === username) return res.status(400).json({ error: "Cannot play yourself" });
+        game.black = { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#1f2937" };
+        game.status = "active";
+        await game.save();
+        res.json({ game });
+    } catch (err) {
+        console.error("[CHK API] Join error:", err.message);
         res.status(500).json({ error: "Failed to join game" });
     }
 });
@@ -1578,6 +1708,233 @@ io.on("connection", async (socket) => {
             io.to(`connect4:${gameId}`).emit("connect4:chat", msg);
         } catch (err) {
             console.error("[C4] Chat error:", err.message);
+        }
+    });
+
+    // ── Tic-Tac-Toe Socket Events ─────────────────────────────────
+    socket.on("tictactoe:join-game", ({ gameId }) => {
+        socket.join(`tictactoe:${gameId}`);
+    });
+    socket.on("tictactoe:leave-game", ({ gameId }) => {
+        socket.leave(`tictactoe:${gameId}`);
+    });
+
+    function finalizeTictactoe(game, board) {
+        const result = tictactoeLogic.checkWinner(board);
+        if (result) {
+            game.status = "win";
+            game.winner = result.winner === "x" ? game.x.username : game.o.username;
+            game.result = result.winner === "x" ? "1-0" : "0-1";
+            game.resultReason = "Three in a row";
+            game.winningLine = result.line;
+        } else if (tictactoeLogic.isFull(board)) {
+            game.status = "draw";
+            game.result = "1/2-1/2";
+            game.resultReason = "Board full";
+        } else {
+            game.status = "active";
+            game.result = "*";
+        }
+    }
+
+    socket.on("tictactoe:make-move", async ({ gameId, cell }) => {
+        try {
+            const game = await TictactoeGame.findById(gameId);
+            if (!game || game.status !== "active") return socket.emit("tictactoe:error", { message: "Game not active" });
+
+            const playerMark = game.x.username === username ? "x" : game.o.username === username ? "o" : null;
+            if (!playerMark) return socket.emit("tictactoe:error", { message: "Not a player" });
+            if (game.turn !== playerMark) return socket.emit("tictactoe:error", { message: "Not your turn" });
+            if (cell < 0 || cell > 8 || game.board[cell]) return socket.emit("tictactoe:error", { message: "Invalid move" });
+
+            const board = game.board.slice();
+            board[cell] = playerMark;
+            game.board = board;
+            game.turn = playerMark === "x" ? "o" : "x";
+            game.moveCount += 1;
+            finalizeTictactoe(game, board);
+            await game.save();
+
+            io.to(`tictactoe:${gameId}`).emit("tictactoe:move", {
+                gameId, board: game.board, turn: game.turn, cell,
+                status: game.status, result: game.result, resultReason: game.resultReason,
+                winner: game.winner, winningLine: game.winningLine, moveCount: game.moveCount,
+            });
+
+            if (game.mode === "ai" && game.status === "active" && game.turn === "o") {
+                setTimeout(async () => {
+                    try {
+                        const latest = await TictactoeGame.findById(gameId);
+                        if (!latest || latest.status !== "active" || latest.turn !== "o") return;
+                        const aiCell = getTictactoeAIMove(latest.board.slice(), "o", latest.aiDifficulty);
+                        if (aiCell == null) return;
+                        const aiBoard = latest.board.slice();
+                        aiBoard[aiCell] = "o";
+                        latest.board = aiBoard;
+                        latest.turn = "x";
+                        latest.moveCount += 1;
+                        finalizeTictactoe(latest, aiBoard);
+                        await latest.save();
+                        io.to(`tictactoe:${gameId}`).emit("tictactoe:move", {
+                            gameId, board: latest.board, turn: latest.turn, cell: aiCell,
+                            status: latest.status, result: latest.result, resultReason: latest.resultReason,
+                            winner: latest.winner, winningLine: latest.winningLine, moveCount: latest.moveCount,
+                        });
+                    } catch (err) {
+                        console.error("[TTT] AI error:", err.message);
+                    }
+                }, 400 + Math.floor(Math.random() * 500));
+            }
+        } catch (err) {
+            console.error("[TTT] Move error:", err.message);
+            socket.emit("tictactoe:error", { message: "Move failed" });
+        }
+    });
+
+    socket.on("tictactoe:resign", async ({ gameId }) => {
+        try {
+            const game = await TictactoeGame.findById(gameId);
+            if (!game || game.status !== "active") return;
+            const mark = game.x.username === username ? "x" : game.o.username === username ? "o" : null;
+            if (!mark) return;
+            game.status = "resigned";
+            game.winner = mark === "x" ? game.o.username : game.x.username;
+            game.result = mark === "x" ? "0-1" : "1-0";
+            game.resultReason = "Resignation";
+            await game.save();
+            io.to(`tictactoe:${gameId}`).emit("tictactoe:game-over", {
+                gameId, status: game.status, result: game.result, resultReason: game.resultReason, winner: game.winner,
+            });
+        } catch (err) {
+            console.error("[TTT] Resign error:", err.message);
+        }
+    });
+
+    socket.on("tictactoe:chat", async ({ gameId, text, color, avatarUrl }) => {
+        if (!text?.trim()) return;
+        try {
+            const game = await TictactoeGame.findById(gameId);
+            if (!game) return;
+            const msg = { username, color: color || "#3b82f6", avatarUrl: avatarUrl || "", text: text.trim().slice(0, 500), createdAt: new Date() };
+            game.chat.push(msg);
+            if (game.chat.length > 200) game.chat = game.chat.slice(-200);
+            await game.save();
+            io.to(`tictactoe:${gameId}`).emit("tictactoe:chat", msg);
+        } catch (err) {
+            console.error("[TTT] Chat error:", err.message);
+        }
+    });
+
+    // ── Checkers Socket Events ────────────────────────────────────
+    socket.on("checkers:join-game", ({ gameId }) => {
+        socket.join(`checkers:${gameId}`);
+    });
+    socket.on("checkers:leave-game", ({ gameId }) => {
+        socket.leave(`checkers:${gameId}`);
+    });
+
+    function finalizeCheckers(game, board, colorToMove) {
+        const winner = checkersLogic.getWinner(board, colorToMove);
+        if (winner) {
+            game.status = "win";
+            game.winner = winner === "r" ? game.red.username : game.black.username;
+            game.result = winner === "r" ? "1-0" : "0-1";
+            game.resultReason = "No moves left";
+        } else {
+            game.status = "active";
+            game.result = "*";
+        }
+    }
+
+    socket.on("checkers:make-move", async ({ gameId, path }) => {
+        try {
+            const game = await CheckersGame.findById(gameId);
+            if (!game || game.status !== "active") return socket.emit("checkers:error", { message: "Game not active" });
+
+            const playerColor = game.red.username === username ? "r" : game.black.username === username ? "b" : null;
+            if (!playerColor) return socket.emit("checkers:error", { message: "Not a player" });
+            if (game.turn !== playerColor) return socket.emit("checkers:error", { message: "Not your turn" });
+
+            const board = game.board.map((row) => row.map((c) => c || null));
+            const result = checkersLogic.applyMove(board, path, playerColor);
+            if (!result) return socket.emit("checkers:error", { message: "Illegal move" });
+
+            game.board = result.board;
+            game.turn = playerColor === "r" ? "b" : "r";
+            game.moveCount += 1;
+            game.lastMove = { path, captures: result.captures };
+            finalizeCheckers(game, result.board, game.turn);
+            await game.save();
+
+            io.to(`checkers:${gameId}`).emit("checkers:move", {
+                gameId, board: game.board, turn: game.turn, lastMove: game.lastMove,
+                status: game.status, result: game.result, resultReason: game.resultReason,
+                winner: game.winner, moveCount: game.moveCount,
+            });
+
+            if (game.mode === "ai" && game.status === "active" && game.turn === "b") {
+                setTimeout(async () => {
+                    try {
+                        const latest = await CheckersGame.findById(gameId);
+                        if (!latest || latest.status !== "active" || latest.turn !== "b") return;
+                        const aiBoard = latest.board.map((row) => row.map((c) => c || null));
+                        const aiPath = getCheckersAIMove(aiBoard, "b", latest.aiDifficulty);
+                        if (!aiPath) return;
+                        const aiResult = checkersLogic.applyMove(aiBoard, aiPath, "b");
+                        if (!aiResult) return;
+                        latest.board = aiResult.board;
+                        latest.turn = "r";
+                        latest.moveCount += 1;
+                        latest.lastMove = { path: aiPath, captures: aiResult.captures };
+                        finalizeCheckers(latest, aiResult.board, latest.turn);
+                        await latest.save();
+                        io.to(`checkers:${gameId}`).emit("checkers:move", {
+                            gameId, board: latest.board, turn: latest.turn, lastMove: latest.lastMove,
+                            status: latest.status, result: latest.result, resultReason: latest.resultReason,
+                            winner: latest.winner, moveCount: latest.moveCount,
+                        });
+                    } catch (err) {
+                        console.error("[CHK] AI error:", err.message);
+                    }
+                }, 500 + Math.floor(Math.random() * 700));
+            }
+        } catch (err) {
+            console.error("[CHK] Move error:", err.message);
+            socket.emit("checkers:error", { message: "Move failed" });
+        }
+    });
+
+    socket.on("checkers:resign", async ({ gameId }) => {
+        try {
+            const game = await CheckersGame.findById(gameId);
+            if (!game || game.status !== "active") return;
+            const color = game.red.username === username ? "r" : game.black.username === username ? "b" : null;
+            if (!color) return;
+            game.status = "resigned";
+            game.winner = color === "r" ? game.black.username : game.red.username;
+            game.result = color === "r" ? "0-1" : "1-0";
+            game.resultReason = "Resignation";
+            await game.save();
+            io.to(`checkers:${gameId}`).emit("checkers:game-over", {
+                gameId, status: game.status, result: game.result, resultReason: game.resultReason, winner: game.winner,
+            });
+        } catch (err) {
+            console.error("[CHK] Resign error:", err.message);
+        }
+    });
+
+    socket.on("checkers:chat", async ({ gameId, text, color, avatarUrl }) => {
+        if (!text?.trim()) return;
+        try {
+            const game = await CheckersGame.findById(gameId);
+            if (!game) return;
+            const msg = { username, color: color || "#3b82f6", avatarUrl: avatarUrl || "", text: text.trim().slice(0, 500), createdAt: new Date() };
+            game.chat.push(msg);
+            if (game.chat.length > 200) game.chat = game.chat.slice(-200);
+            await game.save();
+            io.to(`checkers:${gameId}`).emit("checkers:chat", msg);
+        } catch (err) {
+            console.error("[CHK] Chat error:", err.message);
         }
     });
 

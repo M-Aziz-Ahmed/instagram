@@ -40,6 +40,16 @@ const userSchema = new mongoose.Schema({
         playedAt:     { type: Date, default: Date.now },
         gameStats:    { type: mongoose.Schema.Types.Mixed, default: {} },
     }], default: [] },
+    gameHistory: { type: [{
+        game:         { type: String, required: true },
+        gameId:       { type: String, required: true },
+        opponent:     { type: String, default: "" },
+        outcome:      { type: String, enum: ["win", "loss", "draw"], required: true },
+        resultReason: { type: String, default: "" },
+        mode:         { type: String, enum: ["multiplayer", "ai"], default: "multiplayer" },
+        moves:        { type: Number, default: 0 },
+        playedAt:     { type: Date, default: Date.now },
+    }], default: [] },
 });
 
 userSchema.index({ username: 1 }, { sparse: true });
