@@ -69,7 +69,7 @@ router.post("/send-otp", async (req, res) => {
         }
 
         const code = generateCode();
-        const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
         await OTP.create({ email: email.toLowerCase(), code, expiresAt });
 
         try {
@@ -85,7 +85,7 @@ router.post("/send-otp", async (req, res) => {
                             ${code}
                         </div>
                         <p style="color:#9ca3af;font-size:12px;margin:16px 0 0">
-                            This code expires in 5 minutes. If you didn't request this, ignore this email.
+                            This code expires in 10 minutes. If you didn't request this, ignore this email.
                         </p>
                     </div>
                 `,
