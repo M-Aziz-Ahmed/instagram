@@ -10,6 +10,7 @@ import ChessMoveHistory from "./ChessMoveHistory";
 import ChessChat from "./ChessChat";
 import ChessReviewPanel from "./ChessReviewPanel";
 import { playMoveSound, playCaptureSound, playCheckSound, playCheckmateSound, playCastleSound, playPromotionSound, playClickSound, setSoundEnabled } from "./chessSounds";
+import { useGameReplay } from "@/components/Games/useGameReplay";
 
 const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
 
@@ -58,6 +59,7 @@ function detectPromotion(fen, from, to, playerColor) {
 
 export default function ChessGameClient({ gameId }) {
     const { user } = useUser();
+    const { creating, playAgain } = useGameReplay("chess");
     const socketRef = useRef(null);
     const [game, setGame] = useState(null);
     const [selectedSquare, setSelectedSquare] = useState(null);
@@ -845,6 +847,13 @@ export default function ChessGameClient({ gameId }) {
                         </div>
 
                         <div className="flex flex-col gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                            <button
+                                onClick={() => playAgain("/api/chess/games", { mode: game.mode, aiDifficulty: game.aiDifficulty })}
+                                disabled={creating}
+                                className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-colors shadow-md text-center text-sm"
+                            >
+                                {creating ? "Starting..." : "Play Again"}
+                            </button>
                             <a href="/chess" className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-colors shadow-md text-center text-sm">
                                 Back to Lobby
                             </a>

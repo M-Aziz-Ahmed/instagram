@@ -6,6 +6,7 @@ import { io } from "socket.io-client";
 import CheckersBoard from "./CheckersBoard";
 import ChessChat from "@/components/Chess/ChessChat";
 import { playMoveSound, playCaptureSound, playCheckmateSound, setSoundEnabled } from "@/components/Chess/chessSounds";
+import { useGameReplay } from "@/components/Games/useGameReplay";
 
 const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
 
@@ -27,6 +28,7 @@ function PlayerBar({ player, color, active }) {
 
 export default function CheckersGameClient({ gameId }) {
     const { user } = useUser();
+    const { creating, playAgain } = useGameReplay("checkers");
     const socketRef = useRef(null);
     const [game, setGame] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -201,6 +203,7 @@ export default function CheckersGameClient({ gameId }) {
                         <div className="text-5xl mb-2">{game.status === "draw" ? "\uD83E\uDD1D" : game.winner === user?.username ? "\uD83C\uDFC6" : "\uD83D\uDE1E"}</div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{resultText()}</h2>
                         <div className="flex flex-col gap-2">
+                            <button onClick={() => playAgain("/api/checkers/games", { mode: game.mode, aiDifficulty: game.aiDifficulty })} disabled={creating} className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl text-sm">{creating ? "Starting..." : "Play Again"}</button>
                             <a href="/checkers" className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl text-sm">Back to Lobby</a>
                             <button onClick={() => setShowGameOver(false)} className="px-6 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Close</button>
                         </div>

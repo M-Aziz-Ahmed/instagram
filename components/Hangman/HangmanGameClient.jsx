@@ -5,6 +5,7 @@ import { useUser } from "@/context/UserContext";
 import { io } from "socket.io-client";
 import HangmanFigure from "./HangmanFigure";
 import { playMoveSound, playCaptureSound, playCheckmateSound } from "@/components/Chess/chessSounds";
+import { useGameReplay } from "@/components/Games/useGameReplay";
 
 const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
 const MAX_WRONG = 6;
@@ -12,6 +13,7 @@ const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 export default function HangmanGameClient({ gameId }) {
     const { user } = useUser();
+    const { creating, playAgain } = useGameReplay("hangman");
     const socketRef = useRef(null);
     const [game, setGame] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -138,7 +140,7 @@ export default function HangmanGameClient({ gameId }) {
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">{won ? "You solved it!" : "Out of guesses"}</h2>
                         <p className="text-sm text-gray-500 mb-4">The word was <span className="font-bold text-gray-900 dark:text-gray-100">{game.word}</span></p>
                         <div className="flex flex-col gap-2">
-                            <a href="/hangman" className="px-6 py-2.5 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-xl text-sm">Play Again</a>
+                            <button onClick={() => playAgain("/api/hangman/games", { mode: "ai" })} disabled={creating} className="px-6 py-2.5 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-xl text-sm">{creating ? "Starting..." : "Play Again"}</button>
                             <button onClick={() => setShowGameOver(false)} className="px-6 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Close</button>
                         </div>
                     </div>

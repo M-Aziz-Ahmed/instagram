@@ -7,6 +7,7 @@ import ReversiBoard from "./ReversiBoard";
 import { countPieces } from "./reversiClientLogic";
 import ChessChat from "@/components/Chess/ChessChat";
 import { playMoveSound, playCaptureSound, playCheckmateSound, setSoundEnabled } from "@/components/Chess/chessSounds";
+import { useGameReplay } from "@/components/Games/useGameReplay";
 
 const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
 
@@ -25,6 +26,7 @@ function PlayerBar({ player, color, active, count }) {
 
 export default function ReversiGameClient({ gameId }) {
     const { user } = useUser();
+    const { creating, playAgain } = useGameReplay("reversi");
     const socketRef = useRef(null);
     const [game, setGame] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -165,6 +167,7 @@ export default function ReversiGameClient({ gameId }) {
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">{resultText()}</h2>
                         <p className="text-sm text-gray-500 mb-4">Black {counts.b} &ndash; {counts.w} White</p>
                         <div className="flex flex-col gap-2">
+                            <button onClick={() => playAgain("/api/reversi/games", { mode: game.mode, aiDifficulty: game.aiDifficulty })} disabled={creating} className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-xl text-sm">{creating ? "Starting..." : "Play Again"}</button>
                             <a href="/reversi" className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-xl text-sm">Back to Lobby</a>
                             <button onClick={() => setShowGameOver(false)} className="px-6 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Close</button>
                         </div>

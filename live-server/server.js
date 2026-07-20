@@ -28,6 +28,7 @@ const BattleshipGame = require("./models/battleshipGame");
 const battleshipLogic = require("./battleshipLogic");
 const { getAIMove: getBattleshipAIMove } = require("./battleshipAI");
 const HangmanGame = require("./models/hangmanGame");
+const ReactionDuelGame = require("./models/reactionduelGame");
 const hangmanLogic = require("./hangmanLogic");
 const { sendPushNotification } = require("./push");
 
@@ -2393,6 +2394,128 @@ io.on("connection", async (socket) => {
         }
     });
 
+    // ── Reaction Duel Socket Events ─────────────────────────────────
+    // Per-room in-memory state: gameId -> { ready:Set, goSent:bool, goTime:number, actualGoTime:number, finished:bool, timeout, reactions:[] }
+    if (!io._reactionDuelRooms) io._reactionDuelRooms = new Map();
+    const rdRooms = io._reactionDuelRooms;
+
+    function getRDRoom(gameId) {
+        if (!rdRooms.has(gameId)) {
+            rdRooms.set(gameId, {
+                ready: new Set(),
+                goSent: false,
+                goTime: 0,
+                actualGoTime: 0,
+                finished: false,
+                timeout: null,
+                reactions: [],
+            });
+        }
+        return rdRooms.get(gameId);
+    }
+
+    async function finishRDGame(gameId, room, { winner, loser, resultReason }) {
+        if (room.timeout) { clearTimeout(room.timeout); room.timeout = null; }
+        room.finished = true;
+        try {
+            const game = await ReactionDuelGame.findById(gameId);
+            if (game) {
+                const names = [game.players[0]?.username, game.players[1]?.username].filter(Boolean);
+                const w = winner || names.find((n) => n !== loser) || "";
+                const l = loser || names.find((n) => n !== w) || "";
+                game.status = "finished";
+                game.winner = w;
+                game.loser = l;
+                game.resultReason = resultReason;
+                game.reactions = room.reactions.map((r) => ({ username: r.username, t: r.t }));
+                game.finishedAt = new Date();
+                await game.save();
+                io.to(`reactionduel:${gameId}`).emit("reactionduel:update", {
+                    phase: "finished",
+                    status: "finished",
+                    winner: game.winner,
+                    loser: game.loser,
+                    resultReason: game.resultReason,
+                    reactions: game.reactions,
+                });
+            }
+        } catch (err) {
+            console.error("[RD] finish error:", err.message);
+        }
+    }
+
+    socket.on("reactionduel:join-game", ({ gameId }) => {
+        if (!gameId) return;
+        socket.join(`reactionduel:${gameId}`);
+        socket.data.reactionDuelGame = gameId;
+        const room = getRDRoom(gameId);
+        io.to(`reactionduel:${gameId}`).emit("reactionduel:update", {
+            phase: room.finished ? "finished" : (room.goSent ? "go" : (room.ready.size >= 2 ? "ready" : "waiting")),
+            status: room.finished ? "finished" : "active",
+            ready: [...room.ready],
+        });
+    });
+
+    socket.on("reactionduel:leave-game", ({ gameId }) => {
+        if (!gameId) return;
+        socket.leave(`reactionduel:${gameId}`);
+        if (socket.data.reactionDuelGame === gameId) socket.data.reactionDuelGame = null;
+    });
+
+    socket.on("reactionduel:ready", async ({ gameId }) => {
+        if (!gameId || !username) return;
+        const game = await ReactionDuelGame.findById(gameId);
+        if (!game || game.status !== "active") return;
+        if (![game.players[0]?.username, game.players[1]?.username].includes(username)) return;
+        const room = getRDRoom(gameId);
+        if (room.finished) return;
+        room.ready.add(username);
+        io.to(`reactionduel:${gameId}`).emit("reactionduel:update", {
+            phase: "ready",
+            status: "active",
+            ready: [...room.ready],
+        });
+        if (room.ready.size >= 2 && !room.goSent) {
+            room.goSent = true;
+            const delay = 1500 + Math.floor(Math.random() * 3500); // 1500–5000 ms
+            room.goTime = Date.now() + delay;
+            io.to(`reactionduel:${gameId}`).emit("reactionduel:update", {
+                phase: "countdown",
+                status: "active",
+                ready: [...room.ready],
+            });
+            room.timeout = setTimeout(() => {
+                const r = rdRooms.get(gameId);
+                if (!r || r.finished) return;
+                r.actualGoTime = Date.now();
+                const startedAt = new Date();
+                ReactionDuelGame.findByIdAndUpdate(gameId, { startedAt }).catch(() => {});
+                io.to(`reactionduel:${gameId}`).emit("reactionduel:go", { serverTime: r.actualGoTime });
+                io.to(`reactionduel:${gameId}`).emit("reactionduel:update", {
+                    phase: "go",
+                    status: "active",
+                    ready: [...r.ready],
+                });
+            }, delay);
+        }
+    });
+
+    socket.on("reactionduel:react", ({ gameId }) => {
+        if (!gameId || !username) return;
+        const room = rdRooms.get(gameId);
+        if (!room || room.finished) return;
+        if (!room.goSent) {
+            // False start — reacted before GO
+            finishRDGame(gameId, room, { winner: "", loser: username, resultReason: "False start" });
+            return;
+        }
+        const t = Date.now() - (room.actualGoTime || Date.now());
+        room.reactions.push({ username, t });
+        if (room.reactions.length === 1) {
+            finishRDGame(gameId, room, { winner: username, loser: "", resultReason: "Reaction" });
+        }
+    });
+
     // ── Call Signaling (1:1 + Group) ──────────────────────────────
     // Map<callId, Set<socketId>>
     if (!io._callRooms) io._callRooms = new Map();
@@ -2600,6 +2723,29 @@ io.on("connection", async (socket) => {
     socket.on("disconnect", async () => {
         const { streamId, username } = socket.data || {};
 
+        // Clean up Reaction Duel room state on disconnect
+        if (socket.data?.reactionDuelGame && io._reactionDuelRooms) {
+            const rdGameId = socket.data.reactionDuelGame;
+            const rroom = io._reactionDuelRooms.get(rdGameId);
+            if (rroom) {
+                rroom.ready.delete(username);
+                if (rroom.goSent && !rroom.finished) {
+                    if (rroom.timeout) { clearTimeout(rroom.timeout); rroom.timeout = null; }
+                    rroom.goSent = false;
+                    rroom.goTime = 0;
+                    io.to(`reactionduel:${rdGameId}`).emit("reactionduel:update", {
+                        phase: "waiting",
+                        status: "active",
+                        ready: [...rroom.ready],
+                    });
+                }
+                if (rroom.ready.size === 0 && !rroom.finished) {
+                    io._reactionDuelRooms.delete(rdGameId);
+                }
+            }
+        }
+
+
         // Clean up voice channel on disconnect
         if (socket.data?.voiceChannel) {
             const ch = voiceChannels.get(socket.data.voiceChannel);
@@ -2666,6 +2812,7 @@ app.use("/api/debug", require("./routes/debug"));
 app.use("/api/live", apiLimiter, require("./routes/live"));
 app.use("/api/translate", apiLimiter, require("./routes/translate"));
 app.use("/api/invites", apiLimiter, require("./routes/invites"));
+app.use("/api/reactionduel", require("./routes/reactionduel")(io));
 
 // ── Start ───────────────────────────────────────────────────────
 initStockfish().catch(() => {});

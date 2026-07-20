@@ -300,7 +300,7 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                             href="/games"
                             icon={<ChessIcon />}
                             label="Games"
-                            active={isActive("/games") || isActive("/chess") || isActive("/connect4")}
+                            active={["/games", "/chess", "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman", "/reactionduel", "/game2048", "/minesweeper", "/sudoku"].some((p) => isActive(p))}
                             onClick={handleNavClick}
                         />
                         {user?.isAdmin && (

@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export const metadata = {
     title: "Games - AnonTweet",
-    description: "Play games with friends or AI - chess, Connect Four and more",
+    description: "Play games with friends or AI - chess, Connect Four, 2048, Minesweeper, Sudoku, Reaction Duel and more",
 };
 
 const GAMES = [
@@ -12,6 +12,7 @@ const GAMES = [
         desc: "Classic strategy. Play vs friends or Stockfish AI.",
         emoji: "\u265F\uFE0F",
         gradient: "from-slate-700 to-slate-900",
+        group: "Versus",
     },
     {
         href: "/connect4",
@@ -19,6 +20,7 @@ const GAMES = [
         desc: "Drop discs, connect four to win. vs friends or AI.",
         emoji: "\uD83D\uDD34",
         gradient: "from-blue-600 to-indigo-700",
+        group: "Versus",
     },
     {
         href: "/tictactoe",
@@ -26,6 +28,7 @@ const GAMES = [
         desc: "Three in a row to win. vs friends or unbeatable AI.",
         emoji: "\u2B55\uFE0F",
         gradient: "from-emerald-500 to-teal-700",
+        group: "Versus",
     },
     {
         href: "/checkers",
@@ -33,6 +36,7 @@ const GAMES = [
         desc: "Mandatory captures, crown your kings. vs friends or AI.",
         emoji: "\u269B\uFE0F",
         gradient: "from-amber-600 to-orange-800",
+        group: "Versus",
     },
     {
         href: "/reversi",
@@ -40,6 +44,7 @@ const GAMES = [
         desc: "Flip discs to own the board. vs friends or AI.",
         emoji: "\u26AB",
         gradient: "from-emerald-600 to-green-800",
+        group: "Versus",
     },
     {
         href: "/battleship",
@@ -47,6 +52,7 @@ const GAMES = [
         desc: "Hunt and sink the enemy fleet. vs friends or AI.",
         emoji: "\uD83D\uDEA2",
         gradient: "from-cyan-600 to-blue-800",
+        group: "Versus",
     },
     {
         href: "/hangman",
@@ -54,6 +60,39 @@ const GAMES = [
         desc: "Guess the hidden word before it's too late.",
         emoji: "\uD83D\uDD24",
         gradient: "from-purple-600 to-fuchsia-800",
+        group: "Versus",
+    },
+    {
+        href: "/reactionduel",
+        title: "Reaction Duel",
+        desc: "Real-time 1v1. Tap first after GO to win. Challenge a friend!",
+        emoji: "⚡",
+        gradient: "from-rose-600 to-red-800",
+        group: "Versus",
+    },
+    {
+        href: "/game2048",
+        title: "2048",
+        desc: "Merge tiles, reach 2048. Addictive puzzle, beat your best!",
+        emoji: "\uD83D\uDD32",
+        gradient: "from-indigo-600 to-violet-800",
+        group: "Solo",
+    },
+    {
+        href: "/minesweeper",
+        title: "Minesweeper",
+        desc: "Clear the field without hitting a mine. Easy to Hard.",
+        emoji: "\uD83D\uDCA3",
+        gradient: "from-teal-600 to-cyan-800",
+        group: "Solo",
+    },
+    {
+        href: "/sudoku",
+        title: "Sudoku",
+        desc: "Fill the 9x9 grid. Multiple difficulties, endless puzzles.",
+        emoji: "\uD83D\uDD22",
+        gradient: "from-green-600 to-emerald-800",
+        group: "Solo",
     },
 ];
 
@@ -65,29 +104,40 @@ export default function GamesPage() {
                 <p className="text-sm text-gray-500 dark:text-gray-400">Challenge friends or play against the computer</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {GAMES.map((game) => (
-                    <Link
-                        key={game.href}
-                        href={game.href}
-                        className="group relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
-                    >
-                        <div className={`h-24 bg-gradient-to-br ${game.gradient} flex items-center justify-center`}>
-                            <span className="text-5xl group-hover:scale-110 transition-transform">{game.emoji}</span>
+            {["Versus", "Solo"].map((grp) => {
+                const list = GAMES.filter((g) => g.group === grp);
+                if (list.length === 0) return null;
+                return (
+                    <div key={grp} className="mb-8">
+                        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
+                            {grp === "Versus" ? "Play vs Friends & AI" : "Solo Challenges"}
+                        </h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {list.map((game) => (
+                                <Link
+                                    key={game.href}
+                                    href={game.href}
+                                    className="group relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
+                                >
+                                    <div className={`h-24 bg-gradient-to-br ${game.gradient} flex items-center justify-center`}>
+                                        <span className="text-5xl group-hover:scale-110 transition-transform">{game.emoji}</span>
+                                    </div>
+                                    <div className="p-4">
+                                        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{game.title}</h2>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{game.desc}</p>
+                                        <span className="inline-flex items-center gap-1 mt-3 text-xs font-medium text-blue-500">
+                                            Play now
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                                                <path fillRule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+                                            </svg>
+                                        </span>
+                                    </div>
+                                </Link>
+                            ))}
                         </div>
-                        <div className="p-4">
-                            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{game.title}</h2>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{game.desc}</p>
-                            <span className="inline-flex items-center gap-1 mt-3 text-xs font-medium text-blue-500">
-                                Play now
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-                                    <path fillRule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
-                                </svg>
-                            </span>
-                        </div>
-                    </Link>
-                ))}
-            </div>
+                    </div>
+                );
+            })}
         </div>
     );
 }

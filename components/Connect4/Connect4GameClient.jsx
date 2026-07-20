@@ -6,6 +6,7 @@ import { io } from "socket.io-client";
 import Connect4Board from "./Connect4Board";
 import ChessChat from "@/components/Chess/ChessChat";
 import { playMoveSound, playCaptureSound, playCheckmateSound, setSoundEnabled } from "@/components/Chess/chessSounds";
+import { useGameReplay } from "@/components/Games/useGameReplay";
 
 const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
 
@@ -31,6 +32,7 @@ function PlayerBar({ player, color, active, label }) {
 
 export default function Connect4GameClient({ gameId }) {
     const { user } = useUser();
+    const { creating, playAgain } = useGameReplay("connect4");
     const socketRef = useRef(null);
     const [game, setGame] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -294,6 +296,7 @@ export default function Connect4GameClient({ gameId }) {
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">{resultText()}</h2>
                         <p className="text-xs text-gray-400 mb-4">{game.moves?.length || 0} discs played</p>
                         <div className="flex flex-col gap-2">
+                            <button onClick={() => playAgain("/api/connect4/games", { mode: game.mode, aiDifficulty: game.aiDifficulty })} disabled={creating} className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl text-sm">{creating ? "Starting..." : "Play Again"}</button>
                             <a href="/connect4" className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl text-sm">Back to Lobby</a>
                             <button onClick={() => setShowGameOver(false)} className="px-6 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Stay & Review</button>
                         </div>
