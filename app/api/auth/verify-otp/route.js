@@ -23,10 +23,19 @@ export async function POST(request) {
             code,
             used:      false,
             expiresAt: { $gt: new Date() },
-        });
+        }).sort({ expiresAt: -1 });
 
         if (!otp) {
-            return NextResponse.json({ error: "Invalid or expired code" }, { status: 401 });
+            // Distinguish expired vs wrong code to make failures diagnosable.
+            const expired = await OTP.findOne({
+                email: email.toLowerCase(),
+                code,
+                used:  false,
+            }).sort({ expiresAt: -1 });
+            if (expired) {
+                return NextResponse.json({ error: "Code expired. Request a new one." }, { status: 401 });
+            }
+            return NextResponse.json({ error: "Invalid code. Request a new one." }, { status: 401 });
         }
 
         // Mark used

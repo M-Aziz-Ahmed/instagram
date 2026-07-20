@@ -5,7 +5,8 @@
   "description": "Standalone live streaming server for AnonFeed",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "powershell -ExecutionPolicy Bypass -File start.ps1",
+    "start:node": "node server.js",
     "dev": "node --watch server.js"
   },
   "dependencies": {

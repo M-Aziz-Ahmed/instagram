@@ -21,7 +21,7 @@ export async function sendOTPEmail(email, code) {
                     ${code}
                 </div>
                 <p style="color:#9ca3af;font-size:12px;margin:16px 0 0">
-                    This code expires in 5 minutes. If you didn't request this, ignore this email.
+                    This code expires in 10 minutes. If you didn't request this, ignore this email.
                 </p>
             </div>
         `,

@@ -32,7 +32,7 @@ export async function POST(request) {
         }
 
         const code = generateCode();
-        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
 
         await OTP.create({ email: email.toLowerCase(), code, expiresAt });
         

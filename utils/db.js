@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const MONGODB_URI = process.env.mongobg_uri || "mongodb://39.62.217.128:27017";
+const MONGODB_URI = process.env.mongobg_uri || "mongodb://39.62.215.83:27017";
 
 let cached = null;
 
