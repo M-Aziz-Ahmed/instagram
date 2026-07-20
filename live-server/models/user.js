@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema({
     autoTranslate: { type: Boolean, default: false },
     lastActive:   { type: Date, default: Date.now },
     isOnline:     { type: Boolean, default: false },
-    inviteCode:   { type: String, default: null, unique: true, sparse: true },
+    inviteCode:   { type: String, default: null },
     referredBy:   { type: String, default: null },
     inviteCount:  { type: Number, default: 0 },
     createdAt:   { type: Date, default: Date.now },
