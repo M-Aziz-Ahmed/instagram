@@ -1,12 +1,17 @@
 const express = require("express");
 const router = express.Router();
 
+// Use global fetch (Node 18+). Fall back gracefully if unavailable.
+const fetchImpl = (typeof fetch !== "undefined") ? fetch : null;
+
 async function translateSingle(text, target) {
     const lang = target || "en";
     const encoded = encodeURIComponent(text.trim());
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${lang}&dt=t&q=${encoded}`;
 
-    const res = await fetch(url, {
+    if (!fetchImpl) return text;
+
+    const res = await fetchImpl(url, {
         headers: { "User-Agent": "Mozilla/5.0", "X-Forwarded-For": "1.1.1.1" },
     });
 
