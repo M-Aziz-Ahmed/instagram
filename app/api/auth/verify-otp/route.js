@@ -42,12 +42,19 @@ export async function POST(request) {
         otp.used = true;
         await otp.save();
 
-        // Find or create user
+        // Find or create user (idempotent — avoid duplicate-key 500 on retries)
         let user = await User.findOne({ email: email.toLowerCase() });
         const isNewUser = !user;
         if (!user) {
             const isAdmin = email.toLowerCase() === (process.env.ADMIN_EMAIL || "").toLowerCase();
-            user = await User.create({ email: email.toLowerCase(), isAdmin });
+            try {
+                user = await User.create({ email: email.toLowerCase(), isAdmin });
+            } catch (e) {
+                if (e?.code === 11000) {
+                    user = await User.findOne({ email: email.toLowerCase() });
+                }
+                if (!user) throw e;
+            }
         } else if (!user.isAdmin && email.toLowerCase() === (process.env.ADMIN_EMAIL || "").toLowerCase()) {
             user.isAdmin = true;
             await user.save();
@@ -123,7 +130,8 @@ export async function POST(request) {
         });
         return response;
     } catch (error) {
-        console.error(error);
-        return NextResponse.json({ error: "Verification failed" }, { status: 500 });
+        console.error("VERIFY-OTP ERROR:", error);
+        const detail = error?.message || String(error);
+        return NextResponse.json({ error: "Verification failed", detail }, { status: 500 });
     }
 }
