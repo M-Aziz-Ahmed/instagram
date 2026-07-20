@@ -53,13 +53,12 @@ function pickWord(difficulty) {
     return pick;
 }
 
-hangmanGameSchema.pre("save", function (next) {
+hangmanGameSchema.pre("save", function () {
     if (!this.word) {
         const w = pickWord(this.aiDifficulty);
         this.word = w.word;
         this.category = w.category;
     }
-    next();
 });
 
 hangmanGameSchema.statics.WORDS = WORDS;

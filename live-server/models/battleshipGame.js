@@ -63,9 +63,8 @@ function initialBoards() {
     return { p1: randomBoard(), p2: randomBoard() };
 }
 
-battleshipGameSchema.pre("save", function (next) {
+battleshipGameSchema.pre("save", function () {
     if (!this.boards || !this.boards.p1) this.boards = initialBoards();
-    next();
 });
 
 module.exports = mongoose.model("BattleshipGame", battleshipGameSchema);
