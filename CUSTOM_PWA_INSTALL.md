@@ -175,7 +175,7 @@ Edit `components/PWAInstallPrompt.jsx`:
 
 ```javascript
 <h3 className="font-bold text-sm...">
-    Install AnonFeed  {/* Change this */}
+    Install AnonTweet  {/* Change this */}
 </h3>
 <p className="text-xs...">
     Get quick access and an app-like experience. Works offline!

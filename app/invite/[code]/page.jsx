@@ -3,11 +3,11 @@ import InviteLandingNoSSR from "@/components/Auth/InviteLandingNoSSR";
 export async function generateMetadata({ params }) {
     const { code } = await params;
     return {
-        title: `Join AnonFeed with invite code ${code}`,
-        description: "You've been invited to join AnonFeed! Enter this invite code to create your account.",
+        title: `Join AnonTweet with invite code ${code}`,
+        description: "You've been invited to join AnonTweet! Enter this invite code to create your account.",
         openGraph: {
-            title: "Join AnonFeed",
-            description: "You've been invited to join AnonFeed!",
+            title: "Join AnonTweet",
+            description: "You've been invited to join AnonTweet!",
             type: "website",
         },
     };

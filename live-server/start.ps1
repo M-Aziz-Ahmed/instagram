@@ -1,4 +1,4 @@
-# Pre-start helper for the AnonFeed live-server.
+# Pre-start helper for the AnonTweet live-server.
 # Ensures the coturn TURN relay (running inside WSL2) is up before launching
 # the Node live-server, so WebRTC voice/video relay works end-to-end.
 #

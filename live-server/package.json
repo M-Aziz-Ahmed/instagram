@@ -2,7 +2,7 @@
   "name": "anonfeed-live-server",
   "version": "1.0.0",
   "private": true,
-  "description": "Standalone live streaming server for AnonFeed",
+  "description": "Standalone live streaming server for AnonTweet",
   "main": "server.js",
   "scripts": {
     "start": "powershell -ExecutionPolicy Bypass -File start.ps1",

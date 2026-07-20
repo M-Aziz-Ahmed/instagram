@@ -64,7 +64,7 @@ export default function FeedClient() {
                         >
                             {activeTag
                                 ? <span className="text-blue-600">#{activeTag}</span>
-                                : "AnonFeed"}
+                                : "AnonTweet"}
                         </button>
                     </div>
 
@@ -117,7 +117,7 @@ export default function FeedClient() {
                                 </svg>
                             </div>
                             <div>
-                                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Welcome to AnonFeed</p>
+                                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Welcome to AnonTweet</p>
                                 <p className="text-xs text-gray-500 dark:text-gray-400">Sign in to like, comment, post & follow</p>
                             </div>
                         </div>

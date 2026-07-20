@@ -1,7 +1,7 @@
 import HangmanGameNoSSR from "@/components/Hangman/HangmanGameNoSSR";
 
 export const metadata = {
-    title: "Hangman Game - AnonFeed",
+    title: "Hangman Game - AnonTweet",
     description: "Play Hangman",
 };
 

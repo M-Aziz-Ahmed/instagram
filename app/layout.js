@@ -12,40 +12,66 @@ const geistSans = Geist({
 
 export const metadata = {
   title: {
-    default: "AnonFeed - Anonymous Social Media Platform",
-    template: "%s | AnonFeed"
+    default: "AnonTweet - Anonymous Social Media & Messaging Platform",
+    template: "%s | AnonTweet"
   },
-  description: "Say anything. Anonymously. Share your thoughts, stories, and connect with others without revealing your identity. A safe space for authentic expression.",
-  keywords: ["anonymous social media", "anonymous posting", "share anonymously", "anonymous stories", "private social network", "AnonFeed"],
-  authors: [{ name: "AnonFeed Team" }],
-  creator: "AnonFeed",
-  publisher: "AnonFeed",
-  applicationName: "AnonFeed",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://yourapp.com'),
+  description: "AnonTweet is an anonymous social media platform to post, share stories, send messages, go live, and play games — all without revealing your identity. Speak freely. Join anonymous communities, trending feeds, and private chats.",
+  keywords: [
+    "anonymous social media",
+    "anonymous posting",
+    "post anonymously",
+    "anonymous stories",
+    "anonymous app",
+    "private social network",
+    "anonymous messaging",
+    "secret social app",
+    "anonymous chat",
+    "anonymous community",
+    "no name social media",
+    "anonymous feed",
+    "trending anonymous posts",
+    "AnonTweet",
+    "anonymous live streaming",
+    "anonymous video call",
+    "private message app",
+    "anonymous social network",
+    "say anything anonymously",
+    "hide identity social app",
+    "confession app",
+    "anonymous thoughts",
+  ],
+  authors: [{ name: "AnonTweet Team" }],
+  creator: "AnonTweet",
+  publisher: "AnonTweet",
+  applicationName: "AnonTweet",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://anontweet.duckdns.org'),
   alternates: {
     canonical: '/',
+    languages: {
+      'en-US': '/',
+    },
   },
   openGraph: {
     type: 'website',
     locale: 'en_US',
     url: '/',
-    title: 'AnonFeed - Anonymous Social Media Platform',
-    description: 'Say anything. Anonymously. Share your thoughts, stories, and connect with others without revealing your identity.',
-    siteName: 'AnonFeed',
+    siteName: 'AnonTweet',
+    title: 'AnonTweet - Anonymous Social Media & Messaging Platform',
+    description: 'Post, message, go live, and play games — all anonymously. Speak freely on AnonTweet, the private social network.',
     images: [
       {
         url: '/icon-512.svg',
         width: 512,
         height: 512,
-        alt: 'AnonFeed - Anonymous Social Media',
+        alt: 'AnonTweet - Anonymous Social Media',
         type: 'image/svg+xml',
       }
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'AnonFeed - Anonymous Social Media Platform',
-    description: 'Say anything. Anonymously. Share your thoughts, stories, and connect with others.',
+    title: 'AnonTweet - Anonymous Social Media & Messaging Platform',
+    description: 'Post, message, go live, and play games — all anonymously. Speak freely on AnonTweet.',
     images: ['/icon-512.svg'],
     creator: '@anonfeed',
   },
@@ -66,6 +92,7 @@ export const metadata = {
     // bing: 'your-bing-verification-code',
   },
   category: 'social media',
+  classification: 'social networking',
 };
 
 export const viewport = {
@@ -83,7 +110,7 @@ export default function RootLayout({ children }) {
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="AnonFeed" />
+        <meta name="apple-mobile-web-app-title" content="AnonTweet" />
         <link rel="apple-touch-icon" href="/icon-192.svg" />
         <link rel="icon" href="/icon-192.svg" type="image/svg+xml" />
       </head>

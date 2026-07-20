@@ -1,7 +1,7 @@
 import ChessGameNoSSR from "@/components/Chess/ChessGameNoSSR";
 
 export const metadata = {
-    title: "Chess Game - AnonFeed",
+    title: "Chess Game - AnonTweet",
     description: "Play chess",
 };
 

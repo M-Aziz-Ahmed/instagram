@@ -1,6 +1,6 @@
 {
-  "name": "AnonFeed - Anonymous Social Media",
-  "short_name": "AnonFeed",
+  "name": "AnonTweet - Anonymous Social Media",
+  "short_name": "AnonTweet",
   "description": "Say anything. Anonymously. Share your thoughts, stories, and connect with others without revealing your identity.",
   "start_url": "/",
   "display": "standalone",

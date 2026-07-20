@@ -42,7 +42,7 @@ export default function ProfileSetup({ onDone }) {
         <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-white dark:bg-gray-950 overflow-y-auto">
             <div className="w-full max-w-sm px-6 md:px-8 py-8 md:py-10 flex flex-col items-center gap-5 md:gap-6 min-h-full md:min-h-0 justify-center">
 
-                <span className="font-black text-2xl tracking-tight text-gray-900 dark:text-gray-100">AnonFeed</span>
+                <span className="font-black text-2xl tracking-tight text-gray-900 dark:text-gray-100">AnonTweet</span>
 
                 <div className="text-center">
                     <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Set up your profile</h1>

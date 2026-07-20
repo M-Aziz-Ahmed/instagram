@@ -50,7 +50,7 @@ self.addEventListener('message', (event) => {
 
 // Push notification — only show when app is NOT visible
 self.addEventListener('push', (event) => {
-  let data = { title: 'AnonFeed', body: '', url: '/', icon: '/icon-192.svg' };
+  let data = { title: 'AnonTweet', body: '', url: '/', icon: '/icon-192.svg' };
   try {
     data = { ...data, ...event.data.json() };
   } catch {}

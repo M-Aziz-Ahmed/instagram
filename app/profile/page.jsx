@@ -2,7 +2,7 @@ import ProfileNoSSR from "@/components/Profile/ProfileNoSSR";
 
 export const metadata = {
   title: 'Profile',
-  description: 'View and edit your anonymous profile on AnonFeed. Manage your posts, stories, and account settings.',
+  description: 'View and edit your anonymous profile on AnonTweet. Manage your posts, stories, and account settings.',
   robots: {
     index: false, // Don't index personal profiles
     follow: true,

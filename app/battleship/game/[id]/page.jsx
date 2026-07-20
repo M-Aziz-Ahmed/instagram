@@ -1,7 +1,7 @@
 import BattleshipGameNoSSR from "@/components/Battleship/BattleshipGameNoSSR";
 
 export const metadata = {
-    title: "Battleship Game - AnonFeed",
+    title: "Battleship Game - AnonTweet",
     description: "Play Battleship",
 };
 

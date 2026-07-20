@@ -1,6 +1,6 @@
 # TURN server (coturn) — startup & recovery notes
 
-This is the AnonFeed/Instagram-style app's WebRTC relay. coturn runs inside
+This is the AnonTweet/Instagram-style app's WebRTC relay. coturn runs inside
 WSL2 Ubuntu and shares the host's IP via mirrored networking
 (`C:\Users\munee\.wslconfig` → `networkingMode=mirrored`).
 

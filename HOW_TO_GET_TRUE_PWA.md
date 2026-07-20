@@ -99,7 +99,7 @@ Then click "Install App" → Browser shows **TRUE PWA** install dialog
 
 ### TRUE PWA (What You Want):
 ```
-Install dialog says: "Install AnonFeed"
+Install dialog says: "Install AnonTweet"
 ✅ Opens in own window (no browser UI)
 ✅ Appears in app drawer
 ✅ Has own icon

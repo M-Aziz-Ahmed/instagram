@@ -2,9 +2,9 @@ import BookmarksNoSSR from "@/components/Feed/BookmarksNoSSR";
 
 export const metadata = {
   title: 'Bookmarks',
-  description: 'View your saved posts and content on AnonFeed. Keep track of anonymous posts you want to revisit.',
+  description: 'View your saved posts and content on AnonTweet. Keep track of anonymous posts you want to revisit.',
   openGraph: {
-    title: 'Your Bookmarks - AnonFeed',
+    title: 'Your Bookmarks - AnonTweet',
     description: 'Your saved anonymous posts and content',
   },
   robots: {

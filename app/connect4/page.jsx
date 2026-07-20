@@ -1,7 +1,7 @@
 import Connect4NoSSR from "@/components/Connect4/Connect4NoSSR";
 
 export const metadata = {
-    title: "Connect Four - AnonFeed",
+    title: "Connect Four - AnonTweet",
     description: "Play Connect Four with friends or AI",
 };
 

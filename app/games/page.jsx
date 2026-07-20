@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-    title: "Games - AnonFeed",
+    title: "Games - AnonTweet",
     description: "Play games with friends or AI - chess, Connect Four and more",
 };
 

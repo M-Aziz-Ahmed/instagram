@@ -1,7 +1,7 @@
 import HangmanNoSSR from "@/components/Hangman/HangmanNoSSR";
 
 export const metadata = {
-    title: "Hangman - AnonFeed",
+    title: "Hangman - AnonTweet",
     description: "Guess the word before the drawing completes",
 };
 

@@ -1,7 +1,7 @@
-# SEO Setup Guide for AnonFeed
+# SEO Setup Guide for AnonTweet
 
 ## 🎯 Overview
-This guide will help you optimize your Instagram clone (AnonFeed) for search engines and submit it to Google Search Console.
+This guide will help you optimize your Instagram clone (AnonTweet) for search engines and submit it to Google Search Console.
 
 ## ✅ What's Been Implemented
 
@@ -159,7 +159,7 @@ Add JSON-LD structured data for better search results. Example for social media 
     __html: JSON.stringify({
       "@context": "https://schema.org",
       "@type": "SocialMediaPosting",
-      "name": "AnonFeed",
+      "name": "AnonTweet",
       "description": "Anonymous social media platform",
       "url": "https://yourdomain.com"
     })

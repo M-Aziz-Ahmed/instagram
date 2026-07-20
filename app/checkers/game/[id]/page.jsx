@@ -1,7 +1,7 @@
 import CheckersGameNoSSR from "@/components/Checkers/CheckersGameNoSSR";
 
 export const metadata = {
-    title: "Checkers Game - AnonFeed",
+    title: "Checkers Game - AnonTweet",
     description: "Play Checkers",
 };
 

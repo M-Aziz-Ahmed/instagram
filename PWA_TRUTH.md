@@ -260,7 +260,7 @@ npm run dev
 
 ### When TRUE PWA Works:
 ```
-"Install AnonFeed"
+"Install AnonTweet"
 "This site has app capabilities. Install it on your device."
 → Installs as REAL APP
 → No browser UI
@@ -271,7 +271,7 @@ npm run dev
 ### When It's Just a Shortcut:
 ```
 "Add to Home Screen"
-"Add AnonFeed to home screen"
+"Add AnonTweet to home screen"
 → Creates BOOKMARK
 → Opens in browser
 → Has browser UI

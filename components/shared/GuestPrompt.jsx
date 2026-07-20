@@ -39,7 +39,7 @@ export function LoginModal({ onClose, action = "interact" }) {
                     Sign in to {action}
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
-                    Join AnonFeed to like, comment, post, and connect.
+                    Join AnonTweet to like, comment, post, and connect.
                 </p>
                 <Link
                     href="/login"

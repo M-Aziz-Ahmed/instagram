@@ -1,7 +1,7 @@
 import ReversiGameNoSSR from "@/components/Reversi/ReversiGameNoSSR";
 
 export const metadata = {
-    title: "Reversi Game - AnonFeed",
+    title: "Reversi Game - AnonTweet",
     description: "Play Reversi",
 };
 

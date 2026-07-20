@@ -1,7 +1,7 @@
 import PostDetailNoSSR from "@/components/Feed/PostDetailNoSSR";
 
 const SITE_URL = "https://anontweet.duckdns.org";
-const SITE_NAME = "AnonFeed";
+const SITE_NAME = "AnonTweet";
 
 export async function generateMetadata({ params }) {
     const { id } = await params;
@@ -11,7 +11,7 @@ export async function generateMetadata({ params }) {
         const post = await res.json();
 
         const author = post.sender || "Anonymous";
-        const description = post.text?.slice(0, 200)?.trim() || "Check out this post on AnonFeed";
+        const description = post.text?.slice(0, 200)?.trim() || "Check out this post on AnonTweet";
         const postUrl = `${SITE_URL}/post/${id}`;
         const authorAvatar = post._author?.avatarUrl || post.avatarUrl || "";
 

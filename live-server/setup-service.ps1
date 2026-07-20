@@ -2,7 +2,7 @@
 # Setup live-server as a Windows service that starts on boot
 # Uses NSSM (Non-Sucking Service Manager) - installs it automatically if missing
 
-$serviceName = "AnonFeed-LiveServer"
+$serviceName = "AnonTweet-LiveServer"
 $nodePath = (Get-Command node).Source
 $scriptPath = "D:\Work\instagram-clone\live-server\server.js"
 $workingDir = "D:\Work\instagram-clone\live-server"
@@ -31,8 +31,8 @@ if (-not (Test-Path $nssmPath)) {
 # Install service
 & $nssmPath install $serviceName $nodePath "`"$scriptPath`""
 & $nssmPath set $serviceName AppDirectory $workingDir
-& $nssmPath set $serviceName DisplayName "AnonFeed Live Server"
-& $nssmPath set $serviceName Description "Express + Socket.IO backend for AnonFeed"
+& $nssmPath set $serviceName DisplayName "AnonTweet Live Server"
+& $nssmPath set $serviceName Description "Express + Socket.IO backend for AnonTweet"
 & $nssmPath set $serviceName Start SERVICE_AUTO_START
 & $nssmPath set $serviceName AppStdout $logFile
 & $nssmPath set $serviceName AppStderr "$workingDir\service-error.log"
