@@ -1,5 +1,5 @@
 // Service Worker for PWA
-const CACHE_NAME = 'anonfeed-v5';
+const CACHE_NAME = 'anontweet-v1';
 const OFFLINE_URL = '/offline.html';
 
 // Install event - cache essential assets

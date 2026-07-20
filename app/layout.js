@@ -101,11 +101,61 @@ export const viewport = {
   maximumScale: 1,
 };
 
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://anontweet.duckdns.org/#website",
+      url: "https://anontweet.duckdns.org",
+      name: "AnonTweet",
+      description:
+        "Anonymous social media platform to post, message, go live, and play games without revealing your identity.",
+      inLanguage: "en-US",
+      potentialAction: {
+        "@type": "SearchAction",
+        target: {
+          "@type": "EntryPoint",
+          urlTemplate:
+            "https://anontweet.duckdns.org/search?q={search_term_string}",
+        },
+        "query-input": "required name=search_term_string",
+      },
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://anontweet.duckdns.org/#organization",
+      name: "AnonTweet",
+      url: "https://anontweet.duckdns.org",
+      logo: "https://anontweet.duckdns.org/icon-512.svg",
+      sameAs: [],
+    },
+    {
+      "@type": "WebApplication",
+      name: "AnonTweet",
+      url: "https://anontweet.duckdns.org",
+      applicationCategory: "SocialNetworkingApplication",
+      operatingSystem: "Web, iOS, Android",
+      description:
+        "Post anonymously, send private messages, go live, and play games — all without revealing your identity.",
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD",
+      },
+    },
+  ],
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${geistSans.variable} h-full`} suppressHydrationWarning>
       <head>
         <meta name="google-site-verification" content="OxJnDlxKld6R8V8RXE_SqynIk0LcRgZlRtpsCXOIGKc" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
         <link rel="manifest" href="/manifest.json" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

@@ -29,8 +29,8 @@ export default async function Image() {
         <div style={{ fontSize: 140, fontWeight: 'bold', marginBottom: 20 }}>
           AnonTweet
         </div>
-        <div style={{ fontSize: 48, opacity: 0.9 }}>
-          Say anything. Anonymously.
+        <div style={{ fontSize: 44, opacity: 0.95, textAlign: 'center', padding: '0 40px' }}>
+          Post, message, go live &amp; play games — anonymously.
         </div>
       </div>
     ),
