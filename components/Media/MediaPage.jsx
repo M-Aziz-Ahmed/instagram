@@ -46,20 +46,25 @@ export default function MediaPage({ mediaType, config }) {
         (async () => {
             try {
                 const res = await fetch(`${apiRoute}/${mediaType}/${initialId}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 if (data) {
                     setSelected(data);
                     if (mediaType !== "movie" && data.numberOfEpisodes) {
                         const epsRes = await fetch(`${apiRoute}/${mediaType}/${initialId}/season/1`);
-                        const epsData = await epsRes.json();
-                        setEpisodes(epsData?.episodes || []);
-                        if (initialEp) {
-                            const match = (epsData?.episodes || []).find(e => e.episode_number == initialEp);
-                            if (match) handlePlayEpisode(match);
+                        if (epsRes.ok) {
+                            const epsData = await epsRes.json();
+                            setEpisodes(epsData?.episodes || []);
+                            if (initialEp) {
+                                const match = (epsData?.episodes || []).find(e => e.episode_number == initialEp);
+                                if (match) handlePlayEpisode(match);
+                            }
                         }
                     }
                 }
-            } catch {}
+            } catch (err) {
+                console.error("Failed to load media:", err);
+            }
         })();
     }, [initialId, initialEp, apiRoute, mediaType]);
 
