@@ -551,6 +551,7 @@ export default function AnimePage() {
                                         <button key={item.id} onClick={() => handleSelect(item)} className="group text-left">
                                             <div className="relative aspect-[3/4] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
                                                 <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                                                {item.sub && <span className="absolute top-2 left-2 px-1.5 py-0.5 bg-blue-500 text-white text-[10px] font-bold rounded">SUB</span>}
                                             </div>
                                             <p className="mt-1.5 text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2">{item.title}</p>
                                         </button>
@@ -568,6 +569,7 @@ export default function AnimePage() {
                                         <button key={item.id} onClick={() => handleSelect(item)} className="group text-left">
                                             <div className="relative aspect-[3/4] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
                                                 <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                                                {item.sub && <span className="absolute top-2 left-2 px-1.5 py-0.5 bg-blue-500 text-white text-[10px] font-bold rounded">SUB</span>}
                                             </div>
                                             <p className="mt-1.5 text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2">{item.title}</p>
                                         </button>
