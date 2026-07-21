@@ -10,17 +10,6 @@ const MediaSource = {
         coverBaseUrl: "https://img.anili.st/media/",
         defaultGenres: ["Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror", "Mystery", "Romance", "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller"],
     },
-    MOVIE: {
-        type: "movie",
-        label: "Movies",
-        emoji: "🎥",
-        searchType: "MOVIE",
-        apiRoute: "/api/media",
-        metadataSource: "tvmaze",
-        streamSource: "VIDSRC",
-        coverBaseUrl: "https://static.tvmaze.com/uploads/images/medium_portrait/",
-        defaultGenres: ["Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Family", "Fantasy", "History", "Horror", "Music", "Mystery", "Romance", "Science Fiction", "TV Movie", "Thriller", "War", "Western"],
-    },
     KDRAMA: {
         type: "kdrama",
         label: "K-Dramas",

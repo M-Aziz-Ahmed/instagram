@@ -31,6 +31,12 @@ export default function MediaPage({ mediaType, config }) {
     const fetchTrending = useCallback(async () => {
         try {
             const res = await fetch(`${apiRoute}/${mediaType}/trending?time_window=week`);
+            if (!res.ok) {
+                if (res.status >= 500) {
+                    console.warn(`TVMaze API server error: ${res.status}`);
+                    return;
+                }
+            }
             const data = await res.json();
             if (data?.results) setTrending(data.results.slice(0, 18));
         } catch {}
@@ -46,19 +52,26 @@ export default function MediaPage({ mediaType, config }) {
         (async () => {
             try {
                 const res = await fetch(`${apiRoute}/${mediaType}/${initialId}`);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        console.warn(`Media ${initialId} not found in TVMaze`);
+                        return;
+                    }
+                    // Handle all non-2xx responses gracefully
+                    console.warn(`TVMaze API error: ${res.status}`);
+                    return;
+                }
                 const data = await res.json();
                 if (data) {
                     setSelected(data);
                     if (mediaType !== "movie" && data.numberOfEpisodes) {
                         const epsRes = await fetch(`${apiRoute}/${mediaType}/${initialId}/season/1`);
-                        if (epsRes.ok) {
-                            const epsData = await epsRes.json();
-                            setEpisodes(epsData?.episodes || []);
-                            if (initialEp) {
-                                const match = (epsData?.episodes || []).find(e => e.episode_number == initialEp);
-                                if (match) handlePlayEpisode(match);
-                            }
+                        if (!epsRes.ok) return;
+                        const epsData = await epsRes.json();
+                        setEpisodes(epsData?.episodes || []);
+                        if (initialEp) {
+                            const match = (epsData?.episodes || []).find(e => e.episode_number == initialEp);
+                            if (match) handlePlayEpisode(match);
                         }
                     }
                 }
@@ -102,16 +115,25 @@ export default function MediaPage({ mediaType, config }) {
         window.history.pushState({}, "", `/${route}?id=${item.id}`);
         try {
             const res = await fetch(`${apiRoute}/${mediaType}/${item.id}`);
+            if (!res.ok) {
+                if (res.status >= 400) {
+                    console.warn(`TVMaze API error: ${res.status}`);
+                    return;
+                }
+            }
             const data = await res.json();
             if (data) {
                 setDetails(data);
                 if (mediaType !== "movie" && data.numberOfSeasons > 0) {
                     const epsRes = await fetch(`${apiRoute}/${mediaType}/${item.id}/season/1`);
+                    if (!epsRes.ok) return;
                     const epsData = await epsRes.json();
                     setEpisodes(epsData?.episodes || []);
                 }
             }
-        } catch {}
+        } catch (err) {
+            console.error("Failed to load details:", err);
+        }
     };
 
     const handlePlayEpisode = async (ep) => {
@@ -125,6 +147,12 @@ export default function MediaPage({ mediaType, config }) {
         }
         try {
             const res = await fetch(`${apiRoute}/${mediaType}/${ep.id}/stream?season=1&episode=${ep.episode_number}`);
+            if (!res.ok) {
+                if (res.status >= 400) {
+                    console.warn(`TVMaze stream API error: ${res.status}`);
+                    return;
+                }
+            }
             const data = await res.json();
             if (data?.url) setStreamUrl(data.url);
         } catch {}
@@ -202,7 +230,7 @@ export default function MediaPage({ mediaType, config }) {
                     <div className="flex flex-col lg:flex-row gap-6">
                         <div className="lg:w-1/3 shrink-0">
                             <img
-                                src={details?.posterPath || selected?.posterPath ? `https://image.tmdb.org/t/p/w500${details?.posterPath || selected?.posterPath}` : ""}
+                                src={details?.posterPath || selected?.posterPath || ""}
                                 alt={selected.title}
                                 className="w-full max-w-xs mx-auto lg:mx-0 rounded-xl shadow-lg aspect-[2/3] object-cover bg-gray-100 dark:bg-gray-800"
                             />
@@ -213,13 +241,13 @@ export default function MediaPage({ mediaType, config }) {
                                     {details?.title || selected.title}
                                     {details?.originalTitle && <span className="text-gray-400 dark:text-gray-500 font-normal ml-2">{details.originalTitle}</span>}
                                 </h2>
-                                <MediaBookmarkButton
-                                    mediaType={mediaType}
-                                    mediaId={String(selected.id)}
-                                    title={selected.title}
-                                    coverUrl={selected.posterPath ? `https://image.tmdb.org/t/p/w500${selected.posterPath}` : ""}
-                                    status={details?.status}
-                                />
+<MediaBookmarkButton
+                                mediaType={mediaType}
+                                mediaId={String(selected.id)}
+                                title={selected.title}
+                                coverUrl={selected.posterPath || selected.backdropPath || ""}
+                                status={details?.status}
+                            />
                             </div>
                             {details?.originalTitle && <p className="text-xs text-gray-400">{details.originalTitle}</p>}
                             <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
