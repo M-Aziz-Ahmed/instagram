@@ -360,8 +360,6 @@ function formatMedia(m) {
         id: m.id,
         title: m.title?.english || m.title?.romaji || "",
         image: m.coverImage?.large || m.coverImage?.medium || "",
-        sub: true,
-        dub: false,
         type: m.format,
         episodes: m.episodes,
         score: m.averageScore,

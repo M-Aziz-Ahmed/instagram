@@ -243,7 +243,6 @@ export default function AnimePage() {
     const [hasMore, setHasMore] = useState(true);
     const [genres, setGenres] = useState([]);
     const [activeGenre, setActiveGenre] = useState(null);
-    const [langFilter, setLangFilter] = useState("all");
     const [subOrDub, setSubOrDub] = useState("sub");
     const searchTimer = useRef(null);
 
@@ -538,23 +537,6 @@ export default function AnimePage() {
                             </div>
                         )}
 
-                        {/* Language filter */}
-                        <div className="flex gap-2 mb-4">
-                            {["all", "sub", "dub"].map((f) => (
-                                <button
-                                    key={f}
-                                    onClick={() => setLangFilter(f)}
-                                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                                        langFilter === f
-                                            ? f === "sub" ? "bg-blue-500 text-white" : f === "dub" ? "bg-purple-500 text-white" : "bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900"
-                                            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                                    }`}
-                                >
-                                    {f === "all" ? "All" : f === "sub" ? "Sub" : "Dub"}
-                                </button>
-                            ))}
-                        </div>
-
                         {results.length === 0 && spotlight.length === 0 && !loading && (
                             <div className="text-center py-16">
                                 <span className="text-5xl mb-4 block">🎬</span>
@@ -565,16 +547,10 @@ export default function AnimePage() {
                             <div className="mb-8">
                                 <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-3">Trending Now</h2>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                                    {spotlight.filter((item) => {
-                                        if (langFilter === "sub") return item.sub;
-                                        if (langFilter === "dub") return item.dub;
-                                        return true;
-                                    }).map((item) => (
+                                    {spotlight.map((item) => (
                                         <button key={item.id} onClick={() => handleSelect(item)} className="group text-left">
                                             <div className="relative aspect-[3/4] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
                                                 <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
-                                                {item.sub && <span className="absolute top-2 left-2 px-1.5 py-0.5 bg-blue-500 text-white text-[10px] font-bold rounded">SUB</span>}
-                                                {item.dub && <span className="absolute top-2 right-2 px-1.5 py-0.5 bg-purple-500 text-white text-[10px] font-bold rounded">DUB</span>}
                                             </div>
                                             <p className="mt-1.5 text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2">{item.title}</p>
                                         </button>
@@ -588,16 +564,10 @@ export default function AnimePage() {
                                     {query ? `Results for "${query}"` : activeGenre ? activeGenre : "Browse"}
                                 </h2>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                                    {results.filter((item) => {
-                                        if (langFilter === "sub") return item.sub;
-                                        if (langFilter === "dub") return item.dub;
-                                        return true;
-                                    }).map((item) => (
+                                    {results.map((item) => (
                                         <button key={item.id} onClick={() => handleSelect(item)} className="group text-left">
                                             <div className="relative aspect-[3/4] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
                                                 <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
-                                                {item.sub && <span className="absolute top-2 left-2 px-1.5 py-0.5 bg-blue-500 text-white text-[10px] font-bold rounded">SUB</span>}
-                                                {item.dub && <span className="absolute top-2 right-2 px-1.5 py-0.5 bg-purple-500 text-white text-[10px] font-bold rounded">DUB</span>}
                                             </div>
                                             <p className="mt-1.5 text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2">{item.title}</p>
                                         </button>
