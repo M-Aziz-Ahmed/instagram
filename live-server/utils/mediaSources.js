@@ -22,6 +22,17 @@ const MediaSource = {
         defaultGenres: ["Action", "Comedy", "Drama", "Horror", "Romance", "Sci-Fi", "Thriller"],
     },
     KDRAMA: {
+        type: "kdrama",
+        label: "K-Dramas",
+        emoji: "🇰🇷",
+        searchType: "TV",
+        apiRoute: "/api/media",
+        metadataSource: "tvmaze",
+        streamSource: "VIDSRC",
+        coverBaseUrl: "https://static.tvmaze.com/uploads/images/medium_portrait/",
+        defaultGenres: ["Action", "Adventure", "Comedy", "Crime", "Drama", "Fantasy", "Historical", "Horror", "Legal", "Medical", "Melodrama", "Mystery", "Psychological", "Romance", "School", "Thriller"],
+    },
+    KDRAMA: {
     KDRAMA: {
         type: "kdrama",
         label: "K-Dramas",
