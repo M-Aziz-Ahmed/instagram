@@ -4,14 +4,12 @@ const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "https://anontwee
 const STATIC_ROUTES = [
   { url: "", priority: 1.0, changeFrequency: "daily" },
   { url: "/games", priority: 0.9, changeFrequency: "weekly" },
-  { url: "/live", priority: 0.9, changeFrequency: "hourly" },
-  { url: "/stories", priority: 0.8, changeFrequency: "daily" },
   { url: "/search", priority: 0.7, changeFrequency: "daily" },
-  { url: "/call", priority: 0.6, changeFrequency: "monthly" },
-  { url: "/privacy", priority: 0.5, changeFrequency: "yearly" },
-  { url: "/terms", priority: 0.5, changeFrequency: "yearly" },
-  { url: "/about", priority: 0.6, changeFrequency: "monthly" },
-  { url: "/contact", priority: 0.5, changeFrequency: "yearly" },
+  { url: "/inbox", priority: 0.6, changeFrequency: "monthly" },
+  { url: "/bookmarks", priority: 0.6, changeFrequency: "monthly" },
+  { url: "/analytics", priority: 0.5, changeFrequency: "weekly" },
+  { url: "/referrals", priority: 0.5, changeFrequency: "monthly" },
+  { url: "/admin", priority: 0.3, changeFrequency: "monthly" },
 ];
 
 async function getPublicPosts() {
