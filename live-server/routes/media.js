@@ -103,6 +103,27 @@ async function withTimeout(promise, ms) {
     ]);
 }
 
+// Helper functions for type-specific filtering
+function getTypeCountry(type) {
+    const countries = { kdrama: "KR", cdrama: "CN" };
+    return countries[type];
+}
+
+function getTypeGenre(type) {
+    const genres = { cartoon: "Animation", kdrama: "Drama", cdrama: "Drama" };
+    return genres[type];
+}
+
+function getTypeQueries(type) {
+    const queries = {
+        kdrama: ["korean drama", "k-drama", "korean series"],
+        cdrama: ["chinese drama", "c-drama", "mandarin series"],
+        cartoon: ["animation", "cartoon", "animated series"],
+        season: ["tv series", "television series"],
+    };
+    return queries[type] || [];
+}
+
 function getStreamUrl(mediaType, id, season, episode) {
     if (mediaType === "movie") {
         return `https://vidsrc.xyz/embed/movie/${id}`;
@@ -131,8 +152,25 @@ router.get("/:type/search", async (req, res) => {
             10000
         );
 
+        // Filter by type-specific criteria
+        const typeQueries = getTypeQueries(type);
+        const typeCountry = getTypeCountry(type);
+        const typeGenre = getTypeGenre(type);
+
         const formatted = results
-            .filter(r => r.show && (type === "movie" || r.show.type === "Scripted"))
+            .filter(r => r.show)
+            .filter(r => {
+                const show = r.show;
+                // Filter by type-specific criteria
+                if (type === "movie") return true; // Movies don't have a specific type in TVMaze
+                if (typeCountry && show.network?.country?.code === typeCountry) return true;
+                if (typeGenre && show.genres?.includes(typeGenre)) return true;
+                if (type === "cartoon" && show.genres?.some(g => g.toLowerCase().includes("animat"))) return true;
+                if (type === "kdrama" && show.language === "Korean") return true;
+                if (type === "cdrama" && (show.language === "Chinese" || show.language === "Mandarin")) return true;
+                if (type === "season" && show.type === "Scripted") return true;
+                return true; // fallback
+            })
             .map(r => formatTVMazeShow(r.show, type))
             .slice(0, 20);
 
@@ -142,6 +180,33 @@ router.get("/:type/search", async (req, res) => {
         res.status(502).json({ error: "Search unavailable" });
     }
 });
+
+function getTypeQueries(type) {
+    const queries = {
+        movie: ["movie", "film", "cinema"],
+        kdrama: ["korean drama", "kdrama", "korean series"],
+        cdrama: ["chinese drama", "cdrama", "chinese series", "mandarin drama"],
+        cartoon: ["animation", "cartoon", "animated series", "kids animation"],
+        season: ["series", "tv series", "tv show", "television"],
+    };
+    return queries[type] || ["tv series"];
+}
+
+function getTypeCountry(type) {
+    const countries = {
+        kdrama: "KR",
+        cdrama: "CN",
+    };
+    return countries[type];
+}
+
+function getTypeGenre(type) {
+    const genres = {
+        cartoon: "Animation",
+        movie: "Movie",
+    };
+    return genres[type];
+}
 
 // ── Discover / Browse ──────────────────────────────────────────────
 router.get("/:type/discover", async (req, res) => {
@@ -156,9 +221,14 @@ router.get("/:type/discover", async (req, res) => {
 
         // TVMaze doesn't have discover - use search with genre terms or schedule
         let results;
-        if (country) {
+        const typeCountry = getTypeCountry(type);
+        const typeGenre = getTypeGenre(type);
+        const typeQueries = getTypeQueries(type);
+
+        if (typeCountry) {
+            // Use country-specific schedule for K-Dramas, C-Dramas
             const schedule = await withTimeout(
-                fetch(`${TVMAZE_BASE}/schedule?country=${country}`).then(r => r.json()),
+                fetch(`${TVMAZE_BASE}/schedule?country=${typeCountry}`).then(r => r.json()),
                 10000
             );
             const uniqueShows = [];
@@ -171,16 +241,16 @@ router.get("/:type/discover", async (req, res) => {
                 }
             }
             results = uniqueShows;
-        } else if (genre) {
+        } else if (typeGenre) {
+            // Use genre search for cartoons (Animation)
             const searchResults = await withTimeout(
-                fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(genre)}`).then(r => r.json()),
+                fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(typeGenre)}`).then(r => r.json()),
                 10000
             );
-            results = searchResults.map(r => r.show).filter(s => s.genres?.includes(genre));
+            results = searchResults.map(r => r.show).filter(s => s.genres?.includes(typeGenre));
         } else {
-            // Fallback: popular search
-            const popular = ["game of thrones", "breaking bad", "stranger things", "the office", "friends", "the witcher", "mandalorian", "squid game", "attack on titan", "one piece"];
-            const promises = popular.slice(0, 10).map(q =>
+            // Use type-specific search queries
+            const promises = typeQueries.slice(0, 8).map(q =>
                 fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(q)}`).then(r => r.json())
             );
             const allResults = await Promise.all(promises);
@@ -206,9 +276,17 @@ router.get("/:type/trending", async (req, res) => {
             return res.status(400).json({ error: "Use /api/anime/trending for anime" });
         }
 
-        // TVMaze doesn't have trending - use a curated popular list
-        const popularQueries = ["game of thrones", "breaking bad", "stranger things", "the office", "friends", "the witcher", "mandalorian", "squid game", "attack on titan", "one piece", "the last of us", "house of the dragon", "better call saul", "chernobyl", "the boys"];
-        const promises = popularQueries.slice(0, 12).map(q =>
+        // Type-specific trending queries
+        const trendingQueries = {
+            kdrama: ["korean drama", "squid game", "vincenzo", "crash landing on you", "goblin", "itaewon class", "hospital playlist", "reply 1988", "moon lovers"],
+            cdrama: ["chinese drama", "the untamed", "nirvana in fire", "story of yanxi palace", "eternal love", "ashes of love", "love between fairy and devil"],
+            cartoon: ["animation", "avatar the last airbender", "rick and morty", "adventure time", "steven universe", "gravity falls", "the owl house", "amphibia", "bluey"],
+            season: ["game of thrones", "breaking bad", "stranger things", "the office", "friends", "the witcher", "mandalorian", "squid game", "attack on titan", "one piece", "the last of us", "house of the dragon"],
+            movie: ["movie", "film", "marvel", "dc", "disney", "pixar", "animation", "superhero"],
+        };
+
+        const queries = trendingQueries[type] || ["tv series"];
+        const promises = queries.slice(0, 12).map(q =>
             fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(q)}`).then(r => r.json())
         );
         const allResults = await Promise.all(promises);
