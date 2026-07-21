@@ -15,24 +15,12 @@ const MediaSource = {
         label: "Movies",
         emoji: "🎬",
         searchType: "movie",
-        apiRoute: "/api/movies",
+        apiRoute: "/api/media",
         metadataSource: "tmdb",
         streamSource: "tmdb",
         coverBaseUrl: "https://image.tmdb.org/t/p/w500",
         defaultGenres: ["Action", "Comedy", "Drama", "Horror", "Romance", "Sci-Fi", "Thriller"],
     },
-    KDRAMA: {
-        type: "kdrama",
-        label: "K-Dramas",
-        emoji: "🇰🇷",
-        searchType: "TV",
-        apiRoute: "/api/media",
-        metadataSource: "tvmaze",
-        streamSource: "VIDSRC",
-        coverBaseUrl: "https://static.tvmaze.com/uploads/images/medium_portrait/",
-        defaultGenres: ["Action", "Adventure", "Comedy", "Crime", "Drama", "Fantasy", "Historical", "Horror", "Legal", "Medical", "Melodrama", "Mystery", "Psychological", "Romance", "School", "Thriller"],
-    },
-    KDRAMA: {
     KDRAMA: {
         type: "kdrama",
         label: "K-Dramas",
@@ -76,6 +64,17 @@ const MediaSource = {
         streamSource: "VIDSRC",
         coverBaseUrl: "https://static.tvmaze.com/uploads/images/medium_portrait/",
         defaultGenres: ["Action", "Adventure", "Animation", "Comedy", "Crime", "Drama", "Fantasy", "Horror", "Mystery", "Sci-Fi", "Thriller"],
+    },
+    ANIME: {
+        type: "anime",
+        label: "Anime",
+        emoji: "🎬",
+        searchType: "ANIME",
+        apiRoute: "/api/anime",
+        metadataSource: "anilist",
+        streamSource: "gogoanime",
+        coverBaseUrl: "https://img.anili.st/media/",
+        defaultGenres: ["Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror", "Mystery", "Romance", "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller"],
     },
 };
 
