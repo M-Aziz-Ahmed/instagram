@@ -15,12 +15,13 @@ const MediaSource = {
         label: "Movies",
         emoji: "🎬",
         searchType: "movie",
-        apiRoute: "/api/movies",
+        apiRoute: "/api/media",
         metadataSource: "tmdb",
         streamSource: "tmdb",
         coverBaseUrl: "https://image.tmdb.org/t/p/w500",
         defaultGenres: ["Action", "Comedy", "Drama", "Horror", "Romance", "Sci-Fi", "Thriller"],
     },
+    KDRAMA: {
     KDRAMA: {
         type: "kdrama",
         label: "K-Dramas",
