@@ -5,23 +5,15 @@ const router = express.Router();
 const ANILIST = "https://graphql.anilist.co";
 
 async function gql(query, variables = {}) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
-    try {
-        const res = await fetch(ANILIST, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "User-Agent": "AnonTweet/1.0" },
-            body: JSON.stringify({ query, variables }),
-            signal: controller.signal,
-        });
-        clearTimeout(timer);
-        const json = await res.json();
-        if (json.errors) throw new Error(json.errors[0]?.message || "AniList error");
-        return json.data;
-    } catch (err) {
-        clearTimeout(timer);
-        throw err;
-    }
+    const res = await fetch(ANILIST, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "User-Agent": "AnonTweet/1.0" },
+        body: JSON.stringify({ query, variables }),
+        timeout: 15000,
+    });
+    const json = await res.json();
+    if (json.errors) throw new Error(json.errors[0]?.message || "AniList error");
+    return json.data;
 }
 
 const MEDIA_FIELDS = `

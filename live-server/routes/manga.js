@@ -5,13 +5,10 @@ const router = express.Router();
 const MANGADEX = "https://api.mangadex.org";
 
 async function safeFetch(url) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
     const res = await fetch(url, {
         headers: { "User-Agent": "AnonTweet/1.0" },
-        signal: controller.signal,
+        timeout: 15000,
     });
-    clearTimeout(timer);
     if (!res.ok) throw new Error(`Upstream ${res.status}`);
     return res.json();
 }
@@ -19,17 +16,10 @@ async function safeFetch(url) {
 // Search manga
 router.get("/search", async (req, res) => {
     try {
-        const { q, limit = 20, offset = 0, includes = "cover_art" } = req.query;
+        const { q, limit = 20, offset = 0 } = req.query;
         if (!q) return res.status(400).json({ error: "Query required" });
-        const params = new URLSearchParams({
-            title: q,
-            limit: String(Math.min(Number(limit), 100)),
-            offset: String(offset),
-            "order[relevance]": "desc",
-            "includes[]": includes,
-            "hasAvailableChapters": "true",
-        });
-        const data = await safeFetch(`${MANGADEX}/manga?${params}`);
+        const url = `${MANGADEX}/manga?title=${encodeURIComponent(q)}&limit=${Math.min(Number(limit), 100)}&offset=${offset}&includes[]=cover_art&order[relevance]=desc`;
+        const data = await safeFetch(url);
         res.json(data);
     } catch (err) {
         console.error("Manga search error:", err.message);
@@ -41,14 +31,8 @@ router.get("/search", async (req, res) => {
 router.get("/recent", async (req, res) => {
     try {
         const { limit = 20, offset = 0 } = req.query;
-        const params = new URLSearchParams({
-            limit: String(Math.min(Number(limit), 100)),
-            offset: String(offset),
-            "includes[]": "cover_art",
-            "order[latestUploadedChapter]": "desc",
-            "hasAvailableChapters": "true",
-        });
-        const data = await safeFetch(`${MANGADEX}/manga?${params}`);
+        const url = `${MANGADEX}/manga?limit=${Math.min(Number(limit), 100)}&offset=${offset}&includes[]=cover_art&order[latestUploadedChapter]=desc`;
+        const data = await safeFetch(url);
         res.json(data);
     } catch (err) {
         console.error("Manga recent error:", err.message);
@@ -72,13 +56,8 @@ router.get("/info/:id", async (req, res) => {
 router.get("/chapters/:id", async (req, res) => {
     try {
         const { lang = "en", limit = 500, offset = 0, order = "asc" } = req.query;
-        const params = new URLSearchParams({
-            "translatedLanguage[]": lang,
-            "order[chapter]": order,
-            limit: String(Math.min(Number(limit), 500)),
-            offset: String(offset),
-        });
-        const data = await safeFetch(`${MANGADEX}/manga/${req.params.id}/feed?${params}`);
+        const url = `${MANGADEX}/manga/${req.params.id}/feed?translatedLanguage[]=${lang}&order[chapter]=${order}&limit=${Math.min(Number(limit), 500)}&offset=${offset}`;
+        const data = await safeFetch(url);
         res.json(data);
     } catch (err) {
         console.error("Manga chapters error:", err.message);

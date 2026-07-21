@@ -2,8 +2,11 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 
-const COVER_URL = (id, fileName) =>
-    fileName ? `https://uploads.mangadex.org/covers/${id}/${fileName}.256.jpg` : "";
+const COVER_URL = (id, fileName) => {
+    if (!fileName) return "";
+    const base = fileName.replace(/\.[^.]+$/, "");
+    return `https://uploads.mangadex.org/covers/${id}/${base}.256.jpg`;
+};
 const fmtNum = (n) => (n == null ? "?" : n.toLocaleString());
 
 function MangaReader({ pages, title, chapterNum, onPrevChapter, onNextChapter, hasPrev, hasNext }) {
@@ -189,6 +192,7 @@ export default function MangaPage() {
     const [currentCh, setCurrentCh] = useState(null);
     const [pages, setPages] = useState([]);
     const [loadingChapter, setLoadingChapter] = useState(null);
+    const [chapterError, setChapterError] = useState("");
     const searchTimer = useRef(null);
 
     useEffect(() => {
@@ -233,12 +237,17 @@ export default function MangaPage() {
     const handleReadChapter = async (ch) => {
         setCurrentCh(ch);
         setPages([]);
+        setChapterError("");
         setLoadingChapter(ch.id);
         try {
             const res = await fetch(`/api/manga/chapter/${ch.id}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
+            if (data?.error) throw new Error(data.error);
             setPages(data?.pages || []);
-        } catch { /* silent */ }
+        } catch (err) {
+            setChapterError(err.message || "Failed to load chapter pages");
+        }
         setLoadingChapter(null);
     };
 
@@ -296,15 +305,24 @@ export default function MangaPage() {
             <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4">
                 {/* Reader View */}
                 {view === "reader" && currentCh && (
-                    <MangaReader
-                        pages={pages}
-                        title={selected?.attributes?.title?.en || ""}
-                        chapterNum={currentCh.attributes?.chapter || "?"}
-                        hasPrev={chapterIdx > 0}
-                        hasNext={chapterIdx < chapters.length - 1}
-                        onPrevChapter={() => chapterIdx > 0 && handleReadChapter(chapters[chapterIdx - 1])}
-                        onNextChapter={() => chapterIdx < chapters.length - 1 && handleReadChapter(chapters[chapterIdx + 1])}
-                    />
+                    chapterError ? (
+                        <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-6 text-center">
+                            <p className="text-sm text-red-600 dark:text-red-400 mb-3">{chapterError}</p>
+                            <button onClick={() => { setChapterError(""); setCurrentCh(null); }} className="px-4 py-2 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded-xl text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors">
+                                ← Back to chapters
+                            </button>
+                        </div>
+                    ) : (
+                        <MangaReader
+                            pages={pages}
+                            title={selected?.attributes?.title?.en || ""}
+                            chapterNum={currentCh.attributes?.chapter || "?"}
+                            hasPrev={chapterIdx > 0}
+                            hasNext={chapterIdx < chapters.length - 1}
+                            onPrevChapter={() => chapterIdx > 0 && handleReadChapter(chapters[chapterIdx - 1])}
+                            onNextChapter={() => chapterIdx < chapters.length - 1 && handleReadChapter(chapters[chapterIdx + 1])}
+                        />
+                    )
                 )}
 
                 {/* Detail View */}
