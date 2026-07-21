@@ -390,6 +390,45 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                             active={isActive("/manga")}
                             onClick={handleNavClick}
                         />
+                        <NavItem
+                            href="/movies"
+                            icon={
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                </svg>
+                            }
+                            label="Movies"
+                            active={isActive("/movies")}
+                            onClick={handleNavClick}
+                        />
+                        <NavItem
+                            href="/kdramas"
+                            icon={<KDramaIcon />}
+                            label="K-Dramas"
+                            active={isActive("/kdramas")}
+                            onClick={handleNavClick}
+                        />
+                        <NavItem
+                            href="/seasons"
+                            icon={<SeasonsIcon />}
+                            label="Seasons"
+                            active={isActive("/seasons")}
+                            onClick={handleNavClick}
+                        />
+                        <NavItem
+                            href="/cdramas"
+                            icon={<CDramaIcon />}
+                            label="Chinese Dramas"
+                            active={isActive("/cdramas")}
+                            onClick={handleNavClick}
+                        />
+                        <NavItem
+                            href="/cartoons"
+                            icon={<CartoonsIcon />}
+                            label="Cartoons"
+                            active={isActive("/cartoons")}
+                            onClick={handleNavClick}
+                        />
                         {user?.isAdmin && (
                             <NavItem
                                 href="/admin"
