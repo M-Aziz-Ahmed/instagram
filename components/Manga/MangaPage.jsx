@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import MediaBookmarkButton from "@/components/shared/MediaBookmarkButton";
 
 const COVER_URL = (id, fileName) => {
     if (!fileName) return "";
-    const base = fileName.replace(/\.[^.]+$/, "");
-    const raw = `https://uploads.mangadex.org/covers/${id}/${base}.512.jpg`;
-    return `/api/manga/cover?url=${encodeURIComponent(raw)}`;
+    return `https://uploads.mangadex.org/covers/${id}/${fileName}.256.jpg`;
 };
 const fmtNum = (n) => (n == null ? "?" : n.toLocaleString());
 
@@ -286,6 +285,20 @@ export default function MangaPage() {
             setChapterError(err.message || "Failed to load chapter pages");
         }
         setLoadingChapter(null);
+        if (selected?.id) {
+            fetch(`/api/media-bookmarks/manga/${selected.id}/history`, {
+                method: "PATCH",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    chapterId: ch.id,
+                    chapterNum: ch.attributes?.chapter,
+                    chapterTitle: ch.attributes?.title || (ch.attributes?.chapter ? `Chapter ${ch.attributes.chapter}` : null),
+                    title: selected.attributes?.title?.en || Object.values(selected.attributes?.title || {})[0] || "",
+                    coverUrl: getCover(selected),
+                }),
+            }).catch(() => {});
+        }
     };
 
     const getCover = (item) => {
@@ -369,9 +382,19 @@ export default function MangaPage() {
                             <CoverImg src={getCover(selected)} alt={selected.attributes?.title?.en || ""} className="w-full max-w-xs mx-auto lg:mx-0 rounded-xl shadow-lg aspect-[3/4]" />
                         </div>
                         <div className="flex-1 min-w-0 space-y-3">
-                            <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-gray-100">
-                                {selected.attributes?.title?.en || Object.values(selected.attributes?.title || {})[0] || "Unknown"}
-                            </h2>
+                            <div className="flex items-start gap-3">
+                                <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-gray-100 flex-1">
+                                    {selected.attributes?.title?.en || Object.values(selected.attributes?.title || {})[0] || "Unknown"}
+                                </h2>
+                                <MediaBookmarkButton
+                                    mediaType="manga"
+                                    mediaId={selected.id}
+                                    title={selected.attributes?.title?.en || Object.values(selected.attributes?.title || {})[0] || ""}
+                                    coverUrl={getCover(selected)}
+                                    status={selected.attributes?.status}
+                                    totalChapters={selected.attributes?.lastChapter ? parseInt(selected.attributes.lastChapter) : null}
+                                />
+                            </div>
                             {selected.attributes?.altTitles?.slice(0, 3).map((alt, i) => {
                                 const val = alt.en || Object.values(alt)[0];
                                 return val ? <p key={i} className="text-xs text-gray-400">{val}</p> : null;

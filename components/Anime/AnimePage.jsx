@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Hls from "hls.js";
+import MediaBookmarkButton from "@/components/shared/MediaBookmarkButton";
 
 const fmtNum = (n) => (n == null ? "?" : n.toLocaleString());
 
@@ -301,6 +302,14 @@ export default function AnimePage() {
             const best = sources.find((s) => s.quality === "1080p") || sources.find((s) => s.quality === "720p") || sources[0];
             if (best?.url) setStreamUrl(best.url);
         } catch { /* silent */ }
+        if (selected?.id) {
+            fetch(`/api/media-bookmarks/anime/${encodeURIComponent(String(selected.id))}/history`, {
+                method: "PATCH",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ episodeNum: ep.number, title: selected.title, coverUrl: selected.image }),
+            }).catch(() => {});
+        }
     };
 
     const handleBack = () => {
@@ -355,7 +364,16 @@ export default function AnimePage() {
                             <img src={selected.image} alt={selected.title} className="w-full max-w-xs mx-auto lg:mx-0 rounded-xl shadow-lg" />
                         </div>
                         <div className="flex-1 min-w-0 space-y-3">
-                            <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-gray-100">{selected.title}</h2>
+                            <div className="flex items-start gap-3">
+                                <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-gray-100 flex-1">{selected.title}</h2>
+                                <MediaBookmarkButton
+                                    mediaType="anime"
+                                    mediaId={String(selected.id)}
+                                    title={selected.title}
+                                    coverUrl={selected.image}
+                                    status={selected.status}
+                                />
+                            </div>
                             {selected.otherNames?.length > 0 && (
                                 <p className="text-xs text-gray-400">{selected.otherNames.slice(0, 3).join(" / ")}</p>
                             )}
