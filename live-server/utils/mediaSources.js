@@ -21,7 +21,7 @@ const MediaSource = {
         coverBaseUrl: "https://static.tvmaze.com/uploads/images/medium_portrait/",
         defaultGenres: ["Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Family", "Fantasy", "History", "Horror", "Music", "Mystery", "Romance", "Science Fiction", "TV Movie", "Thriller", "War", "Western"],
     },
-    KDORAMA: {
+    KDRAMA: {
         type: "kdrama",
         label: "K-Dramas",
         emoji: "🇰🇷",
