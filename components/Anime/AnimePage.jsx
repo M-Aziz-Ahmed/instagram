@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import Hls from "hls.js";
 import MediaBookmarkButton from "@/components/shared/MediaBookmarkButton";
 
@@ -223,6 +224,11 @@ function EpisodeList({ episodes, currentId, onSelect }) {
 }
 
 export default function AnimePage() {
+    const searchParams = useSearchParams();
+    const initialId = searchParams.get("id");
+    const initialEp = searchParams.get("ep");
+    const didInit = useRef(false);
+
     const [query, setQuery] = useState("");
     const [results, setResults] = useState([]);
     const [spotlight, setSpotlight] = useState([]);
@@ -261,6 +267,42 @@ export default function AnimePage() {
             })
             .catch(() => {});
     }, []);
+
+    useEffect(() => {
+        if (!initialId || didInit.current) return;
+        didInit.current = true;
+        (async () => {
+            try {
+                const infoRes = await fetch(`/api/anime/info/${initialId}`);
+                const infoData = await infoRes.json();
+                if (infoData?.id) {
+                    const full = { id: infoData.id, title: infoData.title, image: infoData.image, ...infoData };
+                    setSelected(full);
+                    if (infoData.episodes?.length) {
+                        setEpisodes(infoData.episodes);
+                        if (initialEp) {
+                            const ep = infoData.episodes.find(e => String(e.id) === initialEp || String(e.number) === initialEp);
+                            if (ep) {
+                                setCurrentEp(ep);
+                                setStreamTitle(`Episode ${ep.number}${ep.title ? " - " + ep.title : ""}`);
+                                try {
+                                    const watchRes = await fetch(`/api/anime/watch/${encodeURIComponent(ep.id)}?subOrDub=${subOrDub}`);
+                                    const watchData = await watchRes.json();
+                                    const sources = watchData?.sources || [];
+                                    const best = sources.find((s) => s.quality === "1080p") || sources.find((s) => s.quality === "720p") || sources[0];
+                                    if (best?.url) setStreamUrl(best.url);
+                                } catch { /* silent */ }
+                            }
+                        }
+                    } else {
+                        const epRes = await fetch(`/api/anime/episodes/${initialId}?title=${encodeURIComponent(infoData.title || "")}`);
+                        const epData = await epRes.json();
+                        if (epData?.episodes) setEpisodes(epData.episodes);
+                    }
+                }
+            } catch { /* silent */ }
+        })();
+    }, [initialId, initialEp]);
 
     const doSearch = useCallback(async (q, p = 1, append = false) => {
         if (!q.trim()) return;
@@ -307,6 +349,7 @@ export default function AnimePage() {
         setCurrentEp(null);
         setStreamUrl("");
         setLoadingEpisodes(true);
+        window.history.pushState({}, "", `/anime?id=${item.id}`);
         try {
             const res = await fetch(`/api/anime/info/${encodeURIComponent(item.id)}`);
             const data = await res.json();
@@ -329,6 +372,9 @@ export default function AnimePage() {
         setCurrentEp(ep);
         setStreamUrl("");
         setStreamTitle(`Episode ${ep.number}${ep.title ? " - " + ep.title : ""}`);
+        if (selected?.id) {
+            window.history.pushState({}, "", `/anime?id=${selected.id}&ep=${ep.id}`);
+        }
         try {
             const res = await fetch(`/api/anime/watch/${encodeURIComponent(ep.id)}?subOrDub=${subOrDub}`);
             const data = await res.json();
@@ -347,8 +393,15 @@ export default function AnimePage() {
     };
 
     const handleBack = () => {
-        if (streamUrl) { setStreamUrl(""); setCurrentEp(null); }
-        else if (selected) { setSelected(null); setEpisodes([]); }
+        if (streamUrl) {
+            setStreamUrl("");
+            setCurrentEp(null);
+            if (selected?.id) window.history.pushState({}, "", `/anime?id=${selected.id}`);
+        } else if (selected) {
+            setSelected(null);
+            setEpisodes([]);
+            window.history.pushState({}, "", "/anime");
+        }
     };
 
     const view = streamUrl ? "player" : selected ? "detail" : "grid";

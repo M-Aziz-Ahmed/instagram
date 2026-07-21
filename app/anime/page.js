@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import AnimePage from "@/components/Anime/AnimePage";
 
 export const metadata = {
@@ -6,5 +7,9 @@ export const metadata = {
 };
 
 export default function Anime() {
-  return <AnimePage />;
+  return (
+    <Suspense>
+      <AnimePage />
+    </Suspense>
+  );
 }

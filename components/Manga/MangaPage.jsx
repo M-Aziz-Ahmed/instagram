@@ -298,6 +298,7 @@ export default function MangaPage() {
         setChapters([]);
         setCurrentCh(null);
         setPages([]);
+        window.history.pushState({}, "", `/manga?id=${item.id}`);
         try {
             const res = await fetch(`/api/manga/chapters/${item.id}?limit=500&order=asc`);
             const data = await res.json();
@@ -310,6 +311,10 @@ export default function MangaPage() {
         setPages([]);
         setChapterError("");
         setLoadingChapter(ch.id);
+        const sel = selectedRef.current;
+        if (sel?.id) {
+            window.history.pushState({}, "", `/manga?id=${sel.id}&ch=${ch.id}`);
+        }
         try {
             const res = await fetch(`/api/manga/chapter/${ch.id}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -320,7 +325,6 @@ export default function MangaPage() {
             setChapterError(err.message || "Failed to load chapter pages");
         }
         setLoadingChapter(null);
-        const sel = selectedRef.current;
         if (sel?.id) {
             fetch(`/api/media-bookmarks/manga/${sel.id}/history`, {
                 method: "PATCH",
@@ -353,8 +357,15 @@ export default function MangaPage() {
     };
 
     const handleBack = () => {
-        if (pages.length > 0) { setPages([]); setCurrentCh(null); }
-        else if (selected) { setSelected(null); setChapters([]); }
+        if (pages.length > 0) {
+            setPages([]);
+            setCurrentCh(null);
+            if (selected?.id) window.history.pushState({}, "", `/manga?id=${selected.id}`);
+        } else if (selected) {
+            setSelected(null);
+            setChapters([]);
+            window.history.pushState({}, "", "/manga");
+        }
     };
 
     const chapterIdx = chapters.findIndex((c) => c.id === currentCh?.id);
