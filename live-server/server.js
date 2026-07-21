@@ -2812,6 +2812,7 @@ app.use("/api/debug", require("./routes/debug"));
 app.use("/api/live", apiLimiter, require("./routes/live"));
 app.use("/api/translate", apiLimiter, require("./routes/translate"));
 app.use("/api/invites", apiLimiter, require("./routes/invites"));
+app.use("/api/music", apiLimiter, require("./routes/music"));
 app.use("/api/reactionduel", require("./routes/reactionduel")(io));
 
 // ── Start ───────────────────────────────────────────────────────
