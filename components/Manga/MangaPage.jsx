@@ -315,7 +315,7 @@ export default function MangaPage() {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
             if (data?.error) throw new Error(data.error);
-            setPages(data?.pages || []);
+            setPages((data?.pages || []).map((u) => `/api/manga/page?url=${encodeURIComponent(u)}`));
         } catch (err) {
             setChapterError(err.message || "Failed to load chapter pages");
         }

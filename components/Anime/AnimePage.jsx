@@ -238,6 +238,7 @@ export default function AnimePage() {
     const [genres, setGenres] = useState([]);
     const [activeGenre, setActiveGenre] = useState(null);
     const [langFilter, setLangFilter] = useState("all");
+    const [subOrDub, setSubOrDub] = useState("sub");
     const searchTimer = useRef(null);
 
     useEffect(() => {
@@ -310,7 +311,7 @@ export default function AnimePage() {
             const res = await fetch(`/api/anime/info/${encodeURIComponent(item.id)}`);
             const data = await res.json();
             if (data?.description) {
-                setSelected((prev) => ({ ...prev, description: data.description, genres: data.genres, status: data.status, totalEpisodes: data.totalEpisodes, releaseDate: data.releaseDate, otherNames: data.otherNames }));
+                setSelected((prev) => ({ ...prev, description: data.description, genres: data.genres, status: data.status, totalEpisodes: data.totalEpisodes, releaseDate: data.releaseDate, otherNames: data.otherNames, hasDub: data.hasDub, source: data.source }));
             }
             if (data?.episodes?.length) {
                 setEpisodes(data.episodes);
@@ -329,7 +330,7 @@ export default function AnimePage() {
         setStreamUrl("");
         setStreamTitle(`Episode ${ep.number}${ep.title ? " - " + ep.title : ""}`);
         try {
-            const res = await fetch(`/api/anime/watch/${encodeURIComponent(ep.id)}`);
+            const res = await fetch(`/api/anime/watch/${encodeURIComponent(ep.id)}?subOrDub=${subOrDub}`);
             const data = await res.json();
             const sources = data?.sources || [];
             const best = sources.find((s) => s.quality === "1080p") || sources.find((s) => s.quality === "720p") || sources[0];
@@ -415,6 +416,14 @@ export default function AnimePage() {
                                 {selected.status && <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-full text-xs">{selected.status}</span>}
                                 {selected.releaseDate && <span>{selected.releaseDate}</span>}
                                 {selected.totalEpisodes && <span>{selected.totalEpisodes} eps</span>}
+                                {selected.source && <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${selected.source === "hianime" ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400" : "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400"}`}>{selected.source === "hianime" ? "HiAnime" : "AnimeUnity"}</span>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400">Audio:</span>
+                                <div className="flex gap-1">
+                                    <button onClick={() => setSubOrDub("sub")} className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors ${subOrDub === "sub" ? "bg-blue-500 text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"}`}>SUB</button>
+                                    {selected.hasDub && <button onClick={() => setSubOrDub("dub")} className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors ${subOrDub === "dub" ? "bg-purple-500 text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"}`}>DUB</button>}
+                                </div>
                             </div>
                             {selected.genres?.length > 0 && (
                                 <div className="flex flex-wrap gap-1.5">
