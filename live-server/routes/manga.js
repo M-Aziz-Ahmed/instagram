@@ -1,6 +1,9 @@
 const express = require("express");
 const fetch = require("node-fetch");
+const dns = require("dns");
 const router = express.Router();
+
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 const MANGADEX = "https://api.mangadex.org";
 
