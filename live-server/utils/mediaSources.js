@@ -7,7 +7,7 @@ const MediaSource = {
         apiRoute: "/api/anime",
         metadataSource: "anilist",
         streamSource: "gogoanime",
-        coverPattern: (id) => `https://img.anili.st/media/${id}`,
+        coverBaseUrl: "https://img.anili.st/media/",
         defaultGenres: ["Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror", "Mystery", "Romance", "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller"],
     },
     MOVIE: {
@@ -18,7 +18,7 @@ const MediaSource = {
         apiRoute: "/api/media",
         metadataSource: "tvmaze",
         streamSource: "VIDSRC",
-        coverPattern: (id) => `https://static.tvmaze.com/uploads/images/medium_portrait/${id}.jpg`,
+        coverBaseUrl: "https://static.tvmaze.com/uploads/images/medium_portrait/",
         defaultGenres: ["Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary", "Drama", "Family", "Fantasy", "History", "Horror", "Music", "Mystery", "Romance", "Science Fiction", "TV Movie", "Thriller", "War", "Western"],
     },
     KDORAMA: {
@@ -29,7 +29,7 @@ const MediaSource = {
         apiRoute: "/api/media",
         metadataSource: "tvmaze",
         streamSource: "VIDSRC",
-        coverPattern: (id) => `https://static.tvmaze.com/uploads/images/medium_portrait/${id}.jpg`,
+        coverBaseUrl: "https://static.tvmaze.com/uploads/images/medium_portrait/",
         defaultGenres: ["Action", "Adventure", "Comedy", "Crime", "Drama", "Fantasy", "Historical", "Horror", "Legal", "Medical", "Melodrama", "Mystery", "Psychological", "Romance", "School", "Thriller"],
     },
     CDRAMA: {
@@ -40,7 +40,7 @@ const MediaSource = {
         apiRoute: "/api/media",
         metadataSource: "tvmaze",
         streamSource: "VIDSRC",
-        coverPattern: (id) => `https://static.tvmaze.com/uploads/images/medium_portrait/${id}.jpg`,
+        coverBaseUrl: "https://static.tvmaze.com/uploads/images/medium_portrait/",
         defaultGenres: ["Action", "Adventure", "Comedy", "Drama", "Fantasy", "Historical", "Mystery", "Romance", "Wuxia", "Xianxia", "Political", "Family"],
     },
     CARTOON: {
@@ -51,7 +51,7 @@ const MediaSource = {
         apiRoute: "/api/media",
         metadataSource: "tvmaze",
         streamSource: "VIDSRC",
-        coverPattern: (id) => `https://static.tvmaze.com/uploads/images/medium_portrait/${id}.jpg`,
+        coverBaseUrl: "https://static.tvmaze.com/uploads/images/medium_portrait/",
         defaultGenres: ["Action", "Adventure", "Comedy", "Family", "Fantasy", "Musical", "Sci-Fi", "Superhero", "Educational", "Preschool"],
     },
     SEASON: {
@@ -62,7 +62,7 @@ const MediaSource = {
         apiRoute: "/api/media",
         metadataSource: "tvmaze",
         streamSource: "VIDSRC",
-        coverPattern: (id) => `https://static.tvmaze.com/uploads/images/medium_portrait/${id}.jpg`,
+        coverBaseUrl: "https://static.tvmaze.com/uploads/images/medium_portrait/",
         defaultGenres: ["Action", "Adventure", "Animation", "Comedy", "Crime", "Drama", "Fantasy", "Horror", "Mystery", "Sci-Fi", "Thriller"],
     },
 };
