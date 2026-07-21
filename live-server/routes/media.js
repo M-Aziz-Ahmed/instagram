@@ -6,6 +6,17 @@ const TMDB_KEY = process.env.TMDB_API_KEY;
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_IMG = "https://image.tmdb.org/t/p/w500";
 
+function requireTMDBKey(req, res, next) {
+    if (!TMDB_KEY) {
+        return res.status(503).json({ 
+            error: "TMDB API not configured", 
+            message: "Please set TMDB_API_KEY in live-server/.env to use this feature",
+            digest: "MISSING_TMDB_KEY"
+        });
+    }
+    next();
+}
+
 const {
     MediaSource,
     getMediaSource,
