@@ -91,7 +91,9 @@ export default function MediaPage({ mediaType, config }) {
         setEpisodes([]);
         setCurrentEp(null);
         setStreamUrl("");
-        window.history.pushState({}, "", `/${mediaType}?id=${item.id}`);
+        const routeMap = { movie: "movies", kdrama: "kdramas", season: "seasons", cdrama: "cdramas", cartoon: "cartoons" };
+        const route = routeMap[mediaType] || mediaType;
+        window.history.pushState({}, "", `/${route}?id=${item.id}`);
         try {
             const res = await fetch(`${apiRoute}/${mediaType}/${item.id}`);
             const data = await res.json();
@@ -111,7 +113,9 @@ export default function MediaPage({ mediaType, config }) {
         setStreamUrl("");
         setStreamTitle(`Episode ${ep.episode_number}${ep.name ? " - " + ep.name : ""}`);
         if (selected?.id) {
-            window.history.pushState({}, "", `/${mediaType}?id=${selected.id}&ep=${ep.episode_number}`);
+            const routeMap = { movie: "movies", kdrama: "kdramas", season: "seasons", cdrama: "cdramas", cartoon: "cartoons" };
+            const route = routeMap[mediaType] || mediaType;
+            window.history.pushState({}, "", `/${route}?id=${selected.id}&ep=${ep.episode_number}`);
         }
         try {
             const res = await fetch(`${apiRoute}/${mediaType}/${ep.id}/stream?season=1&episode=${ep.episode_number}`);
@@ -132,12 +136,12 @@ export default function MediaPage({ mediaType, config }) {
         if (streamUrl) {
             setStreamUrl("");
             setCurrentEp(null);
-            if (selected?.id) window.history.pushState({}, "", `/${mediaType}?id=${selected.id}`);
+            if (selected?.id) window.history.pushState({}, "", `/${route}?id=${selected.id}`);
         } else if (selected) {
             setSelected(null);
             setDetails(null);
             setEpisodes([]);
-            window.history.pushState({}, "", `/${mediaType}`);
+            window.history.pushState({}, "", `/${route}`);
         }
     };
 
