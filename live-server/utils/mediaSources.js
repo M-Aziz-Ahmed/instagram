@@ -10,6 +10,17 @@ const MediaSource = {
         coverBaseUrl: "https://img.anili.st/media/",
         defaultGenres: ["Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror", "Mystery", "Romance", "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller"],
     },
+    MOVIE: {
+        type: "movie",
+        label: "Movies",
+        emoji: "🎬",
+        searchType: "movie",
+        apiRoute: "/api/movies",
+        metadataSource: "tmdb",
+        streamSource: "tmdb",
+        coverBaseUrl: "https://image.tmdb.org/t/p/w500",
+        defaultGenres: ["Action", "Comedy", "Drama", "Horror", "Romance", "Sci-Fi", "Thriller"],
+    },
     KDRAMA: {
         type: "kdrama",
         label: "K-Dramas",
