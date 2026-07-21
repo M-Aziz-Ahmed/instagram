@@ -35,6 +35,7 @@ function BookmarkCard({ bookmark, onRemove }) {
     const [removing, setRemoving] = useState(false);
     const isAnime = bookmark.mediaType === "anime";
     const linkPath = isAnime ? "/anime" : "/manga";
+    const chapterParam = !isAnime && bookmark.lastReadChapterId ? `&ch=${bookmark.lastReadChapterId}` : "";
 
     const handleRemove = async () => {
         if (removing) return;
@@ -62,15 +63,16 @@ function BookmarkCard({ bookmark, onRemove }) {
 
     return (
         <Link
-            href={`${linkPath}?id=${bookmark.mediaId}`}
+            href={`${linkPath}?id=${bookmark.mediaId}${chapterParam}`}
             className="group flex gap-3 p-3 rounded-2xl border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors relative"
         >
-            <div className="w-16 h-24 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 shrink-0">
+            <div className="w-16 h-24 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 shrink-0">
                 {bookmark.coverUrl ? (
-                    <img src={bookmark.coverUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center text-2xl">{isAnime ? "🎬" : "📖"}</div>
-                )}
+                    <img src={bookmark.coverUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }} />
+                ) : null}
+                <div className={`w-full h-full items-center justify-center text-2xl bg-gradient-to-br from-pink-500/20 to-purple-500/20 dark:from-pink-500/10 dark:to-purple-500/10 ${bookmark.coverUrl ? "hidden" : "flex"}`}>
+                    {isAnime ? "🎬" : "📖"}
+                </div>
             </div>
             <div className="flex-1 min-w-0 flex flex-col justify-between">
                 <div>

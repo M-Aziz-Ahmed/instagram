@@ -9,6 +9,7 @@ const mediaBookmarkSchema = new mongoose.Schema({
     status:     { type: String, default: "" },
     totalChapters: { type: Number, default: null },
     lastReadChapter: { type: String, default: null },
+    lastReadChapterId: { type: String, default: null },
     lastReadChapterNum: { type: Number, default: null },
     readChapters: { type: [String], default: [] },
     readEpisode: { type: Number, default: null },

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import MediaBookmarkButton from "@/components/shared/MediaBookmarkButton";
 
 const COVER_URL = (id, fileName) => {
@@ -203,6 +204,10 @@ export default function MangaPage() {
     const [tags, setTags] = useState([]);
     const [activeTag, setActiveTag] = useState(null);
     const searchTimer = useRef(null);
+    const searchParams = useSearchParams();
+    const initialId = searchParams.get("id");
+    const initialCh = searchParams.get("ch");
+    const didInit = useRef(false);
 
     useEffect(() => {
         fetch("/api/manga/recent?limit=18")
@@ -224,6 +229,28 @@ export default function MangaPage() {
             })
             .catch(() => {});
     }, []);
+
+    useEffect(() => {
+        if (!initialId || didInit.current) return;
+        didInit.current = true;
+        (async () => {
+            try {
+                const res = await fetch(`/api/manga/info/${initialId}`);
+                const data = await res.json();
+                if (data?.data) {
+                    setSelected(data.data);
+                    const chRes = await fetch(`/api/manga/chapters/${initialId}?limit=500&order=asc`);
+                    const chData = await chRes.json();
+                    const chs = chData?.data || [];
+                    setChapters(chs);
+                    if (initialCh) {
+                        const match = chs.find((c) => c.id === initialCh);
+                        if (match) handleReadChapter(match);
+                    }
+                }
+            } catch {}
+        })();
+    }, [initialId, initialCh]);
 
     const doSearch = useCallback(async (q) => {
         if (!q.trim()) return;

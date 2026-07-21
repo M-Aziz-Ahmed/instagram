@@ -125,6 +125,7 @@ router.patch("/:mediaType/:mediaId/history", requireAuth, async (req, res) => {
         if (mediaType === "manga") {
             if (chapterId) {
                 update.$addToSet = { readChapters: chapterId };
+                update.lastReadChapterId = chapterId;
             }
             if (chapterNum != null) {
                 update.lastReadChapter = chapterTitle || `Chapter ${chapterNum}`;
