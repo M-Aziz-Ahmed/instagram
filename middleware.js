@@ -10,6 +10,8 @@ const PUBLIC_PATHS = [
     "/login",
     "/search",
     "/tag",
+    "/anime",
+    "/manga",
     "/api/auth",
     "/api/posts",
     "/api/feed",
