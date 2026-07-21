@@ -72,8 +72,8 @@ export default function GifPicker({ onSelect, onClose, className = "" }) {
     return (
         <div
             ref={containerRef}
-            className={`bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden ${className}`}
-            style={{ maxWidth: 340, width: '100%', maxHeight: 400 }}
+            className={`bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col ${className}`}
+            style={{ maxWidth: 340, width: '100%', maxHeight: 'min(400px, 50dvh)' }}
         >
             {/* Search */}
             <div className="p-2 border-b border-gray-100 dark:border-gray-800">
@@ -138,7 +138,7 @@ export default function GifPicker({ onSelect, onClose, className = "" }) {
             </div>
 
             {/* GIF grid */}
-            <div className="p-2 overflow-y-auto" style={{ maxHeight: 300 }}>
+            <div className="p-2 overflow-y-auto flex-1 min-h-0" style={{ maxHeight: 300 }}>
                 {loading && gifs.length === 0 ? (
                     <div className="flex items-center justify-center py-8">
                         <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-600 border-t-blue-500 rounded-full animate-spin" />

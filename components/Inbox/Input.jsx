@@ -351,13 +351,13 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
             )}
 
             {/* Input row */}
-            <div className="flex items-end gap-2">
-                {/* Attach button */}
+            <div className="flex items-end gap-1.5 sm:gap-2">
+                {/* Attach button - hidden on very small screens */}
                 <button
                     onClick={() => fileRef.current?.click()}
                     disabled={!user || !recipient}
                     aria-label="Attach image"
-                    className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40"
+                    className="shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -371,7 +371,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                         onClick={() => { setShowEmoji(!showEmoji); setShowGif(false); }}
                         disabled={!user || !recipient}
                         aria-label="Add emoji"
-                        className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ${showEmoji ? "text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20" : "text-gray-500 dark:text-gray-400 hover:text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"}`}
+                        className={`shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ${showEmoji ? "text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20" : "text-gray-500 dark:text-gray-400 hover:text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"}`}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5">
                             <circle cx="12" cy="12" r="10" />
@@ -396,12 +396,12 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                         onClick={() => { setShowGif(!showGif); setShowEmoji(false); }}
                         disabled={!user || !recipient}
                         aria-label="Add GIF"
-                        className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ${showGif ? "text-purple-500 bg-purple-50 dark:bg-purple-900/20" : "text-gray-500 dark:text-gray-400 hover:text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20"}`}
+                        className={`shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ${showGif ? "text-purple-500 bg-purple-50 dark:bg-purple-900/20" : "text-gray-500 dark:text-gray-400 hover:text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20"}`}
                     >
                         <span className="text-[11px] font-bold">GIF</span>
                     </button>
                     {showGif && (
-                        <div className="absolute bottom-full left-0 mb-2 z-30">
+                        <div className="absolute bottom-full left-0 mb-2 z-30 max-h-[50dvh]">
                             <GifPicker
                                 onSelect={(url) => {
                                     setImagePreview(url);
@@ -414,7 +414,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                 </div>
 
                 {/* Text input */}
-                <div className="flex-1 flex items-center bg-gray-100 dark:bg-gray-800 rounded-2xl px-4 py-2 min-h-[44px] focus-within:ring-1 focus-within:ring-gray-300 dark:focus-within:ring-gray-600 transition-shadow relative">
+                <div className="flex-1 flex items-center bg-gray-100 dark:bg-gray-800 rounded-2xl px-3 sm:px-4 py-2 min-h-[40px] sm:min-h-[44px] focus-within:ring-1 focus-within:ring-gray-300 dark:focus-within:ring-gray-600 transition-shadow relative">
                     <input
                         ref={inputRef}
                         type="text"
@@ -470,7 +470,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                         onClick={handleSend}
                         disabled={sending || uploading}
                         aria-label="Send"
-                        className="shrink-0 w-10 h-10 rounded-full bg-blue-500 hover:bg-blue-600 dark:hover:bg-blue-400 flex items-center justify-center text-white transition-colors disabled:opacity-50"
+                        className="shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-blue-500 hover:bg-blue-600 dark:hover:bg-blue-400 flex items-center justify-center text-white transition-colors disabled:opacity-50"
                     >
                         {sending ? (
                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -484,6 +484,8 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                     <VoiceRecorder
                         onRecorded={(url) => setAudioUrl(url)}
                         maxDuration={60}
+                        recipient={recipient}
+                        username={user?.username}
                     />
                 )}
             </div>

@@ -51,7 +51,7 @@ export default function LayoutWrapper({ children }) {
         <>
             <Sidebar open={sidebarOpen} onClose={closeSidebar} unreadCount={unreadCount} />
 
-            <div className={`pb-14 lg:pb-0 ${collapsed ? "lg:pl-20" : "lg:pl-72"}`}>
+            <div className={`pb-14 lg:pb-0 transition-all duration-300 ${collapsed ? "lg:pl-20" : "lg:pl-72"} ${voiceOpen ? "lg:pr-80" : ""}`}>
                 {children}
             </div>
             <BottomNav unreadCount={unreadCount} />

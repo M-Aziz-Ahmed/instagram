@@ -35,7 +35,7 @@ function uploadAudioToCloudinary(blob) {
     });
 }
 
-export default function VoiceRecorder({ onRecorded, maxDuration = 60, onCancel }) {
+export default function VoiceRecorder({ onRecorded, maxDuration = 60, onCancel, recipient, username }) {
     const [recording, setRecording]       = useState(false);
     const [elapsed, setElapsed]           = useState(0);
     const [uploading, setUploading]       = useState(false);
@@ -57,6 +57,27 @@ export default function VoiceRecorder({ onRecorded, maxDuration = 60, onCancel }
     }, []);
 
     useEffect(() => () => cleanup(), [cleanup]);
+
+    const notifyRecording = useCallback(async (isRecording) => {
+        if (!recipient || !username) return;
+        try {
+            if (isRecording) {
+                await fetch("/api/typing", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ typingTo: recipient, recording: true }),
+                });
+            } else {
+                await fetch("/api/typing", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({ typingTo: "" }),
+                });
+            }
+        } catch { /* silent */ }
+    }, [recipient, username]);
 
     const startRecording = async () => {
         setError("");
@@ -94,6 +115,7 @@ export default function VoiceRecorder({ onRecorded, maxDuration = 60, onCancel }
             recorder.start(250);
             setRecording(true);
             setElapsed(0);
+            notifyRecording(true);
 
             timerRef.current = setInterval(() => {
                 setElapsed((prev) => {
@@ -114,6 +136,7 @@ export default function VoiceRecorder({ onRecorded, maxDuration = 60, onCancel }
             mediaRecorderRef.current.stop();
         }
         setRecording(false);
+        notifyRecording(false);
     };
 
     const cancelRecording = () => {
@@ -123,6 +146,7 @@ export default function VoiceRecorder({ onRecorded, maxDuration = 60, onCancel }
         }
         cleanup();
         setRecording(false);
+        notifyRecording(false);
         setElapsed(0);
         onCancel?.();
     };

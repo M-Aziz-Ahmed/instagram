@@ -96,7 +96,7 @@ function getMessageStatus(msg) {
     return "sent";
 }
 
-export default function Chat({ pendingMessage, recipient, recipientUser, scrollContainerRef, replyingTo, setReplyingTo }) {
+export default function Chat({ pendingMessage, recipient, recipientUser, scrollContainerRef, replyingTo, setReplyingTo, isTyping, isRecording }) {
     const { user } = useUser();
     const { showToast } = useToast();
     const [messages, setMessages]   = useState([]);
@@ -873,6 +873,31 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                     </div>
                 );
             })}
+            {(isTyping || isRecording) && (
+                <div className="flex items-end gap-2 px-1 pt-1 pb-0.5 animate-fade-in">
+                    <Avatar sender={recipient} color={recipientUser?.color || "#3b82f6"} />
+                    <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-gray-100 dark:bg-gray-800">
+                        {isRecording ? (
+                            <div className="flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 text-red-500 animate-pulse">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                                </svg>
+                                <div className="flex gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-[bounce_0.8s_ease-in-out_infinite]" style={{ animationDelay: '0ms' }} />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-[bounce_0.8s_ease-in-out_infinite]" style={{ animationDelay: '150ms' }} />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-[bounce_0.8s_ease-in-out_infinite]" style={{ animationDelay: '300ms' }} />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-gray-500 animate-[bounce_0.8s_ease-in-out_infinite]" style={{ animationDelay: '0ms' }} />
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-gray-500 animate-[bounce_0.8s_ease-in-out_infinite]" style={{ animationDelay: '150ms' }} />
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-gray-500 animate-[bounce_0.8s_ease-in-out_infinite]" style={{ animationDelay: '300ms' }} />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
             <div ref={bottomRef} />
         </div>
 

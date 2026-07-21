@@ -365,7 +365,7 @@ export default function Compose({ onPosted }) {
                                 </div>
                             )}
                             {showGif && (
-                                <div className="absolute bottom-full left-0 mb-2 z-30">
+                                <div className="absolute bottom-full left-0 mb-2 z-30 max-h-[50dvh]">
                                     <GifPicker
                                         onSelect={(url) => { setPreview(url); setShowGif(false); }}
                                         onClose={() => setShowGif(false)}

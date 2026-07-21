@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const typingSchema = new mongoose.Schema({
     username:  { type: String, required: true, unique: true },
     typingTo:  { type: String, default: "" },
+    recording: { type: Boolean, default: false },
     updatedAt: { type: Date, default: Date.now, expires: 15 },
 });
 

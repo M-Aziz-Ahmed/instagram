@@ -178,7 +178,7 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
                             </div>
                         )}
                         {showGif && (
-                            <div className="absolute bottom-full right-0 mb-2 z-30">
+                            <div className="absolute bottom-full right-0 mb-2 z-30 max-h-[50dvh]">
                                 <GifPicker
                                     onSelect={(url) => { setImageUrl(url); setShowGif(false); }}
                                     onClose={() => setShowGif(false)}

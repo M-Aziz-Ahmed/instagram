@@ -17,12 +17,13 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
     const [editingProfile, setEditingProfile] = useState(false);
     const scrollContainerRef = useRef(null);
     const [isTyping, setIsTyping] = useState(false);
+    const [isRecording, setIsRecording] = useState(false);
     const [recipientOnlineStatus, setRecipientOnlineStatus] = useState(null);
 
     // Track current user's online status
     useOnlineStatus(user?.username);
 
-    // Poll for typing status
+    // Poll for typing/recording status
     useEffect(() => {
         if (!recipient || !user?.username) return;
         const poll = async () => {
@@ -32,12 +33,14 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
                 });
                 if (res.ok) {
                     const data = await res.json();
-                    setIsTyping(data.typingUser === recipient);
+                    const isThem = data.typingUser === recipient;
+                    setIsTyping(isThem && !!data.isTyping);
+                    setIsRecording(isThem && !!data.isRecording);
                 }
             } catch { /* silent */ }
         };
         poll();
-        const id = setInterval(poll, 5000);
+        const id = setInterval(poll, 3000);
         return () => clearInterval(id);
     }, [recipient, user?.username]);
 
@@ -114,7 +117,14 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
                         <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{recipient || user?.username}</p>
                         <UserBadges isVerified={recipientUser?.isVerified} isAdmin={recipientUser?.isAdmin} roles={recipientUser?.roles || []} size="sm" />
                     </div>
-                    {isTyping ? (
+                    {isRecording ? (
+                        <div className="flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3 text-red-500 animate-pulse">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                            </svg>
+                            <p className="text-xs text-red-500 dark:text-red-400 animate-pulse">recording voice...</p>
+                        </div>
+                    ) : isTyping ? (
                         <p className="text-xs text-blue-500 dark:text-blue-400 animate-pulse">typing...</p>
                     ) : recipientOnlineStatus && (
                         <div className="flex items-center gap-1.5">
@@ -178,7 +188,7 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
 
             {/* ── Messages ────────────────────────────────────────────────── */}
             <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-4">
-                <Chat key={recipient} pendingMessage={pendingMessage} recipient={recipient} recipientUser={recipientUser} scrollContainerRef={scrollContainerRef} replyingTo={replyingTo} setReplyingTo={setReplyingTo} />
+                <Chat key={recipient} pendingMessage={pendingMessage} recipient={recipient} recipientUser={recipientUser} scrollContainerRef={scrollContainerRef} replyingTo={replyingTo} setReplyingTo={setReplyingTo} isTyping={isTyping} isRecording={isRecording} />
             </div>
 
             {/* ── Input ───────────────────────────────────────────────────── */}

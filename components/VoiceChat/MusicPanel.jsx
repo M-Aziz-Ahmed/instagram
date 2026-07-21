@@ -461,7 +461,7 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
                                         </div>
                                         <button
                                             onClick={() => addSong(r)}
-                                            className="p-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                                            className="p-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white sm:opacity-0 sm:group-hover:opacity-100 transition-all shrink-0"
                                             title="Add to queue"
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
@@ -497,7 +497,7 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
                                                 <p className="text-xs font-medium text-gray-200 truncate">{song.title}</p>
                                                 <p className="text-[10px] text-gray-500">@{song.addedBy} {song.durationText ? `· ${song.durationText}` : ""}</p>
                                             </div>
-                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                            <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
                                                 <button onClick={() => playSong(song.id)} className="p-1 rounded bg-green-600/20 text-green-400 hover:bg-green-600/40 transition-colors" title="Play now">
                                                     <PlayIcon />
                                                 </button>
