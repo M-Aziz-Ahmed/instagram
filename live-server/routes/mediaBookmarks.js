@@ -170,6 +170,88 @@ router.patch("/:mediaType/:mediaId/dismiss", requireAuth, async (req, res) => {
     }
 });
 
+// GET /api/media-bookmarks/export — export user bookmarks as JSON
+router.get("/export", requireAuth, async (req, res) => {
+    try {
+        const username = await getUsername(req);
+        if (!username) return res.status(401).json({ error: "Unauthorized" });
+        const bookmarks = await MediaBookmark.find({ username }).lean();
+        const data = {
+            username,
+            exportedAt: new Date().toISOString(),
+            bookmarks,
+        };
+        res.json(data);
+    } catch (err) {
+        console.error("Export bookmarks error:", err.message);
+        res.status(500).json({ error: "Failed to export bookmarks" });
+    }
+});
+
+// POST /api/media-bookmarks/import — import bookmarks from external source
+router.post("/import", optionalAuth, async (req, res) => {
+    try {
+        const sourceUsername = req.body.username || (req.userId ? await getUsername(req) : null);
+        if (!sourceUsername) return res.status(401).json({ error: "Source user required" });
+        const { bookmarks } = req.body;
+        if (!Array.isArray(bookmarks)) return res.status(400).json({ error: "Invalid bookmark data" });
+        let imported = 0;
+        for (const b of bookmarks) {
+            const {
+                username,
+                mediaType,
+                mediaId,
+                title,
+                coverUrl,
+                status,
+                totalChapters,
+                readChapters,
+                lastReadChapter,
+                lastReadChapterId,
+                lastReadChapterNum,
+                lastWatchedEpisode,
+                readEpisode,
+                newReleaseAvailable,
+                newReleaseCount,
+                lastChecked,
+                createdAt,
+                updatedAt,
+                _id,
+            } = b;
+            if (!mediaType || !mediaId) continue;
+            const existing = await MediaBookmark.findOne({ username: sourceUsername, mediaType, mediaId });
+            if (!existing) {
+                await MediaBookmark.create({
+                    username: sourceUsername,
+                    mediaType,
+                    mediaId,
+                    title: title || "",
+                    coverUrl: coverUrl || "",
+                    status: status || "",
+                    totalChapters: totalChapters || null,
+                    lastReadChapter: lastReadChapter || null,
+                    lastReadChapterId: lastReadChapterId || null,
+                    lastReadChapterNum: lastReadChapterNum || null,
+                    readChapters: readChapters || [],
+                    lastWatchedEpisode: lastWatchedEpisode || null,
+                    readEpisode: readEpisode || null,
+                    newReleaseAvailable: newReleaseAvailable || false,
+                    newReleaseCount: newReleaseCount || 0,
+                    lastChecked: lastChecked ? new Date(lastChecked) : new Date(),
+                    createdAt: createdAt ? new Date(createdAt) : new Date(),
+                    updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
+                });
+                imported++;
+            }
+        }
+        const updated = await MediaBookmark.find({ username: sourceUsername }).sort({ updatedAt: -1 }).lean();
+        res.json({ imported, bookmarks: updated });
+    } catch (err) {
+        console.error("Import bookmarks error:", err.message);
+        res.status(500).json({ error: "Failed to import bookmarks" });
+    }
+});
+
 // POST /api/media-bookmarks/check-releases — background endpoint to check new releases
 router.post("/check-releases", requireAuth, async (req, res) => {
     try {
