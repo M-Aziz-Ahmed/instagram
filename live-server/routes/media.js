@@ -330,13 +330,31 @@ router.get("/:type/:id", async (req, res) => {
             return res.status(404).json({ error: "Movies not available via TVMaze" });
         }
 
-        const show = await withTimeout(
-            fetch(`${TVMAZE_BASE}/shows/${id}?embed=episodes,cast,images`).then(r => {
-                if (!r.ok) throw new Error("Not found");
-                return r.json();
-            }),
-            10000
-        );
+        // Try direct ID lookup first
+        let show;
+        try {
+            show = await withTimeout(
+                fetch(`${TVMAZE_BASE}/shows/${id}?embed=episodes,cast,images`).then(r => {
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                    return r.json();
+                }),
+                10000
+            );
+        } catch (directErr) {
+            // If direct ID fails, try searching by title from query param
+            const { title } = req.query;
+            if (title) {
+                try {
+                    const searchResults = await withTimeout(
+                        fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(title)}`).then(r => r.json()),
+                        8000
+                    );
+                    const match = searchResults.find(r => r.show && r.show.id.toString() === id) || searchResults[0];
+                    if (match?.show) show = match.show;
+                } catch {}
+            }
+            if (!show) throw new Error("Show not found in TVMaze");
+        }
 
         const formatted = formatTVMazeShow(show, type);
         res.json({ type, ...formatted });
