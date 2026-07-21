@@ -468,7 +468,7 @@ export default function AnimePage() {
                                 {selected.status && <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-full text-xs">{selected.status}</span>}
                                 {selected.releaseDate && <span>{selected.releaseDate}</span>}
                                 {selected.totalEpisodes && <span>{selected.totalEpisodes} eps</span>}
-                                {selected.source && selected.source !== "none" && <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${selected.source === "hianime" ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400" : "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400"}`}>{selected.source === "hianime" ? "HiAnime (EN)" : "AnimeUnity (IT)"}</span>}
+                                {selected.source && selected.source !== "none" && <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${selected.source === "animeunity" ? "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400" : "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"}`}>{selected.source === "gogoanime" ? "Gogoanime (EN)" : selected.source === "hianime" ? "HiAnime (EN)" : "AnimeUnity (IT)"}</span>}
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className="text-xs text-gray-400">Audio:</span>
