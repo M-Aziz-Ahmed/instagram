@@ -142,6 +142,64 @@ router.get("/cover", async (req, res) => {
     }
 });
 
+// In-memory image cache (key: url -> { buffer, contentType, time })
+const imageCache = new Map();
+const IMAGE_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+const MAX_CACHE_SIZE = 500;
+
+// Simple concurrency limiter for MangaDex CDN (5 req/sec limit)
+let pendingRequests = 0;
+const MAX_CONCURRENT = 4;
+const requestQueue = [];
+
+function processQueue() {
+    if (pendingRequests >= MAX_CONCURRENT || requestQueue.length === 0) return;
+    const { fn, resolve, reject } = requestQueue.shift();
+    pendingRequests++;
+    fn().then(resolve, reject).finally(() => {
+        pendingRequests--;
+        processQueue();
+    });
+}
+
+function rateLimitedFetch(url, opts) {
+    return new Promise((resolve, reject) => {
+        requestQueue.push({ fn: () => fetch(url, opts), resolve, reject });
+        processQueue();
+    });
+}
+
+async function fetchImageWithRetry(url, opts, retries = 2) {
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const res = await rateLimitedFetch(url, opts);
+            if (res.status === 429 && i < retries) {
+                await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+                continue;
+            }
+            return res;
+        } catch (err) {
+            if (i === retries) throw err;
+            await new Promise(r => setTimeout(r, 500 * (i + 1)));
+        }
+    }
+}
+
+function getCachedImage(url) {
+    const entry = imageCache.get(url);
+    if (entry && Date.now() - entry.time < IMAGE_CACHE_TTL) return entry;
+    imageCache.delete(url);
+    return null;
+}
+
+function setCachedImage(url, buffer, contentType) {
+    if (imageCache.size >= MAX_CACHE_SIZE) {
+        const oldest = imageCache.keys().next().value;
+        imageCache.delete(oldest);
+    }
+    imageCache.set(url, { buffer, contentType, time: Date.now() });
+}
+
 // Proxy chapter page images from MangaDex CDN (required due to hotlink protection)
 router.get("/page", async (req, res) => {
     try {
@@ -149,7 +207,16 @@ router.get("/page", async (req, res) => {
         if (!url || !url.includes("mangadex.org")) {
             return res.status(400).json({ error: "Invalid page URL" });
         }
-        const upstream = await fetch(url, {
+
+        const cached = getCachedImage(url);
+        if (cached) {
+            res.setHeader("Content-Type", cached.contentType);
+            res.setHeader("Content-Length", cached.buffer.length);
+            res.setHeader("Cache-Control", "public, max-age=604800");
+            return res.send(cached.buffer);
+        }
+
+        const upstream = await fetchImageWithRetry(url, {
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Referer": "https://mangadex.org/",
@@ -163,6 +230,9 @@ router.get("/page", async (req, res) => {
         }
         const contentType = upstream.headers.get("content-type") || "image/jpeg";
         const buffer = await upstream.buffer();
+
+        setCachedImage(url, buffer, contentType);
+
         res.setHeader("Content-Type", contentType);
         res.setHeader("Content-Length", buffer.length);
         res.setHeader("Cache-Control", "public, max-age=604800");

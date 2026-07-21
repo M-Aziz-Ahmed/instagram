@@ -184,10 +184,9 @@ router.get("/watch/:episodeId", async (req, res) => {
         // Try HiAnime first (supports sub/dub)
         try {
             const SubOrDubEnum = subOrDub === "dub" ? "dub" : subOrDub === "both" ? "both" : "sub";
-            const sources = await hianime.fetchEpisodeSources(
-                episodeId,
-                server || undefined,
-                SubOrDubEnum
+            const sources = await withTimeout(
+                hianime.fetchEpisodeSources(episodeId, server || undefined, SubOrDubEnum),
+                15000
             );
             if (sources?.sources?.length > 0) {
                 return res.json({
@@ -202,7 +201,7 @@ router.get("/watch/:episodeId", async (req, res) => {
 
         // Fall back to AnimeUnity
         try {
-            const sources = await animeUnity.fetchEpisodeSources(episodeId);
+            const sources = await withTimeout(animeUnity.fetchEpisodeSources(episodeId), 15000);
             return res.json({ ...sources, source: "animeunity" });
         } catch { /* both failed */ }
 
@@ -216,7 +215,7 @@ router.get("/watch/:episodeId", async (req, res) => {
 // ── Get available servers for an episode ──────────────────────
 router.get("/servers/:episodeId", async (req, res) => {
     try {
-        const servers = await hianime.fetchEpisodeServers(req.params.episodeId);
+        const servers = await withTimeout(hianime.fetchEpisodeServers(req.params.episodeId), 10000);
         res.json(servers);
     } catch (err) {
         console.error("Anime servers error:", err.message);
@@ -259,12 +258,19 @@ router.get("/genre/:genre", async (req, res) => {
 
 // ── HiAnime helpers ───────────────────────────────────────────
 
+function withTimeout(promise, ms) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+    ]);
+}
+
 async function findHiAnimeId(anilistId, title) {
     if (hianimeIdCache.has(anilistId)) return hianimeIdCache.get(anilistId);
     if (!title) return null;
 
     try {
-        const results = await hianime.search(title);
+        const results = await withTimeout(hianime.search(title), 10000);
         if (!results?.results?.length) return null;
 
         const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -288,7 +294,7 @@ async function fetchHiAnimeEpisodes(anilistId, title) {
     if (hianimeEpisodeCache.has(hiId)) return hianimeEpisodeCache.get(hiId);
 
     try {
-        const info = await hianime.fetchAnimeInfo(hiId);
+        const info = await withTimeout(hianime.fetchAnimeInfo(hiId), 10000);
         const episodes = (info.episodes || []).map(ep => ({
             id: ep.id,
             number: ep.number,
@@ -309,7 +315,7 @@ async function findAnimeUnityId(anilistId, title) {
     if (!title) return null;
 
     try {
-        const results = await animeUnity.search(title);
+        const results = await withTimeout(animeUnity.search(title), 10000);
         if (!results?.results?.length) return null;
 
         const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -333,7 +339,7 @@ async function fetchUnityEpisodes(anilistId, title) {
     if (unityEpisodeCache.has(unityId)) return unityEpisodeCache.get(unityId);
 
     try {
-        const info = await animeUnity.fetchAnimeInfo(unityId);
+        const info = await withTimeout(animeUnity.fetchAnimeInfo(unityId), 10000);
         const episodes = (info.episodes || []).map(ep => ({
             id: ep.id,
             number: ep.number,
