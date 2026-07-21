@@ -15,7 +15,7 @@ const MediaSource = {
         label: "Movies",
         emoji: "🎬",
         searchType: "movie",
-        apiRoute: "/api/media",
+        apiRoute: "/api/movies",
         metadataSource: "tmdb",
         streamSource: "tmdb",
         coverBaseUrl: "https://image.tmdb.org/t/p/w500",
