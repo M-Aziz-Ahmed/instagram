@@ -108,4 +108,30 @@ router.get("/tag/:tagId", async (req, res) => {
     }
 });
 
+// Proxy cover images from MangaDex CDN (avoids hotlink blocks and watermarks)
+router.get("/cover", async (req, res) => {
+    try {
+        const { url } = req.query;
+        if (!url || !url.startsWith("https://uploads.mangadex.org/")) {
+            return res.status(400).json({ error: "Invalid cover URL" });
+        }
+        const upstream = await fetch(url, {
+            headers: {
+                "User-Agent": "AnonTweet/1.0",
+                "Referer": "https://mangadex.org/",
+            },
+            timeout: 10000,
+            redirect: "follow",
+        });
+        if (!upstream.ok) return res.status(upstream.status).json({ error: "Cover not found" });
+        const contentType = upstream.headers.get("content-type") || "image/jpeg";
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        upstream.body.pipe(res);
+    } catch (err) {
+        console.error("Manga cover proxy error:", err.message);
+        res.status(502).json({ error: "Cover unavailable" });
+    }
+});
+
 module.exports = router;

@@ -11,7 +11,7 @@ import { useVoiceChat } from "@/context/VoiceChatContext";
 export default function LayoutWrapper({ children }) {
     const { collapsed, sidebarOpen, closeSidebar } = useSidebar();
     const { user } = useUser();
-    const { socket, voiceOpen, closeVoiceChat } = useVoiceChat();
+    const { voiceOpen, closeVoiceChat } = useVoiceChat();
     const [unreadCount, setUnreadCount] = useState(0);
 
     useEffect(() => {
@@ -61,7 +61,7 @@ export default function LayoutWrapper({ children }) {
                 voiceOpen ? "translate-x-0" : "translate-x-full"
             }`}>
                 <div className="h-full w-80 bg-white dark:bg-gray-950 border-l border-gray-200 dark:border-gray-800 shadow-xl overflow-y-auto">
-                    <VoiceChat socket={socket} isOpen={voiceOpen} onClose={closeVoiceChat} />
+                    <VoiceChat isOpen={voiceOpen} onClose={closeVoiceChat} />
                 </div>
             </div>
 

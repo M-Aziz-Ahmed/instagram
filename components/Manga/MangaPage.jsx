@@ -5,9 +5,16 @@ import { useState, useRef, useEffect, useCallback } from "react";
 const COVER_URL = (id, fileName) => {
     if (!fileName) return "";
     const base = fileName.replace(/\.[^.]+$/, "");
-    return `https://uploads.mangadex.org/covers/${id}/${base}.256.jpg`;
+    const raw = `https://uploads.mangadex.org/covers/${id}/${base}.512.jpg`;
+    return `/api/manga/cover?url=${encodeURIComponent(raw)}`;
 };
 const fmtNum = (n) => (n == null ? "?" : n.toLocaleString());
+
+function CoverImg({ src, alt, className }) {
+    const [error, setError] = useState(false);
+    if (error || !src) return <div className={`${className} flex items-center justify-center bg-gradient-to-br from-pink-500/20 to-purple-500/20 dark:from-pink-500/10 dark:to-purple-500/10`}><span className="text-3xl">📖</span></div>;
+    return <img src={src} alt={alt || ""} className={className} loading="lazy" onError={() => setError(true)} />;
+}
 
 function MangaReader({ pages, title, chapterNum, onPrevChapter, onNextChapter, hasPrev, hasNext }) {
     const [currentPage, setCurrentPage] = useState(0);
@@ -359,7 +366,7 @@ export default function MangaPage() {
                 {view === "detail" && selected && (
                     <div className="flex flex-col lg:flex-row gap-6">
                         <div className="lg:w-1/3 shrink-0">
-                            <img src={getCover(selected)} alt={selected.attributes?.title?.en || ""} className="w-full max-w-xs mx-auto lg:mx-0 rounded-xl shadow-lg" />
+                            <CoverImg src={getCover(selected)} alt={selected.attributes?.title?.en || ""} className="w-full max-w-xs mx-auto lg:mx-0 rounded-xl shadow-lg aspect-[3/4]" />
                         </div>
                         <div className="flex-1 min-w-0 space-y-3">
                             <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-gray-100">
@@ -430,7 +437,7 @@ export default function MangaPage() {
                                     {recent.map((item) => (
                                         <button key={item.id} onClick={() => handleSelect(item)} className="group text-left">
                                             <div className="relative aspect-[3/4] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
-                                                <img src={getCover(item)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                                                <CoverImg src={getCover(item)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                                             </div>
                                             <p className="mt-1.5 text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2">
                                                 {item.attributes?.title?.en || Object.values(item.attributes?.title || {})[0] || ""}
@@ -449,7 +456,7 @@ export default function MangaPage() {
                                     {results.map((item) => (
                                         <button key={item.id} onClick={() => handleSelect(item)} className="group text-left">
                                             <div className="relative aspect-[3/4] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
-                                                <img src={getCover(item)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                                                <CoverImg src={getCover(item)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                                             </div>
                                             <p className="mt-1.5 text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2">
                                                 {item.attributes?.title?.en || Object.values(item.attributes?.title || {})[0] || ""}

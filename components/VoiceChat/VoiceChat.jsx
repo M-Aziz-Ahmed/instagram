@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
+import { useVoiceChat } from "@/context/VoiceChatContext";
 import MusicPanel from "./MusicPanel";
 import { ICE_SERVERS } from "@/utils/iceServers";
 
@@ -174,7 +175,8 @@ function ChannelCard({ channel, isActive, onJoin, onDelete, participantCount, is
     );
 }
 
-export default function VoiceChat({ socket, isOpen, onClose }) {
+export default function VoiceChat({ isOpen, onClose }) {
+    const { socket, socketError, reconnectSocket } = useVoiceChat();
     const { user } = useUser();
     const isAdmin = user?.isAdmin;
     const [channels, setChannels] = useState([]);
@@ -1002,10 +1004,16 @@ export default function VoiceChat({ socket, isOpen, onClose }) {
                         isAdmin={isAdmin}
                     />
                 ))}
-                {channels.length === 0 && !socketConnected && (
+                {channels.length === 0 && !socketConnected && !socketError && (
                     <p className="text-xs text-yellow-400/80 text-center py-4">Connecting to voice server...</p>
                 )}
-                {channels.length === 0 && socketConnected && (
+                {channels.length === 0 && socketError && (
+                    <div className="text-center py-4 space-y-2">
+                        <p className="text-xs text-red-400">{socketError}</p>
+                        <button onClick={reconnectSocket} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors">Retry</button>
+                    </div>
+                )}
+                {channels.length === 0 && socketConnected && !socketError && (
                     <p className="text-xs text-gray-500 text-center py-4">No channels yet</p>
                 )}
             </div>
