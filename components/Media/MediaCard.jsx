@@ -10,9 +10,21 @@ export default function MediaCard({ item, mediaType, href, showRating = true, sh
     const rating = item.vote_average ? (item.vote_average / 2).toFixed(1) : null;
     const year = (item.releaseDate || item.firstAirDate || item.release_date || item.first_air_date || "")?.slice(0, 4);
 
+    // Map mediaType to correct route (plural routes)
+    const routeMap = {
+        movie: "movies",
+        kdrama: "kdramas",
+        season: "seasons",
+        cdrama: "cdramas",
+        cartoon: "cartoons",
+        anime: "anime",
+        manga: "manga",
+    };
+    const route = routeMap[mediaType] || mediaType;
+
     return (
         <Link
-            href={href || `/${mediaType}?id=${item.id}`}
+            href={href || `/${route}?id=${item.id}`}
             className="group block"
         >
             <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
