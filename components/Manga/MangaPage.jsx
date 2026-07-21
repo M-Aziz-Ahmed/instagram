@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import MediaBookmarkButton from "@/components/shared/MediaBookmarkButton";
+import ImportDataButton from "@/components/common/ImportDataButton";
 
 const COVER_URL = (id, fileName) => {
     if (!fileName) return "";
@@ -396,6 +397,7 @@ export default function MangaPage() {
                             className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-400"
                         />
                     </div>
+                    <ImportDataButton size="sm" onSuccess={() => window.location.reload()} />
                 </div>
             </header>
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import Link from "next/link";
+import ImportDataButton from "@/components/common/ImportDataButton";
 
 function HistoryBadge({ mediaType, bookmark }) {
     if (mediaType === "manga") {
@@ -171,20 +172,29 @@ export default function MediaBookmarksPage() {
             <div className="max-w-2xl mx-auto px-4 py-6">
                 <div className="flex items-center justify-between mb-6">
                     <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">My Library</h1>
-                    <button
-                        onClick={checkReleases}
-                        disabled={checking}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-                    >
-                        {checking ? (
-                            <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
-                            </svg>
-                        )}
-                        Check updates
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <ImportDataButton 
+                            size="sm"
+                            onSuccess={(result) => {
+                                // Refresh the page data after import
+                                window.location.reload();
+                            }}
+                        />
+                        <button
+                            onClick={checkReleases}
+                            disabled={checking}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                        >
+                            {checking ? (
+                                <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
+                                </svg>
+                            )}
+                            Check updates
+                        </button>
+                    </div>
                 </div>
 
                 {newReleases > 0 && (
