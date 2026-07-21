@@ -204,7 +204,7 @@ function setCachedImage(url, buffer, contentType) {
 router.get("/page", async (req, res) => {
     try {
         const { url } = req.query;
-        if (!url || !url.includes("mangadex.org")) {
+        if (!url || !(url.includes("mangadex.org") || url.includes("mangadex.network") || url.includes("uploads.mangadex.org"))) {
             return res.status(400).json({ error: "Invalid page URL" });
         }
 
