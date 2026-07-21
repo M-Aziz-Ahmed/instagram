@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const notificationSchema = new mongoose.Schema({
     recipient:  { type: String, required: true },
-    type:       { type: String, enum: ["like", "love", "laugh", "fire", "sad", "angry", "comment", "reply", "mention", "repost", "follow", "message", "live"], required: true },
+    type:       { type: String, enum: ["like", "love", "laugh", "fire", "sad", "angry", "comment", "reply", "mention", "repost", "follow", "follow_request", "follow_accept", "message", "live"], required: true },
     fromUser:   { type: String, required: true },
     fromColor:  { type: String, default: "#3b82f6" },
     fromAvatarUrl: { type: String, default: "" },

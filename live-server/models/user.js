@@ -26,6 +26,8 @@ const userSchema = new mongoose.Schema({
     inviteCode:   { type: String, default: null },
     referredBy:   { type: String, default: null },
     inviteCount:  { type: Number, default: 0 },
+    isPrivate: { type: Boolean, default: false },
+    pendingFollowRequests: [{ type: String, default: [] }],
     createdAt:   { type: Date, default: Date.now },
     chessGames:  { type: [{
         gameId:       { type: String, required: true },

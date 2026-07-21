@@ -137,7 +137,7 @@ router.get("/:username", async (req, res) => {
     try {
         const { username } = req.params;
         const user = await User.findOne({ username })
-            .select("username bio avatarColor avatarUrl isVerified isAdmin roles followers following createdAt")
+            .select("username bio avatarColor avatarUrl isVerified isAdmin isPrivate roles followers following createdAt")
             .populate("roles", "name badge color")
             .lean();
 
@@ -150,6 +150,7 @@ router.get("/:username", async (req, res) => {
             avatarUrl: user.avatarUrl || "",
             isVerified: user.isVerified || false,
             isAdmin: user.isAdmin || false,
+            isPrivate: user.isPrivate || false,
             roles: (user.roles || []).map((r) => ({
                 id: r._id?.toString() ?? "",
                 name: r.name ?? "",
@@ -186,7 +187,29 @@ router.post("/:username/follow", verifyToken, async (req, res) => {
         if (isFollowing) {
             currentUser.following = currentUser.following.filter((u) => u !== targetUsername);
             targetUser.followers = targetUser.followers.filter((u) => u !== username);
+            targetUser.pendingFollowRequests = (targetUser.pendingFollowRequests || []).filter((u) => u !== username);
         } else {
+            if (targetUser.isPrivate) {
+                if (!targetUser.pendingFollowRequests.includes(username)) {
+                    targetUser.pendingFollowRequests.push(username);
+                }
+                Notification.create({
+                    recipient: targetUsername,
+                    type: "follow_request",
+                    fromUser: username,
+                    fromColor: currentUser.avatarColor || "#3b82f6",
+                    fromAvatarUrl: currentUser.avatarUrl || "",
+                    text: "",
+                }).catch(() => {});
+                await targetUser.save();
+                return res.json({
+                    following: false,
+                    pending: true,
+                    followersCount: targetUser.followers.length,
+                    followingCount: currentUser.following.length,
+                });
+            }
+
             if (!currentUser.following.includes(targetUsername)) currentUser.following.push(targetUsername);
             if (!targetUser.followers.includes(username)) targetUser.followers.push(username);
 
@@ -203,9 +226,116 @@ router.post("/:username/follow", verifyToken, async (req, res) => {
         await Promise.all([currentUser.save(), targetUser.save()]);
         return res.json({
             following: !isFollowing,
+            pending: false,
             followersCount: targetUser.followers.length,
             followingCount: targetUser.following.length,
         });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// POST /:username/follow/accept — accept a follow request
+router.post("/:username/follow/accept", verifyToken, async (req, res) => {
+    try {
+        const { username } = req.params;
+        const requesterUsername = req.body.requester;
+        if (!requesterUsername) return res.status(400).json({ error: "requester required" });
+
+        const userDoc = await User.findById(req.userId).select("username");
+        if (userDoc?.username !== username) return res.status(403).json({ error: "Unauthorized" });
+
+        const [targetUser, requesterUser] = await Promise.all([
+            User.findOne({ username }),
+            User.findOne({ username: requesterUsername }),
+        ]);
+        if (!targetUser || !requesterUser) return res.status(404).json({ error: "User not found" });
+
+        targetUser.pendingFollowRequests = (targetUser.pendingFollowRequests || []).filter((u) => u !== requesterUsername);
+        if (!targetUser.followers.includes(requesterUsername)) targetUser.followers.push(requesterUsername);
+        if (!requesterUser.following.includes(username)) requesterUser.following.push(username);
+
+        await Promise.all([targetUser.save(), requesterUser.save()]);
+
+        Notification.create({
+            recipient: requesterUsername,
+            type: "follow_accept",
+            fromUser: username,
+            fromColor: targetUser.avatarColor || "#3b82f6",
+            fromAvatarUrl: targetUser.avatarUrl || "",
+            text: "",
+        }).catch(() => {});
+
+        return res.json({ ok: true, pendingFollowRequests: targetUser.pendingFollowRequests });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// POST /:username/follow/deny — deny a follow request
+router.post("/:username/follow/deny", verifyToken, async (req, res) => {
+    try {
+        const { username } = req.params;
+        const requesterUsername = req.body.requester;
+        if (!requesterUsername) return res.status(400).json({ error: "requester required" });
+
+        const userDoc = await User.findById(req.userId).select("username");
+        if (userDoc?.username !== username) return res.status(403).json({ error: "Unauthorized" });
+
+        const targetUser = await User.findOne({ username });
+        if (!targetUser) return res.status(404).json({ error: "User not found" });
+
+        targetUser.pendingFollowRequests = (targetUser.pendingFollowRequests || []).filter((u) => u !== requesterUsername);
+        await targetUser.save();
+
+        return res.json({ ok: true, pendingFollowRequests: targetUser.pendingFollowRequests });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// GET /:username/follow-requests — list pending follow requests
+router.get("/:username/follow-requests", verifyToken, async (req, res) => {
+    try {
+        const { username } = req.params;
+        const userDoc = await User.findById(req.userId).select("username");
+        if (userDoc?.username !== username) return res.status(403).json({ error: "Unauthorized" });
+
+        const user = await User.findOne({ username }).select("pendingFollowRequests").lean();
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        const requests = user.pendingFollowRequests || [];
+        if (requests.length === 0) return res.json({ users: [] });
+
+        const users = await User.find({ username: { $in: requests } })
+            .select("username avatarColor avatarUrl isVerified isAdmin roles")
+            .populate("roles", "name badge color")
+            .lean();
+
+        return res.json({ users });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// PATCH /:username/privacy — toggle private account
+router.patch("/:username/privacy", verifyToken, async (req, res) => {
+    try {
+        const { username } = req.params;
+        const userDoc = await User.findById(req.userId).select("username");
+        if (userDoc?.username !== username) return res.status(403).json({ error: "Unauthorized" });
+
+        const user = await User.findOne({ username });
+        if (!user) return res.status(404).json({ error: "Not found" });
+
+        user.isPrivate = !user.isPrivate;
+        await user.save();
+
+        return res.json({ isPrivate: user.isPrivate });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });

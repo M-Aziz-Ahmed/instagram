@@ -229,4 +229,57 @@ router.get("/unread", verifyToken, async (req, res) => {
     }
 });
 
+// PUT /:id — edit message
+router.put("/:id", verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { text } = req.body;
+
+        const userDoc = await User.findById(req.userId).select("username").lean();
+        const username = userDoc?.username;
+        if (!username) return res.status(400).json({ error: "User not found" });
+
+        const message = await Message.findById(id);
+        if (!message) return res.status(404).json({ error: "Message not found" });
+        if (message.sender !== username) return res.status(403).json({ error: "Unauthorized" });
+
+        const newText = text?.trim();
+        if (!newText) return res.status(400).json({ error: "Text required" });
+
+        message.text = newText;
+        message.editedAt = new Date();
+        await message.save();
+
+        return res.json(message.toObject());
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed to edit message" });
+    }
+});
+
+// DELETE /:id — soft-delete message
+router.delete("/:id", verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const userDoc = await User.findById(req.userId).select("username").lean();
+        const username = userDoc?.username;
+        if (!username) return res.status(400).json({ error: "User not found" });
+
+        const message = await Message.findById(id);
+        if (!message) return res.status(404).json({ error: "Message not found" });
+        if (message.sender !== username) return res.status(403).json({ error: "Unauthorized" });
+
+        message.text = "";
+        message.deleted = true;
+        message.editedAt = null;
+        await message.save();
+
+        return res.json(message.toObject());
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed to delete message" });
+    }
+});
+
 module.exports = router;

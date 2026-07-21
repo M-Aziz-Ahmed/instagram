@@ -15,6 +15,7 @@ export default function EditProfileModal({ onClose }) {
     const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl ?? "");
     const [lang, setLang]           = useState(user?.language ?? "en");
     const [autoTranslate, setAutoTranslate] = useState(user?.autoTranslate ?? false);
+    const [isPrivate, setIsPrivate]         = useState(user?.isPrivate ?? false);
     const [saving, setSaving]       = useState(false);
     const [uploading, setUploading] = useState(false);
     const [error, setError]         = useState("");
@@ -54,6 +55,14 @@ export default function EditProfileModal({ onClose }) {
             });
             const data = await res.json();
             if (!res.ok) { setError(data.error); return; }
+
+            if (isPrivate !== (user?.isPrivate ?? false)) {
+                await fetch(`/api/users/${encodeURIComponent(user.username)}/privacy`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                });
+            }
+
             await reloadUser();
             showToast("Profile updated", "success");
             onClose();
@@ -207,6 +216,17 @@ export default function EditProfileModal({ onClose }) {
                         <button type="button" onClick={() => setAutoTranslate((v) => !v)}
                             className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${autoTranslate ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-600"}`}>
                             <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${autoTranslate ? "translate-x-5.5" : "translate-x-0.5"}`} />
+                        </button>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Private account</label>
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">Only followers can see your posts</p>
+                        </div>
+                        <button type="button" onClick={() => setIsPrivate((v) => !v)}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${isPrivate ? "bg-blue-500" : "bg-gray-300 dark:bg-gray-600"}`}>
+                            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isPrivate ? "translate-x-5.5" : "translate-x-0.5"}`} />
                         </button>
                     </div>
 

@@ -278,6 +278,51 @@ router.delete("/:id", verifyToken, async (req, res) => {
     }
 });
 
+// PUT /:id — edit post
+router.put("/:id", verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!id || !/^[0-9a-fA-F]{24}$/.test(id)) {
+            return res.status(400).json({ error: "Invalid post ID" });
+        }
+
+        const post = await Post.findById(id);
+        if (!post) return res.status(404).json({ error: "Not found" });
+
+        const username = (await User.findById(req.userId).select("username").lean())?.username;
+        if (!username || post.sender !== username) {
+            return res.status(403).json({ error: "Unauthorized" });
+        }
+
+        const { text, imageUrl, audioUrl } = req.body;
+        const sanitizedText = text?.trim() || "";
+
+        if (!sanitizedText && !imageUrl && !audioUrl) {
+            return res.status(400).json({ error: "Post must have text, an image, or audio" });
+        }
+
+        if (sanitizedText.length > 1000) {
+            return res.status(400).json({ error: "Text exceeds maximum length of 1000 characters" });
+        }
+
+        if (sanitizedText) {
+            post.text = sanitizedText;
+            post.hashtags = extractHashtags(sanitizedText);
+            post.mentions = extractMentions(sanitizedText, username);
+        }
+        if (imageUrl !== undefined) post.imageUrl = imageUrl;
+        if (audioUrl !== undefined) post.audioUrl = audioUrl;
+        post.editedAt = new Date();
+
+        await post.save();
+        const enriched = await enrichPost(post);
+        return res.json(enriched);
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed to edit post" });
+    }
+});
+
 // PATCH /:id  — unified action dispatcher (mirrors Next.js API route)
 router.patch("/:id", optionalAuth, async (req, res) => {
     try {
@@ -363,6 +408,22 @@ router.patch("/:id", optionalAuth, async (req, res) => {
                 if (parentComment && parentComment.replies > 0) parentComment.replies -= 1;
             }
 
+            await post.save();
+            const enriched = await enrichPost(post);
+            return res.json(enriched);
+        }
+
+        if (action === "editComment") {
+            if (!commentId || !text?.trim()) {
+                return res.status(400).json({ error: "commentId and text required" });
+            }
+            const comment = post.comments.find(c => c.commentId === commentId);
+            if (!comment) return res.status(404).json({ error: "Comment not found" });
+            if (comment.sender !== username) return res.status(403).json({ error: "Unauthorized" });
+
+            comment.text = text.trim();
+            comment.mentions = extractMentions(text, username);
+            comment.editedAt = new Date();
             await post.save();
             const enriched = await enrichPost(post);
             return res.json(enriched);
@@ -976,6 +1037,39 @@ router.get("/user/:username", async (req, res) => {
         const { username } = req.params;
         const limit = Math.min(parseInt(req.query.limit || "50", 10), 100);
         const before = req.query.before;
+        const viewer = req.query.viewer;
+
+        const userDoc = await User.findOne({ username }).populate("roles").lean();
+
+        const isPrivate = userDoc?.isPrivate;
+        const isSelf = viewer === username;
+        const isFollower = userDoc?.followers?.includes(viewer);
+        const isAdmin = req.query.admin === "true";
+
+        if (isPrivate && !isSelf && !isFollower && !isAdmin) {
+            return res.json({
+                posts: [],
+                totalLikes: 0,
+                postCount: 0,
+                profile: userDoc ? {
+                    username: userDoc.username,
+                    bio: userDoc.bio,
+                    avatarColor: userDoc.avatarColor,
+                    avatarUrl: userDoc.avatarUrl || "",
+                    isVerified: userDoc.isVerified || false,
+                    isAdmin: userDoc.isAdmin || false,
+                    isPrivate: true,
+                    roles: (userDoc.roles || []).map((r) => ({
+                        id: r._id.toString(), name: r.name, badge: r.badge, color: r.color,
+                    })),
+                    followersCount: (userDoc.followers || []).length,
+                    followingCount: (userDoc.following || []).length,
+                } : null,
+                hasMore: false,
+                nextCursor: null,
+                isPrivate: true,
+            });
+        }
 
         const query = {
             sender: username,
@@ -983,9 +1077,8 @@ router.get("/user/:username", async (req, res) => {
         };
         if (before) query.timeStamp = { $lt: new Date(before) };
 
-        const [rawPosts, userDoc, totalPosts] = await Promise.all([
+        const [rawPosts, totalPosts] = await Promise.all([
             Post.find(query).sort({ timeStamp: -1 }).limit(limit + 1).lean(),
-            User.findOne({ username }).populate("roles").lean(),
             Post.countDocuments({ sender: username }),
         ]);
 
@@ -1021,6 +1114,7 @@ router.get("/user/:username", async (req, res) => {
             username: userDoc.username, bio: userDoc.bio,
             avatarColor: userDoc.avatarColor, avatarUrl: userDoc.avatarUrl || "",
             isVerified: userDoc.isVerified || false, isAdmin: userDoc.isAdmin || false,
+            isPrivate: userDoc.isPrivate || false,
             roles: (userDoc.roles || []).map((r) => ({
                 id: r._id.toString(), name: r.name, badge: r.badge, color: r.color,
             })),

@@ -286,13 +286,15 @@ function CommentReactionCounts({ reactions }) {
     );
 }
 
-function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, postId, onDelete, onReactComment }) {
+function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, postId, onDelete, onReactComment, onEditComment }) {
     const replies = useMemo(
         () => allComments.filter((c) => c.parentId === comment.commentId),
         [allComments, comment.commentId]
     );
 
     const [commentLightbox, setCommentLightbox] = useState(false);
+    const [editing, setEditing] = useState(false);
+    const [editText, setEditText] = useState(comment.text || "");
     const author = comment._author || null;
     const avatarUrl = author?.avatarUrl || comment.avatarUrl;
 
@@ -308,8 +310,36 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                             </Link>
                             <UserBadges isVerified={author?.isVerified} isAdmin={author?.isAdmin} roles={author?.roles || []} size="sm" />
                         </span>
-                        {comment.text && (
-                            <RichText text={comment.text} onHashtag={onHashtag} className="text-xs text-gray-700 dark:text-gray-300" />
+                        {editing ? (
+                            <div className="inline-flex items-center gap-1">
+                                <input
+                                    type="text"
+                                    value={editText}
+                                    onChange={(e) => setEditText(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" && editText.trim()) {
+                                            onEditComment(comment.commentId, editText.trim());
+                                            setEditing(false);
+                                        }
+                                        if (e.key === "Escape") setEditing(false);
+                                    }}
+                                    className="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-gray-100 outline-none focus:border-blue-400"
+                                    maxLength={300}
+                                    autoFocus
+                                />
+                                <button onClick={() => { if (editText.trim()) { onEditComment(comment.commentId, editText.trim()); setEditing(false); } }}
+                                    className="text-[10px] text-blue-500 font-bold">Save</button>
+                                <button onClick={() => setEditing(false)} className="text-[10px] text-gray-400">Cancel</button>
+                            </div>
+                        ) : (
+                            <>
+                                {comment.text && (
+                                    <RichText text={comment.text} onHashtag={onHashtag} className="text-xs text-gray-700 dark:text-gray-300" />
+                                )}
+                                {comment.editedAt && (
+                                    <span className="text-[10px] text-gray-300 dark:text-gray-600 italic ml-1">(edited)</span>
+                                )}
+                            </>
                         )}
                     </div>
                     {comment.audioUrl && !comment.text && !comment.imageUrl && (
@@ -339,12 +369,20 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                             </button>
                         )}
                         {user?.username === comment.sender && (
+                            <>
+                            <button
+                                onClick={() => { setEditing(true); setEditText(comment.text || ""); }}
+                                className="text-[11px] text-gray-400 hover:text-blue-500 font-medium transition-colors px-2 py-1.5 min-h-[36px]"
+                            >
+                                Edit
+                            </button>
                             <button
                                 onClick={() => onDelete(comment.commentId)}
                                 className="text-[11px] text-gray-400 hover:text-red-500 font-medium transition-colors px-2 py-1.5 min-h-[36px]"
                             >
                                 Delete
                             </button>
+                            </>
                         )}
                     </div>
                     {comment.reactions && (
@@ -365,6 +403,7 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                     postId={postId}
                     onDelete={onDelete}
                     onReactComment={onReactComment}
+                    onEditComment={onEditComment}
                 />
             ))}
         </div>
@@ -413,6 +452,9 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
     const [loginAction, setLoginAction]       = useState("interact");
     const [translations, setTranslations]   = useState({});
     const [translatingIdx, setTranslatingIdx] = useState(null);
+    const [editingPost, setEditingPost]       = useState(false);
+    const [editText, setEditText]             = useState("");
+    const [savingEdit, setSavingEdit]         = useState(false);
     const autoTranslatedRef = useRef(false);
     const origTranslatedRef = useRef(false);
     const commentTranslatedRef = useRef(false);
@@ -725,6 +767,30 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
         }
     };
 
+    const handleEditComment = async (commentId, text) => {
+        if (!user) return;
+        try {
+            const res = await fetch(`/api/posts/${post._id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "editComment",
+                    username: user.username,
+                    commentId,
+                    text,
+                }),
+            });
+            if (res.ok) {
+                setPost(await res.json());
+                showToast("Comment edited", "success");
+            } else {
+                showToast("Failed to edit comment", "error");
+            }
+        } catch {
+            showToast("Failed to edit comment", "error");
+        }
+    };
+
     const handleDelete = async () => {
         if (!user || deleting) return;
         if (!confirm("Delete this post?")) return;
@@ -748,6 +814,34 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
         }
     };
 
+    const startEditPost = () => {
+        setEditText(post.text || "");
+        setEditingPost(true);
+    };
+
+    const saveEditPost = async () => {
+        if (!editText.trim() || savingEdit) return;
+        setSavingEdit(true);
+        try {
+            const res = await fetch(`/api/posts/${post._id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: editText.trim(), imageUrl: post.imageUrl, audioUrl: post.audioUrl }),
+            });
+            if (res.ok) {
+                setPost(await res.json());
+                setEditingPost(false);
+                showToast("Post edited", "success");
+            } else {
+                showToast("Failed to edit post", "error");
+            }
+        } catch {
+            showToast("Failed to edit post", "error");
+        } finally {
+            setSavingEdit(false);
+        }
+    };
+
     return (
         <>
         <article className="border-b border-gray-200 dark:border-gray-800 px-4 py-4">
@@ -767,6 +861,9 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         </span>
                         <span className="text-gray-400 dark:text-gray-500 text-xs">&middot;</span>
                         <span className="text-gray-400 dark:text-gray-500 text-xs">{timeAgo(post.timeStamp)}</span>
+                        {post.editedAt && (
+                            <span className="text-gray-300 dark:text-gray-600 text-[11px] italic">(edited)</span>
+                        )}
                         {post.expiresAt && (
                             <PostCountdown expiresAt={post.expiresAt} />
                         )}
@@ -782,6 +879,18 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                 <FollowButton username={post.sender} size="xs" />
                             )}
                             {isOwn && (
+                                <>
+                                <button
+                                    onClick={startEditPost}
+                                    aria-label="Edit post"
+                                    className="text-gray-300 dark:text-gray-600 hover:text-blue-500 transition-colors p-2.5 -mr-1 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                                        <path strokeLinecap="round" strokeLinejoin="round"
+                                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                                    </svg>
+                                </button>
                                 <button
                                     onClick={handleDelete}
                                     disabled={deleting}
@@ -794,6 +903,7 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                             d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
                                     </svg>
                                 </button>
+                                </>
                             )}
                         </div>
                     </div>
@@ -887,28 +997,58 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         </div>
                     ) : (post.text ? (
                         <div className="mt-1">
-                            <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap">
-                                <RichText text={post.text} onHashtag={onHashtag} />
-                            </p>
-                            {translations[post._id] && (
-                                <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-1 leading-relaxed whitespace-pre-wrap">
-                                    {translations[post._id]}
-                                </p>
+                            {editingPost ? (
+                                <div>
+                                    <textarea
+                                        value={editText}
+                                        onChange={(e) => setEditText(e.target.value)}
+                                        maxLength={1000}
+                                        rows={3}
+                                        className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-400 dark:focus:border-blue-500 resize-none"
+                                        autoFocus
+                                    />
+                                    <div className="flex items-center gap-2 mt-1.5">
+                                        <button
+                                            onClick={saveEditPost}
+                                            disabled={savingEdit || !editText.trim()}
+                                            className="text-xs font-bold text-blue-500 hover:text-blue-600 disabled:opacity-50"
+                                        >
+                                            {savingEdit ? "Saving\u2026" : "Save"}
+                                        </button>
+                                        <button
+                                            onClick={() => setEditingPost(false)}
+                                            className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap">
+                                        <RichText text={post.text} onHashtag={onHashtag} />
+                                    </p>
+                                    {translations[post._id] && (
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-1 leading-relaxed whitespace-pre-wrap">
+                                            {translations[post._id]}
+                                        </p>
+                                    )}
+                                    <button
+                                        onClick={() => translatePost(post._id, post.text)}
+                                        disabled={translatingIdx === post._id}
+                                        className="text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors mt-0.5 flex items-center gap-1"
+                                        title={translations[post._id] ? "Hide translation" : "Translate"}
+                                    >
+                                        {translatingIdx === post._id ? (
+                                            <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                                        ) : (
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802" />
+                                            </svg>
+                                        )}
+                                    </button>
+                                </>
                             )}
-                            <button
-                                onClick={() => translatePost(post._id, post.text)}
-                                disabled={translatingIdx === post._id}
-                                className="text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors mt-0.5 flex items-center gap-1"
-                                title={translations[post._id] ? "Hide translation" : "Translate"}
-                            >
-                                {translatingIdx === post._id ? (
-                                    <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                                ) : (
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802" />
-                                    </svg>
-                                )}
-                            </button>
                         </div>
                     ) : null)}
 
@@ -1039,6 +1179,7 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                             postId={post._id}
                                             onDelete={handleDeleteComment}
                                             onReactComment={handleReactComment}
+                                            onEditComment={handleEditComment}
                                         />
                                     ))}
                                 </div>

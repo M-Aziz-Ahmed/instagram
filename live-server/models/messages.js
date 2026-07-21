@@ -16,6 +16,8 @@ const messagesSchema = new mongoose.Schema({
         sad:   { type: [String], default: [] },
         angry: { type: [String], default: [] },
     },
+    editedAt: { type: Date, default: null },
+    deleted:  { type: Boolean, default: false },
     timeStamp: { type: Date, default: Date.now },
     isRead:    { type: Boolean, default: false },
     delivered: { type: Boolean, default: false },

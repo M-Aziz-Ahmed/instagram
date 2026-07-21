@@ -16,6 +16,8 @@ export default function MentionInput({
     const [results, setResults]     = useState([]);
     const [highlight, setHighlight] = useState(0);
     const [showDropdown, setShowDropdown] = useState(false);
+    const [mode, setMode]           = useState(null); // "user" or "hashtag"
+    const [hashtagResults, setHashtagResults] = useState([]);
     const inputRef = useRef(null);
     const dropdownRef = useRef(null);
 
@@ -30,15 +32,29 @@ export default function MentionInput({
         } catch { /* silent */ }
     }, []);
 
+    const fetchHashtags = useCallback(async (q) => {
+        try {
+            const url = q ? `/api/search?q=${encodeURIComponent(q)}` : `/api/hashtags/trending?limit=8`;
+            const res = await fetch(url);
+            if (res.ok) {
+                const data = await res.json();
+                setHashtagResults(data.hashtags || data || []);
+            }
+        } catch { /* silent */ }
+    }, []);
+
     useEffect(() => {
         if (query === null) return;
-        const t = setTimeout(() => fetchUsers(query), 200);
+        const t = setTimeout(() => {
+            if (mode === "hashtag") fetchHashtags(query);
+            else fetchUsers(query);
+        }, 200);
         return () => clearTimeout(t);
-    }, [query, fetchUsers]);
+    }, [query, mode, fetchUsers, fetchHashtags]);
 
     useEffect(() => {
         setHighlight(0);
-    }, [results]);
+    }, [results, hashtagResults, mode]);
 
     const handleChange = (e) => {
         const val = e.target.value;
@@ -46,13 +62,22 @@ export default function MentionInput({
 
         const pos = e.target.selectionStart;
         const before = val.slice(0, pos);
-        const match = before.match(/@([a-zA-Z0-9_]*)$/);
-        if (match) {
-            setQuery(match[1]);
+
+        const hashtagMatch = before.match(/#([a-zA-Z0-9_]*)$/);
+        const userMatch = before.match(/@([a-zA-Z0-9_]*)$/);
+
+        if (hashtagMatch && (!userMatch || hashtagMatch.index > userMatch.index)) {
+            setQuery(hashtagMatch[1]);
+            setMode("hashtag");
+            setShowDropdown(true);
+        } else if (userMatch) {
+            setQuery(userMatch[1]);
+            setMode("user");
             setShowDropdown(true);
         } else {
             setShowDropdown(false);
             setQuery(null);
+            setMode(null);
         }
     };
 
@@ -65,6 +90,7 @@ export default function MentionInput({
         onChange(newText);
         setShowDropdown(false);
         setQuery(null);
+        setMode(null);
         setTimeout(() => {
             const newPos = atIdx + username.length + 2;
             inputRef.current?.setSelectionRange(newPos, newPos);
@@ -72,8 +98,27 @@ export default function MentionInput({
         }, 0);
     };
 
+    const insertHashtag = (tag) => {
+        const pos = inputRef.current?.selectionStart ?? value.length;
+        const before = value.slice(0, pos);
+        const after = value.slice(pos);
+        const hashIdx = before.lastIndexOf("#");
+        const cleanTag = tag.replace(/^#/, "");
+        const newText = before.slice(0, hashIdx) + `#${cleanTag} ` + after;
+        onChange(newText);
+        setShowDropdown(false);
+        setQuery(null);
+        setMode(null);
+        setTimeout(() => {
+            const newPos = hashIdx + cleanTag.length + 2;
+            inputRef.current?.setSelectionRange(newPos, newPos);
+            inputRef.current?.focus();
+        }, 0);
+    };
+
     const handleKeyDown = (e) => {
-        if (!showDropdown || results.length === 0) {
+        const items = mode === "hashtag" ? hashtagResults : results;
+        if (!showDropdown || items.length === 0) {
             if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 onSubmit?.();
@@ -82,13 +127,17 @@ export default function MentionInput({
         }
         if (e.key === "ArrowDown") {
             e.preventDefault();
-            setHighlight((h) => (h + 1) % results.length);
+            setHighlight((h) => (h + 1) % items.length);
         } else if (e.key === "ArrowUp") {
             e.preventDefault();
-            setHighlight((h) => (h - 1 + results.length) % results.length);
+            setHighlight((h) => (h - 1 + items.length) % items.length);
         } else if (e.key === "Enter" || e.key === "Tab") {
             e.preventDefault();
-            insertMention(results[highlight].username);
+            if (mode === "hashtag") {
+                insertHashtag(items[highlight]?.tag || items[highlight]);
+            } else {
+                insertMention(items[highlight].username);
+            }
         } else if (e.key === "Escape") {
             setShowDropdown(false);
         }
@@ -111,7 +160,7 @@ export default function MentionInput({
                 }}
             />
 
-            {showDropdown && results.length > 0 && (
+            {showDropdown && mode === "user" && results.length > 0 && (
                 <div
                     ref={dropdownRef}
                     className="absolute z-30 bottom-full mb-1 left-0 w-56 sm:w-64 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto"
@@ -138,6 +187,34 @@ export default function MentionInput({
                             <span className="font-medium text-gray-900 dark:text-gray-100 truncate">{u.username}</span>
                         </button>
                     ))}
+                </div>
+            )}
+
+            {showDropdown && mode === "hashtag" && hashtagResults.length > 0 && (
+                <div
+                    ref={dropdownRef}
+                    className="absolute z-30 bottom-full mb-1 left-0 w-56 sm:w-64 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto"
+                >
+                    {hashtagResults.map((tag, i) => {
+                        const tagName = typeof tag === "string" ? tag : tag?.tag || "";
+                        const tagCount = typeof tag === "object" ? tag?.count : null;
+                        return (
+                            <button
+                                key={tagName}
+                                type="button"
+                                onClick={() => insertHashtag(tagName)}
+                                className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
+                                    i === highlight ? "bg-gray-100 dark:bg-gray-800" : ""
+                                }`}
+                            >
+                                <span className="text-blue-500 font-medium text-xs">#</span>
+                                <span className="font-medium text-gray-900 dark:text-gray-100 truncate">{tagName}</span>
+                                {tagCount != null && (
+                                    <span className="ml-auto text-[10px] text-gray-400">{tagCount.toLocaleString()}</span>
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
             )}
 

@@ -18,6 +18,12 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
     const [audioUrl, setAudioUrl]   = useState("");
     const [showEmoji, setShowEmoji] = useState(false);
     const [showGif, setShowGif]     = useState(false);
+    const [mentionQuery, setMentionQuery]     = useState(null);
+    const [mentionResults, setMentionResults] = useState([]);
+    const [mentionHighlight, setMentionHighlight] = useState(0);
+    const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+    const [mentionMode, setMentionMode] = useState(null); // "user" or "hashtag"
+    const [hashtagResults, setHashtagResults] = useState([]);
     const fileRef                   = useRef(null);
     const inputRef                  = useRef(null);
     const typingTimeoutRef          = useRef(null);
@@ -66,7 +72,51 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                 }).catch(() => {});
             }, 3000);
         }
+
+        // Detect @mention or #hashtag at cursor
+        const pos = inputRef.current?.selectionStart || val.length;
+        const before = val.slice(0, pos);
+        const hashtagMatch = before.match(/#([a-zA-Z0-9_]*)$/);
+        const userMatch = before.match(/@([a-zA-Z0-9_]*)$/);
+        if (hashtagMatch && (!userMatch || hashtagMatch.index > userMatch.index)) {
+            setMentionQuery(hashtagMatch[1]);
+            setMentionMode("hashtag");
+            setShowMentionDropdown(true);
+        } else if (userMatch) {
+            setMentionQuery(userMatch[1]);
+            setMentionMode("user");
+            setShowMentionDropdown(true);
+        } else {
+            setShowMentionDropdown(false);
+            setMentionQuery(null);
+            setMentionMode(null);
+        }
     };
+
+    useEffect(() => {
+        if (mentionQuery === null) return;
+        const t = setTimeout(async () => {
+            try {
+                if (mentionMode === "hashtag") {
+                    const url = mentionQuery ? `/api/search?q=${encodeURIComponent(mentionQuery)}` : `/api/hashtags/trending?limit=8`;
+                    const res = await fetch(url);
+                    if (res.ok) {
+                        const data = await res.json();
+                        setHashtagResults(data.hashtags || data || []);
+                    }
+                } else {
+                    const res = await fetch(`/api/search?q=${encodeURIComponent(mentionQuery)}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        setMentionResults(data.users || []);
+                    }
+                }
+            } catch { /* silent */ }
+        }, 200);
+        return () => clearTimeout(t);
+    }, [mentionQuery, mentionMode]);
+
+    useEffect(() => { setMentionHighlight(0); }, [mentionResults, hashtagResults, mentionMode]);
 
     const uploadToCloudinary = (file) =>
         new Promise((resolve, reject) => {
@@ -178,7 +228,67 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
         }
     };
 
+    const insertMention = (username) => {
+        const pos = inputRef.current?.selectionStart ?? text.length;
+        const before = text.slice(0, pos);
+        const after = text.slice(pos);
+        const atIdx = before.lastIndexOf("@");
+        const newText = before.slice(0, atIdx) + `@${username} ` + after;
+        setText(newText);
+        setShowMentionDropdown(false);
+        setMentionQuery(null);
+        setMentionMode(null);
+        handleTextChange(newText);
+        setTimeout(() => {
+            const newPos = atIdx + username.length + 2;
+            inputRef.current?.setSelectionRange(newPos, newPos);
+            inputRef.current?.focus();
+        }, 0);
+    };
+
+    const insertHashtag = (tag) => {
+        const pos = inputRef.current?.selectionStart ?? text.length;
+        const before = text.slice(0, pos);
+        const after = text.slice(pos);
+        const hashIdx = before.lastIndexOf("#");
+        const cleanTag = tag.replace(/^#/, "");
+        const newText = before.slice(0, hashIdx) + `#${cleanTag} ` + after;
+        setText(newText);
+        setShowMentionDropdown(false);
+        setMentionQuery(null);
+        setMentionMode(null);
+        handleTextChange(newText);
+        setTimeout(() => {
+            const newPos = hashIdx + cleanTag.length + 2;
+            inputRef.current?.setSelectionRange(newPos, newPos);
+            inputRef.current?.focus();
+        }, 0);
+    };
+
     const handleKeyDown = (e) => {
+        const items = mentionMode === "hashtag" ? hashtagResults : mentionResults;
+        if (showMentionDropdown && items.length > 0) {
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setMentionHighlight((h) => (h + 1) % items.length);
+                return;
+            } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setMentionHighlight((h) => (h - 1 + items.length) % items.length);
+                return;
+            } else if (e.key === "Enter" || e.key === "Tab") {
+                e.preventDefault();
+                if (mentionMode === "hashtag") {
+                    insertHashtag(items[mentionHighlight]?.tag || items[mentionHighlight]);
+                } else {
+                    insertMention(items[mentionHighlight].username);
+                }
+                return;
+            } else if (e.key === "Escape") {
+                setShowMentionDropdown(false);
+                return;
+            }
+        }
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             handleSend();
@@ -304,7 +414,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                 </div>
 
                 {/* Text input */}
-                <div className="flex-1 flex items-center bg-gray-100 dark:bg-gray-800 rounded-2xl px-4 py-2 min-h-[44px] focus-within:ring-1 focus-within:ring-gray-300 dark:focus-within:ring-gray-600 transition-shadow">
+                <div className="flex-1 flex items-center bg-gray-100 dark:bg-gray-800 rounded-2xl px-4 py-2 min-h-[44px] focus-within:ring-1 focus-within:ring-gray-300 dark:focus-within:ring-gray-600 transition-shadow relative">
                     <input
                         ref={inputRef}
                         type="text"
@@ -315,6 +425,43 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                         disabled={!user || !recipient}
                         className="flex-1 bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none disabled:cursor-not-allowed"
                     />
+                    {showMentionDropdown && mentionMode === "user" && mentionResults.length > 0 && (
+                        <div className="absolute bottom-full mb-2 left-0 right-0 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto z-40">
+                            {mentionResults.map((u, i) => (
+                                <button
+                                    key={u._id || u.username}
+                                    type="button"
+                                    onMouseDown={(e) => { e.preventDefault(); insertMention(u.username); }}
+                                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${i === mentionHighlight ? "bg-gray-100 dark:bg-gray-800" : ""}`}
+                                >
+                                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: u.avatarColor }}>
+                                        {u.avatarUrl ? <img src={u.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" /> : u.username?.[0]?.toUpperCase()}
+                                    </div>
+                                    <span className="font-medium text-gray-900 dark:text-gray-100 truncate">{u.username}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    {showMentionDropdown && mentionMode === "hashtag" && hashtagResults.length > 0 && (
+                        <div className="absolute bottom-full mb-2 left-0 right-0 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto z-40">
+                            {hashtagResults.map((tag, i) => {
+                                const tagName = typeof tag === "string" ? tag : tag?.tag || "";
+                                const tagCount = typeof tag === "object" ? tag?.count : null;
+                                return (
+                                    <button
+                                        key={tagName}
+                                        type="button"
+                                        onMouseDown={(e) => { e.preventDefault(); insertHashtag(tagName); }}
+                                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${i === mentionHighlight ? "bg-gray-100 dark:bg-gray-800" : ""}`}
+                                    >
+                                        <span className="text-blue-500 font-medium text-xs">#</span>
+                                        <span className="font-medium text-gray-900 dark:text-gray-100 truncate">{tagName}</span>
+                                        {tagCount != null && <span className="ml-auto text-[10px] text-gray-400">{tagCount.toLocaleString()}</span>}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
 
                 {/* Send / Mic button */}

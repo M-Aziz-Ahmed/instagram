@@ -138,6 +138,92 @@ function ActiveIndicator({ username }) {
     );
 }
 
+function FollowRequestsModal({ requests, username, onClose, onRequestHandled }) {
+    const [processing, setProcessing] = useState(null);
+
+    const handleAccept = async (requester) => {
+        setProcessing(requester);
+        try {
+            const res = await fetch(`/api/users/${encodeURIComponent(username)}/follow/accept`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ requester }),
+            });
+            if (res.ok) {
+                onRequestHandled(requester);
+            }
+        } catch {}
+        setProcessing(null);
+    };
+
+    const handleDeny = async (requester) => {
+        setProcessing(requester);
+        try {
+            const res = await fetch(`/api/users/${encodeURIComponent(username)}/follow/deny`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ requester }),
+            });
+            if (res.ok) {
+                onRequestHandled(requester);
+            }
+        } catch {}
+        setProcessing(null);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden max-w-md w-full max-h-[80dvh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                    <span className="font-bold text-sm text-gray-900 dark:text-gray-100">Follow Requests</span>
+                    <button onClick={onClose} className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center" aria-label="Close">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                    {requests.length === 0 ? (
+                        <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-10">No pending requests</p>
+                    ) : (
+                        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {requests.map((u) => (
+                                <div key={u._id || u.username} className="flex items-center gap-3 px-4 py-3 min-h-[56px]">
+                                    <div
+                                        className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
+                                        style={{ backgroundColor: u.avatarColor }}
+                                    >
+                                        {u.avatarUrl ? (
+                                            <img src={u.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" />
+                                        ) : (
+                                            u.username?.[0]?.toUpperCase()
+                                        )}
+                                    </div>
+                                    <span className="font-medium text-sm text-gray-900 dark:text-gray-100 flex-1 truncate">{u.username}</span>
+                                    <button
+                                        onClick={() => handleAccept(u.username)}
+                                        disabled={processing === u.username}
+                                        className="text-xs font-semibold px-3 py-1.5 rounded-full bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                                    >
+                                        {processing === u.username ? "\u2026" : "Accept"}
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeny(u.username)}
+                                        disabled={processing === u.username}
+                                        className="text-xs font-semibold px-3 py-1.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 transition-colors"
+                                    >
+                                        Deny
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function ProfileClient({ username }) {
     const { user } = useUser();
     const router = useRouter();
@@ -150,8 +236,12 @@ export default function ProfileClient({ username }) {
     const [listModal, setListModal]           = useState(null);
     const [showCompose, setShowCompose]       = useState(false);
     const [showInviteManager, setShowInviteManager] = useState(false);
+    const [showFollowRequests, setShowFollowRequests] = useState(false);
+    const [pendingRequests, setPendingRequests] = useState([]);
 
     const isOwn = user?.username === username;
+    const isPrivateProfile = !isOwn && data?.profile?.isPrivate && !user?.following?.includes(username);
+    const isPrivateAdmin = !isOwn && data?.profile?.isPrivate && user?.isAdmin;
 
     useEffect(() => {
         if (!user || !isOwn) return;
@@ -177,6 +267,16 @@ export default function ProfileClient({ username }) {
     }, []);
 
     useEffect(() => { fetchProfile(); }, [fetchProfile]);
+
+    useEffect(() => {
+        if (!isOwn || !user) return;
+        fetch(`/api/users/${encodeURIComponent(username)}/follow-requests`, {
+            credentials: "include",
+        })
+            .then((r) => r.ok ? r.json() : { users: [] })
+            .then((data) => setPendingRequests(data.users || []))
+            .catch(() => {});
+    }, [isOwn, user, username]);
 
     const handleFollowToggle = useCallback(({ followersCount, followingCount }) => {
         setData((prev) => {
@@ -290,6 +390,17 @@ export default function ProfileClient({ username }) {
 
                                 {isOwn && (
                                     <div className="mt-3 flex items-center gap-2">
+                                        {pendingRequests.length > 0 && (
+                                            <button
+                                                onClick={() => setShowFollowRequests(true)}
+                                                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-orange-500 hover:text-orange-600 border border-orange-200 dark:border-orange-800 rounded-xl hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                                                </svg>
+                                                Follow Requests ({pendingRequests.length})
+                                            </button>
+                                        )}
                                         <button
                                             onClick={() => setShowInviteManager(true)}
                                             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
@@ -343,7 +454,15 @@ export default function ProfileClient({ username }) {
                         </div>
 
                         {/* Posts grid + list */}
-                        {!data?.posts?.length ? (
+                        {isPrivateProfile ? (
+                            <div className="flex flex-col items-center py-20 text-gray-400 dark:text-gray-600 select-none">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 mb-3 opacity-40">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                </svg>
+                                <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">This account is private</p>
+                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Follow this account to see their posts</p>
+                            </div>
+                        ) : !data?.posts?.length ? (
                             <div className="flex flex-col items-center py-20 text-gray-400 dark:text-gray-600 select-none">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 mb-3 opacity-40">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
@@ -424,6 +543,18 @@ export default function ProfileClient({ username }) {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                     </svg>
                 </button>
+            )}
+
+            {showFollowRequests && (
+                <FollowRequestsModal
+                    requests={pendingRequests}
+                    username={username}
+                    onClose={() => setShowFollowRequests(false)}
+                    onRequestHandled={(handledUsername) => {
+                        setPendingRequests((prev) => prev.filter((u) => u.username !== handledUsername));
+                        fetchProfile();
+                    }}
+                />
             )}
 
             {showInviteManager && (
