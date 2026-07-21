@@ -166,6 +166,28 @@ router.get("/genres", async (_req, res) => {
     }
 });
 
+// Browse anime by genre
+router.get("/genre/:genre", async (req, res) => {
+    try {
+        const { genre } = req.params;
+        const { page = 1, sort = "POPULARITY_DESC" } = req.query;
+        const data = await gql(
+            `query ($genre: String, $page: Int, $sort: [MediaSort]) {
+                Page(page: $page, perPage: 20) {
+                    media(genre: $genre, type: ANIME, sort: $sort) { ${MEDIA_FIELDS} }
+                    pageInfo { hasNextPage total }
+                }
+            }`,
+            { genre, page: Number(page), sort }
+        );
+        const results = (data.Page.media || []).map(formatMedia);
+        res.json({ results, hasNextPage: data.Page.pageInfo?.hasNextPage || false });
+    } catch (err) {
+        console.error("Anime genre browse error:", err.message);
+        res.status(502).json({ error: "Genre browse unavailable" });
+    }
+});
+
 async function findAnimeUnityId(anilistId, title) {
     if (idCache.has(anilistId)) return idCache.get(anilistId);
     if (!title) return null;

@@ -235,6 +235,9 @@ export default function AnimePage() {
     const [streamTitle, setStreamTitle] = useState("");
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
+    const [genres, setGenres] = useState([]);
+    const [activeGenre, setActiveGenre] = useState(null);
+    const [langFilter, setLangFilter] = useState("all");
     const searchTimer = useRef(null);
 
     useEffect(() => {
@@ -242,21 +245,51 @@ export default function AnimePage() {
             .then((r) => r.json())
             .then((d) => { if (d?.results) setSpotlight(d.results.slice(0, 12)); })
             .catch(() => {});
+        fetch("/api/anime/genres")
+            .then((r) => r.json())
+            .then((d) => {
+                if (d?.data) {
+                    const popular = ["Action", "Romance", "Comedy", "Drama", "Fantasy", "Horror", "Sci-Fi", "Slice of Life", "Mystery", "Supernatural", "Adventure", "Sports", "Mecha", "Psychological", "Thriller", "Martial Arts", "Superhero", "Ecchi", "Harem", "Military"];
+                    const sorted = d.data.sort((a, b) => {
+                        const ai = popular.indexOf(a);
+                        const bi = popular.indexOf(b);
+                        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+                    });
+                    setGenres(sorted.slice(0, 20));
+                }
+            })
+            .catch(() => {});
     }, []);
 
     const doSearch = useCallback(async (q, p = 1, append = false) => {
         if (!q.trim()) return;
         setLoading(true);
+        setActiveGenre(null);
         try {
             const res = await fetch(`/api/anime/search?q=${encodeURIComponent(q)}&page=${p}`);
             const data = await res.json();
             const items = data?.results || [];
             setResults((prev) => (append ? [...prev, ...items] : items));
-            setHasMore(items.length > 0);
+            setHasMore(data?.hasNextPage ?? items.length > 0);
             setPage(p);
         } catch { /* silent */ }
         setLoading(false);
     }, []);
+
+    const handleGenreBrowse = async (genre, p = 1, append = false) => {
+        setActiveGenre(genre);
+        setQuery("");
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/anime/genre/${encodeURIComponent(genre)}?page=${p}`);
+            const data = await res.json();
+            const items = data?.results || [];
+            setResults((prev) => (append ? [...prev, ...items] : items));
+            setHasMore(data?.hasNextPage ?? items.length > 0);
+            setPage(p);
+        } catch { /* silent */ }
+        setLoading(false);
+    };
 
     const handleSearchChange = (val) => {
         setQuery(val);
@@ -421,17 +454,60 @@ export default function AnimePage() {
                 {/* Grid View */}
                 {view === "grid" && (
                     <>
+                        {/* Genre chips */}
+                        {!query && genres.length > 0 && (
+                            <div className="mb-4">
+                                <h3 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Browse by Genre</h3>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {genres.map((g) => (
+                                        <button
+                                            key={g}
+                                            onClick={() => handleGenreBrowse(g)}
+                                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                                                activeGenre === g
+                                                    ? "bg-blue-500 text-white"
+                                                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                            }`}
+                                        >
+                                            {g}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Language filter */}
+                        <div className="flex gap-2 mb-4">
+                            {["all", "sub", "dub"].map((f) => (
+                                <button
+                                    key={f}
+                                    onClick={() => setLangFilter(f)}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                                        langFilter === f
+                                            ? f === "sub" ? "bg-blue-500 text-white" : f === "dub" ? "bg-purple-500 text-white" : "bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900"
+                                            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                    }`}
+                                >
+                                    {f === "all" ? "All" : f === "sub" ? "Sub" : "Dub"}
+                                </button>
+                            ))}
+                        </div>
+
                         {results.length === 0 && spotlight.length === 0 && !loading && (
                             <div className="text-center py-16">
                                 <span className="text-5xl mb-4 block">🎬</span>
                                 <p className="text-gray-500 dark:text-gray-400 text-sm">Search for your favorite anime to start watching</p>
                             </div>
                         )}
-                        {results.length === 0 && spotlight.length > 0 && !query && (
+                        {results.length === 0 && spotlight.length > 0 && !query && !activeGenre && (
                             <div className="mb-8">
                                 <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-3">Trending Now</h2>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                                    {spotlight.map((item) => (
+                                    {spotlight.filter((item) => {
+                                        if (langFilter === "sub") return item.sub;
+                                        if (langFilter === "dub") return item.dub;
+                                        return true;
+                                    }).map((item) => (
                                         <button key={item.id} onClick={() => handleSelect(item)} className="group text-left">
                                             <div className="relative aspect-[3/4] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
                                                 <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
@@ -446,9 +522,15 @@ export default function AnimePage() {
                         )}
                         {results.length > 0 && (
                             <div>
-                                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-3">{query ? `Results for "${query}"` : "Browse"}</h2>
+                                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-3">
+                                    {query ? `Results for "${query}"` : activeGenre ? activeGenre : "Browse"}
+                                </h2>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                                    {results.map((item) => (
+                                    {results.filter((item) => {
+                                        if (langFilter === "sub") return item.sub;
+                                        if (langFilter === "dub") return item.dub;
+                                        return true;
+                                    }).map((item) => (
                                         <button key={item.id} onClick={() => handleSelect(item)} className="group text-left">
                                             <div className="relative aspect-[3/4] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
                                                 <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
@@ -462,7 +544,10 @@ export default function AnimePage() {
                                 {hasMore && (
                                     <div className="flex justify-center mt-6">
                                         <button
-                                            onClick={() => doSearch(query, page + 1, true)}
+                                            onClick={() => {
+                                                if (activeGenre) handleGenreBrowse(activeGenre, page + 1, true);
+                                                else if (query) doSearch(query, page + 1, true);
+                                            }}
                                             disabled={loading}
                                             className="px-6 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-full transition-colors disabled:opacity-50"
                                         >

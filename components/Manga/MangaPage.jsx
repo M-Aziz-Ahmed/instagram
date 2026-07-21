@@ -203,11 +203,14 @@ export default function MangaPage() {
     const [chapterError, setChapterError] = useState("");
     const [tags, setTags] = useState([]);
     const [activeTag, setActiveTag] = useState(null);
+    const [tagOffset, setTagOffset] = useState(0);
+    const [hasMore, setHasMore] = useState(false);
     const searchTimer = useRef(null);
     const searchParams = useSearchParams();
     const initialId = searchParams.get("id");
     const initialCh = searchParams.get("ch");
     const didInit = useRef(false);
+    const selectedRef = useRef(null);
 
     useEffect(() => {
         fetch("/api/manga/recent?limit=18")
@@ -239,6 +242,7 @@ export default function MangaPage() {
                 const data = await res.json();
                 if (data?.data) {
                     setSelected(data.data);
+                    selectedRef.current = data.data;
                     const chRes = await fetch(`/api/manga/chapters/${initialId}?limit=500&order=asc`);
                     const chData = await chRes.json();
                     const chs = chData?.data || [];
@@ -273,21 +277,24 @@ export default function MangaPage() {
         }, 400);
     };
 
-    const handleBrowseTag = async (tag) => {
+    const handleBrowseTag = async (tag, offset = 0, append = false) => {
         setActiveTag(tag);
         setQuery("");
-        setResults([]);
         setLoading(true);
         try {
-            const res = await fetch(`/api/manga/tag/${tag.id}?limit=30`);
+            const res = await fetch(`/api/manga/tag/${tag.id}?limit=30&offset=${offset}`);
             const data = await res.json();
-            setResults(data?.data || []);
+            const items = data?.data || [];
+            setResults((prev) => (append ? [...prev, ...items] : items));
+            setTagOffset(offset + items.length);
+            setHasMore(items.length >= 30);
         } catch { /* silent */ }
         setLoading(false);
     };
 
     const handleSelect = async (item) => {
         setSelected(item);
+        selectedRef.current = item;
         setChapters([]);
         setCurrentCh(null);
         setPages([]);
@@ -313,8 +320,9 @@ export default function MangaPage() {
             setChapterError(err.message || "Failed to load chapter pages");
         }
         setLoadingChapter(null);
-        if (selected?.id) {
-            fetch(`/api/media-bookmarks/manga/${selected.id}/history`, {
+        const sel = selectedRef.current;
+        if (sel?.id) {
+            fetch(`/api/media-bookmarks/manga/${sel.id}/history`, {
                 method: "PATCH",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
@@ -322,8 +330,8 @@ export default function MangaPage() {
                     chapterId: ch.id,
                     chapterNum: ch.attributes?.chapter,
                     chapterTitle: ch.attributes?.title || (ch.attributes?.chapter ? `Chapter ${ch.attributes.chapter}` : null),
-                    title: selected.attributes?.title?.en || Object.values(selected.attributes?.title || {})[0] || "",
-                    coverUrl: getCover(selected),
+                    title: sel.attributes?.title?.en || Object.values(sel.attributes?.title || {})[0] || "",
+                    coverUrl: getCover(sel),
                 }),
             }).catch(() => {});
         }
@@ -461,7 +469,7 @@ export default function MangaPage() {
                                     {tags.map((tag) => (
                                         <button
                                             key={tag.id}
-                                            onClick={() => handleBrowseTag(tag)}
+                                            onClick={() => { setTagOffset(0); handleBrowseTag(tag); }}
                                             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                                                 activeTag?.id === tag.id
                                                     ? "bg-blue-500 text-white"
@@ -515,6 +523,17 @@ export default function MangaPage() {
                                         </button>
                                     ))}
                                 </div>
+                                {activeTag && hasMore && (
+                                    <div className="flex justify-center mt-6">
+                                        <button
+                                            onClick={() => handleBrowseTag(activeTag, tagOffset, true)}
+                                            disabled={loading}
+                                            className="px-6 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-full transition-colors disabled:opacity-50"
+                                        >
+                                            {loading ? "Loading..." : "Load more"}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
                         {loading && (
