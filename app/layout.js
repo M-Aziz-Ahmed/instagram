@@ -15,7 +15,7 @@ export const metadata = {
     default: "AnonTweet - Anonymous Social Media & Messaging Platform",
     template: "%s | AnonTweet"
   },
-  description: "AnonTweet is an anonymous social media platform to post, share stories, send messages, go live, and play games — all without revealing your identity. Speak freely. Join anonymous communities, trending feeds, and private chats.",
+  description: "Post, message, go live, and play games anonymously on AnonTweet. The secure, private social platform where you can share anything without revealing your identity.",
   keywords: [
     "anonymous social media",
     "anonymous posting",
@@ -110,14 +110,14 @@ const jsonLd = {
       url: "https://anontweet.vercel.app",
       name: "AnonTweet",
       description:
-        "Anonymous social media platform to post, message, go live, and play games without revealing your identity.",
+        "AnonTweet: anonymous social platform for posting, messaging, live streaming, and gaming. Share thoughts without revealing your identity.",
       inLanguage: "en-US",
       potentialAction: {
         "@type": "SearchAction",
         target: {
           "@type": "EntryPoint",
-          urlTemplate:
-            "https://anontweet.duckdns.org/search?q={search_term_string}",
+            urlTemplate:
+              "https://anontweet.vercel.app/search?q={search_term_string}",
         },
         "query-input": "required name=search_term_string",
       },
@@ -127,7 +127,7 @@ const jsonLd = {
       "@id": "https://anontweet.vercel.app/#organization",
       name: "AnonTweet",
       url: "https://anontweet.vercel.app",
-      logo: "https://anontweet.duckdns.org/icon-512.svg",
+      logo: "https://anontweet.vercel.app/icon-512.svg",
       sameAs: [],
     },
     {

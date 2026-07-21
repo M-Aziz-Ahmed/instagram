@@ -1,5 +1,5 @@
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://anontweet.duckdns.org";
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "https://anontweet.duckdns.org";
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://anontweet.vercel.app";
+const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "https://anontweet.vercel.app";
 
 const STATIC_ROUTES = [
   { url: "", priority: 1.0, changeFrequency: "daily" },
@@ -18,7 +18,7 @@ async function getPublicPosts() {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(`${LIVE_SERVER}/api/posts?limit=200`, {
+    const res = await fetch(`https://anontweet.vercel.app/api/posts?limit=200`, {
       signal: controller.signal,
       headers: { Accept: "application/json" },
       cache: "no-store",
@@ -58,7 +58,7 @@ export default async function sitemap() {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(`${LIVE_SERVER}/api/hashtags/trending?limit=50`, {
+    const res = await fetch(`https://anontweet.vercel.app/api/hashtags/trending?limit=50`, {
       signal: controller.signal,
       headers: { Accept: "application/json" },
       cache: "no-store",
