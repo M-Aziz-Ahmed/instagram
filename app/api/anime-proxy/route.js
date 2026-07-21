@@ -1,13 +1,5 @@
 import { NextResponse } from "next/server";
 
-const ALLOWED_HOSTS = [
-    "hianime.to",
-    "hianime.sx",
-    "hianime.nz",
-    "aniwatch.to",
-    "www3.hianime.to",
-];
-
 export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const targetUrl = searchParams.get("url");

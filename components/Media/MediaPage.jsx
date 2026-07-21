@@ -28,12 +28,15 @@ export default function MediaPage({ mediaType, config }) {
     const initialEp = searchParams.get("ep");
     const didInit = useRef(false);
 
-    const routeMap = { movie: "movies", kdrama: "kdramas", season: "seasons", cdrama: "cdramas", cartoon: "cartoons" };
+    const routeMap = { movie: "movies", kdrama: "kdramas", season: "seasons", cdrama: "cdramas", cartoon: "cartoons", anime: "anime" };
     const route = routeMap[mediaType] || mediaType;
 
     const fetchTrending = useCallback(async () => {
         try {
-            const res = await fetch(`${apiRoute}/${mediaType}/trending?time_window=week`);
+            const routePath = mediaType === "movie" ? 
+                `/api/movies/trending?time_window=week` :
+                `${apiRoute}/${route}/trending?time_window=week`;
+            const res = await fetch(routePath);
             if (!res.ok) {
                 if (res.status >= 500) {
                     console.warn(`TVMaze API server error: ${res.status}`);
@@ -89,7 +92,10 @@ export default function MediaPage({ mediaType, config }) {
         setLoading(true);
         setTrending([]);
         try {
-            const res = await fetch(`${apiRoute}/${mediaType}/search?q=${encodeURIComponent(q)}&page=${page}`);
+            const searchPath = mediaType === "movie" ? 
+                `/api/movies/search?q=${encodeURIComponent(q)}&page=${page}` :
+                `${apiRoute}/${mediaType}/search?q=${encodeURIComponent(q)}&page=${page}`;
+            const res = await fetch(searchPath);
             const data = await res.json();
             if (data?.results) {
                 setResults(append ? [...results, ...data.results] : data.results);
