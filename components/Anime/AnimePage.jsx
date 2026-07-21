@@ -227,7 +227,7 @@ export default function AnimePage() {
     const [spotlight, setSpotlight] = useState([]);
     const [loading, setLoading] = useState(false);
     const [selected, setSelected] = useState(null);
-    const [episodes, setEpisodes] = useState([]);
+    const [streamingLinks, setStreamingLinks] = useState([]);
     const [currentEp, setCurrentEp] = useState(null);
     const [streamUrl, setStreamUrl] = useState("");
     const [streamTitle, setStreamTitle] = useState("");
@@ -267,13 +267,13 @@ export default function AnimePage() {
 
     const handleSelect = async (item) => {
         setSelected(item);
-        setEpisodes([]);
+        setStreamingLinks([]);
         setCurrentEp(null);
         setStreamUrl("");
         try {
             const res = await fetch(`/api/anime/info/${encodeURIComponent(item.id)}`);
             const data = await res.json();
-            setEpisodes(data?.episodes || []);
+            if (data?.streamingEpisodes) setStreamingLinks(data.streamingEpisodes);
             if (data?.description) {
                 setSelected((prev) => ({ ...prev, description: data.description, genres: data.genres, status: data.status, totalEpisodes: data.totalEpisodes, releaseDate: data.releaseDate, otherNames: data.otherNames }));
             }
@@ -281,27 +281,18 @@ export default function AnimePage() {
     };
 
     const handlePlayEpisode = async (ep) => {
-        setCurrentEp(ep);
-        setStreamUrl("");
-        setStreamTitle(`Episode ${ep.number}${ep.title ? " - " + ep.title : ""}`);
-        try {
-            const res = await fetch(`/api/anime/watch/${encodeURIComponent(ep.id)}`);
-            const data = await res.json();
-            const sources = data?.sources || [];
-            const best = sources.find((s) => s.quality === "default") || sources[0];
-            if (best?.url) setStreamUrl(best.url);
-        } catch { /* silent */ }
+        if (ep.url) window.open(ep.url, "_blank", "noopener,noreferrer");
     };
 
     const streamLinks = selected ? [
-        { name: "Tubi", url: `https://tubitv.com/search/${encodeURIComponent(selected.title)}` },
-        { name: "Crunchyroll", url: `https://www.crunchyroll.com/search?q=${encodeURIComponent(selected.title)}` },
-        { name: "Anime-Planet", url: `https://www.anime-planet.com/anime/all?q=${encodeURIComponent(selected.title)}` },
+        { name: "Tubi", url: `https://tubitv.com/search/${encodeURIComponent(selected.title)}`, title: "Free on Tubi" },
+        { name: "Crunchyroll", url: `https://www.crunchyroll.com/search?q=${encodeURIComponent(selected.title)}`, title: "Search Crunchyroll" },
+        { name: "Anime-Planet", url: `https://www.anime-planet.com/anime/all?q=${encodeURIComponent(selected.title)}`, title: "Anime-Planet" },
     ] : [];
 
     const handleBack = () => {
         if (streamUrl) { setStreamUrl(""); setCurrentEp(null); }
-        else if (selected) { setSelected(null); setEpisodes([]); }
+        else if (selected) { setSelected(null); setStreamingLinks([]); }
     };
 
     const view = streamUrl ? "player" : selected ? "detail" : "grid";
@@ -339,32 +330,8 @@ export default function AnimePage() {
                 {/* Player View */}
                 {view === "player" && (
                     <div className="space-y-4">
-                        {streamUrl ? (
-                            <VideoPlayer src={streamUrl} title={streamTitle} poster={selected?.image} onBack={handleBack} />
-                        ) : (
-                            <div className="bg-gray-900 rounded-xl p-8 text-center">
-                                <div className="w-16 h-16 mx-auto mb-4 bg-gray-800 rounded-full flex items-center justify-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-gray-400">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.91 11.672a.375.375 0 0 1 0 .656l-5.603 3.113a.375.375 0 0 1-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112Z" />
-                                    </svg>
-                                </div>
-                                <h3 className="text-white font-bold text-lg mb-2">{streamTitle}</h3>
-                                <p className="text-gray-400 text-sm mb-6">Streaming not available directly. Watch on one of these free platforms:</p>
-                                <div className="flex flex-wrap justify-center gap-3">
-                                    {streamLinks.map((link) => (
-                                        <a key={link.name} href={link.url} target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-full transition-colors">
-                                            Watch on {link.name}
-                                        </a>
-                                    ))}
-                                </div>
-                                <button onClick={handleBack} className="mt-6 text-gray-400 text-sm hover:text-white transition-colors">
-                                    ← Back to episodes
-                                </button>
-                            </div>
-                        )}
+                        <VideoPlayer src={streamUrl} title={streamTitle} poster={selected?.image} onBack={handleBack} />
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{streamTitle}</p>
-                        <EpisodeList episodes={episodes} currentId={currentEp?.id} onSelect={handlePlayEpisode} />
                     </div>
                 )}
 
@@ -395,10 +362,43 @@ export default function AnimePage() {
                             {selected.description && (
                                 <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-line line-clamp-6">{selected.description}</p>
                             )}
-                        </div>
-                        <div className="lg:w-72 shrink-0">
-                            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">Episodes ({episodes.length})</h3>
-                            <EpisodeList episodes={episodes} currentId={currentEp?.id} onSelect={handlePlayEpisode} />
+                            {/* Streaming Links */}
+                            <div className="space-y-2">
+                                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Watch Now</h3>
+                                {streamingLinks.length > 0 ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {streamingLinks.map((ep, i) => (
+                                            <a
+                                                key={i}
+                                                href={ep.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-3 p-2.5 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors group"
+                                            >
+                                                {ep.thumbnail && <img src={ep.thumbnail} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />}
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{ep.title}</p>
+                                                    {ep.site && <p className="text-[10px] text-gray-400">{ep.site}</p>}
+                                                </div>
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5 text-gray-400 group-hover:text-blue-500 shrink-0 transition-colors">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                                                </svg>
+                                            </a>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <p className="text-xs text-gray-400">No streaming links available from AniList. Try these:</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {streamLinks.map((link) => (
+                                                <a key={link.name} href={link.url} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-full transition-colors">
+                                                    {link.title}
+                                                </a>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}
