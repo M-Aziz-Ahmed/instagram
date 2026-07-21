@@ -28,12 +28,17 @@ function isStaticPath(pathname) {
         pathname.startsWith("/_next") ||
         pathname.startsWith("/favicon") ||
         pathname.startsWith("/stockfish") ||
+        pathname === "/sitemap.xml" ||
+        pathname === "/robots.txt" ||
+        pathname === "/opengraph-image" ||
         pathname.endsWith(".ico") ||
         pathname.endsWith(".js") ||
         pathname.endsWith(".css") ||
         pathname.endsWith(".png") ||
         pathname.endsWith(".jpg") ||
         pathname.endsWith(".svg") ||
+        pathname.endsWith(".xml") ||
+        pathname.endsWith(".txt") ||
         pathname.endsWith(".woff2")
     );
 }
