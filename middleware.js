@@ -19,6 +19,7 @@ const PUBLIC_PATHS = [
     "/api/ads",
     "/api/trending",
     "/api/hashtags",
+    "/api/anime-proxy",
 ];
 
 function isPublicPath(pathname) {
