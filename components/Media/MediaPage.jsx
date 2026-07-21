@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import MediaCard from "./MediaCard";
 import MediaPlayer from "./MediaPlayer";
 import ImportDataButton from "@/components/common/ImportDataButton";
+import MediaBookmarkButton from "@/components/shared/MediaBookmarkButton";
 
 const fmtNum = (n) => (n == null ? "?" : n.toLocaleString());
 
