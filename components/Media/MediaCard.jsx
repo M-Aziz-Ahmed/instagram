@@ -22,13 +22,16 @@ export default function MediaCard({ item, mediaType, href, showRating = true, sh
     };
     const route = routeMap[mediaType] || mediaType;
 
+    // Only render Image if we have a valid URL
+    const hasImage = imageUrl && imageUrl.startsWith("http");
+
     return (
         <Link
             href={href || `/${route}?id=${item.id}`}
             className="group block"
         >
             <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
-                {imageUrl ? (
+                {hasImage ? (
                     <Image
                         src={imageUrl}
                         alt={title}

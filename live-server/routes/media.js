@@ -325,6 +325,11 @@ router.get("/:type/:id", async (req, res) => {
             return res.status(400).json({ error: "Use /api/anime/:id for anime" });
         }
 
+        // TVMaze only has TV shows - return 404 for movie type
+        if (type === "movie") {
+            return res.status(404).json({ error: "Movies not available via TVMaze" });
+        }
+
         const show = await withTimeout(
             fetch(`${TVMAZE_BASE}/shows/${id}?embed=episodes,cast,images`).then(r => {
                 if (!r.ok) throw new Error("Not found");
