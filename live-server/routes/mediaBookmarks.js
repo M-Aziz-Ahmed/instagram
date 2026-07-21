@@ -3,6 +3,50 @@ const fetch = require("node-fetch");
 const router = express.Router();
 const MediaBookmark = require("../models/mediaBookmark");
 
+const ANILIST_URL = "https://graphql.anilist.co";
+
+async function findAnilistId(mediaType, title, fallbackId) {
+    if (!title) return fallbackId;
+    try {
+        const query = `
+            query ($search: String, $type: MediaType) {
+                Page(perPage: 5) {
+                    media(search: $search, type: $type) {
+                        id
+                        title { romaji english native }
+                    }
+                }
+            }
+        `;
+        const res = await fetch(ANILIST_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "User-Agent": "AnonTweet/1.0" },
+            body: JSON.stringify({
+                query,
+                variables: { search: title, type: mediaType === "anime" ? "ANIME" : "MANGA" }
+            }),
+            timeout: 8000,
+        });
+        const data = await res.json();
+        const results = data.data?.Page?.media || [];
+        if (results.length === 0) return fallbackId;
+
+        const normalized = title.toLowerCase().replace(/[^a-z0-9]/g, "");
+        let match = results.find(m => {
+            const t = (m.title.romaji || m.title.english || m.title.native || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            return t === normalized;
+        });
+        if (!match) match = results.find(m => {
+            const t = (m.title.romaji || m.title.english || m.title.native || "").toLowerCase();
+            return t.includes(title.toLowerCase()) || title.toLowerCase().includes(t);
+        });
+        if (!match) match = results[0];
+        return match.id.toString();
+    } catch {
+        return fallbackId;
+    }
+}
+
 function optionalAuth(req, res, next) {
     const token = req.headers.authorization?.replace("Bearer ", "") || req.cookies?.af_session;
     if (!token) return next();
@@ -193,9 +237,12 @@ router.post("/import", optionalAuth, async (req, res) => {
     try {
         const sourceUsername = req.body.username || (req.userId ? await getUsername(req) : null);
         if (!sourceUsername) return res.status(401).json({ error: "Source user required" });
-        const { bookmarks } = req.body;
+        const { bookmarks, source } = req.body;
         if (!Array.isArray(bookmarks)) return res.status(400).json({ error: "Invalid bookmark data" });
+
         let imported = 0;
+        const results = [];
+
         for (const b of bookmarks) {
             const {
                 username,
@@ -217,35 +264,50 @@ router.post("/import", optionalAuth, async (req, res) => {
                 createdAt,
                 updatedAt,
                 _id,
+                externalIds,
             } = b;
-            if (!mediaType || !mediaId) continue;
-            const existing = await MediaBookmark.findOne({ username: sourceUsername, mediaType, mediaId });
-            if (!existing) {
-                await MediaBookmark.create({
-                    username: sourceUsername,
-                    mediaType,
-                    mediaId,
-                    title: title || "",
-                    coverUrl: coverUrl || "",
-                    status: status || "",
-                    totalChapters: totalChapters || null,
-                    lastReadChapter: lastReadChapter || null,
-                    lastReadChapterId: lastReadChapterId || null,
-                    lastReadChapterNum: lastReadChapterNum || null,
-                    readChapters: readChapters || [],
-                    lastWatchedEpisode: lastWatchedEpisode || null,
-                    readEpisode: readEpisode || null,
-                    newReleaseAvailable: newReleaseAvailable || false,
-                    newReleaseCount: newReleaseCount || 0,
-                    lastChecked: lastChecked ? new Date(lastChecked) : new Date(),
-                    createdAt: createdAt ? new Date(createdAt) : new Date(),
-                    updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
-                });
-                imported++;
+
+            if (!mediaType || (!mediaId && !title)) continue;
+
+            // Cross-site ID mapping: try to find AniList ID by title
+            let mappedId = mediaId;
+            if (title && (source || !/^\d+$/.test(mediaId))) {
+                mappedId = await findAnilistId(mediaType, title, mediaId);
             }
+
+            // Check for existing bookmark (use mapped ID)
+            const existing = await MediaBookmark.findOne({ username: sourceUsername, mediaType, mediaId: mappedId });
+            if (existing) {
+                results.push({ mediaId: mappedId, title, status: "skipped", reason: "already exists" });
+                continue;
+            }
+
+            await MediaBookmark.create({
+                username: sourceUsername,
+                mediaType,
+                mediaId: mappedId,
+                title: title || "",
+                coverUrl: coverUrl || "",
+                status: status || "",
+                totalChapters: totalChapters || null,
+                lastReadChapter: lastReadChapter || null,
+                lastReadChapterId: lastReadChapterId || null,
+                lastReadChapterNum: lastReadChapterNum || null,
+                readChapters: readChapters || [],
+                lastWatchedEpisode: lastWatchedEpisode || null,
+                readEpisode: readEpisode || null,
+                newReleaseAvailable: newReleaseAvailable || false,
+                newReleaseCount: newReleaseCount || 0,
+                lastChecked: lastChecked ? new Date(lastChecked) : new Date(),
+                createdAt: createdAt ? new Date(createdAt) : new Date(),
+                updatedAt: updatedAt ? new Date(updatedAt) : new Date(),
+            });
+            imported++;
+            results.push({ mediaId: mappedId, title, status: "imported", sourceId: mediaId });
         }
+
         const updated = await MediaBookmark.find({ username: sourceUsername }).sort({ updatedAt: -1 }).lean();
-        res.json({ imported, bookmarks: updated });
+        res.json({ imported, results, bookmarks: updated });
     } catch (err) {
         console.error("Import bookmarks error:", err.message);
         res.status(500).json({ error: "Failed to import bookmarks" });
@@ -322,5 +384,25 @@ router.post("/check-releases", requireAuth, async (req, res) => {
         return res.status(500).json({ error: "Failed to check releases" });
     }
 });
+
+// Cross-site ID mapping: find AniList ID by title using AniList search
+async function findAnilistId(mediaType, title, fallbackId) {
+    try {
+        const query = mediaType === "anime"
+            ? `query ($search: String) { Media(search: $search, type: ANIME) { id title { romaji english native } } }`
+            : `query ($search: String) { Media(search: $search, type: MANGA) { id title { romaji english native } } }`;
+        const res = await fetch("https://graphql.anilist.co", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "User-Agent": "AnonTweet/1.0" },
+            body: JSON.stringify({ query, variables: { search: title } }),
+            timeout: 8000,
+        });
+        if (!res.ok) return fallbackId;
+        const data = await res.json();
+        const media = data.data?.Media;
+        if (media?.id) return String(media.id);
+    } catch {}
+    return fallbackId;
+}
 
 module.exports = router;
