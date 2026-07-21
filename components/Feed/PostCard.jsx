@@ -23,6 +23,63 @@ import { timeAgo } from "@/utils/timeAgo";
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
+function ImageCarousel({ images, onImageClick, showHeart }) {
+    const [idx, setIdx] = useState(0);
+    const touchX = useRef(null);
+
+    const go = (dir) => setIdx((i) => Math.max(0, Math.min(images.length - 1, i + dir)));
+    const onTouchStart = (e) => { touchX.current = e.touches[0].clientX; };
+    const onTouchEnd = (e) => {
+        if (touchX.current == null) return;
+        const diff = touchX.current - e.changedTouches[0].clientX;
+        if (Math.abs(diff) > 40) go(diff > 0 ? 1 : -1);
+        touchX.current = null;
+    };
+
+    return (
+        <div className="mt-3 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 relative select-none">
+            <div
+                className="relative cursor-pointer"
+                onClick={() => onImageClick?.(images[idx])}
+                onTouchStart={onTouchStart}
+                onTouchEnd={onTouchEnd}
+            >
+                <div className="flex transition-transform duration-300 ease-out" style={{ transform: `translateX(-${idx * 100}%)` }}>
+                    {images.map((src, i) => (
+                        <img key={i} src={src} alt="" className="w-full shrink-0 h-auto block" loading="lazy" />
+                    ))}
+                </div>
+                {showHeart && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-20 h-20 text-white drop-shadow-lg animate-heart-burst">
+                            <path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
+                        </svg>
+                    </div>
+                )}
+            </div>
+            {images.length > 1 && (
+                <>
+                    {idx > 0 && (
+                        <button onClick={(e) => { e.stopPropagation(); go(-1); }} className="absolute left-1.5 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs transition-colors z-10">
+                            ‹
+                        </button>
+                    )}
+                    {idx < images.length - 1 && (
+                        <button onClick={(e) => { e.stopPropagation(); go(1); }} className="absolute right-1.5 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs transition-colors z-10">
+                            ›
+                        </button>
+                    )}
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 z-10">
+                        {images.map((_, i) => (
+                            <div key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${i === idx ? "bg-white" : "bg-white/40"}`} />
+                        ))}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
 function HeartIcon({ filled }) {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" fill={filled ? "currentColor" : "none"}
@@ -666,8 +723,9 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
             scrollDetectedRef.current = false;
             return;
         }
+        const mainImage = (post.imageUrls?.length > 0 ? post.imageUrls[0] : post.imageUrl) || post.imageUrl;
         if (!user) {
-            setLightboxSrc(post.imageUrl);
+            setLightboxSrc(mainImage);
             return;
         }
         const now = Date.now();
@@ -680,7 +738,7 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
         } else {
             // Single tap — wait to see if double tap follows
             singleTapTimer.current = setTimeout(() => {
-                setLightboxSrc(post.imageUrl);
+                setLightboxSrc(mainImage);
             }, 300);
         }
         lastTapRef.current = now;
@@ -983,12 +1041,17 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                         )}
                                     </button>
                                 )}
-                                {post._originalPost.imageUrl && (
-                                    <div className="mt-2 rounded-lg overflow-hidden">
-                                        <img src={post._originalPost.imageUrl} alt="" className="w-full h-auto block" loading="lazy" />
-                                    </div>
-                                )}
-                                {post._originalPost.audioUrl && !post._originalPost.text && !post._originalPost.imageUrl && (
+                                {(post._originalPost.imageUrl || post._originalPost.imageUrls?.length > 0) && (() => {
+                                    const imgs = post._originalPost.imageUrls?.length > 0 ? post._originalPost.imageUrls : [post._originalPost.imageUrl];
+                                    return imgs.length === 1 ? (
+                                        <div className="mt-2 rounded-lg overflow-hidden">
+                                            <img src={imgs[0]} alt="" className="w-full h-auto block" loading="lazy" />
+                                        </div>
+                                    ) : (
+                                        <ImageCarousel images={imgs} onImageClick={(src) => setLightboxSrc(src)} />
+                                    );
+                                })()}
+                                {post._originalPost.audioUrl && !post._originalPost.text && !(post._originalPost.imageUrl || post._originalPost.imageUrls?.length) && (
                                     <div className="mt-2 max-w-xs">
                                         <AudioPlayer src={post._originalPost.audioUrl} />
                                     </div>
@@ -1052,36 +1115,40 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         </div>
                     ) : null)}
 
-                    {post.audioUrl && !post.text && !post.imageUrl && (
+                    {post.audioUrl && !post.text && !post.imageUrl && !(post.imageUrls?.length) && (
                         <div className="mt-2 max-w-xs">
                             <AudioPlayer src={post.audioUrl} />
                         </div>
                     )}
 
-                    {post.imageUrl && (
-                        <div
-                            ref={imageRef}
-                            className="mt-3 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 relative cursor-pointer select-none"
-                            onClick={handleImageTap}
-                            onTouchStart={handleTouchStart}
-                            onTouchEnd={handleTouchEnd}
-                        >
-                            <img
-                                src={post.imageUrl}
-                                alt="Post image"
-                                className="w-full h-auto block"
-                                loading="lazy"
-                            />
-                            {/* Double-tap heart animation */}
-                            {showHeart && (
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-20 h-20 text-white drop-shadow-lg animate-heart-burst">
-                                        <path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
-                                    </svg>
-                                </div>
-                            )}
-                        </div>
-                    )}
+                    {(post.imageUrl || post.imageUrls?.length > 0) && (() => {
+                        const allImages = post.imageUrls?.length > 0 ? post.imageUrls : [post.imageUrl];
+                        return allImages.length === 1 ? (
+                            <div
+                                ref={imageRef}
+                                className="mt-3 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 relative cursor-pointer select-none"
+                                onClick={handleImageTap}
+                                onTouchStart={handleTouchStart}
+                                onTouchEnd={handleTouchEnd}
+                            >
+                                <img
+                                    src={allImages[0]}
+                                    alt="Post image"
+                                    className="w-full h-auto block"
+                                    loading="lazy"
+                                />
+                                {showHeart && (
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-20 h-20 text-white drop-shadow-lg animate-heart-burst">
+                                            <path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
+                                        </svg>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <ImageCarousel images={allImages} onImageClick={(src) => setLightboxSrc(src)} showHeart={showHeart} />
+                        );
+                    })()}
 
                     {post.poll?.enabled && (
                         <PollCard

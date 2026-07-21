@@ -38,7 +38,7 @@ export default function PollCard({ post, onPollUpdate }) {
         if (!user || voting || isExpired || hasVoted) return;
         setVoting(true);
         try {
-            const res = await fetch(`/api/posts/${post._id}/poll`, {
+            const res = await fetch(`/api/posts/${post._id}/poll/vote`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: user.username, optionIndex: idx }),

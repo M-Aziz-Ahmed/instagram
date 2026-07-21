@@ -177,7 +177,7 @@ router.get("/", async (req, res) => {
 // POST /
 router.post("/", verifyToken, async (req, res) => {
     try {
-        const { text, imageUrl, audioUrl, visibility, poll } = req.body;
+        const { text, imageUrl, imageUrls, audioUrl, visibility, poll } = req.body;
         const username = req.body.sender || req.session?.userId;
 
         const senderUser = await User.findById(req.userId).select("username avatarUrl").lean();
@@ -190,7 +190,10 @@ router.post("/", verifyToken, async (req, res) => {
         if (sanitizedText.length > 1000) {
             return res.status(400).json({ error: "Text exceeds maximum length of 1000 characters" });
         }
-        if (!sanitizedText && !imageUrl && !audioUrl) {
+        const finalImageUrls = Array.isArray(imageUrls) && imageUrls.length > 0
+            ? imageUrls.filter(Boolean).slice(0, 10)
+            : (imageUrl ? [imageUrl] : []);
+        if (!sanitizedText && finalImageUrls.length === 0 && !audioUrl) {
             return res.status(400).json({ error: "Post must have text, an image, or audio" });
         }
 
@@ -198,9 +201,10 @@ router.post("/", verifyToken, async (req, res) => {
         const mentions = extractMentions(sanitizedText, sender);
 
         const post = await Post.create({
-            text:     sanitizedText,
-            imageUrl: imageUrl || "",
-            audioUrl: audioUrl || "",
+            text:      sanitizedText,
+            imageUrl:  finalImageUrls[0] || "",
+            imageUrls: finalImageUrls,
+            audioUrl:  audioUrl || "",
             sender:   sender.trim(),
             color:    senderUser?.avatarColor || "#3b82f6",
             avatarUrl: senderUser?.avatarUrl || "",

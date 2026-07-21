@@ -15,8 +15,8 @@ export default function Compose({ onPosted }) {
     const { user } = useUser();
     const { showToast } = useToast();
     const [text, setText]                 = useState("");
-    const [preview, setPreview]           = useState(null);
-    const [imageFile, setImageFile]       = useState(null);
+    const [imageFiles, setImageFiles]     = useState([]);
+    const [previews, setPreviews]         = useState([]);
     const [audioUrl, setAudioUrl]         = useState("");
     const [posting, setPosting]           = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
@@ -43,20 +43,27 @@ export default function Compose({ onPosted }) {
     }, []);
 
     const handleFile = (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        if (file.size > 20 * 1024 * 1024) {
-            setError("Image must be under 20 MB.");
-            return;
-        }
-        setImageFile(file);
-        setPreview(URL.createObjectURL(file));
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+        const valid = files.filter(f => f.size <= 20 * 1024 * 1024).slice(0, 10 - imageFiles.length);
+        if (valid.length < files.length) setError("Some images exceeded 20 MB and were skipped.");
+        setImageFiles(prev => [...prev, ...valid]);
+        setPreviews(prev => [...prev, ...valid.map(f => URL.createObjectURL(f))]);
         setError("");
     };
 
-    const removeImage = () => {
-        setPreview(null);
-        setImageFile(null);
+    const removeImage = (idx) => {
+        URL.revokeObjectURL(previews[idx]);
+        setImageFiles(prev => prev.filter((_, i) => i !== idx));
+        setPreviews(prev => prev.filter((_, i) => i !== idx));
+        setShowGif(false);
+        if (imageFiles.length <= 1 && fileRef.current) fileRef.current.value = "";
+    };
+
+    const clearImages = () => {
+        previews.forEach(u => URL.revokeObjectURL(u));
+        setImageFiles([]);
+        setPreviews([]);
         setUploadProgress(0);
         setShowGif(false);
         if (fileRef.current) fileRef.current.value = "";
@@ -85,11 +92,11 @@ export default function Compose({ onPosted }) {
         });
 
     const handlePost = async () => {
-        // Validate input
         const trimmedText = text.trim();
-        if ((!trimmedText && !imageFile && !preview && !audioUrl) || posting || !user) return;
+        const hasGif = previews.some(u => u.includes("media.giphy.com"));
+        const hasImages = imageFiles.length > 0 || previews.some(u => !u.includes("media.giphy.com"));
+        if ((!trimmedText && !hasImages && !hasGif && !audioUrl) || posting || !user) return;
         
-        // Check text length limit
         if (trimmedText.length > 500) {
             setError("Post text cannot exceed 500 characters");
             return;
@@ -99,24 +106,27 @@ export default function Compose({ onPosted }) {
         setError("");
         setUploadProgress(0);
         try {
-            let imageUrl = "";
-            if (imageFile) {
+            const uploadedUrls = [];
+            for (const file of imageFiles) {
                 try {
-                    imageUrl = await uploadToCloudinary(imageFile);
+                    const url = await uploadToCloudinary(file);
+                    uploadedUrls.push(url);
                 } catch (uploadErr) {
-                    setError("Failed to upload image. Please try again.");
+                    setError("Failed to upload an image. Please try again.");
                     return;
                 }
-            } else if (preview) {
-                imageUrl = preview;
             }
+            const gifUrls = previews.filter(u => u.includes("media.giphy.com") && !uploadedUrls.includes(u));
+            const allImageUrls = [...uploadedUrls, ...gifUrls];
+
             const res = await fetch("/api/posts", {
                 method:  "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
                 body:    JSON.stringify({
                     text:     trimmedText,
-                    imageUrl,
+                    imageUrl: allImageUrls[0] || "",
+                    imageUrls: allImageUrls,
                     audioUrl: audioUrl || "",
                     sender:   user.username,
                     color:    user.color,
@@ -137,7 +147,7 @@ export default function Compose({ onPosted }) {
                 return;
             }
             setText("");
-            removeImage();
+            clearImages();
             setAudioUrl("");
             setShowPoll(false);
             setPollOptions(["", ""]);
@@ -154,7 +164,9 @@ export default function Compose({ onPosted }) {
     };
 
     const hasValidPoll = showPoll && pollOptions.filter(o => o.trim()).length >= 2;
-    const canPost = ((text.trim().length > 0 || !!imageFile || !!preview || !!audioUrl) || hasValidPoll) && !posting;
+    const hasGif = previews.some(u => u.includes("media.giphy.com"));
+    const hasMedia = imageFiles.length > 0 || previews.some(u => !u.includes("media.giphy.com"));
+    const canPost = ((text.trim().length > 0 || hasMedia || hasGif || !!audioUrl) || hasValidPoll) && !posting;
 
     return (
         <div id="compose" className="border-b border-gray-200 dark:border-gray-800 p-4">
@@ -180,33 +192,47 @@ export default function Compose({ onPosted }) {
                         submitting={posting}
                     />
 
-                    {preview && (
-                        <div className="relative w-full rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700">
-                            <img src={preview} alt="Preview" className="w-full max-h-80 object-contain bg-gray-50 dark:bg-gray-800" />
+                    {previews.length > 0 && (
+                        <div className={`rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 ${previews.length > 1 ? "grid grid-cols-2 gap-1" : ""}`}>
+                            {previews.map((src, idx) => (
+                                <div key={idx} className="relative">
+                                    <img src={src} alt={`Preview ${idx + 1}`} className={`w-full object-contain bg-gray-50 dark:bg-gray-800 ${previews.length === 1 ? "max-h-80" : "max-h-48"}`} />
+                                    {!posting && (
+                                        <button
+                                            onClick={() => removeImage(idx)}
+                                            aria-label="Remove image"
+                                            className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center hover:bg-black/80 transition-colors"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                                strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
                             {posting && uploadProgress > 0 && uploadProgress < 100 && (
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-700">
+                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-700 col-span-full">
                                     <div
                                         className="h-full bg-blue-500 transition-all duration-200"
                                         style={{ width: `${uploadProgress}%` }}
                                     />
                                 </div>
                             )}
-                            {!posting && (
+                            {!posting && previews.length < 10 && imageFiles.length < 10 && (
                                 <button
-                                    onClick={removeImage}
-                                    aria-label="Remove image"
-                                    className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center hover:bg-black/80 transition-colors"
+                                    onClick={() => fileRef.current?.click()}
+                                    className="flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors min-h-[120px]"
                                 >
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                        strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-gray-400">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                     </svg>
                                 </button>
                             )}
                         </div>
                     )}
 
-                    {audioUrl && !preview && (
+                    {audioUrl && previews.length === 0 && (
                         <div className="relative inline-flex">
                             <div className="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 text-blue-500">
@@ -387,7 +413,7 @@ export default function Compose({ onPosted }) {
                             )}
                         </div>
 
-                        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+                        <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFile} />
 
                         <button
                             onClick={handlePost}
