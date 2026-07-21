@@ -2,20 +2,7 @@ const express = require("express");
 const fetch = require("node-fetch");
 const router = express.Router();
 
-const TMDB_KEY = process.env.TMDB_API_KEY;
-const TMDB_BASE = "https://api.themoviedb.org/3";
-const TMDB_IMG = "https://image.tmdb.org/t/p/w500";
-
-function requireTMDBKey(req, res, next) {
-    if (!TMDB_KEY) {
-        return res.status(503).json({ 
-            error: "TMDB API not configured", 
-            message: "Please set TMDB_API_KEY in live-server/.env to use this feature",
-            digest: "MISSING_TMDB_KEY"
-        });
-    }
-    next();
-}
+const TVMAZE_BASE = "https://api.tvmaze.com";
 
 const {
     MediaSource,
@@ -55,206 +42,83 @@ async function getUsername(req) {
     return user?.username;
 }
 
-function formatTMDBMedia(item, mediaType) {
+function formatTVMazeShow(show, mediaType) {
     const source = getMediaSource(mediaType);
+    const genres = show.genres || [];
+    const network = show.network?.name || show.webChannel?.name || "";
+    const status = show.status || "";
+    const runtime = show.runtime || 0;
+    const premiered = show.premiered || "";
+    const ended = show.ended || "";
+    const image = show.image ? { medium: show.image.medium, original: show.image.original } : null;
+
     return {
-        id: item.id.toString(),
-        title: item.title || item.name || "Unknown",
-        originalTitle: item.original_title || item.original_name || "",
-        overview: item.overview || "",
-        posterPath: item.poster_path ? TMDB_IMG + item.poster_path : "",
-        backdropPath: item.backdrop_path ? TMDB_IMG + item.backdrop_path : "",
-        releaseDate: item.release_date || item.first_air_date || "",
-        firstAirDate: item.first_air_date || "",
-        voteAverage: item.vote_average || 0,
-        voteCount: item.vote_count || 0,
-        popularity: item.popularity || 0,
-        genreIds: item.genre_ids || [],
-        adult: item.adult || false,
-        originalLanguage: item.original_language || "",
-        mediaType: mediaType,
+        id: show.id.toString(),
+        tvmazeId: show.id,
+        title: show.name,
+        originalTitle: show.name,
+        overview: show.summary ? show.summary.replace(/<[^>]*>/g, "") : "",
+        posterPath: image?.medium || "",
+        backdropPath: image?.original || "",
+        releaseDate: premiered,
+        firstAirDate: premiered,
+        lastAirDate: ended,
+        voteAverage: show.rating?.average ? show.rating.average / 2 : 0,
+        voteCount: show.rating?.average ? 1 : 0,
+        popularity: show.weight || 0,
+        genreIds: genres.map(g => g.toLowerCase().replace(/[^a-z]/g, "")),
+        genres: genres,
+        adult: false,
+        originalLanguage: show.language || "en",
+        mediaType: mediaType === "movie" ? "movie" : "tv",
         source: source.label,
+        status,
+        network,
+        runtime,
+        numberOfSeasons: show._embedded?.episodes ? [...new Set(show._embedded.episodes.map(e => e.season))].length : null,
+        numberOfEpisodes: show._embedded?.episodes?.length || null,
+        externals: show.externals || {},
+        schedule: show.schedule || {},
     };
 }
 
-function formatTMDBDetail(data, mediaType) {
-    const source = getMediaSource(mediaType);
+function formatTVMazeEpisode(ep) {
     return {
-        id: data.id.toString(),
-        title: data.title || data.name || "Unknown",
-        originalTitle: data.original_title || data.original_name || "",
-        overview: data.overview || "",
-        posterPath: data.poster_path ? TMDB_IMG + data.poster_path : "",
-        backdropPath: data.backdrop_path ? TMDB_IMG + data.backdrop_path : "",
-        releaseDate: data.release_date || data.first_air_date || "",
-        firstAirDate: data.first_air_date || "",
-        lastAirDate: data.last_air_date || "",
-        voteAverage: data.vote_average || 0,
-        voteCount: data.vote_count || 0,
-        popularity: data.popularity || 0,
-        genres: (data.genres || []).map(g => g.name),
-        genreIds: (data.genres || []).map(g => g.id),
-        adult: data.adult || false,
-        originalLanguage: data.original_language || "",
-        status: data.status || "",
-        numberOfSeasons: data.number_of_seasons || null,
-        numberOfEpisodes: data.number_of_episodes || null,
-        episodeRunTime: data.episode_run_time || [],
-        languages: data.languages || [],
-        networks: (data.networks || []).map(n => n.name),
-        productionCompanies: (data.production_companies || []).map(c => c.name),
-        productionCountries: (data.production_countries || []).map(c => c.name),
-        spokenLanguages: (data.spoken_languages || []).map(l => l.english_name),
-        mediaType: mediaType,
-        source: source.label,
-        externalIds: data.external_ids || {},
+        id: ep.id.toString(),
+        episodeNumber: ep.number,
+        seasonNumber: ep.season,
+        name: ep.name,
+        overview: ep.summary ? ep.summary.replace(/<[^>]*>/g, "") : "",
+        airDate: ep.airdate,
+        runtime: ep.runtime,
+        voteAverage: ep.rating?.average ? ep.rating.average / 2 : 0,
+        stillPath: ep.image?.medium || ep.image?.original || "",
     };
 }
 
-async function tmdbSearch(query, mediaType, page = 1) {
-    const source = getMediaSource(mediaType);
-    let endpoint;
-    let type;
-
-    if (mediaType === "movie") {
-        endpoint = "/search/movie";
-        type = "movie";
-    } else {
-        endpoint = "/search/tv";
-        type = "tv";
-    }
-
-    const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(query)}&page=${page}&language=en-US`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`TMDB search failed: ${res.status}`);
-    const data = await res.json();
-
-    return {
-        results: (data.results || []).map(item => formatTMDBMedia(item, type)),
-        totalPages: data.total_pages || 1,
-        totalResults: data.total_results || 0,
-        page: data.page || 1,
-    };
-}
-
-async function tmdbDiscover(mediaType, options = {}) {
-    const {
-        page = 1,
-        sortBy = "popularity.desc",
-        withGenres,
-        withKeywords,
-        year,
-        language = "en",
-        region,
-        includeAdult = false,
-    } = options;
-
-    let endpoint;
-    if (mediaType === "movie") endpoint = "/discover/movie";
-    else endpoint = "/discover/tv";
-
-    const params = new URLSearchParams({
-        api_key: TMDB_KEY,
-        page,
-        sort_by: sortBy,
-        language: "en-US",
-        include_adult: includeAdult,
-    });
-
-    if (withGenres) params.append("with_genres", withGenres);
-    if (withKeywords) params.append("with_keywords", withKeywords);
-    if (year) params.append("year", year);
-    if (language) params.append("with_original_language", language);
-    if (region) params.append("with_origin_country", region);
-
-    const url = `${TMDB_BASE}${endpoint}?${params.toString()}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`TMDB discover failed: ${res.status}`);
-    const data = await res.json();
-
-    return {
-        results: (data.results || []).map(item => formatTMDBMedia(item, mediaType === "movie" ? "movie" : "tv")),
-        totalPages: data.total_pages || 1,
-        totalResults: data.total_results || 0,
-        page: data.page || 1,
-    };
-}
-
-async function tmdbDetail(id, mediaType) {
-    let endpoint;
-    if (mediaType === "movie") endpoint = `/movie/${id}`;
-    else endpoint = `/tv/${id}`;
-
-    const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_KEY}&language=en-US&append_to_response=external_ids,credits,videos,images,keywords,recommendations,similar,translations`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`TMDB detail failed: ${res.status}`);
-    const data = await res.json();
-    return formatTMDBDetail(data, mediaType === "movie" ? "movie" : "tv");
-}
-
-async function tmdbSeasonDetail(seriesId, seasonNumber) {
-    const url = `${TMDB_BASE}/tv/${seriesId}/season/${seasonNumber}?api_key=${TMDB_KEY}&language=en-US`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`TMDB season detail failed: ${res.status}`);
-    return await res.json();
-}
-
-async function tmdbEpisodeDetail(seriesId, seasonNumber, episodeNumber) {
-    const url = `${TMDB_BASE}/tv/${seriesId}/season/${seasonNumber}/episode/${episodeNumber}?api_key=${TMDB_KEY}&language=en-US`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`TMDB episode detail failed: ${res.status}`);
-    return await res.json();
-}
-
-async function tmdbGenres(mediaType) {
-    let endpoint;
-    if (mediaType === "movie") endpoint = "/genre/movie/list";
-    else endpoint = "/genre/tv/list";
-
-    const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_KEY}&language=en-US`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`TMDB genres failed: ${res.status}`);
-    const data = await res.json();
-    return data.genres || [];
-}
-
-function getStreamUrl(mediaType, id, season, episode) {
-    const source = getMediaSource(mediaType);
-    const baseUrl = process.env.STREAM_BASE || "https://vidsrc.xyz";
-
-    if (mediaType === "movie") {
-        return `${baseUrl}/embed/movie/${id}`;
-    } else {
-        if (season && episode) {
-            return `${baseUrl}/embed/tv/${id}/${season}/${episode}`;
-        }
-        return `${baseUrl}/embed/tv/${id}`;
-    }
-}
-
-async function getTMDBExternalIds(id, mediaType) {
-    let endpoint;
-    if (mediaType === "movie") endpoint = `/movie/${id}/external_ids`;
-    else endpoint = `/tv/${id}/external_ids`;
-
-    const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_KEY}`;
-    const res = await fetch(url);
-    if (!res.ok) return {};
-    return await res.json();
-}
-
-function withTimeout(promise, ms) {
+async function withTimeout(promise, ms) {
     return Promise.race([
         promise,
         new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
     ]);
 }
 
+function getStreamUrl(mediaType, id, season, episode) {
+    if (mediaType === "movie") {
+        return `https://vidsrc.xyz/embed/movie/${id}`;
+    } else {
+        if (season && episode) {
+            return `https://vidsrc.xyz/embed/tv/${id}/${season}/${episode}`;
+        }
+        return `https://vidsrc.xyz/embed/tv/${id}`;
+    }
+}
+
+// ── Search ─────────────────────────────────────────────────────────
 router.get("/:type/search", async (req, res) => {
     try {
         const { type } = req.params;
         const { q, page = 1 } = req.query;
-
         if (!q) return res.status(400).json({ error: "Query required" });
 
         const source = getMediaSource(type);
@@ -262,62 +126,76 @@ router.get("/:type/search", async (req, res) => {
             return res.status(400).json({ error: "Use /api/anime/search for anime" });
         }
 
-        const result = await withTimeout(
-            tmdbSearch(q, source.searchType.toLowerCase(), parseInt(page)),
+        const results = await withTimeout(
+            fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(q)}`).then(r => r.json()),
             10000
         );
 
-        res.json({
-            type,
-            ...result,
-        });
+        const formatted = results
+            .filter(r => r.show && (type === "movie" || r.show.type === "Scripted"))
+            .map(r => formatTVMazeShow(r.show, type))
+            .slice(0, 20);
+
+        res.json({ type, results: formatted, page: parseInt(page), totalPages: 1, totalResults: formatted.length });
     } catch (err) {
         console.error(`${req.params.type} search error:`, err.message);
         res.status(502).json({ error: "Search unavailable" });
     }
 });
 
+// ── Discover / Browse ──────────────────────────────────────────────
 router.get("/:type/discover", async (req, res) => {
     try {
         const { type } = req.params;
-        const {
-            page = 1,
-            sort = "popularity.desc",
-            genre,
-            year,
-            language,
-            region,
-            adult = false,
-        } = req.query;
+        const { page = 1, genre, country, sort = "popularity" } = req.query;
 
         const source = getMediaSource(type);
         if (!source || source.type === "anime") {
             return res.status(400).json({ error: "Use /api/anime for anime" });
         }
 
-        const result = await withTimeout(
-            tmdbDiscover(source.searchType.toLowerCase(), {
-                page: parseInt(page),
-                sortBy: sort,
-                withGenres: genre,
-                year: year ? parseInt(year) : undefined,
-                language,
-                region,
-                includeAdult: adult === "true",
-            }),
-            10000
-        );
+        // TVMaze doesn't have discover - use search with genre terms or schedule
+        let results;
+        if (country) {
+            const schedule = await withTimeout(
+                fetch(`${TVMAZE_BASE}/schedule?country=${country}`).then(r => r.json()),
+                10000
+            );
+            const uniqueShows = [];
+            const seen = new Set();
+            for (const item of schedule) {
+                if (item.show && !seen.has(item.show.id)) {
+                    seen.add(item.show.id);
+                    uniqueShows.push(item.show);
+                    if (uniqueShows.length >= 20) break;
+                }
+            }
+            results = uniqueShows;
+        } else if (genre) {
+            const searchResults = await withTimeout(
+                fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(genre)}`).then(r => r.json()),
+                10000
+            );
+            results = searchResults.map(r => r.show).filter(s => s.genres?.includes(genre));
+        } else {
+            // Fallback: popular search
+            const popular = ["game of thrones", "breaking bad", "stranger things", "the office", "friends", "the witcher", "mandalorian", "squid game", "attack on titan", "one piece"];
+            const promises = popular.slice(0, 10).map(q =>
+                fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(q)}`).then(r => r.json())
+            );
+            const allResults = await Promise.all(promises);
+            results = allResults.flatMap(r => r.map(x => x.show)).filter((s, i, a) => a.findIndex(x => x.id === s.id) === i);
+        }
 
-        res.json({
-            type,
-            ...result,
-        });
+        const formatted = (results || []).map(s => formatTVMazeShow(s, type)).slice(0, 20);
+        res.json({ type, results: formatted, page: parseInt(page), totalPages: 1, totalResults: formatted.length });
     } catch (err) {
         console.error(`${req.params.type} discover error:`, err.message);
         res.status(502).json({ error: "Discover unavailable" });
     }
 });
 
+// ── Trending ───────────────────────────────────────────────────────
 router.get("/:type/trending", async (req, res) => {
     try {
         const { type } = req.params;
@@ -328,44 +206,39 @@ router.get("/:type/trending", async (req, res) => {
             return res.status(400).json({ error: "Use /api/anime/trending for anime" });
         }
 
-        const endpoint = source.searchType.toLowerCase() === "movie"
-            ? `/trending/movie/${time_window}`
-            : `/trending/tv/${time_window}`;
+        // TVMaze doesn't have trending - use a curated popular list
+        const popularQueries = ["game of thrones", "breaking bad", "stranger things", "the office", "friends", "the witcher", "mandalorian", "squid game", "attack on titan", "one piece", "the last of us", "house of the dragon", "better call saul", "chernobyl", "the boys"];
+        const promises = popularQueries.slice(0, 12).map(q =>
+            fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(q)}`).then(r => r.json())
+        );
+        const allResults = await Promise.all(promises);
+        const shows = allResults.flatMap(r => r.map(x => x.show)).filter((s, i, a) => a.findIndex(x => x.id === s.id) === i);
 
-        const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_KEY}`;
-        const res_tmdb = await fetch(url);
-        if (!res_tmdb.ok) throw new Error(`TMDB trending failed: ${res_tmdb.status}`);
-        const data = await res_tmdb.json();
-
-        const results = (data.results || []).map(item => formatTMDBMedia(item, source.searchType.toLowerCase()));
-
-        res.json({ type, results, totalResults: data.total_results || 0 });
+        const formatted = shows.slice(0, 18).map(s => formatTVMazeShow(s, type));
+        res.json({ type, results: formatted, totalResults: formatted.length });
     } catch (err) {
         console.error(`${req.params.type} trending error:`, err.message);
         res.status(502).json({ error: "Trending unavailable" });
     }
 });
 
+// ── Genres ─────────────────────────────────────────────────────────
 router.get("/:type/genres", async (req, res) => {
     try {
         const { type } = req.params;
         const source = getMediaSource(type);
-        if (!source || source.type === "anime") {
-            return res.status(400).json({ error: "Use /api/anime/genres for anime" });
-        }
+        if (!source) return res.status(400).json({ error: "Invalid media type" });
 
-        const genres = await withTimeout(
-            tmdbGenres(source.searchType.toLowerCase()),
-            8000
-        );
-
-        res.json({ type, genres });
+        // TVMaze genres are just strings in show.genres
+        const commonGenres = ["Action", "Adventure", "Animation", "Comedy", "Crime", "Drama", "Fantasy", "Horror", "Mystery", "Romance", "Sci-Fi", "Thriller", "Western", "Family", "Reality", "Documentary", "News", "Talk", "War", "Politics", "History", "Music", "Sport", "Kids", "Anime", "Superhero", "Medical", "Legal", "Food", "Travel", "Home", "Game Show"];
+        res.json({ type, genres: commonGenres });
     } catch (err) {
         console.error(`${req.params.type} genres error:`, err.message);
         res.status(502).json({ error: "Genres unavailable" });
     }
 });
 
+// ── Detail ─────────────────────────────────────────────────────────
 router.get("/:type/:id", async (req, res) => {
     try {
         const { type, id } = req.params;
@@ -374,18 +247,23 @@ router.get("/:type/:id", async (req, res) => {
             return res.status(400).json({ error: "Use /api/anime/:id for anime" });
         }
 
-        const detail = await withTimeout(
-            tmdbDetail(id, source.searchType.toLowerCase()),
+        const show = await withTimeout(
+            fetch(`${TVMAZE_BASE}/shows/${id}?embed=episodes,cast,images`).then(r => {
+                if (!r.ok) throw new Error("Not found");
+                return r.json();
+            }),
             10000
         );
 
-        res.json({ type, ...detail });
+        const formatted = formatTVMazeShow(show, type);
+        res.json({ type, ...formatted });
     } catch (err) {
         console.error(`${req.params.type} detail error:`, err.message);
         res.status(502).json({ error: "Detail unavailable" });
     }
 });
 
+// ── Season ─────────────────────────────────────────────────────────
 router.get("/:type/:id/season/:season", async (req, res) => {
     try {
         const { type, id, season } = req.params;
@@ -394,18 +272,31 @@ router.get("/:type/:id/season/:season", async (req, res) => {
             return res.status(400).json({ error: "Seasons only available for TV series" });
         }
 
-        const detail = await withTimeout(
-            tmdbSeasonDetail(id, parseInt(season)),
+        const show = await withTimeout(
+            fetch(`${TVMAZE_BASE}/shows/${id}/seasons`).then(r => r.json()),
             10000
         );
 
-        res.json({ type, season: parseInt(season), ...detail });
+        const seasonData = show.find(s => s.number === parseInt(season));
+        if (!seasonData) return res.status(404).json({ error: "Season not found" });
+
+        const episodes = await withTimeout(
+            fetch(`${TVMAZE_BASE}/shows/${id}/episodes`).then(r => r.json()),
+            10000
+        );
+
+        const seasonEpisodes = episodes
+            .filter(e => e.season === parseInt(season))
+            .map(formatTVMazeEpisode);
+
+        res.json({ type, season: parseInt(season), episodes: seasonEpisodes, ...seasonData });
     } catch (err) {
         console.error(`${req.params.type} season error:`, err.message);
-        res.status(502).json({ error: "Season detail unavailable" });
+        res.status(502).json({ error: "Season unavailable" });
     }
 });
 
+// ── Episode ────────────────────────────────────────────────────────
 router.get("/:type/:id/season/:season/episode/:episode", async (req, res) => {
     try {
         const { type, id, season, episode } = req.params;
@@ -414,166 +305,157 @@ router.get("/:type/:id/season/:season/episode/:episode", async (req, res) => {
             return res.status(400).json({ error: "Episodes only available for TV series" });
         }
 
-        const detail = await withTimeout(
-            tmdbEpisodeDetail(id, parseInt(season), parseInt(episode)),
+        const episodes = await withTimeout(
+            fetch(`${TVMAZE_BASE}/shows/${id}/episodes`).then(r => r.json()),
             10000
         );
 
-        res.json({ type, season: parseInt(season), episode: parseInt(episode), ...detail });
+        const ep = episodes.find(e => e.season === parseInt(season) && e.number === parseInt(episode));
+        if (!ep) return res.status(404).json({ error: "Episode not found" });
+
+        res.json({ type, season: parseInt(season), episode: parseInt(episode), ...formatTVMazeEpisode(ep) });
     } catch (err) {
         console.error(`${req.params.type} episode error:`, err.message);
-        res.status(502).json({ error: "Episode detail unavailable" });
+        res.status(502).json({ error: "Episode unavailable" });
     }
 });
 
+// ── Stream ─────────────────────────────────────────────────────────
 router.get("/:type/:id/stream", async (req, res) => {
     try {
         const { type, id } = req.params;
         const { season, episode } = req.query;
         const source = getMediaSource(type);
 
-        if (!source) {
-            return res.status(400).json({ error: "Invalid media type" });
-        }
+        if (!source) return res.status(400).json({ error: "Invalid media type" });
 
         const streamUrl = getStreamUrl(type, id, season ? parseInt(season) : null, episode ? parseInt(episode) : null);
 
-        const externalIds = await getTMDBExternalIds(id, source.searchType.toLowerCase());
-
         const sources = [
-            {
-                name: "VidSrc",
-                url: streamUrl,
-                quality: "auto",
-                type: "iframe",
-            },
+            { name: "VidSrc", url: streamUrl, quality: "auto", type: "iframe" },
         ];
 
-        if (type !== "movie" && source.streamSource === "VIDSRC") {
+        if (type !== "movie") {
             sources.push({
-                name: "VidSrc (Season/Episode selector)",
+                name: "VidSrc (Selector)",
                 url: `https://vidsrc.xyz/embed/tv/${id}`,
                 quality: "auto",
                 type: "iframe",
             });
         }
 
-        res.json({
-            type,
-            id,
-            season: season ? parseInt(season) : null,
-            episode: episode ? parseInt(episode) : null,
-            sources,
-            externalIds,
-        });
+        res.json({ type, id, season: season ? parseInt(season) : null, episode: episode ? parseInt(episode) : null, sources });
     } catch (err) {
         console.error(`${req.params.type} stream error:`, err.message);
         res.status(502).json({ error: "Stream unavailable" });
     }
 });
 
+// ── Recommendations ────────────────────────────────────────────────
 router.get("/:type/:id/recommendations", async (req, res) => {
     try {
         const { type, id } = req.params;
         const source = getMediaSource(type);
         if (!source) return res.status(400).json({ error: "Invalid media type" });
 
-        let endpoint;
-        if (source.searchType === "MOVIE") endpoint = `/movie/${id}/recommendations`;
-        else endpoint = `/tv/${id}/recommendations`;
+        // TVMaze doesn't have recommendations - search similar by genre
+        const show = await withTimeout(
+            fetch(`${TVMAZE_BASE}/shows/${id}`).then(r => r.json()),
+            8000
+        );
+        const genres = show.genres || [];
+        if (!genres.length) return res.json({ type, results: [] });
 
-        const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_KEY}&language=en-US&page=1`;
-        const res_tmdb = await fetch(url);
-        if (!res_tmdb.ok) throw new Error(`TMDB recommendations failed: ${res_tmdb.status}`);
-        const data = await res_tmdb.json();
+        const genre = genres[0];
+        const searchResults = await withTimeout(
+            fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(genre)}`).then(r => r.json()),
+            8000
+        );
 
-        const results = (data.results || []).map(item => formatTMDBMedia(item, source.searchType.toLowerCase()));
+        const results = searchResults
+            .map(r => r.show)
+            .filter(s => s.id !== parseInt(id))
+            .slice(0, 10)
+            .map(s => formatTVMazeShow(s, type));
 
-        res.json({ type, results, totalResults: data.total_results || 0 });
+        res.json({ type, results, totalResults: results.length });
     } catch (err) {
         console.error(`${req.params.type} recommendations error:`, err.message);
         res.status(502).json({ error: "Recommendations unavailable" });
     }
 });
 
+// ── Similar ────────────────────────────────────────────────────────
 router.get("/:type/:id/similar", async (req, res) => {
     try {
         const { type, id } = req.params;
         const source = getMediaSource(type);
         if (!source) return res.status(400).json({ error: "Invalid media type" });
 
-        let endpoint;
-        if (source.searchType === "MOVIE") endpoint = `/movie/${id}/similar`;
-        else endpoint = `/tv/${id}/similar`;
+        // Same as recommendations for TVMaze
+        const show = await withTimeout(
+            fetch(`${TVMAZE_BASE}/shows/${id}`).then(r => r.json()),
+            8000
+        );
+        const genres = show.genres || [];
+        if (!genres.length) return res.json({ type, results: [] });
 
-        const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_KEY}&language=en-US&page=1`;
-        const res_tmdb = await fetch(url);
-        if (!res_tmdb.ok) throw new Error(`TMDB similar failed: ${res_tmdb.status}`);
-        const data = await res_tmdb.json();
+        const genre = genres[0];
+        const searchResults = await withTimeout(
+            fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(genre)}`).then(r => r.json()),
+            8000
+        );
 
-        const results = (data.results || []).map(item => formatTMDBMedia(item, source.searchType.toLowerCase()));
+        const results = searchResults
+            .map(r => r.show)
+            .filter(s => s.id !== parseInt(id))
+            .slice(0, 10)
+            .map(s => formatTVMazeShow(s, type));
 
-        res.json({ type, results, totalResults: data.total_results || 0 });
+        res.json({ type, results, totalResults: results.length });
     } catch (err) {
         console.error(`${req.params.type} similar error:`, err.message);
         res.status(502).json({ error: "Similar unavailable" });
     }
 });
 
+// ── Videos (Trailers) ──────────────────────────────────────────────
 router.get("/:type/:id/videos", async (req, res) => {
     try {
         const { type, id } = req.params;
         const source = getMediaSource(type);
         if (!source) return res.status(400).json({ error: "Invalid media type" });
 
-        let endpoint;
-        if (source.searchType === "MOVIE") endpoint = `/movie/${id}/videos`;
-        else endpoint = `/tv/${id}/videos`;
-
-        const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_KEY}&language=en-US`;
-        const res_tmdb = await fetch(url);
-        if (!res_tmdb.ok) throw new Error(`TMDB videos failed: ${res_tmdb.status}`);
-        const data = await res_tmdb.json();
-
-        const videos = (data.results || []).filter(v => v.site === "YouTube" && v.type === "Trailer");
-
-        res.json({ type, videos });
+        // TVMaze doesn't have videos - return empty
+        res.json({ type, videos: [] });
     } catch (err) {
         console.error(`${req.params.type} videos error:`, err.message);
         res.status(502).json({ error: "Videos unavailable" });
     }
 });
 
+// ── Credits ────────────────────────────────────────────────────────
 router.get("/:type/:id/credits", async (req, res) => {
     try {
         const { type, id } = req.params;
         const source = getMediaSource(type);
         if (!source) return res.status(400).json({ error: "Invalid media type" });
 
-        let endpoint;
-        if (source.searchType === "MOVIE") endpoint = `/movie/${id}/credits`;
-        else endpoint = `/tv/${id}/credits`;
-
-        const url = `${TMDB_BASE}${endpoint}?api_key=${TMDB_KEY}&language=en-US`;
-        const res_tmdb = await fetch(url);
-        if (!res_tmdb.ok) throw new Error(`TMDB credits failed: ${res_tmdb.status}`);
-        const data = await res_tmdb.json();
+        const cast = await withTimeout(
+            fetch(`${TVMAZE_BASE}/shows/${id}/cast`).then(r => r.json()),
+            8000
+        );
 
         res.json({
             type,
-            cast: (data.cast || []).slice(0, 20).map(c => ({
-                id: c.id,
-                name: c.name,
-                character: c.character,
-                profilePath: c.profile_path ? TMDB_IMG + c.profile_path : "",
-                order: c.order,
+            cast: (cast || []).slice(0, 20).map(c => ({
+                id: c.person.id,
+                name: c.person.name,
+                character: c.character?.name || "",
+                profilePath: c.person.image?.medium || "",
+                order: 0,
             })),
-            crew: (data.crew || []).filter(c => ["Director", "Writer", "Creator", "Producer", "Executive Producer"].includes(c.job)).map(c => ({
-                id: c.id,
-                name: c.name,
-                job: c.job,
-                profilePath: c.profile_path ? TMDB_IMG + c.profile_path : "",
-            })),
+            crew: [],
         });
     } catch (err) {
         console.error(`${req.params.type} credits error:`, err.message);
@@ -581,13 +463,11 @@ router.get("/:type/:id/credits", async (req, res) => {
     }
 });
 
+// ── Types List ─────────────────────────────────────────────────────
 router.get("/types", (req, res) => {
-    const types = Object.values(MediaSource).filter(s => s.type !== "anime").map(s => ({
-        type: s.type,
-        label: s.label,
-        emoji: s.emoji,
-        searchType: s.searchType,
-    }));
+    const types = Object.values(MediaSource)
+        .filter(s => s.type !== "anime")
+        .map(s => ({ type: s.type, label: s.label, emoji: s.emoji, searchType: s.searchType }));
     res.json({ types });
 });
 
