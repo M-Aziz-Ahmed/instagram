@@ -28,6 +28,9 @@ export default function MediaPage({ mediaType, config }) {
     const initialEp = searchParams.get("ep");
     const didInit = useRef(false);
 
+    const routeMap = { movie: "movies", kdrama: "kdramas", season: "seasons", cdrama: "cdramas", cartoon: "cartoons" };
+    const route = routeMap[mediaType] || mediaType;
+
     const fetchTrending = useCallback(async () => {
         try {
             const res = await fetch(`${apiRoute}/${mediaType}/trending?time_window=week`);
