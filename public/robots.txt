@@ -1,8 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /api/
-Disallow: /admin/
-Disallow: /inbox/
-Disallow: /call/
-Disallow: /login/
-Sitemap: https://anontweet.vercel.app/sitemap.xml
