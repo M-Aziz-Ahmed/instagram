@@ -117,17 +117,22 @@ router.get("/cover", async (req, res) => {
         }
         const upstream = await fetch(url, {
             headers: {
-                "User-Agent": "AnonTweet/1.0",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Referer": "https://mangadex.org/",
+                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
             },
-            timeout: 10000,
+            timeout: 15000,
             redirect: "follow",
         });
-        if (!upstream.ok) return res.status(upstream.status).json({ error: "Cover not found" });
+        if (!upstream.ok) {
+            return res.status(upstream.status).json({ error: "Cover not found" });
+        }
         const contentType = upstream.headers.get("content-type") || "image/jpeg";
+        const buffer = await upstream.buffer();
         res.setHeader("Content-Type", contentType);
-        res.setHeader("Cache-Control", "public, max-age=86400");
-        upstream.body.pipe(res);
+        res.setHeader("Content-Length", buffer.length);
+        res.setHeader("Cache-Control", "public, max-age=604800");
+        res.send(buffer);
     } catch (err) {
         console.error("Manga cover proxy error:", err.message);
         res.status(502).json({ error: "Cover unavailable" });

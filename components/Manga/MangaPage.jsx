@@ -5,7 +5,8 @@ import MediaBookmarkButton from "@/components/shared/MediaBookmarkButton";
 
 const COVER_URL = (id, fileName) => {
     if (!fileName) return "";
-    return `https://uploads.mangadex.org/covers/${id}/${fileName}.256.jpg`;
+    const raw = `https://uploads.mangadex.org/covers/${id}/${fileName}.256.jpg`;
+    return `/api/manga/cover?url=${encodeURIComponent(raw)}`;
 };
 const fmtNum = (n) => (n == null ? "?" : n.toLocaleString());
 
