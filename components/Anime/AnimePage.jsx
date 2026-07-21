@@ -391,6 +391,21 @@ export default function AnimePage() {
         }
     };
 
+    useEffect(() => {
+        if (!currentEp || !streamUrl) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch(`/api/anime/watch/${encodeURIComponent(currentEp.id)}?subOrDub=${subOrDub}`);
+                const data = await res.json();
+                const sources = data?.sources || [];
+                const best = sources.find((s) => s.quality === "1080p") || sources.find((s) => s.quality === "720p") || sources[0];
+                if (!cancelled && best?.url) setStreamUrl(best.url);
+            } catch { /* silent */ }
+        })();
+        return () => { cancelled = true; };
+    }, [subOrDub]);
+
     const handleBack = () => {
         if (streamUrl) {
             setStreamUrl("");

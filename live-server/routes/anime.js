@@ -178,7 +178,6 @@ router.get("/watch/:episodeId", async (req, res) => {
         const episodeId = decodeURIComponent(req.params.episodeId);
         const { subOrDub } = req.query;
 
-        // Gogoanime: episodeId format is "gogo:{slug}:{epNum}"
         if (episodeId.startsWith("gogo:")) {
             try {
                 const parts = episodeId.split(":");
@@ -189,18 +188,24 @@ router.get("/watch/:episodeId", async (req, res) => {
                 const qualities = data?.server?.qualities || [];
                 const qualityBlock = qualities.find(q => q.title === quality) || qualities.find(q => q.title === "SUB") || qualities[0];
                 const servers = qualityBlock?.serverList || [];
-                const defaultUrl = data?.defaultStreamingUrl;
                 const sources = [];
-                if (defaultUrl) {
-                    const fullUrl = defaultUrl.startsWith("http") ? defaultUrl : `${GOGO_BASE}${defaultUrl}`;
+
+                if (servers.length) {
+                    const primaryServer = servers[0];
+                    try {
+                        const srvData = await withTimeout(gogoFetchJson(`/api/server?id=${encodeURIComponent(primaryServer.serverId)}`), 8000);
+                        if (srvData?.url) {
+                            const fullUrl = srvData.url.startsWith("http") ? srvData.url : `${GOGO_BASE}${srvData.url}`;
+                            sources.push({ url: fullUrl, quality: quality, isM3U8: true });
+                        }
+                    } catch { /* server resolve failed */ }
+                }
+
+                if (!sources.length && data?.defaultStreamingUrl) {
+                    const fullUrl = data.defaultStreamingUrl.startsWith("http") ? data.defaultStreamingUrl : `${GOGO_BASE}${data.defaultStreamingUrl}`;
                     sources.push({ url: fullUrl, quality: quality, isM3U8: true });
                 }
-                for (const srv of servers.slice(0, 2)) {
-                    if (srv.serverId && srv.serverId !== data?.defaultServerId) {
-                        const srvUrl = `/api/episode/${slug}/${epNum}?server=${encodeURIComponent(srv.serverId)}`;
-                        sources.push({ url: `${GOGO_BASE}${srvUrl}`, quality: `${quality}-${srv.title}`, isM3U8: true, serverName: srv.name });
-                    }
-                }
+
                 if (sources.length) {
                     return res.json({ sources, subtitles: [], source: "gogoanime", audioTracks: [] });
                 }
