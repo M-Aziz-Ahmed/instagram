@@ -55,11 +55,8 @@ router.get("/recent", async (req, res) => {
 // Get manga info
 router.get("/info/:id", async (req, res) => {
     try {
-        const params = new URLSearchParams({
-            "includes[]": "cover_art",
-            "includes[]": "author",
-        });
-        const data = await safeFetch(`${MANGADEX}/manga/${req.params.id}?${params}`);
+        const url = `${MANGADEX}/manga/${req.params.id}?includes[]=cover_art&includes[]=author`;
+        const data = await safeFetch(url);
         res.json(data);
     } catch (err) {
         console.error("Manga info error:", err.message);

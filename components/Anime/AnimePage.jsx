@@ -293,6 +293,12 @@ export default function AnimePage() {
         } catch { /* silent */ }
     };
 
+    const streamLinks = selected ? [
+        { name: "Tubi", url: `https://tubitv.com/search/${encodeURIComponent(selected.title)}` },
+        { name: "Crunchyroll", url: `https://www.crunchyroll.com/search?q=${encodeURIComponent(selected.title)}` },
+        { name: "Anime-Planet", url: `https://www.anime-planet.com/anime/all?q=${encodeURIComponent(selected.title)}` },
+    ] : [];
+
     const handleBack = () => {
         if (streamUrl) { setStreamUrl(""); setCurrentEp(null); }
         else if (selected) { setSelected(null); setEpisodes([]); }
@@ -333,7 +339,30 @@ export default function AnimePage() {
                 {/* Player View */}
                 {view === "player" && (
                     <div className="space-y-4">
-                        <VideoPlayer src={streamUrl} title={streamTitle} poster={selected?.image} onBack={handleBack} />
+                        {streamUrl ? (
+                            <VideoPlayer src={streamUrl} title={streamTitle} poster={selected?.image} onBack={handleBack} />
+                        ) : (
+                            <div className="bg-gray-900 rounded-xl p-8 text-center">
+                                <div className="w-16 h-16 mx-auto mb-4 bg-gray-800 rounded-full flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-gray-400">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.91 11.672a.375.375 0 0 1 0 .656l-5.603 3.113a.375.375 0 0 1-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112Z" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-white font-bold text-lg mb-2">{streamTitle}</h3>
+                                <p className="text-gray-400 text-sm mb-6">Streaming not available directly. Watch on one of these free platforms:</p>
+                                <div className="flex flex-wrap justify-center gap-3">
+                                    {streamLinks.map((link) => (
+                                        <a key={link.name} href={link.url} target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-full transition-colors">
+                                            Watch on {link.name}
+                                        </a>
+                                    ))}
+                                </div>
+                                <button onClick={handleBack} className="mt-6 text-gray-400 text-sm hover:text-white transition-colors">
+                                    ← Back to episodes
+                                </button>
+                            </div>
+                        )}
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{streamTitle}</p>
                         <EpisodeList episodes={episodes} currentId={currentEp?.id} onSelect={handlePlayEpisode} />
                     </div>
