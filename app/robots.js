@@ -1,4 +1,4 @@
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://anontweet.duckdns.org";
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://anontweet.vercel.app";
 
 export default function robots() {
   return {

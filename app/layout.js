@@ -44,7 +44,7 @@ export const metadata = {
   creator: "AnonTweet",
   publisher: "AnonTweet",
   applicationName: "AnonTweet",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://anontweet.duckdns.org'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://anontweet.vercel.app'),
   alternates: {
     canonical: '/',
     languages: {
@@ -73,7 +73,7 @@ export const metadata = {
     title: 'AnonTweet - Anonymous Social Media & Messaging Platform',
     description: 'Post, message, go live, and play games — all anonymously. Speak freely on AnonTweet.',
     images: ['/icon-512.svg'],
-    creator: '@anonfeed',
+    creator: '@anontweet',
   },
   robots: {
     index: true,
@@ -106,8 +106,8 @@ const jsonLd = {
   "@graph": [
     {
       "@type": "WebSite",
-      "@id": "https://anontweet.duckdns.org/#website",
-      url: "https://anontweet.duckdns.org",
+      "@id": "https://anontweet.vercel.app/#website",
+      url: "https://anontweet.vercel.app",
       name: "AnonTweet",
       description:
         "Anonymous social media platform to post, message, go live, and play games without revealing your identity.",
@@ -124,16 +124,16 @@ const jsonLd = {
     },
     {
       "@type": "Organization",
-      "@id": "https://anontweet.duckdns.org/#organization",
+      "@id": "https://anontweet.vercel.app/#organization",
       name: "AnonTweet",
-      url: "https://anontweet.duckdns.org",
+      url: "https://anontweet.vercel.app",
       logo: "https://anontweet.duckdns.org/icon-512.svg",
       sameAs: [],
     },
     {
       "@type": "WebApplication",
       name: "AnonTweet",
-      url: "https://anontweet.duckdns.org",
+      url: "https://anontweet.vercel.app",
       applicationCategory: "SocialNetworkingApplication",
       operatingSystem: "Web, iOS, Android",
       description:

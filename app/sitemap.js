@@ -1,5 +1,5 @@
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://anontweet.duckdns.org";
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "http://localhost:3001";
+const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "https://anontweet.duckdns.org";
 
 const STATIC_ROUTES = [
   { url: "", priority: 1.0, changeFrequency: "daily" },
