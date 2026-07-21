@@ -84,7 +84,7 @@ router.get("/chapter/:id", async (req, res) => {
     }
 });
 
-// Get manga genres
+// Get manga genres/tags
 router.get("/genres", async (_req, res) => {
     try {
         const data = await safeFetch(`${MANGADEX}/manga/tag`);
@@ -92,6 +92,19 @@ router.get("/genres", async (_req, res) => {
     } catch (err) {
         console.error("Manga genres error:", err.message);
         res.status(502).json({ error: "Genres unavailable" });
+    }
+});
+
+// Browse manga by tag
+router.get("/tag/:tagId", async (req, res) => {
+    try {
+        const { limit = 20, offset = 0 } = req.query;
+        const url = `${MANGADEX}/manga?includedTags[]=${req.params.tagId}&limit=${Math.min(Number(limit), 100)}&offset=${offset}&includes[]=cover_art&order[latestUploadedChapter]=desc`;
+        const data = await safeFetch(url);
+        res.json(data);
+    } catch (err) {
+        console.error("Manga tag browse error:", err.message);
+        res.status(502).json({ error: "Tag browse unavailable" });
     }
 });
 

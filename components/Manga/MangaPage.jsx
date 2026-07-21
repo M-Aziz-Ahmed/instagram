@@ -193,6 +193,8 @@ export default function MangaPage() {
     const [pages, setPages] = useState([]);
     const [loadingChapter, setLoadingChapter] = useState(null);
     const [chapterError, setChapterError] = useState("");
+    const [tags, setTags] = useState([]);
+    const [activeTag, setActiveTag] = useState(null);
     const searchTimer = useRef(null);
 
     useEffect(() => {
@@ -200,11 +202,26 @@ export default function MangaPage() {
             .then((r) => r.json())
             .then((d) => { if (d?.data) setRecent(d.data.slice(0, 18)); })
             .catch(() => {});
+        fetch("/api/manga/genres")
+            .then((r) => r.json())
+            .then((d) => {
+                if (d?.data) {
+                    const popular = ["Action", "Romance", "Fantasy", "Comedy", "Drama", "Horror", "Sci-Fi", "Slice of Life", "Mystery", "Sports", "Supernatural", "Adventure", "Mecha", "Psychological", "Tragedy"];
+                    const sorted = d.data.sort((a, b) => {
+                        const ai = popular.indexOf(a.attributes?.name?.en);
+                        const bi = popular.indexOf(b.attributes?.name?.en);
+                        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+                    });
+                    setTags(sorted);
+                }
+            })
+            .catch(() => {});
     }, []);
 
     const doSearch = useCallback(async (q) => {
         if (!q.trim()) return;
         setLoading(true);
+        setActiveTag(null);
         try {
             const res = await fetch(`/api/manga/search?q=${encodeURIComponent(q)}&limit=30`);
             const data = await res.json();
@@ -220,6 +237,19 @@ export default function MangaPage() {
             if (val.trim()) doSearch(val);
             else setResults([]);
         }, 400);
+    };
+
+    const handleBrowseTag = async (tag) => {
+        setActiveTag(tag);
+        setQuery("");
+        setResults([]);
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/manga/tag/${tag.id}?limit=30`);
+            const data = await res.json();
+            setResults(data?.data || []);
+        } catch { /* silent */ }
+        setLoading(false);
     };
 
     const handleSelect = async (item) => {
@@ -365,13 +395,35 @@ export default function MangaPage() {
                 {/* Grid View */}
                 {view === "grid" && (
                     <>
-                        {results.length === 0 && recent.length === 0 && !loading && (
+                        {/* Tag chips */}
+                        {!query && tags.length > 0 && (
+                            <div className="mb-6">
+                                <h3 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Browse by Genre</h3>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {tags.map((tag) => (
+                                        <button
+                                            key={tag.id}
+                                            onClick={() => handleBrowseTag(tag)}
+                                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                                                activeTag?.id === tag.id
+                                                    ? "bg-blue-500 text-white"
+                                                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                            }`}
+                                        >
+                                            {tag.attributes?.name?.en}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {results.length === 0 && recent.length === 0 && !loading && !activeTag && (
                             <div className="text-center py-16">
                                 <span className="text-5xl mb-4 block">📚</span>
                                 <p className="text-gray-500 dark:text-gray-400 text-sm">Search for manga to start reading</p>
                             </div>
                         )}
-                        {results.length === 0 && recent.length > 0 && !query && (
+                        {results.length === 0 && recent.length > 0 && !query && !activeTag && (
                             <div className="mb-8">
                                 <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-3">Recently Updated</h2>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
@@ -390,7 +442,9 @@ export default function MangaPage() {
                         )}
                         {results.length > 0 && (
                             <div>
-                                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-3">{query ? `Results for "${query}"` : "Browse"}</h2>
+                                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-3">
+                                    {query ? `Results for "${query}"` : activeTag ? activeTag.attributes?.name?.en : "Browse"}
+                                </h2>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                                     {results.map((item) => (
                                         <button key={item.id} onClick={() => handleSelect(item)} className="group text-left">

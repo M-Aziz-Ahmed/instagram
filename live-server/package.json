@@ -10,6 +10,7 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
+    "@consumet/extensions": "^1.8.8",
     "chess.js": "^1.4.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
