@@ -5,14 +5,11 @@ const router = express.Router();
 
 const ANILIST = "https://graphql.anilist.co";
 
-// Primary: HiAnime (English sub + dub, huge library)
-const hianime = new ANIME.Hianime();
-// Fallback: AnimeUnity (Italian site, Japanese audio only)
+// Primary: AnimeUnity (reliable, works from this network)
+// HiAnime is unreachable (522), skip it entirely
 const animeUnity = new ANIME.AnimeUnity();
 
 // Caches: anilistId -> streaming provider ID
-const hianimeIdCache = new Map();
-const hianimeEpisodeCache = new Map();
 const unityIdCache = new Map();
 const unityEpisodeCache = new Map();
 
@@ -101,28 +98,17 @@ router.get("/info/:id", async (req, res) => {
         const m = data.Media;
         const title = m.title?.english || m.title?.romaji || "";
 
-        // Try HiAnime first, then AnimeUnity
+        // Try AnimeUnity for episodes
         let episodes = [];
         let hasSub = true;
         let hasDub = false;
 
         try {
-            const hiEps = await fetchHiAnimeEpisodes(id, title);
-            if (hiEps.length > 0) {
-                episodes = hiEps;
-                hasDub = true;
+            const unityEps = await fetchUnityEpisodes(id, title);
+            if (unityEps.length > 0) {
+                episodes = unityEps;
             }
-        } catch { /* HiAnime unavailable */ }
-
-        if (episodes.length === 0) {
-            try {
-                const unityEps = await fetchUnityEpisodes(id, title);
-                if (unityEps.length > 0) {
-                    episodes = unityEps;
-                    hasDub = false;
-                }
-            } catch { /* AnimeUnity unavailable */ }
-        }
+        } catch { /* AnimeUnity unavailable */ }
 
         res.json({
             id: m.id,
@@ -139,7 +125,7 @@ router.get("/info/:id", async (req, res) => {
             episodes,
             hasSub,
             hasDub,
-            source: episodes.length > 0 ? (hasDub ? "hianime" : "animeunity") : "none",
+            source: episodes.length > 0 ? "animeunity" : "none",
         });
     } catch (err) {
         console.error("Anime info error:", err.message);
@@ -154,19 +140,11 @@ router.get("/episodes/:id", async (req, res) => {
         if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
         const title = req.query.title || "";
 
-        // Try HiAnime first
+        // Try AnimeUnity
         try {
-            const hiEps = await fetchHiAnimeEpisodes(id, title);
-            if (hiEps.length > 0) return res.json({ episodes: hiEps, source: "hianime" });
-        } catch { /* fallback */ }
-
-        // Fall back to AnimeUnity
-        try {
-            const unityId = await findAnimeUnityId(id, title);
-            if (!unityId) return res.json({ episodes: [], message: "No streaming source found" });
             const episodes = await fetchUnityEpisodes(id, title);
-            return res.json({ episodes, source: "animeunity" });
-        } catch { /* both failed */ }
+            if (episodes.length > 0) return res.json({ episodes, source: "animeunity" });
+        } catch { /* AnimeUnity unavailable */ }
 
         res.json({ episodes: [], message: "No streaming source found" });
     } catch (err) {
@@ -181,29 +159,19 @@ router.get("/watch/:episodeId", async (req, res) => {
         const episodeId = req.params.episodeId;
         const { server, subOrDub } = req.query;
 
-        // Try HiAnime first (supports sub/dub)
+        // Get stream URL from AnimeUnity
         try {
-            const SubOrDubEnum = subOrDub === "dub" ? "dub" : subOrDub === "both" ? "both" : "sub";
-            const sources = await withTimeout(
-                hianime.fetchEpisodeSources(episodeId, server || undefined, SubOrDubEnum),
-                15000
-            );
+            const sources = await withTimeout(animeUnity.fetchEpisodeSources(episodeId), 15000);
             if (sources?.sources?.length > 0) {
                 return res.json({
                     sources: sources.sources,
                     subtitles: sources.subtitles || [],
                     intro: sources.intro || null,
                     outro: sources.outro || null,
-                    source: "hianime",
+                    source: "animeunity",
                 });
             }
-        } catch { /* fallback to AnimeUnity */ }
-
-        // Fall back to AnimeUnity
-        try {
-            const sources = await withTimeout(animeUnity.fetchEpisodeSources(episodeId), 15000);
-            return res.json({ ...sources, source: "animeunity" });
-        } catch { /* both failed */ }
+        } catch { /* AnimeUnity unavailable */ }
 
         res.status(502).json({ error: "Streaming unavailable" });
     } catch (err) {
@@ -214,13 +182,8 @@ router.get("/watch/:episodeId", async (req, res) => {
 
 // ── Get available servers for an episode ──────────────────────
 router.get("/servers/:episodeId", async (req, res) => {
-    try {
-        const servers = await withTimeout(hianime.fetchEpisodeServers(req.params.episodeId), 10000);
-        res.json(servers);
-    } catch (err) {
-        console.error("Anime servers error:", err.message);
-        res.json({ sub: [], dub: [], raw: [] });
-    }
+    // AnimeUnity doesn't expose server lists; return single server
+    res.json({ sub: [{ name: "default", url: "" }], dub: [], raw: [] });
 });
 
 // ── Get anime genres ──────────────────────────────────────────
@@ -256,7 +219,7 @@ router.get("/genre/:genre", async (req, res) => {
     }
 });
 
-// ── HiAnime helpers ───────────────────────────────────────────
+// ── AnimeUnity helpers ──────────────────────────────────────
 
 function withTimeout(promise, ms) {
     return Promise.race([
@@ -264,51 +227,6 @@ function withTimeout(promise, ms) {
         new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
     ]);
 }
-
-async function findHiAnimeId(anilistId, title) {
-    if (hianimeIdCache.has(anilistId)) return hianimeIdCache.get(anilistId);
-    if (!title) return null;
-
-    try {
-        const results = await withTimeout(hianime.search(title), 10000);
-        if (!results?.results?.length) return null;
-
-        const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9]/g, "");
-        let match = results.results.find(r =>
-            r.title?.toLowerCase().replace(/[^a-z0-9]/g, "") === normalizedTitle
-        );
-        if (!match) match = results.results[0];
-        if (!match?.id) return null;
-
-        hianimeIdCache.set(anilistId, match.id);
-        return match.id;
-    } catch {
-        return null;
-    }
-}
-
-async function fetchHiAnimeEpisodes(anilistId, title) {
-    const hiId = await findHiAnimeId(anilistId, title);
-    if (!hiId) return [];
-
-    if (hianimeEpisodeCache.has(hiId)) return hianimeEpisodeCache.get(hiId);
-
-    try {
-        const info = await withTimeout(hianime.fetchAnimeInfo(hiId), 10000);
-        const episodes = (info.episodes || []).map(ep => ({
-            id: ep.id,
-            number: ep.number,
-            title: ep.title || "",
-            url: ep.url || "",
-        }));
-        hianimeEpisodeCache.set(hiId, episodes);
-        return episodes;
-    } catch {
-        return [];
-    }
-}
-
-// ── AnimeUnity helpers (fallback) ─────────────────────────────
 
 async function findAnimeUnityId(anilistId, title) {
     if (unityIdCache.has(anilistId)) return unityIdCache.get(anilistId);
