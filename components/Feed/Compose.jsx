@@ -293,15 +293,15 @@ export default function Compose({ onPosted }) {
                         </div>
                     )}
 
-                    <div className="flex items-center justify-between p-1 border-t border-gray-100 dark:border-gray-800 overflow-hidden">
-                        <div className="flex items-center gap-1 relative overflow-x-auto flex-shrink min-w-0">
+                    <div className="flex items-center justify-between p-1 border-t border-gray-100 dark:border-gray-800">
+                        <div className="flex items-center gap-0.5 sm:gap-1 relative overflow-x-auto flex-1 min-w-0">
                             <button
                                 onClick={() => { setShowEmoji(!showEmoji); setShowGif(false); }}
                                 aria-label="Add emoji"
                                 disabled={!user || posting}
-                                className={`p-2 rounded-full transition-colors disabled:opacity-40 ${showEmoji ? "text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20" : "text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"}`}
+                                className={`p-1.5 sm:p-2 rounded-full transition-colors disabled:opacity-40 ${showEmoji ? "text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20" : "text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"}`}
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4.5 h-4.5 sm:w-5 sm:h-5">
                                     <circle cx="12" cy="12" r="10" />
                                     <path strokeLinecap="round" d="M8 14s1.5 2 4 2 4-2 4-2" />
                                     <line x1="9" y1="9" x2="9.01" y2="9" strokeLinecap="round" />
@@ -312,7 +312,7 @@ export default function Compose({ onPosted }) {
                                 onClick={() => { setShowGif(!showGif); setShowEmoji(false); }}
                                 aria-label="Add GIF"
                                 disabled={!user || posting}
-                                className={`px-2 py-1 rounded-full transition-colors disabled:opacity-40 text-xs font-bold ${showGif ? "text-purple-500 bg-purple-50 dark:bg-purple-900/20" : "text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20"}`}
+                                className={`px-1.5 sm:px-2 py-1 rounded-full transition-colors disabled:opacity-40 text-[10px] sm:text-xs font-bold ${showGif ? "text-purple-500 bg-purple-50 dark:bg-purple-900/20" : "text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20"}`}
                             >
                                 GIF
                             </button>
@@ -320,9 +320,9 @@ export default function Compose({ onPosted }) {
                                 onClick={() => { setShowPoll(!showPoll); setShowEmoji(false); setShowGif(false); }}
                                 aria-label="Add poll"
                                 disabled={!user || posting}
-                                className={`p-2 rounded-full transition-colors disabled:opacity-40 ${showPoll ? "text-orange-500 bg-orange-50 dark:bg-orange-900/20" : "text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20"}`}
+                                className={`p-1.5 sm:p-2 rounded-full transition-colors disabled:opacity-40 ${showPoll ? "text-orange-500 bg-orange-50 dark:bg-orange-900/20" : "text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20"}`}
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4.5 h-4.5 sm:w-5 sm:h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
                                 </svg>
                             </button>
@@ -330,10 +330,10 @@ export default function Compose({ onPosted }) {
                                 onClick={() => fileRef.current?.click()}
                                 aria-label="Add image"
                                 disabled={!user || posting}
-                                className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors disabled:opacity-40"
+                                className="p-1.5 sm:p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors disabled:opacity-40"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                    strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                    strokeWidth={1.8} stroke="currentColor" className="w-4.5 h-4.5 sm:w-5 sm:h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round"
                                         d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
                                 </svg>
@@ -344,7 +344,7 @@ export default function Compose({ onPosted }) {
                             />
                             <button
                                 onClick={() => setVisibility(visibility === "public" ? "closeFriends" : "public")}
-                                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                                className={`hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
                                     visibility === "closeFriends"
                                         ? "bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-800"
                                         : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -355,6 +355,19 @@ export default function Compose({ onPosted }) {
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
                                 </svg>
                                 {visibility === "closeFriends" ? "Close" : "Public"}
+                            </button>
+                            <button
+                                onClick={() => setVisibility(visibility === "public" ? "closeFriends" : "public")}
+                                className={`sm:hidden p-1.5 rounded-full transition-colors ${
+                                    visibility === "closeFriends"
+                                        ? "text-green-500 bg-green-50 dark:bg-green-900/20"
+                                        : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"
+                                }`}
+                                title={visibility === "closeFriends" ? "Close Friends only" : "Public"}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4.5 h-4.5 sm:w-5 sm:h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                                </svg>
                             </button>
                             {showEmoji && (
                                 <div className="absolute bottom-full left-0 mb-2 z-30">
@@ -379,7 +392,7 @@ export default function Compose({ onPosted }) {
                         <button
                             onClick={handlePost}
                             disabled={!canPost}
-                            className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-bold px-5 py-1.5 rounded-full hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors min-w-0 sm:min-w-16 shrink-0 flex items-center justify-center"
+                            className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs sm:text-sm font-bold px-3 sm:px-5 py-1.5 rounded-full hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0 flex items-center justify-center ml-1"
                         >
                             {posting ? (
                                 <span className="flex items-center gap-1.5">
