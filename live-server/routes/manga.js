@@ -1,13 +1,17 @@
 const express = require("express");
+const fetch = require("node-fetch");
 const router = express.Router();
 
 const MANGADEX = "https://api.mangadex.org";
 
 async function safeFetch(url) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
     const res = await fetch(url, {
         headers: { "User-Agent": "AnonTweet/1.0" },
-        signal: AbortSignal.timeout(15000),
+        signal: controller.signal,
     });
+    clearTimeout(timer);
     if (!res.ok) throw new Error(`Upstream ${res.status}`);
     return res.json();
 }

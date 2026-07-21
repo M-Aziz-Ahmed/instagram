@@ -1,4 +1,5 @@
 const express = require("express");
+const fetch = require("node-fetch");
 const router = express.Router();
 
 const JIKAN = "https://api.jikan.moe/v4";
@@ -9,10 +10,13 @@ async function safeFetch(url, retries = 2) {
     for (let i = 0; i <= retries; i++) {
         try {
             if (i > 0) await sleep(1000 * i);
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 15000);
             const res = await fetch(url, {
                 headers: { "User-Agent": "AnonTweet/1.0" },
-                signal: AbortSignal.timeout(15000),
+                signal: controller.signal,
             });
+            clearTimeout(timer);
             if (res.status === 429) {
                 await sleep(2000);
                 continue;
