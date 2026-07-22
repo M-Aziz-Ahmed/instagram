@@ -9,25 +9,25 @@ const pending = new Map();
 
 function buildDnsQuery(host) {
     const labels = host.split(".");
-    const header = Buffer.alloc(12);
-    header.writeUInt16BE(0x1234, 0); // transaction id
-    header.writeUInt16BE(0x0100, 2); // flags: standard query
-    header.writeUInt16BE(1, 4); // questions
-    header.writeUInt16BE(0, 6); // answers
-    header.writeUInt16BE(0, 8); // authority
-    header.writeUInt16BE(0, 10); // additional
+    const buf = Buffer.alloc(512);
+    buf.writeUInt16BE(0x1234, 0);
+    buf.writeUInt16BE(0x0100, 2);
+    buf.writeUInt16BE(1, 4);
+    buf.writeUInt16BE(0, 6);
+    buf.writeUInt16BE(0, 8);
+    buf.writeUInt16BE(0, 10);
 
     let offset = 12;
     for (const label of labels) {
-        header.writeUInt8(label.length, offset++);
-        header.write(label, offset, label.length);
+        buf.writeUInt8(label.length, offset++);
+        buf.write(label, offset, label.length);
         offset += label.length;
     }
-    header.writeUInt8(0, offset++); // end of name
-    header.writeUInt16BE(1, offset); offset += 2; // type A
-    header.writeUInt16BE(1, offset); offset += 2; // class IN
+    buf.writeUInt8(0, offset++);
+    buf.writeUInt16BE(1, offset); offset += 2;
+    buf.writeUInt16BE(1, offset); offset += 2;
 
-    return header.slice(0, offset);
+    return buf.slice(0, offset);
 }
 
 function parseDnsResponse(buf) {
