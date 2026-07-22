@@ -104,23 +104,21 @@ router.get("/info/:id", async (req, res) => {
         let hasDub = true;
         let source = "none";
 
-        try {
-            const gogoEps = await fetchGogoEpisodes(id, title);
-            if (gogoEps.length > 0) {
-                episodes = gogoEps;
-                source = "gogoanime";
-            }
-        } catch { /* Gogoanime unreachable */ }
+        const [gogoResult, unityResult] = await Promise.allSettled([
+            fetchGogoEpisodes(id, title),
+            fetchUnityEpisodes(id, title),
+        ]);
 
-        if (episodes.length === 0) {
-            try {
-                const unityEps = await fetchUnityEpisodes(id, title);
-                if (unityEps.length > 0) {
-                    episodes = unityEps;
-                    source = "animeunity";
-                    hasDub = false;
-                }
-            } catch { /* AnimeUnity unavailable */ }
+        const gogoEps = gogoResult.status === "fulfilled" ? gogoResult.value : [];
+        const unityEps = unityResult.status === "fulfilled" ? unityResult.value : [];
+
+        if (gogoEps.length > 0) {
+            episodes = gogoEps;
+            source = "gogoanime";
+        } else if (unityEps.length > 0) {
+            episodes = unityEps;
+            source = "animeunity";
+            hasDub = false;
         }
 
         res.json({
@@ -153,17 +151,16 @@ router.get("/episodes/:id", async (req, res) => {
         if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
         const title = req.query.title || "";
 
-        // Try Gogoanime first (English sub/dub)
-        try {
-            const gogoEps = await fetchGogoEpisodes(id, title);
-            if (gogoEps.length > 0) return res.json({ episodes: gogoEps, source: "gogoanime" });
-        } catch { /* fallback */ }
+        const [gogoResult, unityResult] = await Promise.allSettled([
+            fetchGogoEpisodes(id, title),
+            fetchUnityEpisodes(id, title),
+        ]);
 
-        // Fall back to AnimeUnity (Italian)
-        try {
-            const episodes = await fetchUnityEpisodes(id, title);
-            if (episodes.length > 0) return res.json({ episodes, source: "animeunity" });
-        } catch { /* both failed */ }
+        const gogoEps = gogoResult.status === "fulfilled" ? gogoResult.value : [];
+        if (gogoEps.length > 0) return res.json({ episodes: gogoEps, source: "gogoanime" });
+
+        const unityEps = unityResult.status === "fulfilled" ? unityResult.value : [];
+        if (unityEps.length > 0) return res.json({ episodes: unityEps, source: "animeunity" });
 
         res.json({ episodes: [], message: "No streaming source found" });
     } catch (err) {

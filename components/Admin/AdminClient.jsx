@@ -76,6 +76,10 @@ export default function AdminClient() {
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "logs" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         Logs
                     </button>
+                    <button onClick={() => setTab("adult")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "adult" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        18+ Manga
+                    </button>
                 </div>
 
                 {tab === "users" && <UsersPanel />}
@@ -84,6 +88,7 @@ export default function AdminClient() {
                 {tab === "voice" && <VoicePanel />}
                 {tab === "ads" && <AdsPanel />}
                 {tab === "logs" && <LogsPanel />}
+                {tab === "adult" && <AdultMangaPanel />}
             </div>
         </div>
     );
@@ -1240,6 +1245,173 @@ function LogsPanel() {
             </div>
 
             <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 text-right">{logs.length} entries</p>
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  18+ Manga Panel                                                           */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+function AdultMangaPanel() {
+    const [query, setQuery] = useState("");
+    const [results, setResults] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [selected, setSelected] = useState(null);
+    const [chapters, setChapters] = useState([]);
+    const [loadingCh, setLoadingCh] = useState(false);
+    const [pages, setPages] = useState([]);
+    const [currentPage, setCurrentPage] = useState(0);
+    const [loadingPage, setLoadingPage] = useState(false);
+    const searchTimer = useRef(null);
+
+    const getCover = (item) => {
+        const rel = (item.relationships || []).find((r) => r.type === "cover_art");
+        if (!rel?.attributes?.fileName) return "";
+        const raw = `https://uploads.mangadex.org/covers/${item.id}/${rel.attributes.fileName}.256.jpg`;
+        return `/api/manga/cover?url=${encodeURIComponent(raw)}`;
+    };
+
+    const doSearch = async (q) => {
+        if (!q.trim()) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/manga/adult?q=${encodeURIComponent(q)}&limit=30`);
+            const data = await res.json();
+            setResults(data?.data || []);
+        } catch {}
+        setLoading(false);
+    };
+
+    const loadBrowse = async (offset = 0, append = false) => {
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/manga/adult?limit=30&offset=${offset}`);
+            const data = await res.json();
+            const items = data?.data || [];
+            setResults((prev) => (append ? [...prev, ...items] : items));
+        } catch {}
+        setLoading(false);
+    };
+
+    useEffect(() => { loadBrowse(); }, []);
+
+    const handleSearchChange = (val) => {
+        setQuery(val);
+        clearTimeout(searchTimer.current);
+        searchTimer.current = setTimeout(() => {
+            if (val.trim()) doSearch(val);
+            else loadBrowse();
+        }, 400);
+    };
+
+    const handleSelect = async (item) => {
+        setSelected(item);
+        setChapters([]);
+        setPages([]);
+        setCurrentPage(0);
+        setLoadingCh(true);
+        try {
+            const res = await fetch(`/api/manga/chapters/${item.id}?limit=500&order=asc`);
+            const data = await res.json();
+            setChapters(data?.data || []);
+        } catch {}
+        setLoadingCh(false);
+    };
+
+    const handleReadChapter = async (ch) => {
+        setPages([]);
+        setCurrentPage(0);
+        setLoadingPage(true);
+        try {
+            const res = await fetch(`/api/manga/chapter/${ch.id}`);
+            const data = await res.json();
+            setPages(data?.pages || []);
+        } catch {}
+        setLoadingPage(false);
+    };
+
+    if (pages.length > 0) {
+        return (
+            <div>
+                <button onClick={() => { setPages([]); setCurrentPage(0); }} className="mb-4 px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                    ← Back to chapters
+                </button>
+                <div className="flex flex-col items-center gap-4">
+                    <img src={pages[currentPage]} alt={`Page ${currentPage + 1}`} className="max-h-[70vh] object-contain rounded-lg" />
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setCurrentPage((p) => Math.max(0, p - 1))} disabled={currentPage === 0} className="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm disabled:opacity-30">Prev</button>
+                        <span className="text-sm text-gray-500">{currentPage + 1} / {pages.length}</span>
+                        <button onClick={() => setCurrentPage((p) => Math.min(pages.length - 1, p + 1))} disabled={currentPage >= pages.length - 1} className="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm disabled:opacity-30">Next</button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (selected) {
+        return (
+            <div>
+                <button onClick={() => { setSelected(null); setChapters([]); }} className="mb-4 px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                    ← Back to browse
+                </button>
+                <div className="flex gap-4 mb-6">
+                    <img src={getCover(selected)} alt="" className="w-24 sm:w-32 aspect-[3/4] object-cover rounded-xl bg-gray-100 dark:bg-gray-800" />
+                    <div className="flex-1 min-w-0">
+                        <h2 className="font-bold text-gray-900 dark:text-gray-100 text-lg line-clamp-2">{selected.attributes?.title?.en || Object.values(selected.attributes?.title || {})[0]}</h2>
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-3">{selected.attributes?.description?.en || ""}</p>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                            {(selected.attributes?.tags || []).slice(0, 6).map((t) => (
+                                <span key={t.id} className="px-2 py-0.5 bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 text-[10px] rounded-full">{t.attributes?.name?.en}</span>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                {loadingCh ? (
+                    <div className="flex justify-center py-8"><div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" /></div>
+                ) : (
+                    <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+                        {chapters.map((ch) => (
+                            <button key={ch.id} onClick={() => handleReadChapter(ch)} className="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 transition-colors">
+                                <span className="font-medium">Ch. {ch.attributes?.chapter || "?"}</span>
+                                {ch.attributes?.title && <span className="ml-2 opacity-60">{ch.attributes.title}</span>}
+                            </button>
+                        ))}
+                        {chapters.length === 0 && <p className="text-sm text-gray-400 text-center py-4">No chapters found</p>}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    return (
+        <div>
+            <input
+                type="text"
+                placeholder="Search 18+ manga..."
+                value={query}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none focus:ring-2 focus:ring-pink-400 mb-4"
+            />
+            {loading && results.length === 0 ? (
+                <div className="flex justify-center py-12"><div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" /></div>
+            ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                    {results.map((item) => (
+                        <button key={item.id} onClick={() => handleSelect(item)} className="group text-left">
+                            <div className="relative aspect-[3/4] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
+                                <img src={getCover(item)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                            </div>
+                            <p className="mt-1.5 text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2">
+                                {item.attributes?.title?.en || Object.values(item.attributes?.title || {})[0] || ""}
+                            </p>
+                        </button>
+                    ))}
+                </div>
+            )}
+            {results.length === 0 && !loading && (
+                <p className="text-sm text-gray-400 text-center py-12">No results</p>
+            )}
         </div>
     );
 }

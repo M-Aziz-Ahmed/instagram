@@ -222,7 +222,7 @@ export default function MangaPage() {
             .then((r) => r.json())
             .then((d) => {
                 if (d?.data) {
-                    const popular = ["Action", "Adult", "Mature", "Romance", "Fantasy", "Comedy", "Drama", "Horror", "Sci-Fi", "Slice of Life", "Mystery", "Sports", "Supernatural", "Adventure", "Mecha", "Psychological", "Tragedy"];
+                    const popular = ["Action", "Romance", "Fantasy", "Comedy", "Drama", "Horror", "Sci-Fi", "Slice of Life", "Mystery", "Sports", "Supernatural", "Adventure", "Mecha", "Psychological", "Tragedy"];
                     const sorted = d.data.sort((a, b) => {
                         const ai = popular.indexOf(a.attributes?.name?.en);
                         const bi = popular.indexOf(b.attributes?.name?.en);
@@ -248,7 +248,7 @@ export default function MangaPage() {
             .catch(() => {});
     }, []);
 
-    
+
     useEffect(() => {
         if (!initialId || didInit.current) return;
         didInit.current = true;

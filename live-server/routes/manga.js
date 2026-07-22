@@ -251,4 +251,22 @@ router.get("/page", async (req, res) => {
     }
 });
 
+// Browse 18+ manga (erotica + pornographic content ratings)
+router.get("/adult", async (req, res) => {
+    try {
+        const { limit = 20, offset = 0, q } = req.query;
+        let url;
+        if (q) {
+            url = `${MANGADEX}/manga?title=${encodeURIComponent(q)}&limit=${Math.min(Number(limit), 100)}&offset=${offset}&includes[]=cover_art&contentRating[]=erotica&contentRating[]=pornographic&order[relevance]=desc`;
+        } else {
+            url = `${MANGADEX}/manga?limit=${Math.min(Number(limit), 100)}&offset=${offset}&includes[]=cover_art&contentRating[]=erotica&contentRating[]=pornographic&order[latestUploadedChapter]=desc`;
+        }
+        const data = await safeFetch(url);
+        res.json(data);
+    } catch (err) {
+        console.error("Adult manga error:", err.message);
+        res.status(502).json({ error: "Adult manga unavailable" });
+    }
+});
+
 module.exports = router;
