@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
-export default function MediaCard({ item, mediaType, href, showRating = true, showType = false }) {
+export default function MediaCard({ item, mediaType, href, showRating = true, showType = false, onClick }) {
     // TVMaze API returns full URLs in posterPath/backdropPath
     const imageUrl = item.posterPath || item.backdropPath || "";
     const title = item.title || item.name || "Unknown";
@@ -25,11 +25,8 @@ export default function MediaCard({ item, mediaType, href, showRating = true, sh
     // Only render Image if we have a valid URL
     const hasImage = imageUrl && imageUrl.startsWith("http");
 
-    return (
-        <Link
-            href={href || `/${route}?id=${item.id}`}
-            className="group block"
-        >
+    const content = (
+        <>
             <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
                 {hasImage ? (
                     <Image
@@ -65,6 +62,23 @@ export default function MediaCard({ item, mediaType, href, showRating = true, sh
                     {item.vote_average && <span className="flex items-center gap-0.5"><svg className="w-3 h-3 text-yellow-400" fill="currentColor" viewBox="0 0 24 24"><path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clipRule="evenodd" /></svg>{(item.vote_average / 2).toFixed(1)}</span>}
                 </div>
             </div>
+        </>
+    );
+
+    if (onClick) {
+        return (
+            <button onClick={() => onClick(item)} className="group block text-left w-full">
+                {content}
+            </button>
+        );
+    }
+
+    return (
+        <Link
+            href={href || `/${route}?id=${item.id}`}
+            className="group block"
+        >
+            {content}
         </Link>
     );
 }

@@ -307,7 +307,7 @@ export default function MediaPage({ mediaType, config }) {
                                 <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-3">Trending {label}</h2>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                                     {trending.map((item) => (
-                                        <MediaCard key={item.id} item={item} mediaType={mediaType} />
+                                        <MediaCard key={item.id} item={item} mediaType={mediaType} onClick={handleSelect} />
                                     ))}
                                 </div>
                             </div>
@@ -325,7 +325,7 @@ export default function MediaPage({ mediaType, config }) {
                                 </h2>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                                     {results.map((item) => (
-                                        <MediaCard key={item.id} item={item} mediaType={mediaType} />
+                                        <MediaCard key={item.id} item={item} mediaType={mediaType} onClick={handleSelect} />
                                     ))}
                                 </div>
                                 {loading && <div className="flex justify-center py-12"><div className="w-8 h-8 border-2 border-gray-300 dark:border-gray-700 border-t-blue-500 rounded-full animate-spin" /></div>}
