@@ -117,26 +117,32 @@ function formatTVMazeEpisode(ep) {
 }
 
 async function withTimeout(promise, ms) {
+    let timer;
     return Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
-    ]);
+        promise.then(v => { clearTimeout(timer); return v; }).catch(e => { clearTimeout(timer); throw e; }),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), ms); }),
+    ]).catch(err => {
+        clearTimeout(timer);
+        throw err;
+    });
 }
 
-async function fetchTVMaze(path, retries = 2) {
+async function fetchTVMaze(path, retries = 1) {
     for (let i = 0; i <= retries; i++) {
         try {
             const res = await withTimeout(
-                fetch(`${TVMAZE_BASE}${path}`, { family: 4, timeout: 10000 }),
-                12000
+                fetch(`${TVMAZE_BASE}${path}`, { family: 4, timeout: 8000 }),
+                10000
             );
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             return await res.json();
         } catch (err) {
-            if (i === retries) throw err;
-            await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+            if (i < retries) {
+                await new Promise(r => setTimeout(r, 500 * (i + 1)));
+            }
         }
     }
+    return [];
 }
 
 // Helper functions for type-specific filtering
@@ -374,19 +380,20 @@ router.get("/:type/:id", async (req, res) => {
         // Try direct ID lookup first
         let show;
         try {
-            show = await fetchTVMaze(`/shows/${id}?embed=episodes,cast,images`);
-        } catch (directErr) {
-            // If direct ID fails, try searching by title from query param
+            const data = await fetchTVMaze(`/shows/${id}?embed=episodes,cast,images`);
+            if (data && !Array.isArray(data)) show = data;
+        } catch {}
+        if (!show) {
             const { title } = req.query;
             if (title) {
                 try {
                     const searchResults = await fetchTVMaze(`/search/shows?q=${encodeURIComponent(title)}`);
-                    const match = searchResults.find(r => r.show && r.show.id.toString() === id) || searchResults[0];
+                    const match = (Array.isArray(searchResults) ? searchResults : []).find(r => r.show && r.show.id.toString() === id) || (Array.isArray(searchResults) ? searchResults[0] : null);
                     if (match?.show) show = match.show;
                 } catch {}
             }
-            if (!show) return res.status(404).json({ error: "Show not found in TVMaze" });
         }
+        if (!show) return res.status(404).json({ error: "Show not found in TVMaze" });
 
         const formatted = formatTVMazeShow(show, type);
         res.json({ type, ...formatted });
