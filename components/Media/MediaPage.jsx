@@ -33,9 +33,9 @@ export default function MediaPage({ mediaType, config }) {
 
     const fetchTrending = useCallback(async () => {
         try {
-            const routePath = mediaType === "movie" ? 
-                `/api/movies/trending?time_window=week` :
-                `${apiRoute}/${route}/trending?time_window=week`;
+            const routePath = mediaType === "movie" 
+                ? `/api/movies?trending=true&time_window=week`
+                : `${apiRoute}/${route}/trending?time_window=week`;
             const res = await fetch(routePath);
             if (!res.ok) {
                 if (res.status >= 500) {
@@ -57,14 +57,16 @@ export default function MediaPage({ mediaType, config }) {
         didInit.current = true;
         (async () => {
             try {
-                const res = await fetch(`${apiRoute}/${mediaType}/${initialId}`);
+                const detailPath = mediaType === "movie"
+                    ? `/api/movies?id=${initialId}`
+                    : `${apiRoute}/${mediaType}/${initialId}`;
+                const res = await fetch(detailPath);
                 if (!res.ok) {
                     if (res.status === 404) {
-                        console.warn(`Media ${initialId} not found in TVMaze`);
+                        console.warn(`Media ${initialId} not found`);
                         return;
                     }
-                    // Handle all non-2xx responses gracefully
-                    console.warn(`TVMaze API error: ${res.status}`);
+                    console.warn(`API error: ${res.status}`);
                     return;
                 }
                 const data = await res.json();
@@ -92,9 +94,9 @@ export default function MediaPage({ mediaType, config }) {
         setLoading(true);
         setTrending([]);
         try {
-            const searchPath = mediaType === "movie" ? 
-                `/api/movies/search?q=${encodeURIComponent(q)}&page=${page}` :
-                `${apiRoute}/${mediaType}/search?q=${encodeURIComponent(q)}&page=${page}`;
+            const searchPath = mediaType === "movie" 
+                ? `/api/movies?q=${encodeURIComponent(q)}&page=${page}`
+                : `${apiRoute}/${mediaType}/search?q=${encodeURIComponent(q)}&page=${page}`;
             const res = await fetch(searchPath);
             const data = await res.json();
             if (data?.results) {
@@ -123,10 +125,13 @@ export default function MediaPage({ mediaType, config }) {
         const route = routeMap[mediaType] || mediaType;
         window.history.pushState({}, "", `/${route}?id=${item.id}`);
         try {
-            const res = await fetch(`${apiRoute}/${mediaType}/${item.id}`);
+            const detailPath = mediaType === "movie"
+                ? `/api/movies?id=${item.id}`
+                : `${apiRoute}/${mediaType}/${item.id}`;
+            const res = await fetch(detailPath);
             if (!res.ok) {
                 if (res.status >= 400) {
-                    console.warn(`TVMaze API error: ${res.status}`);
+                    console.warn(`API error: ${res.status}`);
                     return;
                 }
             }
@@ -155,10 +160,12 @@ export default function MediaPage({ mediaType, config }) {
             window.history.pushState({}, "", `/${route}?id=${selected.id}&ep=${ep.episode_number}`);
         }
         try {
-            const res = await fetch(`${apiRoute}/${mediaType}/${ep.id}/stream?season=1&episode=${ep.episode_number}`);
+            const imdbId = selected?.externals?.imdb;
+            const streamQuery = `?season=1&episode=${ep.episode_number}` + (imdbId ? `&imdb=${imdbId}` : "");
+            const res = await fetch(`${apiRoute}/${mediaType}/${ep.id}/stream${streamQuery}`);
             if (!res.ok) {
                 if (res.status >= 400) {
-                    console.warn(`TVMaze stream API error: ${res.status}`);
+                    console.warn(`Stream API error: ${res.status}`);
                     return;
                 }
             }

@@ -9,6 +9,18 @@ const {
     getMediaSource,
 } = require("../utils/mediaSources");
 
+const PLURAL_TO_SINGULAR = {
+    movies: "movie",
+    kdramas: "kdrama",
+    cdramas: "cdrama",
+    cartoons: "cartoon",
+    seasons: "season",
+};
+
+function normalizeType(type) {
+    return PLURAL_TO_SINGULAR[type] || type;
+}
+
 const MediaBookmark = require("../models/mediaBookmark");
 const User = require("../models/user");
 
@@ -64,6 +76,7 @@ function formatTVMazeShow(show, mediaType) {
         firstAirDate: premiered,
         lastAirDate: ended,
         voteAverage: show.rating?.average ? show.rating.average / 2 : 0,
+        vote_average: show.rating?.average ? show.rating.average / 2 : 0,
         voteCount: show.rating?.average ? 1 : 0,
         popularity: show.weight || 0,
         genreIds: genres.map(g => g.toLowerCase().replace(/[^a-z]/g, "")),
@@ -86,12 +99,15 @@ function formatTVMazeEpisode(ep) {
     return {
         id: ep.id.toString(),
         episodeNumber: ep.number,
+        episode_number: ep.number,
         seasonNumber: ep.season,
         name: ep.name,
         overview: ep.summary ? ep.summary.replace(/<[^>]*>/g, "") : "",
         airDate: ep.airdate,
+        air_date: ep.airdate,
         runtime: ep.runtime,
         voteAverage: ep.rating?.average ? ep.rating.average / 2 : 0,
+        vote_average: ep.rating?.average ? ep.rating.average / 2 : 0,
         stillPath: ep.image?.medium || ep.image?.original || "",
     };
 }
@@ -135,10 +151,26 @@ function getStreamUrl(mediaType, id, season, episode) {
     }
 }
 
+async function resolveImdbId(type, id) {
+    if (type === "movie") return id;
+    try {
+        const show = await withTimeout(
+            fetch(`${TVMAZE_BASE}/shows/${id}`).then(r => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            }),
+            8000
+        );
+        return show?.externals?.imdb || id;
+    } catch {
+        return id;
+    }
+}
+
 // ── Search ─────────────────────────────────────────────────────────
 router.get("/:type/search", async (req, res) => {
     try {
-        const { type } = req.params;
+        const type = normalizeType(req.params.type);
         const { q, page = 1 } = req.query;
         if (!q) return res.status(400).json({ error: "Query required" });
 
@@ -211,7 +243,7 @@ function getTypeGenre(type) {
 // ── Discover / Browse ──────────────────────────────────────────────
 router.get("/:type/discover", async (req, res) => {
     try {
-        const { type } = req.params;
+        const type = normalizeType(req.params.type);
         const { page = 1, genre, country, sort = "popularity" } = req.query;
 
         const source = getMediaSource(type);
@@ -268,7 +300,7 @@ router.get("/:type/discover", async (req, res) => {
 // ── Trending ───────────────────────────────────────────────────────
 router.get("/:type/trending", async (req, res) => {
     try {
-        const { type } = req.params;
+        const type = normalizeType(req.params.type);
         const { time_window = "week" } = req.query;
 
         const source = getMediaSource(type);
@@ -303,7 +335,7 @@ router.get("/:type/trending", async (req, res) => {
 // ── Genres ─────────────────────────────────────────────────────────
 router.get("/:type/genres", async (req, res) => {
     try {
-        const { type } = req.params;
+        const type = normalizeType(req.params.type);
         const source = getMediaSource(type);
         if (!source) return res.status(400).json({ error: "Invalid media type" });
 
@@ -319,7 +351,8 @@ router.get("/:type/genres", async (req, res) => {
 // ── Detail ─────────────────────────────────────────────────────────
 router.get("/:type/:id", async (req, res) => {
     try {
-        const { type, id } = req.params;
+        const type = normalizeType(req.params.type);
+        const { id } = req.params;
         const source = getMediaSource(type);
         if (!source || source.type === "anime") {
             return res.status(400).json({ error: "Use /api/anime/:id for anime" });
@@ -367,7 +400,8 @@ router.get("/:type/:id", async (req, res) => {
 // ── Season ─────────────────────────────────────────────────────────
 router.get("/:type/:id/season/:season", async (req, res) => {
     try {
-        const { type, id, season } = req.params;
+        const type = normalizeType(req.params.type);
+        const { id, season } = req.params;
         const source = getMediaSource(type);
         if (!source || source.searchType !== "TV") {
             return res.status(400).json({ error: "Seasons only available for TV series" });
@@ -400,7 +434,8 @@ router.get("/:type/:id/season/:season", async (req, res) => {
 // ── Episode ────────────────────────────────────────────────────────
 router.get("/:type/:id/season/:season/episode/:episode", async (req, res) => {
     try {
-        const { type, id, season, episode } = req.params;
+        const type = normalizeType(req.params.type);
+        const { id, season, episode } = req.params;
         const source = getMediaSource(type);
         if (!source || source.searchType !== "TV") {
             return res.status(400).json({ error: "Episodes only available for TV series" });
@@ -424,28 +459,17 @@ router.get("/:type/:id/season/:season/episode/:episode", async (req, res) => {
 // ── Stream ─────────────────────────────────────────────────────────
 router.get("/:type/:id/stream", async (req, res) => {
     try {
-        const { type, id } = req.params;
-        const { season, episode } = req.query;
+        const type = normalizeType(req.params.type);
+        const { id } = req.params;
+        const { season, episode, imdb } = req.query;
         const source = getMediaSource(type);
 
         if (!source) return res.status(400).json({ error: "Invalid media type" });
 
-        const streamUrl = getStreamUrl(type, id, season ? parseInt(season) : null, episode ? parseInt(episode) : null);
+        const resolvedId = imdb || await resolveImdbId(type, id);
+        const streamUrl = getStreamUrl(type, resolvedId, season ? parseInt(season) : null, episode ? parseInt(episode) : null);
 
-        const sources = [
-            { name: "VidSrc", url: streamUrl, quality: "auto", type: "iframe" },
-        ];
-
-        if (type !== "movie") {
-            sources.push({
-                name: "VidSrc (Selector)",
-                url: `https://vidsrc.xyz/embed/tv/${id}`,
-                quality: "auto",
-                type: "iframe",
-            });
-        }
-
-        res.json({ type, id, season: season ? parseInt(season) : null, episode: episode ? parseInt(episode) : null, sources });
+        res.json({ url: streamUrl, type, id, season: season ? parseInt(season) : null, episode: episode ? parseInt(episode) : null });
     } catch (err) {
         console.error(`${req.params.type} stream error:`, err.message);
         res.status(502).json({ error: "Stream unavailable" });
@@ -455,7 +479,8 @@ router.get("/:type/:id/stream", async (req, res) => {
 // ── Recommendations ────────────────────────────────────────────────
 router.get("/:type/:id/recommendations", async (req, res) => {
     try {
-        const { type, id } = req.params;
+        const type = normalizeType(req.params.type);
+        const { id } = req.params;
         const source = getMediaSource(type);
         if (!source) return res.status(400).json({ error: "Invalid media type" });
 
@@ -489,7 +514,8 @@ router.get("/:type/:id/recommendations", async (req, res) => {
 // ── Similar ────────────────────────────────────────────────────────
 router.get("/:type/:id/similar", async (req, res) => {
     try {
-        const { type, id } = req.params;
+        const type = normalizeType(req.params.type);
+        const { id } = req.params;
         const source = getMediaSource(type);
         if (!source) return res.status(400).json({ error: "Invalid media type" });
 
@@ -523,7 +549,8 @@ router.get("/:type/:id/similar", async (req, res) => {
 // ── Videos (Trailers) ──────────────────────────────────────────────
 router.get("/:type/:id/videos", async (req, res) => {
     try {
-        const { type, id } = req.params;
+        const type = normalizeType(req.params.type);
+        const { id } = req.params;
         const source = getMediaSource(type);
         if (!source) return res.status(400).json({ error: "Invalid media type" });
 
@@ -538,7 +565,8 @@ router.get("/:type/:id/videos", async (req, res) => {
 // ── Credits ────────────────────────────────────────────────────────
 router.get("/:type/:id/credits", async (req, res) => {
     try {
-        const { type, id } = req.params;
+        const type = normalizeType(req.params.type);
+        const { id } = req.params;
         const source = getMediaSource(type);
         if (!source) return res.status(400).json({ error: "Invalid media type" });
 
