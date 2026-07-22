@@ -114,8 +114,8 @@ export default function MediaPage({ mediaType, config }) {
 
     const handleSelect = async (item) => {
         setSelected(item);
-        setDetails(null);
-        setEpisodes([]);
+        setDetails(item);
+        setEpisodes(item.episodes || []);
         setCurrentEp(null);
         setStreamUrl("");
         const routeMap = { movie: "movies", kdrama: "kdramas", season: "seasons", cdrama: "cdramas", cartoon: "cartoons" };
@@ -126,19 +126,17 @@ export default function MediaPage({ mediaType, config }) {
                 ? `/api/movies?id=${item.id}`
                 : `${apiRoute}/${mediaType}/${item.id}`;
             const res = await fetch(detailPath);
-            if (!res.ok) {
-                console.warn(`API error: ${res.status}`);
-                return;
-            }
-            const data = await res.json();
-            if (data) {
-                setDetails(data);
-                if (data.episodes?.length > 0) {
-                    setEpisodes(data.episodes);
+            if (res.ok) {
+                const data = await res.json();
+                if (data) {
+                    setDetails(data);
+                    if (data.episodes?.length > 0) {
+                        setEpisodes(data.episodes);
+                    }
                 }
             }
         } catch (err) {
-            console.error("Failed to load details:", err);
+            console.warn("Detail fetch failed, using search data:", err.message);
         }
     };
 
