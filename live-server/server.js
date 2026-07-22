@@ -2815,6 +2815,7 @@ app.use("/api/invites", apiLimiter, require("./routes/invites"));
 app.use("/api/music", apiLimiter, require("./routes/music"));
 app.use("/api/anime", apiLimiter, require("./routes/anime"));
 app.use("/api/manga", apiLimiter, require("./routes/manga"));
+app.use("/api/adult-manga", apiLimiter, require("./routes/adultManga"));
 app.use("/api/media", apiLimiter, require("./routes/media"));
 app.use("/api/media-bookmarks", apiLimiter, require("./routes/mediaBookmarks"));
 app.use("/api/reactionduel", require("./routes/reactionduel")(io));

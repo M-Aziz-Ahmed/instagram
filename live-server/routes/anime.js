@@ -1,7 +1,10 @@
 const express = require("express");
 const fetch = require("node-fetch");
+const dns = require("dns");
 const { ANIME } = require("@consumet/extensions");
 const router = express.Router();
+
+dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
 
 const ANILIST = "https://graphql.anilist.co";
 const GOGO_BASE = "https://gogoanimehd.to";
@@ -14,16 +17,24 @@ const gogoEpisodeCache = new Map();
 const unityIdCache = new Map();
 const unityEpisodeCache = new Map();
 
-async function gql(query, variables = {}) {
-    const res = await fetch(ANILIST, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "User-Agent": "AnonTweet/1.0" },
-        body: JSON.stringify({ query, variables }),
-        timeout: 15000,
-    });
-    const json = await res.json();
-    if (json.errors) throw new Error(json.errors[0]?.message || "AniList error");
-    return json.data;
+async function gql(query, variables = {}, retries = 2) {
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const res = await fetch(ANILIST, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "User-Agent": "AnonTweet/1.0" },
+                body: JSON.stringify({ query, variables }),
+                timeout: 20000,
+                family: 4,
+            });
+            const json = await res.json();
+            if (json.errors) throw new Error(json.errors[0]?.message || "AniList error");
+            return json.data;
+        } catch (err) {
+            if (i === retries) throw err;
+            await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+        }
+    }
 }
 
 const MEDIA_FIELDS = `
