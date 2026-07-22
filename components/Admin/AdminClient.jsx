@@ -1284,6 +1284,8 @@ function AdultMangaPanel() {
         return `/api/adult-manga/cover?url=${encodeURIComponent(`https://uploads.mangadex.org/covers/${m.id}/${fn}.256.jpg`)}`;
     };
 
+    const toArray = (v) => (Array.isArray(v) ? v : []);
+
     const doSearch = async (q) => {
         if (!q.trim()) return;
         setLoading(true);
@@ -1291,8 +1293,8 @@ function AdultMangaPanel() {
         try {
             const res = await fetch(`/api/adult-manga/search?q=${encodeURIComponent(q)}&limit=${LIMIT}`);
             const data = await res.json();
-            setResults(data?.data || []);
-            setTotal(data?.total || 0);
+            setResults(toArray(data?.data));
+            setTotal(Number(data?.total) || 0);
         } catch {}
         setLoading(false);
     };
@@ -1303,8 +1305,8 @@ function AdultMangaPanel() {
         try {
             const res = await fetch(`/api/adult-manga/browse?limit=${LIMIT}&offset=${offset}`);
             const data = await res.json();
-            setResults(data?.data || []);
-            setTotal(data?.total || 0);
+            setResults(toArray(data?.data));
+            setTotal(Number(data?.total) || 0);
             setPageNum(p + 1);
         } catch {}
         setLoading(false);
@@ -1330,7 +1332,7 @@ function AdultMangaPanel() {
         try {
             const res = await fetch(`/api/adult-manga/chapters/${item.id}?lang=en&limit=500&order=asc`);
             const data = await res.json();
-            setChapters(data?.data || []);
+            setChapters(toArray(data?.data));
         } catch {}
         setChLoading(false);
     };
@@ -1342,7 +1344,7 @@ function AdultMangaPanel() {
         try {
             const res = await fetch(`/api/adult-manga/chapter/${chapterId}`);
             const data = await res.json();
-            const pageList = (data.pages || []).map((p) => `/api/adult-manga/page?url=${encodeURIComponent(p)}`);
+            const pageList = toArray(data?.pages).map((p) => `/api/adult-manga/page?url=${encodeURIComponent(p)}`);
             setPages(pageList);
         } catch {}
         setLoading(false);

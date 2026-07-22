@@ -7,8 +7,6 @@ dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
 
 const MANGADEX = "https://api.mangadex.org";
 
-const UNCENSORED_TAG_ID = "b133333a-eb36-4f1e-a385-1304d3a468b6";
-
 async function mdFetch(url, retries = 2) {
     for (let i = 0; i <= retries; i++) {
         try {
@@ -30,7 +28,7 @@ router.get("/search", async (req, res) => {
     try {
         const { q, limit = 30, offset = 0 } = req.query;
         if (!q) return res.status(400).json({ error: "Query required" });
-        const url = `${MANGADEX}/manga?title=${encodeURIComponent(q)}&limit=${Math.min(Number(limit), 100)}&offset=${offset}&includes[]=cover_art&contentRating[]=erotica&contentRating[]=pornographic&includedTags[]=${UNCENSORED_TAG_ID}&order[relevance]=desc`;
+        const url = `${MANGADEX}/manga?title=${encodeURIComponent(q)}&limit=${Math.min(Number(limit), 100)}&offset=${offset}&includes[]=cover_art&contentRating[]=erotica&contentRating[]=pornographic&order[relevance]=desc`;
         const data = await mdFetch(url);
         if (data?.data) {
             const seen = new Map();
@@ -47,7 +45,7 @@ router.get("/search", async (req, res) => {
 router.get("/browse", async (req, res) => {
     try {
         const { limit = 30, offset = 0 } = req.query;
-        const url = `${MANGADEX}/manga?limit=${Math.min(Number(limit), 100)}&offset=${offset}&includes[]=cover_art&contentRating[]=erotica&contentRating[]=pornographic&includedTags[]=${UNCENSORED_TAG_ID}&order[latestUploadedChapter]=desc`;
+        const url = `${MANGADEX}/manga?limit=${Math.min(Number(limit), 100)}&offset=${offset}&includes[]=cover_art&contentRating[]=erotica&contentRating[]=pornographic&order[latestUploadedChapter]=desc`;
         const data = await mdFetch(url);
         if (data?.data) {
             const seen = new Map();
