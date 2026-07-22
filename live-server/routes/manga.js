@@ -7,13 +7,21 @@ dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 const MANGADEX = "https://api.mangadex.org";
 
-async function safeFetch(url) {
-    const res = await fetch(url, {
-        headers: { "User-Agent": "AnonTweet/1.0" },
-        timeout: 15000,
-    });
-    if (!res.ok) throw new Error(`Upstream ${res.status}`);
-    return res.json();
+async function safeFetch(url, retries = 2) {
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const res = await fetch(url, {
+                headers: { "User-Agent": "AnonTweet/1.0" },
+                timeout: 20000,
+                family: 4,
+            });
+            if (!res.ok) throw new Error(`Upstream ${res.status}`);
+            return res.json();
+        } catch (err) {
+            if (i === retries) throw err;
+            await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+        }
+    }
 }
 
 // Search manga
