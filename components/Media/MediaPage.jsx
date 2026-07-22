@@ -124,7 +124,7 @@ export default function MediaPage({ mediaType, config }) {
         try {
             const detailPath = mediaType === "movie"
                 ? `/api/movies?id=${item.id}`
-                : `${apiRoute}/${mediaType}/${item.id}`;
+                : `${apiRoute}/${mediaType}/${item.id}?title=${encodeURIComponent(item.title || "")}`;
             const res = await fetch(detailPath);
             if (res.ok) {
                 const data = await res.json();
