@@ -61,6 +61,14 @@ router.get("/chapters/:id", async (req, res) => {
         const { lang = "en", limit = 500, offset = 0, order = "asc" } = req.query;
         const url = `${MANGADEX}/manga/${req.params.id}/feed?translatedLanguage[]=${lang}&order[chapter]=${order}&limit=${Math.min(Number(limit), 500)}&offset=${offset}`;
         const data = await safeFetch(url);
+        if (data?.data) {
+            const seen = new Map();
+            for (const ch of data.data) {
+                const num = ch.attributes?.chapter || "";
+                if (!seen.has(num)) seen.set(num, ch);
+            }
+            data.data = [...seen.values()];
+        }
         res.json(data);
     } catch (err) {
         console.error("Manga chapters error:", err.message);
