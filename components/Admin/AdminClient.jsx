@@ -1258,78 +1258,103 @@ function AdultMangaPanel() {
     const [results, setResults] = useState([]);
     const [loading, setLoading] = useState(false);
     const [selected, setSelected] = useState(null);
+    const [chapters, setChapters] = useState([]);
     const [pages, setPages] = useState([]);
     const [currentPage, setCurrentPage] = useState(0);
     const [pageNum, setPageNum] = useState(1);
-    const [numPages, setNumPages] = useState(1);
+    const [total, setTotal] = useState(0);
+    const [chLoading, setChLoading] = useState(false);
     const searchTimer = useRef(null);
+    const LIMIT = 30;
 
-    const getCover = (item) => {
-        if (item.images?.cover) {
-            const ext = item.images.cover.t === "j" ? "jpg" : item.images.cover.t === "p" ? "png" : "webp";
-            return `/api/adult-manga/cover?url=${encodeURIComponent(`https://i.nhentai.net/galleries/${item.id}/cover.${ext}`)}`;
-        }
-        return "";
+    const getTitle = (m) => {
+        const t = m.attributes?.title;
+        if (!t) return "";
+        return t.en || t["ja-ro"] || t.ja || Object.values(t)[0] || "";
+    };
+
+    const getCoverFileName = (m) => {
+        const rel = (m.relationships || []).find((r) => r.type === "cover_art");
+        return rel?.attributes?.fileName || "";
+    };
+
+    const getCover = (m) => {
+        const fn = getCoverFileName(m);
+        if (!fn) return "";
+        return `/api/adult-manga/cover?url=${encodeURIComponent(`https://uploads.mangadex.org/covers/${m.id}/${fn}.256.jpg`)}`;
     };
 
     const doSearch = async (q) => {
         if (!q.trim()) return;
         setLoading(true);
+        setPageNum(1);
         try {
-            const res = await fetch(`/api/adult-manga/search?q=${encodeURIComponent(q)}`);
+            const res = await fetch(`/api/adult-manga/search?q=${encodeURIComponent(q)}&limit=${LIMIT}`);
             const data = await res.json();
-            setResults(data?.result || []);
-            setNumPages(data?.num_pages || 1);
+            setResults(data?.data || []);
+            setTotal(data?.total || 0);
         } catch {}
         setLoading(false);
     };
 
-    const loadBrowse = async (p = 1) => {
+    const loadBrowse = async (p = 0) => {
         setLoading(true);
+        const offset = p * LIMIT;
         try {
-            const res = await fetch(`/api/adult-manga/browse?page=${p}`);
+            const res = await fetch(`/api/adult-manga/browse?limit=${LIMIT}&offset=${offset}`);
             const data = await res.json();
-            setResults(data?.result || []);
-            setNumPages(data?.num_pages || 1);
-            setPageNum(p);
+            setResults(data?.data || []);
+            setTotal(data?.total || 0);
+            setPageNum(p + 1);
         } catch {}
         setLoading(false);
     };
 
-    useEffect(() => { loadBrowse(); }, []);
+    useEffect(() => { loadBrowse(0); }, []);
 
     const handleSearchChange = (val) => {
         setQuery(val);
         clearTimeout(searchTimer.current);
         searchTimer.current = setTimeout(() => {
             if (val.trim()) doSearch(val);
-            else loadBrowse();
+            else loadBrowse(0);
         }, 400);
     };
 
     const handleSelect = async (item) => {
         setSelected(item);
+        setChapters([]);
+        setPages([]);
+        setCurrentPage(0);
+        setChLoading(true);
+        try {
+            const res = await fetch(`/api/adult-manga/chapters/${item.id}?lang=en&limit=500&order=asc`);
+            const data = await res.json();
+            setChapters(data?.data || []);
+        } catch {}
+        setChLoading(false);
+    };
+
+    const handleReadChapter = async (chapterId) => {
         setPages([]);
         setCurrentPage(0);
         setLoading(true);
         try {
-            const res = await fetch(`/api/adult-manga/pages/${item.id}`);
+            const res = await fetch(`/api/adult-manga/chapter/${chapterId}`);
             const data = await res.json();
-            const pageList = [];
-            for (let i = 1; i <= (data.num_pages || 0); i++) {
-                const ext = data.pages?.[i - 1]?.t === "j" ? "jpg" : data.pages?.[i - 1]?.t === "p" ? "png" : "webp";
-                pageList.push(`/api/adult-manga/page?url=${encodeURIComponent(`https://i.nhentai.net/galleries/${item.id}/${i}.${ext}`)}`);
-            }
+            const pageList = (data.pages || []).map((p) => `/api/adult-manga/page?url=${encodeURIComponent(p)}`);
             setPages(pageList);
         } catch {}
         setLoading(false);
     };
 
+    const totalPages = Math.ceil(total / LIMIT);
+
     if (pages.length > 0) {
         return (
             <div>
-                <button onClick={() => { setPages([]); setCurrentPage(0); setSelected(null); }} className="mb-4 px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-                    ← Back to browse
+                <button onClick={() => { setPages([]); setCurrentPage(0); }} className="mb-4 px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                    ← Back to chapters
                 </button>
                 <div className="flex flex-col items-center gap-4">
                     <img src={pages[currentPage]} alt={`Page ${currentPage + 1}`} className="max-h-[70vh] object-contain rounded-lg" />
@@ -1346,24 +1371,35 @@ function AdultMangaPanel() {
     if (selected) {
         return (
             <div>
-                <button onClick={() => { setSelected(null); }} className="mb-4 px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                <button onClick={() => { setSelected(null); setChapters([]); }} className="mb-4 px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                     ← Back to browse
                 </button>
                 <div className="flex gap-4 mb-6">
                     <img src={getCover(selected)} alt="" className="w-24 sm:w-32 aspect-[3/4] object-cover rounded-xl bg-gray-100 dark:bg-gray-800" />
                     <div className="flex-1 min-w-0">
-                        <h2 className="font-bold text-gray-900 dark:text-gray-100 text-lg line-clamp-2">{selected.title}</h2>
+                        <h2 className="font-bold text-gray-900 dark:text-gray-100 text-lg line-clamp-2">{getTitle(selected)}</h2>
                         <div className="flex flex-wrap gap-1 mt-2">
-                            {(selected.tags || []).slice(0, 8).map((t, i) => (
-                                <span key={i} className="px-2 py-0.5 bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 text-[10px] rounded-full">{t.name}</span>
+                            {(selected.attributes?.tags || []).slice(0, 8).map((t, i) => (
+                                <span key={i} className="px-2 py-0.5 bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 text-[10px] rounded-full">{t.attributes?.name?.en || ""}</span>
                             ))}
                         </div>
-                        <p className="text-xs text-gray-500 mt-2">{selected.num_pages || 0} pages</p>
-                        <button onClick={() => handleSelect(selected)} disabled={loading} className="mt-3 px-4 py-2 bg-pink-500 text-white rounded-xl text-sm font-medium hover:bg-pink-600 transition-colors disabled:opacity-50">
-                            {loading ? "Loading..." : "Read"}
-                        </button>
                     </div>
                 </div>
+                {chLoading ? (
+                    <div className="flex justify-center py-8"><div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" /></div>
+                ) : chapters.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-8">No chapters available</p>
+                ) : (
+                    <div className="space-y-1 max-h-[40vh] overflow-y-auto pr-1">
+                        {chapters.map((ch) => (
+                            <button key={ch.id} onClick={() => handleReadChapter(ch.id)} disabled={loading} className="w-full text-left px-3 py-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50 text-xs">
+                                <span className="font-medium text-gray-900 dark:text-gray-100">Ch. {ch.attributes?.chapter || "?"}</span>
+                                {ch.attributes?.title && <span className="text-gray-500 ml-2">— {ch.attributes.title}</span>}
+                                <span className="float-right text-gray-400">{ch.attributes?.translatedLanguage?.toUpperCase()}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
         );
     }
@@ -1372,7 +1408,7 @@ function AdultMangaPanel() {
         <div>
             <input
                 type="text"
-                placeholder="Search uncensored hentai..."
+                placeholder="Search uncensored manga..."
                 value={query}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none focus:ring-2 focus:ring-pink-400 mb-4"
@@ -1387,7 +1423,7 @@ function AdultMangaPanel() {
                                 <img src={getCover(item)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
                             </div>
                             <p className="mt-1.5 text-xs font-medium text-gray-900 dark:text-gray-100 line-clamp-2">
-                                {item.title || ""}
+                                {getTitle(item)}
                             </p>
                         </button>
                     ))}
@@ -1396,11 +1432,11 @@ function AdultMangaPanel() {
             {results.length === 0 && !loading && (
                 <p className="text-sm text-gray-400 text-center py-12">No results</p>
             )}
-            {numPages > 1 && (
+            {totalPages > 1 && (
                 <div className="flex justify-center gap-2 mt-6">
-                    <button onClick={() => query ? doSearch(query) : loadBrowse(pageNum - 1)} disabled={pageNum <= 1} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 rounded-lg disabled:opacity-30">Prev</button>
-                    <span className="text-xs text-gray-500 px-2">Page {pageNum} / {numPages}</span>
-                    <button onClick={() => query ? doSearch(query) : loadBrowse(pageNum + 1)} disabled={pageNum >= numPages} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 rounded-lg disabled:opacity-30">Next</button>
+                    <button onClick={() => query ? doSearch(query) : loadBrowse(pageNum - 2)} disabled={pageNum <= 1} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 rounded-lg disabled:opacity-30">Prev</button>
+                    <span className="text-xs text-gray-500 px-2">Page {pageNum} / {totalPages}</span>
+                    <button onClick={() => query ? doSearch(query) : loadBrowse(pageNum)} disabled={pageNum >= totalPages} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 rounded-lg disabled:opacity-30">Next</button>
                 </div>
             )}
         </div>
