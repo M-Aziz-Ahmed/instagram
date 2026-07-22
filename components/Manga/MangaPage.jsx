@@ -229,6 +229,8 @@ export default function MangaPage() {
                         return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                     });
                     setTags(sorted);
+                    const awardWinning = sorted.find((t) => t.id === "d134e539-c501-41ec-b4b1-4550f1c46a04");
+                    if (awardWinning) handleBrowseTag(awardWinning);
                 }
             })
             .catch(() => {});
