@@ -236,6 +236,7 @@ export default function MangaPage() {
             .catch(() => {});
     }, []);
 
+    
     useEffect(() => {
         if (!initialId || didInit.current) return;
         didInit.current = true;
