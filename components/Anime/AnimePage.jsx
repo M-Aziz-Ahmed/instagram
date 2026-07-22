@@ -246,6 +246,7 @@ export default function AnimePage() {
     const [activeGenre, setActiveGenre] = useState(null);
     const [subOrDub, setSubOrDub] = useState("sub");
     const searchTimer = useRef(null);
+    const scrollRef = useRef(0);
 
     useEffect(() => {
         fetch("/api/anime/spotlight")
@@ -344,6 +345,7 @@ export default function AnimePage() {
     };
 
     const handleSelect = async (item) => {
+        scrollRef.current = window.scrollY;
         setSelected(item);
         setEpisodes([]);
         setCurrentEp(null);
@@ -416,6 +418,7 @@ export default function AnimePage() {
             setSelected(null);
             setEpisodes([]);
             window.history.pushState({}, "", "/anime");
+            requestAnimationFrame(() => window.scrollTo(0, scrollRef.current));
         }
     };
 

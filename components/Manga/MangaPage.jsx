@@ -206,7 +206,10 @@ export default function MangaPage() {
     const [activeTag, setActiveTag] = useState(null);
     const [tagOffset, setTagOffset] = useState(0);
     const [hasMore, setHasMore] = useState(false);
+    const [searchOffset, setSearchOffset] = useState(0);
+    const [searchHasMore, setSearchHasMore] = useState(false);
     const searchTimer = useRef(null);
+    const scrollRef = useRef(0);
     const searchParams = useSearchParams();
     const initialId = searchParams.get("id");
     const initialCh = searchParams.get("ch");
@@ -272,14 +275,18 @@ export default function MangaPage() {
         })();
     }, [initialId, initialCh]);
 
-    const doSearch = useCallback(async (q) => {
+    const doSearch = useCallback(async (q, offset = 0, append = false) => {
         if (!q.trim()) return;
         setLoading(true);
         setActiveTag(null);
+        setHasMore(false);
         try {
-            const res = await fetch(`/api/manga/search?q=${encodeURIComponent(q)}&limit=30`);
+            const res = await fetch(`/api/manga/search?q=${encodeURIComponent(q)}&limit=30&offset=${offset}`);
             const data = await res.json();
-            setResults(data?.data || []);
+            const items = data?.data || [];
+            setResults((prev) => (append ? [...prev, ...items] : items));
+            setSearchOffset(offset + items.length);
+            setSearchHasMore(items.length >= 30);
         } catch { /* silent */ }
         setLoading(false);
     }, []);
@@ -288,7 +295,7 @@ export default function MangaPage() {
         setQuery(val);
         clearTimeout(searchTimer.current);
         searchTimer.current = setTimeout(() => {
-            if (val.trim()) doSearch(val);
+            if (val.trim()) doSearch(val, 0, false);
             else setResults([]);
         }, 400);
     };
@@ -296,6 +303,7 @@ export default function MangaPage() {
     const handleBrowseTag = async (tag, offset = 0, append = false) => {
         setActiveTag(tag);
         setQuery("");
+        setSearchHasMore(false);
         setLoading(true);
         try {
             const res = await fetch(`/api/manga/tag/${tag.id}?limit=30&offset=${offset}`);
@@ -309,6 +317,7 @@ export default function MangaPage() {
     };
 
     const handleSelect = async (item) => {
+        scrollRef.current = window.scrollY;
         setSelected(item);
         selectedRef.current = item;
         setChapters([]);
@@ -381,6 +390,7 @@ export default function MangaPage() {
             setSelected(null);
             setChapters([]);
             window.history.pushState({}, "", "/manga");
+            requestAnimationFrame(() => window.scrollTo(0, scrollRef.current));
         }
     };
 
@@ -408,7 +418,7 @@ export default function MangaPage() {
                             placeholder="Search manga..."
                             value={query}
                             onChange={(e) => handleSearchChange(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === "Enter" && query.trim()) doSearch(query); }}
+                            onKeyDown={(e) => { if (e.key === "Enter" && query.trim()) doSearch(query, 0, false); }}
                             className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-400"
                         />
                     </div>
@@ -555,6 +565,17 @@ export default function MangaPage() {
                                     <div className="flex justify-center mt-6">
                                         <button
                                             onClick={() => handleBrowseTag(activeTag, tagOffset, true)}
+                                            disabled={loading}
+                                            className="px-6 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-full transition-colors disabled:opacity-50"
+                                        >
+                                            {loading ? "Loading..." : "Load more"}
+                                        </button>
+                                    </div>
+                                )}
+                                {query && searchHasMore && !activeTag && (
+                                    <div className="flex justify-center mt-6">
+                                        <button
+                                            onClick={() => doSearch(query, searchOffset, true)}
                                             disabled={loading}
                                             className="px-6 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-full transition-colors disabled:opacity-50"
                                         >
