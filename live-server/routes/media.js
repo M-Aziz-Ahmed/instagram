@@ -1,6 +1,9 @@
 const express = require("express");
 const fetch = require("node-fetch");
+const dns = require("dns");
 const router = express.Router();
+
+dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
 
 const TVMAZE_BASE = "https://api.tvmaze.com";
 
@@ -119,6 +122,22 @@ async function withTimeout(promise, ms) {
     ]);
 }
 
+async function fetchTVMaze(path, retries = 2) {
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const res = await withTimeout(
+                fetch(`${TVMAZE_BASE}${path}`, { family: 4, timeout: 10000 }),
+                12000
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return await res.json();
+        } catch (err) {
+            if (i === retries) throw err;
+            await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+        }
+    }
+}
+
 // Helper functions for type-specific filtering
 function getTypeCountry(type) {
     const countries = { kdrama: "KR", cdrama: "CN" };
@@ -154,13 +173,7 @@ function getStreamUrl(mediaType, id, season, episode) {
 async function resolveImdbId(type, id) {
     if (type === "movie") return id;
     try {
-        const show = await withTimeout(
-            fetch(`${TVMAZE_BASE}/shows/${id}`).then(r => {
-                if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                return r.json();
-            }),
-            8000
-        );
+        const show = await fetchTVMaze(`/shows/${id}`);
         return show?.externals?.imdb || id;
     } catch {
         return id;
@@ -179,10 +192,7 @@ router.get("/:type/search", async (req, res) => {
             return res.status(400).json({ error: "Use /api/anime/search for anime" });
         }
 
-        const results = await withTimeout(
-            fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(q)}`).then(r => r.json()),
-            10000
-        );
+        const results = await fetchTVMaze(`/search/shows?q=${encodeURIComponent(q)}`);
 
         // Filter by type-specific criteria
         const typeQueries = getTypeQueries(type);
@@ -259,10 +269,7 @@ router.get("/:type/discover", async (req, res) => {
 
         if (typeCountry) {
             // Use country-specific schedule for K-Dramas, C-Dramas
-            const schedule = await withTimeout(
-                fetch(`${TVMAZE_BASE}/schedule?country=${typeCountry}`).then(r => r.json()),
-                10000
-            );
+            const schedule = await fetchTVMaze(`/schedule?country=${typeCountry}`);
             const uniqueShows = [];
             const seen = new Set();
             for (const item of schedule) {
@@ -275,18 +282,18 @@ router.get("/:type/discover", async (req, res) => {
             results = uniqueShows;
         } else if (typeGenre) {
             // Use genre search for cartoons (Animation)
-            const searchResults = await withTimeout(
-                fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(typeGenre)}`).then(r => r.json()),
-                10000
-            );
+            const searchResults = await fetchTVMaze(`/search/shows?q=${encodeURIComponent(typeGenre)}`);
             results = searchResults.map(r => r.show).filter(s => s.genres?.includes(typeGenre));
         } else {
             // Use type-specific search queries
             const promises = typeQueries.slice(0, 8).map(q =>
-                fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(q)}`).then(r => r.json())
+                fetchTVMaze(`/search/shows?q=${encodeURIComponent(q)}`)
             );
-            const allResults = await Promise.all(promises);
-            results = allResults.flatMap(r => r.map(x => x.show)).filter((s, i, a) => a.findIndex(x => x.id === s.id) === i);
+            const allResults = await Promise.allSettled(promises);
+            results = allResults
+                .filter(r => r.status === "fulfilled")
+                .flatMap(r => r.value.map(x => x.show))
+                .filter((s, i, a) => a.findIndex(x => x.id === s.id) === i);
         }
 
         const formatted = (results || []).map(s => formatTVMazeShow(s, type)).slice(0, 20);
@@ -319,7 +326,7 @@ router.get("/:type/trending", async (req, res) => {
 
         const queries = trendingQueries[type] || ["tv series"];
         const promises = queries.slice(0, 12).map(q =>
-            fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(q)}`).then(r => r.json())
+            fetchTVMaze(`/search/shows?q=${encodeURIComponent(q)}`).catch(() => [])
         );
         const allResults = await Promise.all(promises);
         const shows = allResults.flatMap(r => r.map(x => x.show)).filter((s, i, a) => a.findIndex(x => x.id === s.id) === i);
@@ -366,27 +373,18 @@ router.get("/:type/:id", async (req, res) => {
         // Try direct ID lookup first
         let show;
         try {
-            show = await withTimeout(
-                fetch(`${TVMAZE_BASE}/shows/${id}?embed=episodes,cast,images`).then(r => {
-                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                    return r.json();
-                }),
-                10000
-            );
+            show = await fetchTVMaze(`/shows/${id}?embed=episodes,cast,images`);
         } catch (directErr) {
             // If direct ID fails, try searching by title from query param
             const { title } = req.query;
             if (title) {
                 try {
-                    const searchResults = await withTimeout(
-                        fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(title)}`).then(r => r.json()),
-                        8000
-                    );
+                    const searchResults = await fetchTVMaze(`/search/shows?q=${encodeURIComponent(title)}`);
                     const match = searchResults.find(r => r.show && r.show.id.toString() === id) || searchResults[0];
                     if (match?.show) show = match.show;
                 } catch {}
             }
-            if (!show) throw new Error("Show not found in TVMaze");
+            if (!show) return res.status(404).json({ error: "Show not found in TVMaze" });
         }
 
         const formatted = formatTVMazeShow(show, type);
@@ -407,18 +405,12 @@ router.get("/:type/:id/season/:season", async (req, res) => {
             return res.status(400).json({ error: "Seasons only available for TV series" });
         }
 
-        const show = await withTimeout(
-            fetch(`${TVMAZE_BASE}/shows/${id}/seasons`).then(r => r.json()),
-            10000
-        );
+        const show = await fetchTVMaze(`/shows/${id}/seasons`);
 
         const seasonData = show.find(s => s.number === parseInt(season));
         if (!seasonData) return res.status(404).json({ error: "Season not found" });
 
-        const episodes = await withTimeout(
-            fetch(`${TVMAZE_BASE}/shows/${id}/episodes`).then(r => r.json()),
-            10000
-        );
+        const episodes = await fetchTVMaze(`/shows/${id}/episodes`);
 
         const seasonEpisodes = episodes
             .filter(e => e.season === parseInt(season))
@@ -441,10 +433,7 @@ router.get("/:type/:id/season/:season/episode/:episode", async (req, res) => {
             return res.status(400).json({ error: "Episodes only available for TV series" });
         }
 
-        const episodes = await withTimeout(
-            fetch(`${TVMAZE_BASE}/shows/${id}/episodes`).then(r => r.json()),
-            10000
-        );
+        const episodes = await fetchTVMaze(`/shows/${id}/episodes`);
 
         const ep = episodes.find(e => e.season === parseInt(season) && e.number === parseInt(episode));
         if (!ep) return res.status(404).json({ error: "Episode not found" });
@@ -485,18 +474,12 @@ router.get("/:type/:id/recommendations", async (req, res) => {
         if (!source) return res.status(400).json({ error: "Invalid media type" });
 
         // TVMaze doesn't have recommendations - search similar by genre
-        const show = await withTimeout(
-            fetch(`${TVMAZE_BASE}/shows/${id}`).then(r => r.json()),
-            8000
-        );
+        const show = await fetchTVMaze(`/shows/${id}`);
         const genres = show.genres || [];
         if (!genres.length) return res.json({ type, results: [] });
 
         const genre = genres[0];
-        const searchResults = await withTimeout(
-            fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(genre)}`).then(r => r.json()),
-            8000
-        );
+        const searchResults = await fetchTVMaze(`/search/shows?q=${encodeURIComponent(genre)}`).catch(() => []);
 
         const results = searchResults
             .map(r => r.show)
@@ -520,18 +503,12 @@ router.get("/:type/:id/similar", async (req, res) => {
         if (!source) return res.status(400).json({ error: "Invalid media type" });
 
         // Same as recommendations for TVMaze
-        const show = await withTimeout(
-            fetch(`${TVMAZE_BASE}/shows/${id}`).then(r => r.json()),
-            8000
-        );
+        const show = await fetchTVMaze(`/shows/${id}`);
         const genres = show.genres || [];
         if (!genres.length) return res.json({ type, results: [] });
 
         const genre = genres[0];
-        const searchResults = await withTimeout(
-            fetch(`${TVMAZE_BASE}/search/shows?q=${encodeURIComponent(genre)}`).then(r => r.json()),
-            8000
-        );
+        const searchResults = await fetchTVMaze(`/search/shows?q=${encodeURIComponent(genre)}`).catch(() => []);
 
         const results = searchResults
             .map(r => r.show)
@@ -570,10 +547,7 @@ router.get("/:type/:id/credits", async (req, res) => {
         const source = getMediaSource(type);
         if (!source) return res.status(400).json({ error: "Invalid media type" });
 
-        const cast = await withTimeout(
-            fetch(`${TVMAZE_BASE}/shows/${id}/cast`).then(r => r.json()),
-            8000
-        );
+        const cast = await fetchTVMaze(`/shows/${id}/cast`).catch(() => []);
 
         res.json({
             type,
