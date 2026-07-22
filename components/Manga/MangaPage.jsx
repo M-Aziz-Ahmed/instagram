@@ -232,7 +232,7 @@ export default function MangaPage() {
                         return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                     });
                     setTags(sorted);
-                    const awardWinning = sorted.find((t) => t.id === "d134e539-c501-41ec-b4b1-4550f1c46a04");
+                    const awardWinning = sorted.find((t) => t.id === "0a39b5a1-b235-4886-a747-1d05d216532d");
                     if (awardWinning) {
                         setActiveTag(awardWinning);
                         fetch(`/api/manga/tag/${awardWinning.id}?limit=30&offset=0`)

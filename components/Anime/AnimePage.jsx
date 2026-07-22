@@ -233,6 +233,8 @@ export default function AnimePage() {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState([]);
     const [spotlight, setSpotlight] = useState([]);
+    const [spotlightPage, setSpotlightPage] = useState(1);
+    const [spotlightHasMore, setSpotlightHasMore] = useState(false);
     const [loading, setLoading] = useState(false);
     const [selected, setSelected] = useState(null);
     const [episodes, setEpisodes] = useState([]);
@@ -251,7 +253,13 @@ export default function AnimePage() {
     useEffect(() => {
         fetch("/api/anime/spotlight")
             .then((r) => r.json())
-            .then((d) => { if (d?.results) setSpotlight(d.results.slice(0, 12)); })
+            .then((d) => {
+                if (d?.results) {
+                    setSpotlight(d.results);
+                    setSpotlightHasMore(d.hasNextPage ?? false);
+                    setSpotlightPage(1);
+                }
+            })
             .catch(() => {});
         fetch("/api/anime/genres")
             .then((r) => r.json())
@@ -577,6 +585,29 @@ export default function AnimePage() {
                                         </button>
                                     ))}
                                 </div>
+                                {spotlightHasMore && (
+                                    <div className="flex justify-center mt-6">
+                                        <button
+                                            onClick={async () => {
+                                                setLoading(true);
+                                                try {
+                                                    const res = await fetch(`/api/anime/spotlight?page=${spotlightPage + 1}`);
+                                                    const d = await res.json();
+                                                    if (d?.results) {
+                                                        setSpotlight((prev) => [...prev, ...d.results]);
+                                                        setSpotlightPage((p) => p + 1);
+                                                        setSpotlightHasMore(d.hasNextPage ?? false);
+                                                    }
+                                                } catch {}
+                                                setLoading(false);
+                                            }}
+                                            disabled={loading}
+                                            className="px-6 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-full transition-colors disabled:opacity-50"
+                                        >
+                                            {loading ? "Loading..." : "Load more"}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
                         {results.length > 0 && (

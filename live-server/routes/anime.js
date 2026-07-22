@@ -78,17 +78,22 @@ router.get("/search", async (req, res) => {
 });
 
 // ── Trending / spotlight ──────────────────────────────────────
-router.get("/spotlight", async (_req, res) => {
+router.get("/spotlight", async (req, res) => {
     try {
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const perPage = Math.min(Math.max(1, parseInt(req.query.limit) || 18), 50);
         const data = await gql(
-            `query {
-                Page(page: 1, perPage: 18) {
+            `query ($page: Int, $perPage: Int) {
+                Page(page: $page, perPage: $perPage) {
                     media(type: ANIME, sort: TRENDING_DESC) { ${MEDIA_FIELDS} }
+                    pageInfo { hasNextPage total }
                 }
-            }`
+            }`,
+            { page, perPage }
         );
         const results = (data.Page.media || []).map(formatMedia);
-        res.json({ results });
+        const hasNext = data.Page.pageInfo?.hasNextPage ?? false;
+        res.json({ results, hasNextPage: hasNext });
     } catch (err) {
         console.error("Anime spotlight error:", err.message);
         res.status(502).json({ error: "Spotlight unavailable" });
