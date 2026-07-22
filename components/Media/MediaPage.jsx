@@ -153,15 +153,17 @@ export default function MediaPage({ mediaType, config }) {
     const handlePlayEpisode = async (ep) => {
         setCurrentEp(ep);
         setStreamUrl("");
-        setStreamTitle(`Episode ${ep.episode_number}${ep.name ? " - " + ep.name : ""}`);
+        setStreamTitle(mediaType === "movie" ? selected?.title : `Episode ${ep.episode_number}${ep.name ? " - " + ep.name : ""}`);
         if (selected?.id) {
             const routeMap = { movie: "movies", kdrama: "kdramas", season: "seasons", cdrama: "cdramas", cartoon: "cartoons" };
             const route = routeMap[mediaType] || mediaType;
             window.history.pushState({}, "", `/${route}?id=${selected.id}&ep=${ep.episode_number}`);
         }
         try {
-            const imdbId = selected?.externals?.imdb;
-            const streamQuery = `?season=1&episode=${ep.episode_number}` + (imdbId ? `&imdb=${imdbId}` : "");
+            const imdbId = selected?.externals?.imdb || details?.imdbId;
+            const streamQuery = mediaType === "movie"
+                ? ""
+                : `?season=1&episode=${ep.episode_number}` + (imdbId ? `&imdb=${imdbId}` : "");
             const res = await fetch(`${apiRoute}/${mediaType}/${ep.id}/stream${streamQuery}`);
             if (!res.ok) {
                 if (res.status >= 400) {
@@ -250,6 +252,21 @@ export default function MediaPage({ mediaType, config }) {
                                 alt={selected.title}
                                 className="w-full max-w-xs mx-auto lg:mx-0 rounded-xl shadow-lg aspect-[2/3] object-cover bg-gray-100 dark:bg-gray-800"
                             />
+                            <button
+                                onClick={() => {
+                                    if (mediaType === "movie") {
+                                        handlePlayEpisode({ id: selected.id, episode_number: 1, name: selected.title });
+                                    } else if (episodes.length > 0) {
+                                        handlePlayEpisode(episodes[0]);
+                                    }
+                                }}
+                                className="w-full mt-4 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors text-sm"
+                            >
+                                <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                                    <path d="M8 5v14l11-7z" />
+                                </svg>
+                                {mediaType === "movie" ? "Play Movie" : episodes.length > 0 ? "Play S1 E1" : "Loading episodes..."}
+                            </button>
                         </div>
                         <div className="flex-1 min-w-0 space-y-3">
                             <div className="flex items-start gap-3">
