@@ -93,6 +93,7 @@ function formatTVMazeShow(show, mediaType) {
         runtime,
         numberOfSeasons: show._embedded?.episodes ? [...new Set(show._embedded.episodes.map(e => e.season))].length : null,
         numberOfEpisodes: show._embedded?.episodes?.length || null,
+        episodes: (show._embedded?.episodes || []).filter(e => e.season === 1).map(formatTVMazeEpisode),
         externals: show.externals || {},
         schedule: show.schedule || {},
     };

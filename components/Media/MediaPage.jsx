@@ -72,13 +72,10 @@ export default function MediaPage({ mediaType, config }) {
                 const data = await res.json();
                 if (data) {
                     setSelected(data);
-                    if (mediaType !== "movie" && data.numberOfEpisodes) {
-                        const epsRes = await fetch(`${apiRoute}/${mediaType}/${initialId}/season/1`);
-                        if (!epsRes.ok) return;
-                        const epsData = await epsRes.json();
-                        setEpisodes(epsData?.episodes || []);
+                    if (data.episodes?.length > 0) {
+                        setEpisodes(data.episodes);
                         if (initialEp) {
-                            const match = (epsData?.episodes || []).find(e => e.episode_number == initialEp);
+                            const match = data.episodes.find(e => e.episode_number == initialEp);
                             if (match) handlePlayEpisode(match);
                         }
                     }
@@ -130,19 +127,14 @@ export default function MediaPage({ mediaType, config }) {
                 : `${apiRoute}/${mediaType}/${item.id}`;
             const res = await fetch(detailPath);
             if (!res.ok) {
-                if (res.status >= 400) {
-                    console.warn(`API error: ${res.status}`);
-                    return;
-                }
+                console.warn(`API error: ${res.status}`);
+                return;
             }
             const data = await res.json();
             if (data) {
                 setDetails(data);
-                if (mediaType !== "movie" && data.numberOfSeasons > 0) {
-                    const epsRes = await fetch(`${apiRoute}/${mediaType}/${item.id}/season/1`);
-                    if (!epsRes.ok) return;
-                    const epsData = await epsRes.json();
-                    setEpisodes(epsData?.episodes || []);
+                if (data.episodes?.length > 0) {
+                    setEpisodes(data.episodes);
                 }
             }
         } catch (err) {
