@@ -230,7 +230,19 @@ export default function MangaPage() {
                     });
                     setTags(sorted);
                     const awardWinning = sorted.find((t) => t.id === "d134e539-c501-41ec-b4b1-4550f1c46a04");
-                    if (awardWinning) handleBrowseTag(awardWinning);
+                    if (awardWinning) {
+                        setActiveTag(awardWinning);
+                        fetch(`/api/manga/tag/${awardWinning.id}?limit=30&offset=0`)
+                            .then((r) => r.json())
+                            .then((d) => {
+                                const items = d?.data || [];
+                                setResults(items);
+                                setTagOffset(items.length);
+                                setHasMore(items.length >= 30);
+                                setLoading(false);
+                            })
+                            .catch(() => setLoading(false));
+                    }
                 }
             })
             .catch(() => {});
