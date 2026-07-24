@@ -2820,12 +2820,20 @@ app.use("/api/media", apiLimiter, require("./routes/media"));
 app.use("/api/media-bookmarks", apiLimiter, require("./routes/mediaBookmarks"));
 app.use("/api/reactionduel", require("./routes/reactionduel")(io));
 app.use("/api", require("./routes/social"));
+app.use("/api/bots", apiLimiter, require("./routes/bots"));
 
 // ── Scheduled Posts Publisher ───────────────────────────────────
 const { publishScheduledPosts } = require("./routes/posts");
 setInterval(async () => {
     const count = await publishScheduledPosts();
     if (count > 0) console.log(`[Scheduler] Published ${count} scheduled post(s)`);
+}, 60000);
+
+// ── Bot Auto-Poster ────────────────────────────────────────────
+const { runBotPosts } = require("./routes/bots");
+setInterval(async () => {
+    const count = await runBotPosts();
+    if (count > 0) console.log(`[Bots] Auto-posted ${count} bot post(s)`);
 }, 60000);
 
 // ── Start ───────────────────────────────────────────────────────

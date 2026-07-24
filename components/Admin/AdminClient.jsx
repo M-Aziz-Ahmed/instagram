@@ -7,6 +7,7 @@ import UserBadges from "@/components/shared/UserBadges";
 import { useSidebar } from "@/context/SidebarContext";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import BotsPanel from "@/components/Admin/BotsPanel";
 
 const EMOJI_PRESETS = ["⭐","🛡️","👑","💎","🔥","🎯","🏆","🎨","🧪","🤖","💡","🌟"];
 
@@ -92,6 +93,10 @@ export default function AdminClient() {
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "adult" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         18+ Manga
                     </button>
+                    <button onClick={() => setTab("bots")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "bots" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        🤖 Bots
+                    </button>
                 </div>
 
                 {tab === "users" && <UsersPanel />}
@@ -104,6 +109,7 @@ export default function AdminClient() {
                 {tab === "ads" && <AdsPanel />}
                 {tab === "logs" && <LogsPanel />}
                 {tab === "adult" && <AdultMangaPanel />}
+                {tab === "bots" && <BotsPanel />}
             </div>
         </div>
     );
