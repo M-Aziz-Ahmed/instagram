@@ -238,36 +238,28 @@ router.get("/", async (req, res) => {
             ];
         }
 
-        const pipeline = [];
-        if (Object.keys(matchStage).length > 0) pipeline.push({ $match: matchStage });
-        if (Object.keys(extraMatch).length > 0) pipeline.push({ $match: extraMatch });
-        pipeline.push({ $sort: { timeStamp: -1 } });
-        pipeline.push({ $limit: limit + 10 });
-        pipeline.push({ $lookup: { from: "posts", localField: "originalPostId", foreignField: "_id", as: "_originalPost" } });
-        pipeline.push({ $addFields: { _originalPost: { $first: "$_originalPost" } } });
+        const query = {};
 
-        const rawPosts = await Post.aggregate(pipeline).allowDiskUse(true);
+        if (tag) query.hashtags = tag.toLowerCase();
+        if (feed === "following" && username && viewer?.following?.length) {
+            query.sender = { $in: viewer.following };
+        }
+        query.$or = [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }];
 
-        const mutedSet = new Set((viewer?.mutedWords || []).map((w) => w.toLowerCase()));
-        const closeFriendsSet = new Set(viewer?.closeFriends || []);
+        let finalQuery = Post.find(query);
+
+        if (!viewerIsAdmin) finalQuery = finalQuery.where({ isRemoved: { $ne: true } });
+
+        finalQuery = finalQuery.sort({ timeStamp: -1 }).limit(limit + 10);
+
+        const rawPosts = await finalQuery.lean();
 
         const filtered = rawPosts.filter((p) => {
-            if (mutedSet.size > 0) {
-                const text = (p.text || "").toLowerCase();
-                for (const w of mutedSet) {
-                    if (text.includes(w)) return false;
-                }
-                if (p.hashtags) {
-                    for (const h of p.hashtags) {
-                        if (mutedSet.has(h.toLowerCase())) return false;
-                    }
-                }
-            }
-            if (p.visibility === "closeFriends") {
-                if (p.sender !== username && !closeFriendsSet.has(p.sender)) return false;
+            if (p.visibility === "closeFriends" && p.sender !== username) {
+                if (!viewer?.closeFriends?.includes(p.sender)) return false;
             }
             return true;
-        });
+        }).slice(0, 100);
 
         const hasMore = filtered.length > limit;
         const sliced = hasMore ? filtered.slice(0, limit) : filtered;

@@ -58,12 +58,13 @@ export default function TrendingPage() {
 
     const fetchTodayPosts = useCallback(async () => {
         try {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
             const r = await fetch("/api/posts?limit=30");
             if (r.ok) {
                 const all = await r.json();
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                setTodayPosts(all.filter((p) => !p.isScheduled && new Date(p.timeStamp) >= today && !p.isRemoved));
+                const todayPosts = Array.isArray(all.posts) ? all.posts.filter(p => !p.isScheduled && new Date(p.timeStamp) >= today && !p.isRemoved) : [];
+                setTodayPosts(todayPosts);
             }
         } catch {}
     }, []);
