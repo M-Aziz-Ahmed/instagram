@@ -117,11 +117,28 @@ async function checkAchievements(userId, username) {
 
 async function enrichPosts(posts) {
     const allUsernames = new Set();
+    const originalPostIds = [];
+
     posts.forEach((p) => {
         allUsernames.add(p.sender);
         (p.comments || []).forEach((c) => allUsernames.add(c.sender));
-        if (p._originalPost?.sender) allUsernames.add(p._originalPost.sender);
+        if (p.originalPostId) originalPostIds.push(p.originalPostId);
     });
+
+    // Fetch original posts in batch if any
+    let originalPostMap = {};
+    if (originalPostIds.length > 0) {
+        const originalPosts = await Post.find({ _id: { $in: originalPostIds } })
+            .select("sender text imageUrl imageUrls audioUrl color avatarUrl hashtags mentions visibility theme timeStamp likes reactions comments isRepost originalPostId originalSender repostComment repostCount")
+            .lean();
+        originalPosts.forEach((op) => { originalPostMap[op._id.toString()] = op; });
+        // Collect usernames from original posts too
+        originalPosts.forEach((op) => {
+            allUsernames.add(op.sender);
+            (op.comments || []).forEach((c) => allUsernames.add(c.sender));
+        });
+    }
+
     if (allUsernames.size === 0) return posts;
 
     const users = await User.find({ username: { $in: [...allUsernames] } })
@@ -146,18 +163,21 @@ async function enrichPosts(posts) {
         };
     });
 
-    return posts.map((p) => ({
-        ...p,
-        _author: userMap[p.sender] || null,
-        _originalPost: p._originalPost ? {
-            ...p._originalPost,
-            _author: userMap[p._originalPost.sender] || null,
-        } : null,
-        comments: (p.comments || []).map((c) => ({
-            ...c,
-            _author: userMap[c.sender] || null,
-        })),
-    }));
+    return posts.map((p) => {
+        const originalPost = p.originalPostId ? originalPostMap[p.originalPostId.toString()] : null;
+        return {
+            ...p,
+            _author: userMap[p.sender] || null,
+            _originalPost: originalPost ? {
+                ...originalPost,
+                _author: userMap[originalPost.sender] || null,
+            } : null,
+            comments: (p.comments || []).map((c) => ({
+                ...c,
+                _author: userMap[c.sender] || null,
+            })),
+        };
+    });
 }
 
 async function enrichPost(post) {
@@ -203,11 +223,19 @@ router.get("/", async (req, res) => {
         const limit = Math.min(parseInt(req.query.limit || "20", 10), 50);
 
         let query = {};
+
+        // Parallel fetch: get viewer info in one go
         let viewerIsAdmin = false;
+        let viewerFollowing = [];
+        let viewerCloseFriends = [];
 
         if (username) {
-            const viewerDoc = await User.findOne({ username }).select("isAdmin").lean();
+            const [viewerDoc] = await Promise.all([
+                User.findOne({ username }).select("isAdmin following closeFriends").lean(),
+            ]);
             viewerIsAdmin = !!viewerDoc?.isAdmin;
+            viewerFollowing = viewerDoc?.following || [];
+            viewerCloseFriends = viewerDoc?.closeFriends || [];
         }
 
         query.$or = [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }];
@@ -217,31 +245,58 @@ router.get("/", async (req, res) => {
         }
 
         if (tag) query.hashtags = tag.toLowerCase();
+
         if (feed === "following" && username) {
-            const viewer = await User.findOne({ username }).select("following").lean();
-            if (!viewer?.following?.length) {
+            if (!viewerFollowing.length) {
                 return res.json({ posts: [], hasMore: false });
             }
-            query.sender = { $in: viewer.following };
+            query.sender = { $in: viewerFollowing };
         }
         if (before) query.timeStamp = { $lt: new Date(before) };
 
         if (username) {
             const visibilityQuery = { visibility: { $ne: "closeFriends" } };
-            const closeFriendsQuery = { sender: { $in: (await User.findOne({ username }).select("closeFriends").lean())?.closeFriends || [] } };
+            const closeFriendsQuery = { sender: { $in: viewerCloseFriends } };
             const ownQuery = { sender: username };
             query.$or = [visibilityQuery, closeFriendsQuery, ownQuery];
         }
 
-        const rawPosts = await Post.find(query)
+        // Fetch posts with minimal projection first
+        const rawPosts = await Post.find(query, {
+            _id: 1,
+            sender: 1,
+            text: 1,
+            imageUrl: 1,
+            imageUrls: 1,
+            audioUrl: 1,
+            color: 1,
+            avatarUrl: 1,
+            hashtags: 1,
+            mentions: 1,
+            visibility: 1,
+            theme: 1,
+            scheduledAt: 1,
+            isScheduled: 1,
+            isRemoved: 1,
+            expiresAt: 1,
+            repostCount: 1,
+            timeStamp: 1,
+            originalPostId: 1,
+            originalSender: 1,
+            repostComment: 1,
+            viewCount: 1,
+            likes: 1,
+            reactions: 1,
+            comments: 1,
+            _originalPost: 1,
+            isRepost: 1,
+        })
             .sort({ timeStamp: -1 })
             .limit(limit + 10)
             .lean();
 
-        const filtered = rawPosts.slice(0, 100);
-
-        const hasMore = filtered.length > limit;
-        const posts = await enrichPosts(filtered.slice(0, limit));
+        const hasMore = rawPosts.length > limit;
+        const posts = await enrichPosts(rawPosts.slice(0, limit));
 
         return res.json({ posts, hasMore });
     } catch (error) {
