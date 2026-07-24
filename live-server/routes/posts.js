@@ -1440,7 +1440,11 @@ async function publishScheduledPosts() {
             post.isScheduled = false;
             post.timeStamp = now;
             await post.save();
-            updateStreak(post.sender);
+            const senderUser = await User.findOne({ username: post.sender }).select("_id").lean();
+            if (senderUser) {
+                updateStreak(senderUser._id.toString());
+                checkAchievements(senderUser._id.toString(), post.sender);
+            }
         }
         return posts.length;
     } catch (e) {
