@@ -2824,10 +2824,12 @@ io.on("connection", async (socket) => {
 });
 
 // ── API Routes ───────────────────────────────────────────────────
-const { apiLimiter, authLimiter, readLimiter } = require("./middleware/rateLimit");
+const { apiLimiter, authLimiter, readLimiter, writeLimiter, verifyApiKey } = require("./middleware/rateLimit");
 
 app.use("/api/auth", authLimiter, require("./routes/auth"));
-app.use("/api/posts", readLimiter, require("./routes/posts"));
+// POSTS: no rate limit (read-only, high traffic)
+app.use("/api/posts", require("./routes/posts"));
+// Other routes use apiLimiter
 app.use("/api/feed", apiLimiter, require("./routes/feed"));
 app.use("/api/users", apiLimiter, require("./routes/users"));
 app.use("/api/admin", apiLimiter, require("./routes/admin"));
