@@ -903,8 +903,10 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
         }
     };
 
+    const canMod = user?.isAdmin || (user?.roles || []).some((r) => r.permissions?.includes?.("moderate_posts"));
+
     const handleModAction = async (action, reason) => {
-        if (!user?.isAdmin || moderating) return;
+        if (!canMod || moderating) return;
         setModerating(true);
         setShowModMenu(false);
         try {
@@ -932,8 +934,6 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
             setModerating(false);
         }
     };
-
-    const canMod = user?.isAdmin || (user?.roles || []).some((r) => r.permissions?.includes?.("moderate_posts"));
 
     return (
         <>

@@ -5,7 +5,7 @@ const Ad = require("../models/ad");
 const Post = require("../models/post");
 const ContentFilter = require("../models/contentFilter");
 const ModerationLog = require("../models/moderationLog");
-const { requireAdmin } = require("../middleware/auth");
+const { requireAdmin, requirePermission } = require("../middleware/auth");
 const { getLogs } = require("../logBuffer");
 const { VALID_PERMISSIONS } = require("../models/role");
 
@@ -420,7 +420,7 @@ router.get("/moderation/flagged", requireAdmin, async (req, res) => {
 });
 
 // POST /moderation/remove — take down a post
-router.post("/moderation/remove", requireAdmin, async (req, res) => {
+router.post("/moderation/remove", requirePermission("moderate_posts"), async (req, res) => {
     try {
         const { postId, reason } = req.body;
         if (!postId) return res.status(400).json({ error: "postId required" });
@@ -453,7 +453,7 @@ router.post("/moderation/remove", requireAdmin, async (req, res) => {
 });
 
 // POST /moderation/restore — restore a taken-down post
-router.post("/moderation/restore", requireAdmin, async (req, res) => {
+router.post("/moderation/restore", requirePermission("moderate_posts"), async (req, res) => {
     try {
         const { postId } = req.body;
         if (!postId) return res.status(400).json({ error: "postId required" });
