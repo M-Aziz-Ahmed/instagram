@@ -77,6 +77,8 @@ async function fetchLiked(username, limit) {
 async function getUserInterestTags(viewer) {
     const userPosts = await Post.find({
         sender: { $in: viewer.following },
+        $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
+        isRemoved: { $ne: true },
         timeStamp: { $gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // last 30 days
     })
         .select("hashtags")

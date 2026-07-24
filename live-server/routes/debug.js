@@ -31,7 +31,7 @@ router.get("/me", async (req, res) => {
 // GET /posts
 router.get("/posts", async (req, res) => {
     try {
-        const posts = await Post.find({}).limit(5).lean();
+        const posts = await Post.find({ isRemoved: { $ne: true } }).limit(5).sort({ timeStamp: -1 }).lean();
         return res.json({ ok: true, count: posts.length, sample: posts.slice(0, 5) });
     } catch (err) {
         console.error("/debug/posts error:", err);
