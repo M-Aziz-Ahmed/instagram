@@ -67,7 +67,13 @@ const postSchema = new mongoose.Schema({
     removedAt:     { type: Date, default: null },
     expiresAt:     { type: Date, default: null },
     visibility:    { type: String, enum: ["public", "closeFriends"], default: "public" },
-    timeStamp:     { type: Date, default: Date.now },
+    theme: {
+        type: { type: String, enum: ["default", "sunset", "ocean", "forest", "neon", "midnight", "rose", "gold"], default: "default" },
+        bg:  { type: String, default: "" },
+    },
+    scheduledAt:  { type: Date, default: null },
+    isScheduled:  { type: Boolean, default: false },
+    timeStamp:    { type: Date, default: Date.now },
 });
 
 postSchema.index({ sender: 1, timeStamp: -1 });

@@ -490,6 +490,17 @@ function PostCountdown({ expiresAt }) {
     );
 }
 
+const POST_THEMES = {
+    default: "",
+    sunset:  "bg-gradient-to-br from-orange-50 to-rose-50 dark:from-orange-950/20 dark:to-rose-950/20",
+    ocean:   "bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-950/20 dark:to-blue-950/20",
+    forest:  "bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20",
+    neon:    "bg-gradient-to-br from-fuchsia-50 to-violet-50 dark:from-fuchsia-950/20 dark:to-violet-950/20",
+    midnight:"bg-gradient-to-br from-indigo-50 to-slate-100 dark:from-indigo-950/20 dark:to-slate-900/40",
+    rose:    "bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-950/20 dark:to-rose-950/20",
+    gold:    "bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950/20 dark:to-yellow-950/20",
+};
+
 export default function PostCard({ post: initialPost, onDelete, onHashtag, serverTranslation, trackView }) {
     const { user } = useUser();
     const { showToast } = useToast();
@@ -937,7 +948,7 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
 
     return (
         <>
-        <article className="border-b border-gray-200 dark:border-gray-800 px-4 py-4">
+        <article className={`border-b border-gray-200 dark:border-gray-800 px-4 py-4 ${POST_THEMES[post.theme?.type] || ""}`}>
             {post.isRemoved && (
                 <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
                     <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
@@ -967,6 +978,11 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         </span>
                         <span className="text-gray-400 dark:text-gray-500 text-xs">&middot;</span>
                         <span className="text-gray-400 dark:text-gray-500 text-xs">{timeAgo(post.timeStamp)}</span>
+                        {author?.postingStreak > 0 && (
+                            <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-orange-500" title={`${author.postingStreak}-day streak`}>
+                                🔥{author.postingStreak}
+                            </span>
+                        )}
                         {post.editedAt && (
                             <span className="text-gray-300 dark:text-gray-600 text-[11px] italic">(edited)</span>
                         )}

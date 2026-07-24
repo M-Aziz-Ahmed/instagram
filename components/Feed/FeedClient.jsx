@@ -6,6 +6,8 @@ import { useUser } from "@/context/UserContext";
 import Compose from "./Compose";
 import Feed from "./Feed";
 import TrendingTags from "./TrendingTags";
+import TrendingSidebar from "@/components/TrendingSidebar";
+import SuggestedUsers from "@/components/SuggestedUsers";
 import SearchBar from "./SearchBar";
 import NotificationBell from "@/components/Notifications/NotificationBell";
 import { useSidebar } from "@/context/SidebarContext";
@@ -184,7 +186,11 @@ export default function FeedClient() {
                         isGuest={isGuest}
                     />
                 </main>
-                <TrendingTags activeTag={activeTag} onTagClick={handleHashtag} />
+                <aside className="hidden lg:block w-80 shrink-0 space-y-4 pt-4">
+                    <SuggestedUsers />
+                    <TrendingSidebar />
+                    <TrendingTags activeTag={activeTag} onTagClick={handleHashtag} />
+                </aside>
             </div>
         </div>
     );

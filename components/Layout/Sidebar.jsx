@@ -199,6 +199,14 @@ function EntertainmentIcon() {
     );
 }
 
+function TrophyIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 0 1 3 3h-15a3 3 0 0 1 3-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 0 1-.982-3.172M9.497 14.25a7.454 7.454 0 0 0 .981-3.172M5.25 4.236c-.996.176-1.887.744-2.25 1.632M18.75 4.236c-.996.176-1.887.744-2.25 1.632M12 2.25a2.625 2.625 0 1 0 0 5.25 2.625 2.625 0 0 0 0-5.25ZM12 2.25a2.625 2.625 0 1 1 0 5.25 2.625 2.625 0 0 1 0-5.25Z" />
+        </svg>
+    );
+}
+
 function MoviesIcon() {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
@@ -402,6 +410,13 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                             icon={<ChessIcon />}
                             label="Games"
                             active={["/games", "/chess", "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman", "/reactionduel", "/game2048", "/minesweeper", "/sudoku"].some((p) => isActive(p))}
+                            onClick={handleNavClick}
+                        />
+                        <NavItem
+                            href="/leaderboard"
+                            icon={<TrophyIcon />}
+                            label="Leaderboard"
+                            active={isActive("/leaderboard")}
                             onClick={handleNavClick}
                         />
 

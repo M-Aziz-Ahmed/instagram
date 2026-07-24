@@ -49,6 +49,10 @@ function sendUserPayload(user) {
         autoTranslate:   user.autoTranslate || false,
         liveStreamAllowed: user.liveStreamAllowed || false,
         voiceChatBanned:   user.voiceChatBanned || false,
+        postingStreak:  user.postingStreak || 0,
+        longestStreak:  user.longestStreak || 0,
+        achievements:   user.achievements || [],
+        defaultTheme:   user.defaultTheme || "default",
         needsSetup: !user.username,
     };
 }

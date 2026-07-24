@@ -31,6 +31,11 @@ const userSchema = new mongoose.Schema({
     suspended:       { type: Boolean, default: false },
     suspendedUntil:  { type: Date, default: null },
     suspendedReason: { type: String, default: "" },
+    postingStreak:   { type: Number, default: 0 },
+    lastPostDate:    { type: String, default: "" },
+    longestStreak:   { type: Number, default: 0 },
+    achievements:    [{ type: String, default: [] }],
+    defaultTheme:    { type: String, enum: ["default", "sunset", "ocean", "forest", "neon", "midnight", "rose", "gold"], default: "default" },
     createdAt:   { type: Date, default: Date.now },
     chessGames:  { type: [{
         gameId:       { type: String, required: true },
