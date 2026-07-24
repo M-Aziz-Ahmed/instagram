@@ -166,6 +166,13 @@ router.post("/", verifyToken, async (req, res) => {
             postTimes: postTimes?.length ? postTimes : ["09:00"],
             createdBy: req.session?.userId || "admin",
         });
+        await User.create({
+            email: `${username.toLowerCase()}@anon.bot`,
+            username: username.toLowerCase(),
+            bio: bio || `I post about ${topics?.join(", ") || "various topics"} 🤖`,
+            avatarColor: avatarColor || "#10b981",
+            isAdmin: false,
+        });
         return res.json(bot);
     } catch (error) {
         console.error("[bots] Error:", error.message);
@@ -235,8 +242,16 @@ router.post("/:id/post-now", verifyToken, async (req, res) => {
 
         const post = buildPost({ ...article, topic }, bot.style);
 
-        const botUser = await User.findOne({ username: bot.username });
-        if (!botUser) return res.status(400).json({ error: "Bot user account not found" });
+        let botUser = await User.findOne({ username: bot.username });
+        if (!botUser) {
+            botUser = await User.create({
+                email: `${bot.username}@anon.bot`,
+                username: bot.username,
+                bio: bot.bio || "",
+                avatarColor: bot.avatarColor || "#10b981",
+                isAdmin: false,
+            });
+        }
 
         const postData = {
             text: post.text,
@@ -341,8 +356,16 @@ async function runBotPosts() {
                 postData.text = `Random thought about ${topic}... more updates coming soon!`;
             }
 
-            const botUser = await User.findOne({ username: bot.username });
-            if (!botUser) continue;
+            let botUser = await User.findOne({ username: bot.username });
+            if (!botUser) {
+                botUser = await User.create({
+                    email: `${bot.username}@anon.bot`,
+                    username: bot.username,
+                    bio: bot.bio || "",
+                    avatarColor: bot.avatarColor || "#10b981",
+                    isAdmin: false,
+                });
+            }
 
             await Post.create(postData);
             bot.lastPostedAt = now;
