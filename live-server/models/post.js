@@ -61,9 +61,13 @@ const postSchema = new mongoose.Schema({
         options:   [pollOptionSchema],
         expiresAt: { type: Date, default: null },
     },
-    expiresAt:  { type: Date, default: null },
-    visibility: { type: String, enum: ["public", "closeFriends"], default: "public" },
-    timeStamp:  { type: Date, default: Date.now },
+    isRemoved:     { type: Boolean, default: false },
+    removedBy:     { type: String, default: null },
+    removedReason: { type: String, default: "" },
+    removedAt:     { type: Date, default: null },
+    expiresAt:     { type: Date, default: null },
+    visibility:    { type: String, enum: ["public", "closeFriends"], default: "public" },
+    timeStamp:     { type: Date, default: Date.now },
 });
 
 postSchema.index({ sender: 1, timeStamp: -1 });

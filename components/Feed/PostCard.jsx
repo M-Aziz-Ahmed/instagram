@@ -16,6 +16,7 @@ import AudioPlayer from "@/components/shared/AudioPlayer";
 import EmojiPicker from "@/components/shared/EmojiPicker";
 import GifPicker from "@/components/shared/GifPicker";
 import PollCard from "./PollCard";
+import ToxicText from "@/components/shared/ToxicText";
 import Link from "next/link";
 import { LoginModal } from "@/components/shared/GuestPrompt";
 import { timeAgo } from "@/utils/timeAgo";
@@ -391,7 +392,7 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                         ) : (
                             <>
                                 {comment.text && (
-                                    <RichText text={comment.text} onHashtag={onHashtag} className="text-xs text-gray-700 dark:text-gray-300" />
+                                    <RichText text={comment.text} onHashtag={onHashtag} className="text-xs text-gray-700 dark:text-gray-300" toxicWords />
                                 )}
                                 {comment.editedAt && (
                                     <span className="text-[10px] text-gray-300 dark:text-gray-600 italic ml-1">(edited)</span>
@@ -512,6 +513,8 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
     const [editingPost, setEditingPost]       = useState(false);
     const [editText, setEditText]             = useState("");
     const [savingEdit, setSavingEdit]         = useState(false);
+    const [showModMenu, setShowModMenu]       = useState(false);
+    const [moderating, setModerating]         = useState(false);
     const autoTranslatedRef = useRef(false);
     const origTranslatedRef = useRef(false);
     const commentTranslatedRef = useRef(false);
@@ -900,9 +903,54 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
         }
     };
 
+    const handleModAction = async (action, reason) => {
+        if (!user?.isAdmin || moderating) return;
+        setModerating(true);
+        setShowModMenu(false);
+        try {
+            const res = await fetch(`/api/admin/moderation/${action}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ postId: post._id, reason }),
+            });
+            if (res.ok) {
+                setPost((prev) => ({
+                    ...prev,
+                    isRemoved: action === "remove",
+                    removedBy: action === "remove" ? user.username : null,
+                    removedReason: action === "remove" ? reason : "",
+                    removedAt: action === "remove" ? new Date().toISOString() : null,
+                }));
+                showToast(action === "remove" ? "Post taken down" : "Post restored", "success");
+            } else {
+                const data = await res.json();
+                showToast(data.error || "Failed", "error");
+            }
+        } catch {
+            showToast("Failed", "error");
+        } finally {
+            setModerating(false);
+        }
+    };
+
+    const canMod = user?.isAdmin || (user?.roles || []).some((r) => r.permissions?.includes?.("moderate_posts"));
+
     return (
         <>
         <article className="border-b border-gray-200 dark:border-gray-800 px-4 py-4">
+            {post.isRemoved && (
+                <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+                    <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 shrink-0">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                        </svg>
+                        <span className="text-xs font-semibold">This post has been removed by a moderator</span>
+                    </div>
+                    {post.removedReason && (
+                        <p className="text-xs text-red-500 dark:text-red-400/80 mt-1 ml-6">Reason: {post.removedReason}</p>
+                    )}
+                </div>
+            )}
             <div className="flex gap-3">
                 <PostAvatar sender={post.sender} color={post.color} avatarUrl={post.avatarUrl} author={author} />
 
@@ -935,6 +983,47 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         <div className="ml-auto flex items-center gap-1">
                             {!isOwn && user && !author?.followers?.includes?.(user.username) && (
                                 <FollowButton username={post.sender} size="xs" />
+                            )}
+                            {canMod && !isOwn && !post.isRemoved && (
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setShowModMenu(!showModMenu)}
+                                        disabled={moderating}
+                                        title="Moderate"
+                                        className="text-gray-300 dark:text-gray-600 hover:text-orange-500 transition-colors p-2.5 -mr-1 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                                        </svg>
+                                    </button>
+                                    {showModMenu && (
+                                        <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-full z-30 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg p-2 w-56">
+                                            <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-2 py-1">Take down for:</p>
+                                            {["False information", "Nudity", "Harassment", "Spam", "Other"].map((reason) => (
+                                                <button key={reason} onClick={() => handleModAction("remove", reason)}
+                                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-colors">
+                                                    {reason}
+                                                </button>
+                                            ))}
+                                            <button onClick={() => setShowModMenu(false)}
+                                                className="w-full text-center px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 mt-1">
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            {canMod && !isOwn && post.isRemoved && (
+                                <button
+                                    onClick={() => handleModAction("restore", "")}
+                                    disabled={moderating}
+                                    title="Restore post"
+                                    className="text-gray-300 dark:text-gray-600 hover:text-green-500 transition-colors p-2.5 -mr-1 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+                                    </svg>
+                                </button>
                             )}
                             {isOwn && (
                                 <>
@@ -1089,7 +1178,7 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                             ) : (
                                 <>
                                     <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap">
-                                        <RichText text={post.text} onHashtag={onHashtag} />
+                                        <RichText text={post.text} onHashtag={onHashtag} toxicWords />
                                     </p>
                                     {translations[post._id] && (
                                         <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-1 leading-relaxed whitespace-pre-wrap">

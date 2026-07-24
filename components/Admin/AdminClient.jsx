@@ -60,6 +60,18 @@ export default function AdminClient() {
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "roles" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         Roles
                     </button>
+                    <button onClick={() => setTab("permissions")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "permissions" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        Permissions
+                    </button>
+                    <button onClick={() => setTab("moderation")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "moderation" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        Moderation
+                    </button>
+                    <button onClick={() => setTab("contentFilter")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "contentFilter" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        Content Filter
+                    </button>
                     <button onClick={() => setTab("analytics")}
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "analytics" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         Analytics
@@ -84,6 +96,9 @@ export default function AdminClient() {
 
                 {tab === "users" && <UsersPanel />}
                 {tab === "roles" && <RolesPanel />}
+                {tab === "permissions" && <PermissionsPanel />}
+                {tab === "moderation" && <ModerationPanel />}
+                {tab === "contentFilter" && <ContentFilterPanel />}
                 {tab === "analytics" && <AnalyticsPanel />}
                 {tab === "voice" && <VoicePanel />}
                 {tab === "ads" && <AdsPanel />}
@@ -673,6 +688,496 @@ function RolesPanel() {
                                     </svg>
                                 </button>
                             </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  Permissions Panel                                                         */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+const PERMISSION_LABELS = {
+    create_post: "Create Posts",
+    delete_own_post: "Delete Own Posts",
+    delete_any_post: "Delete Any Post",
+    create_comment: "Create Comments",
+    delete_own_comment: "Delete Own Comments",
+    delete_any_comment: "Delete Any Comments",
+    react: "React to Posts",
+    bookmark: "Bookmark Posts",
+    repost: "Repost Posts",
+    manage_users: "Manage Users",
+    manage_roles: "Manage Roles",
+    moderate_posts: "Moderate Posts",
+    manage_content_filter: "Manage Content Filter",
+    use_voice_chat: "Use Voice Chat",
+    use_live_stream: "Use Live Stream",
+    access_entertainment: "Access Entertainment",
+};
+
+const PERMISSION_GROUPS = {
+    "Posts": ["create_post", "delete_own_post", "delete_any_post", "react", "bookmark", "repost"],
+    "Comments": ["create_comment", "delete_own_comment", "delete_any_comment"],
+    "Moderation": ["moderate_posts", "manage_content_filter"],
+    "Admin": ["manage_users", "manage_roles"],
+    "Features": ["use_voice_chat", "use_live_stream", "access_entertainment"],
+};
+
+function PermissionsPanel() {
+    const { showToast } = useToast();
+    const [roles, setRoles] = useState([]);
+    const [allPermissions, setAllPermissions] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [expandedRole, setExpandedRole] = useState(null);
+    const [saving, setSaving] = useState(null);
+
+    const refresh = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [rolesRes, permsRes] = await Promise.all([
+                fetch("/api/admin/roles"),
+                fetch("/api/admin/permissions"),
+            ]);
+            if (rolesRes.ok) setRoles(await rolesRes.json());
+            if (permsRes.ok) setAllPermissions(await permsRes.json());
+        } catch (e) { console.error(e); }
+        finally { setLoading(false); }
+    }, []);
+
+    useEffect(() => { refresh(); }, [refresh]);
+
+    const togglePermission = async (roleId, permission) => {
+        const role = roles.find((r) => r.id === roleId);
+        if (!role) return;
+        const current = role.permissions || [];
+        const updated = current.includes(permission)
+            ? current.filter((p) => p !== permission)
+            : [...current, permission];
+        setRoles((prev) => prev.map((r) => r.id === roleId ? { ...r, permissions: updated } : r));
+        setSaving(roleId);
+        try {
+            const res = await fetch(`/api/admin/roles/${roleId}/permissions`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ permissions: updated }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setRoles((prev) => prev.map((r) => r.id === roleId ? { ...r, permissions: data.permissions } : r));
+            }
+        } catch (e) {
+            console.error(e);
+            showToast("Failed to update permissions", "error");
+            refresh();
+        }
+        setSaving(null);
+    };
+
+    if (loading) {
+        return <div className="flex justify-center py-12">
+            <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
+        </div>;
+    }
+
+    return (
+        <div className="space-y-4">
+            {roles.length === 0 ? (
+                <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 py-12 text-center">
+                    <p className="text-sm text-gray-400 dark:text-gray-500">No roles created yet. Create roles in the Roles tab first.</p>
+                </div>
+            ) : (
+                roles.map((role) => (
+                    <div key={role.id} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+                        <button
+                            onClick={() => setExpandedRole(expandedRole === role.id ? null : role.id)}
+                            className="w-full px-4 sm:px-5 py-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                        >
+                            <span className="w-9 h-9 rounded-lg flex items-center justify-center text-lg text-white font-bold shrink-0"
+                                style={{ backgroundColor: role.color }}>
+                                {role.badge}
+                            </span>
+                            <div className="flex-1 text-left min-w-0">
+                                <p className="font-semibold text-sm text-gray-900 dark:text-gray-100">{role.name}</p>
+                                <p className="text-xs text-gray-400 dark:text-gray-500">
+                                    {(role.permissions || []).length} permission{(role.permissions || []).length !== 1 && "s"}
+                                </p>
+                            </div>
+                            {saving === role.id && (
+                                <div className="w-4 h-4 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
+                            )}
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+                                className={`w-4 h-4 text-gray-400 transition-transform ${expandedRole === role.id ? "rotate-180" : ""}`}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </button>
+                        {expandedRole === role.id && (
+                            <div className="border-t border-gray-100 dark:border-gray-800 p-4 sm:p-5 space-y-5">
+                                {Object.entries(PERMISSION_GROUPS).map(([group, perms]) => (
+                                    <div key={group}>
+                                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{group}</p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                            {perms.map((perm) => {
+                                                const checked = (role.permissions || []).includes(perm);
+                                                const valid = allPermissions.includes(perm);
+                                                return (
+                                                    <button
+                                                        key={perm}
+                                                        onClick={() => valid && togglePermission(role.id, perm)}
+                                                        disabled={!valid}
+                                                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-left ${
+                                                            checked
+                                                                ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300"
+                                                                : "bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+                                                        } ${!valid ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-gray-700"}`}
+                                                    >
+                                                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                                                            checked
+                                                                ? "bg-green-500 border-green-500 text-white"
+                                                                : "border-gray-300 dark:border-gray-600"
+                                                        }`}>
+                                                            {checked && (
+                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                                                                    <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                                                                </svg>
+                                                            )}
+                                                        </div>
+                                                        <span className="truncate">{PERMISSION_LABELS[perm] || perm}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                ))
+            )}
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  Moderation Panel                                                          */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+function ModerationPanel() {
+    const { showToast } = useToast();
+    const [subTab, setSubTab] = useState("flagged");
+    const [flaggedPosts, setFlaggedPosts] = useState([]);
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchFlagged = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/admin/moderation/flagged");
+            if (res.ok) setFlaggedPosts(await res.json());
+        } catch (e) { console.error(e); }
+        finally { setLoading(false); }
+    }, []);
+
+    const fetchLogs = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/admin/moderation");
+            if (res.ok) setLogs(await res.json());
+        } catch (e) { console.error(e); }
+        finally { setLoading(false); }
+    }, []);
+
+    useEffect(() => {
+        if (subTab === "flagged") fetchFlagged();
+        else fetchLogs();
+    }, [subTab, fetchFlagged, fetchLogs]);
+
+    const restorePost = async (postId) => {
+        try {
+            const res = await fetch("/api/admin/moderation/restore", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ postId }),
+            });
+            if (res.ok) {
+                setFlaggedPosts((prev) => prev.filter((p) => p.id !== postId));
+                showToast("Post restored", "success");
+            }
+        } catch (e) {
+            showToast("Failed to restore post", "error");
+        }
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex gap-1 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-1 w-fit">
+                <button onClick={() => setSubTab("flagged")}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${subTab === "flagged" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                    Removed Posts
+                </button>
+                <button onClick={() => setSubTab("log")}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${subTab === "log" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                    Activity Log
+                </button>
+            </div>
+
+            {loading ? (
+                <div className="flex justify-center py-12">
+                    <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
+                </div>
+            ) : subTab === "flagged" ? (
+                flaggedPosts.length === 0 ? (
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 py-12 text-center">
+                        <p className="text-sm text-gray-400 dark:text-gray-500">No removed posts.</p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {flaggedPosts.map((post) => (
+                            <div key={post.id} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                            <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">@{post.sender}</span>
+                                            {post.removedReason && (
+                                                <span className="px-2 py-0.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-[10px] font-medium rounded-full">
+                                                    {post.removedReason}
+                                                </span>
+                                            )}
+                                            <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                                                {new Date(post.removedAt).toLocaleString()}
+                                            </span>
+                                        </div>
+                                        {post.text && <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-3">{post.text}</p>}
+                                        {post.removedBy && (
+                                            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5">
+                                                Removed by @{post.removedBy}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <button
+                                        onClick={() => restorePost(post.id)}
+                                        className="shrink-0 px-3 py-1.5 bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20 text-xs font-medium rounded-lg transition-colors"
+                                    >
+                                        Restore
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )
+            ) : (
+                logs.length === 0 ? (
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 py-12 text-center">
+                        <p className="text-sm text-gray-400 dark:text-gray-500">No moderation activity yet.</p>
+                    </div>
+                ) : (
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+                        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {logs.map((log) => (
+                                <div key={log.id} className="px-4 sm:px-5 py-3">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${
+                                            log.action === "remove"
+                                                ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
+                                                : "bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400"
+                                        }`}>
+                                            {log.action === "remove" ? "Removed" : "Restored"}
+                                        </span>
+                                        <span className="text-sm text-gray-900 dark:text-gray-100 font-medium">@{log.postOwner}</span>
+                                        <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                                            by @{log.moderator}
+                                        </span>
+                                        <span className="text-[10px] text-gray-400 dark:text-gray-500 ml-auto">
+                                            {new Date(log.timeStamp).toLocaleString()}
+                                        </span>
+                                    </div>
+                                    {log.postPreview && (
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{log.postPreview}</p>
+                                    )}
+                                    {log.reason && (
+                                        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">Reason: {log.reason}</p>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )
+            )}
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  Content Filter Panel                                                      */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+function ContentFilterPanel() {
+    const { showToast } = useToast();
+    const [filter, setFilter] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [newToxicWord, setNewToxicWord] = useState("");
+    const [newNudityWord, setNewNudityWord] = useState("");
+
+    const refresh = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/admin/content-filter");
+            if (res.ok) setFilter(await res.json());
+        } catch (e) { console.error(e); }
+        finally { setLoading(false); }
+    }, []);
+
+    useEffect(() => { refresh(); }, [refresh]);
+
+    const saveFilter = async (update) => {
+        setSaving(true);
+        try {
+            const res = await fetch("/api/admin/content-filter", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(update),
+            });
+            if (res.ok) {
+                setFilter(await res.json());
+                showToast("Settings saved", "success");
+            } else {
+                showToast("Failed to save", "error");
+            }
+        } catch (e) {
+            showToast("Failed to save", "error");
+        }
+        setSaving(false);
+    };
+
+    const addWord = (type) => {
+        const word = type === "toxic" ? newToxicWord.trim().toLowerCase() : newNudityWord.trim().toLowerCase();
+        if (!word || !filter) return;
+        const list = type === "toxic" ? filter.toxicWords : filter.nudityKeywords;
+        if (list.includes(word)) return;
+        const updated = type === "toxic"
+            ? { ...filter, toxicWords: [...list, word] }
+            : { ...filter, nudityKeywords: [...list, word] };
+        setFilter(updated);
+        saveFilter(type === "toxic" ? { toxicWords: updated.toxicWords } : { nudityKeywords: updated.nudityKeywords });
+        if (type === "toxic") setNewToxicWord("");
+        else setNewNudityWord("");
+    };
+
+    const removeWord = (type, word) => {
+        if (!filter) return;
+        const list = type === "toxic" ? filter.toxicWords : filter.nudityKeywords;
+        const updated = list.filter((w) => w !== word);
+        const newFilter = type === "toxic"
+            ? { ...filter, toxicWords: updated }
+            : { ...filter, nudityKeywords: updated };
+        setFilter(newFilter);
+        saveFilter(type === "toxic" ? { toxicWords: updated } : { nudityKeywords: updated });
+    };
+
+    const toggle = (field) => {
+        if (!filter) return;
+        const value = !filter[field];
+        setFilter({ ...filter, [field]: value });
+        saveFilter({ [field]: value });
+    };
+
+    if (loading || !filter) {
+        return <div className="flex justify-center py-12">
+            <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
+        </div>;
+    }
+
+    return (
+        <div className="space-y-4">
+            {/* Toggle Settings */}
+            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 sm:p-5 space-y-4">
+                <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">Settings</h3>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Block Nudity Uploads</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">Prevent posts containing nudity-related keywords</p>
+                    </div>
+                    <button onClick={() => toggle("blockNudity")}
+                        className={`relative w-11 h-6 rounded-full transition-colors ${filter.blockNudity ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"}`}>
+                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${filter.blockNudity ? "translate-x-5" : ""}`} />
+                    </button>
+                </div>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Blur Toxic Words</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">Blur toxic content until hover in posts and comments</p>
+                    </div>
+                    <button onClick={() => toggle("blurToxicWords")}
+                        className={`relative w-11 h-6 rounded-full transition-colors ${filter.blurToxicWords ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"}`}>
+                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${filter.blurToxicWords ? "translate-x-5" : ""}`} />
+                    </button>
+                </div>
+                {saving && <p className="text-xs text-gray-400 dark:text-gray-500">Saving...</p>}
+            </div>
+
+            {/* Toxic Words */}
+            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 sm:p-5">
+                <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 mb-3">Toxic Words</h3>
+                <div className="flex gap-2 mb-3">
+                    <input
+                        value={newToxicWord}
+                        onChange={(e) => setNewToxicWord(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && addWord("toxic")}
+                        placeholder="Add a toxic word..."
+                        className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-gray-100"
+                    />
+                    <button onClick={() => addWord("toxic")} disabled={!newToxicWord.trim()}
+                        className="px-3 py-2 bg-black dark:bg-gray-100 text-white dark:text-gray-900 text-xs font-semibold rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-40 transition-colors">
+                        Add
+                    </button>
+                </div>
+                {filter.toxicWords.length === 0 ? (
+                    <p className="text-xs text-gray-400 dark:text-gray-500">No toxic words configured.</p>
+                ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                        {filter.toxicWords.map((word) => (
+                            <span key={word} className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-medium rounded-lg">
+                                {word}
+                                <button onClick={() => removeWord("toxic", word)} className="hover:text-red-800 dark:hover:text-red-200 ml-0.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
+                                </button>
+                            </span>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* Nudity Keywords */}
+            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 sm:p-5">
+                <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 mb-3">Nudity Keywords</h3>
+                <div className="flex gap-2 mb-3">
+                    <input
+                        value={newNudityWord}
+                        onChange={(e) => setNewNudityWord(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && addWord("nudity")}
+                        placeholder="Add a nudity keyword..."
+                        className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-gray-100"
+                    />
+                    <button onClick={() => addWord("nudity")} disabled={!newNudityWord.trim()}
+                        className="px-3 py-2 bg-black dark:bg-gray-100 text-white dark:text-gray-900 text-xs font-semibold rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-40 transition-colors">
+                        Add
+                    </button>
+                </div>
+                {filter.nudityKeywords.length === 0 ? (
+                    <p className="text-xs text-gray-400 dark:text-gray-500">No nudity keywords configured.</p>
+                ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                        {filter.nudityKeywords.map((word) => (
+                            <span key={word} className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-xs font-medium rounded-lg">
+                                {word}
+                                <button onClick={() => removeWord("nudity", word)} className="hover:text-amber-800 dark:hover:text-amber-200 ml-0.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
+                                </button>
+                            </span>
                         ))}
                     </div>
                 )}

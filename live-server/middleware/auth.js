@@ -49,4 +49,31 @@ async function requireAdmin(req, res, next) {
     }
 }
 
-module.exports = { verifyToken, optionalAuth, requireAdmin };
+function requirePermission(permission) {
+    return async (req, res, next) => {
+        try {
+            const token = req.cookies?.af_session;
+            if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+            const decoded = jwt.verify(token, SECRET);
+            req.userId = decoded.userId;
+            req.session = decoded;
+
+            const user = await User.findById(decoded.userId).select("isAdmin roles").populate("roles", "permissions").lean();
+            if (!user) return res.status(401).json({ error: "User not found" });
+
+            if (user.isAdmin) return next();
+
+            const hasPermission = (user.roles || []).some((role) =>
+                (role.permissions || []).includes(permission)
+            );
+            if (!hasPermission) return res.status(403).json({ error: "Forbidden", required: permission });
+
+            next();
+        } catch {
+            return res.status(401).json({ error: "Invalid session" });
+        }
+    };
+}
+
+module.exports = { verifyToken, optionalAuth, requireAdmin, requirePermission };

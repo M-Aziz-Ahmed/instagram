@@ -2,7 +2,8 @@ const express = require("express");
 const Post = require("../models/post");
 const User = require("../models/user");
 const Notification = require("../models/notification");
-const { verifyToken, optionalAuth } = require("../middleware/auth");
+const ContentFilter = require("../models/contentFilter");
+const { verifyToken, optionalAuth, requirePermission } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -21,6 +22,29 @@ function extractMentions(text, sender) {
     const matches = text.match(/@(\w+)/g);
     if (!matches) return [];
     return [...new Set(matches.map((m) => m.slice(1).toLowerCase()))].filter((u) => u !== sender);
+}
+
+async function checkNudity(text) {
+    try {
+        const filter = await ContentFilter.findOne({}).lean();
+        if (!filter || !filter.blockNudity) return false;
+        const lower = (text || "").toLowerCase();
+        return (filter.nudityKeywords || []).some((kw) => lower.includes(kw.toLowerCase()));
+    } catch {
+        return false;
+    }
+}
+
+async function getUserPermissions(userId) {
+    try {
+        const user = await User.findById(userId).select("isAdmin roles").populate("roles", "permissions").lean();
+        if (!user) return { isAdmin: false, permissions: [] };
+        if (user.isAdmin) return { isAdmin: true, permissions: [] };
+        const perms = (user.roles || []).flatMap((r) => r.permissions || []);
+        return { isAdmin: false, permissions: [...new Set(perms)] };
+    } catch {
+        return { isAdmin: false, permissions: [] };
+    }
 }
 
 async function enrichPosts(posts) {
@@ -113,6 +137,15 @@ router.get("/", async (req, res) => {
         const matchStage = {};
         matchStage.$or = [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }];
 
+        let viewerIsAdmin = false;
+        if (username) {
+            const viewerDoc = await User.findOne({ username }).select("isAdmin").lean();
+            viewerIsAdmin = !!viewerDoc?.isAdmin;
+        }
+        if (!viewerIsAdmin) {
+            matchStage.isRemoved = { $ne: true };
+        }
+
         if (tag) matchStage.hashtags = tag.toLowerCase();
         if (feed === "following" && username) {
             if (viewer?.following?.length) {
@@ -180,15 +213,28 @@ router.post("/", verifyToken, async (req, res) => {
         const { text, imageUrl, imageUrls, audioUrl, visibility, poll } = req.body;
         const username = req.body.sender || req.session?.userId;
 
-        const senderUser = await User.findById(req.userId).select("username avatarUrl").lean();
+        const senderUser = await User.findById(req.userId).select("username avatarUrl suspended").lean();
         const sender = senderUser?.username || username;
         if (!sender?.trim()) {
             return res.status(400).json({ error: "Sender is required" });
         }
 
+        if (senderUser?.suspended) {
+            return res.status(403).json({ error: "Your account is suspended" });
+        }
+
+        const { isAdmin, permissions } = await getUserPermissions(req.userId);
+        if (!isAdmin && !permissions.includes("create_post")) {
+            return res.status(403).json({ error: "You don't have permission to create posts" });
+        }
+
         const sanitizedText = text?.trim() || "";
         if (sanitizedText.length > 1000) {
             return res.status(400).json({ error: "Text exceeds maximum length of 1000 characters" });
+        }
+
+        if (await checkNudity(sanitizedText)) {
+            return res.status(400).json({ error: "Your post contains content that is not allowed" });
         }
         const finalImageUrls = Array.isArray(imageUrls) && imageUrls.length > 0
             ? imageUrls.filter(Boolean).slice(0, 10)
@@ -269,8 +315,17 @@ router.delete("/:id", verifyToken, async (req, res) => {
         if (!post) return res.status(404).json({ error: "Not found" });
 
         const username = req.body.username || req.body.sender || (await User.findById(req.userId).select("username").lean())?.username;
-        if (post.sender !== username) {
+        const { isAdmin, permissions } = await getUserPermissions(req.userId);
+
+        const isOwner = post.sender === username;
+        const canDeleteAny = isAdmin || permissions.includes("delete_any_post");
+        const canDeleteOwn = permissions.includes("delete_own_post");
+
+        if (!isOwner && !canDeleteAny) {
             return res.status(403).json({ error: "Unauthorized" });
+        }
+        if (isOwner && !canDeleteOwn && !canDeleteAny) {
+            return res.status(403).json({ error: "You don't have permission to delete posts" });
         }
 
         await Post.findByIdAndDelete(id);
@@ -358,6 +413,10 @@ router.patch("/:id", optionalAuth, async (req, res) => {
             const hasAudio = audioUrl;
             if (!hasText && !hasImage && !hasAudio) {
                 return res.status(400).json({ error: "Comment must have text, an image, or audio" });
+            }
+
+            if (hasText && await checkNudity(text)) {
+                return res.status(400).json({ error: "Your comment contains content that is not allowed" });
             }
 
             const commenter = await User.findOne({ username }).select("username avatarColor avatarUrl isVerified roles").populate("roles", "name badge color").lean();
@@ -681,6 +740,10 @@ router.post("/:id/comment", verifyToken, async (req, res) => {
             return res.status(400).json({ error: "Comment must have text, an image, or audio" });
         }
 
+        if (hasText && await checkNudity(text)) {
+            return res.status(400).json({ error: "Your comment contains content that is not allowed" });
+        }
+
         const user = await User.findById(req.userId).select("username avatarColor").lean();
         const username = user?.username;
         if (!username) return res.status(400).json({ error: "Username not found" });
@@ -990,6 +1053,7 @@ router.get("/bookmarks", async (req, res) => {
         const posts = await Post.find({
             _id: { $in: ids },
             $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
+            isRemoved: { $ne: true },
         }).lean();
         if (posts.length === 0) return res.json([]);
 
@@ -1079,6 +1143,9 @@ router.get("/user/:username", async (req, res) => {
             sender: username,
             $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
         };
+        if (!isAdmin) {
+            query.isRemoved = { $ne: true };
+        }
         if (before) query.timeStamp = { $lt: new Date(before) };
 
         const [rawPosts, totalPosts] = await Promise.all([

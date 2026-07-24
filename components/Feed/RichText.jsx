@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 
 const EMOJI_SHORTCODES = {
@@ -57,6 +58,21 @@ const EMOJI_SHORTCODES = {
     ":ring:": "💍", ":purse:": "👛", ":handbag:": "👜", ":eyeglasses:": "👓",
 };
 
+let cachedToxicWords = null;
+let toxicFetchPromise = null;
+
+function fetchToxicWords() {
+    if (toxicFetchPromise) return toxicFetchPromise;
+    toxicFetchPromise = fetch("/api/admin/content-filter/public")
+        .then((r) => r.ok ? r.json() : null)
+        .catch(() => null)
+        .then((data) => {
+            cachedToxicWords = data?.toxicWords?.length && data?.blurToxicWords ? data.toxicWords.map((w) => w.toLowerCase()) : [];
+            return cachedToxicWords;
+        });
+    return toxicFetchPromise;
+}
+
 function parseShortcodes(text) {
     const regex = /:[a-zA-Z0-9_]+:/g;
     const parts = [];
@@ -79,7 +95,52 @@ function parseShortcodes(text) {
 const EMOJI_REGEX_STR = Object.keys(EMOJI_SHORTCODES).map(k => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
 const FULL_REGEX = new RegExp(`(#[a-zA-Z0-9_]+|@[a-zA-Z0-9_]+|${EMOJI_REGEX_STR})`, "g");
 
-export default function RichText({ text, onHashtag, className = "" }) {
+function ToxicSegment({ text }) {
+    const [hovered, setHovered] = useState(false);
+    const [toxicWords, setToxicWords] = useState(cachedToxicWords || []);
+
+    useEffect(() => {
+        if (cachedToxicWords === null) {
+            fetchToxicWords().then(setToxicWords);
+        }
+    }, []);
+
+    if (toxicWords.length === 0) return <span>{text}</span>;
+
+    const pattern = new RegExp(`(${toxicWords.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+    const segments = text.split(pattern);
+    let key = 0;
+
+    return (
+        <span
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+        >
+            {segments.map((seg) => {
+                if (!seg) return null;
+                const isToxic = toxicWords.some((w) => seg.toLowerCase() === w);
+                if (isToxic) {
+                    return (
+                        <span
+                            key={key++}
+                            className={`inline-block transition-all duration-200 cursor-pointer select-none rounded ${
+                                hovered
+                                    ? "blur-none text-red-500 dark:text-red-400 font-semibold"
+                                    : "blur-[5px] bg-gray-400/30 dark:bg-gray-500/30 text-transparent"
+                            }`}
+                            title={hovered ? seg : "Hover to reveal"}
+                        >
+                            {seg}
+                        </span>
+                    );
+                }
+                return <span key={key++}>{seg}</span>;
+            })}
+        </span>
+    );
+}
+
+export default function RichText({ text, onHashtag, className = "", toxicWords = false }) {
     if (!text) return null;
 
     const parts = text.split(FULL_REGEX);
@@ -113,6 +174,9 @@ export default function RichText({ text, onHashtag, className = "" }) {
                 }
                 if (EMOJI_SHORTCODES[part]) {
                     return <span key={i} className="text-base leading-none">{EMOJI_SHORTCODES[part]}</span>;
+                }
+                if (toxicWords && part.length > 0) {
+                    return <ToxicSegment key={i} text={part} />;
                 }
                 return <span key={i}>{part}</span>;
             })}

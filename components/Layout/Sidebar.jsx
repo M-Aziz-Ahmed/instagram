@@ -191,6 +191,38 @@ function LogoutIcon() {
     );
 }
 
+function EntertainmentIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 0v.375" />
+        </svg>
+    );
+}
+
+function MoviesIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 0v.375" />
+        </svg>
+    );
+}
+
+function ChannelsIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5m.75-9 3-3 2.148 2.148A12.061 12.061 0 0 1 16.5 7.605" />
+        </svg>
+    );
+}
+
+function ChevronIcon({ open }) {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={`w-4 h-4 transition-transform duration-200 ${open ? "rotate-90" : ""}`}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+        </svg>
+    );
+}
+
 export default function Sidebar({ open, onClose, unreadCount = 0 }) {
     const { user, logout } = useUser();
     const { theme, toggleTheme } = useTheme();
@@ -201,6 +233,10 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
     const [editingProfile, setEditingProfile] = useState(false);
     const [showCloseFriends, setShowCloseFriends] = useState(false);
     const [showMutedWords, setShowMutedWords] = useState(false);
+    const [entertainmentOpen, setEntertainmentOpen] = useState(false);
+
+    const entertainmentRoutes = ["/anime", "/manga", "/movies", "/kdramas", "/seasons", "/cdramas", "/cartoons", "/channels"];
+    const isEntertainmentActive = entertainmentRoutes.some((r) => isActive(r));
 
     const handleLogout = async () => {
         if (onClose) onClose();
@@ -368,48 +404,47 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                             active={["/games", "/chess", "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman", "/reactionduel", "/game2048", "/minesweeper", "/sudoku"].some((p) => isActive(p))}
                             onClick={handleNavClick}
                         />
-                        <NavItem
-                            href="/anime"
-                            icon={<AnimeIcon />}
-                            label="Anime"
-                            active={isActive("/anime")}
-                            onClick={handleNavClick}
-                        />
-                        <NavItem
-                            href="/manga"
-                            icon={<MangaIcon />}
-                            label="Manga"
-                            active={isActive("/manga")}
-                            onClick={handleNavClick}
-                        />
-                        <NavItem
-                            href="/kdramas"
-                            icon={<KDramaIcon />}
-                            label="K-Dramas"
-                            active={isActive("/kdramas")}
-                            onClick={handleNavClick}
-                        />
-                        <NavItem
-                            href="/seasons"
-                            icon={<SeasonsIcon />}
-                            label="Seasons"
-                            active={isActive("/seasons")}
-                            onClick={handleNavClick}
-                        />
-                        <NavItem
-                            href="/cdramas"
-                            icon={<CDramaIcon />}
-                            label="Chinese Dramas"
-                            active={isActive("/cdramas")}
-                            onClick={handleNavClick}
-                        />
-                        <NavItem
-                            href="/cartoons"
-                            icon={<CartoonsIcon />}
-                            label="Cartoons"
-                            active={isActive("/cartoons")}
-                            onClick={handleNavClick}
-                        />
+
+                        {/* Entertainment Dropdown */}
+                        <div>
+                            <button
+                                onClick={() => setEntertainmentOpen(!entertainmentOpen)}
+                                className={`flex items-center ${collapsed ? "justify-center gap-0 px-2" : "gap-3 px-4"} py-3 rounded-xl text-sm font-medium transition-colors min-h-[48px] w-full ${collapsed ? "" : "text-left"} ${
+                                    isEntertainmentActive && !entertainmentOpen
+                                        ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                                        : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/60 hover:text-gray-900 dark:hover:text-gray-100"
+                                }`}
+                            >
+                                <EntertainmentIcon />
+                                <span className={collapsed ? "sr-only" : "flex-1"}>Entertainment</span>
+                                {!collapsed && <ChevronIcon open={entertainmentOpen} />}
+                            </button>
+
+                            {entertainmentOpen && !collapsed && (
+                                <div className="ml-4 mt-0.5 space-y-0.5 border-l-2 border-gray-200 dark:border-gray-700 pl-3">
+                                    {[
+                                        { href: "/movies", icon: <MoviesIcon />, label: "Movies" },
+                                        { href: "/kdramas", icon: <KDramaIcon />, label: "K-Dramas" },
+                                        { href: "/channels", icon: <ChannelsIcon />, label: "Channels" },
+                                        { href: "/seasons", icon: <SeasonsIcon />, label: "Seasons" },
+                                        { href: "/cdramas", icon: <CDramaIcon />, label: "Chinese Dramas" },
+                                        { href: "/cartoons", icon: <CartoonsIcon />, label: "Cartoons" },
+                                        { href: "/anime", icon: <AnimeIcon />, label: "Anime" },
+                                        { href: "/manga", icon: <MangaIcon />, label: "Manga" },
+                                    ].map((item) => (
+                                        <NavItem
+                                            key={item.href}
+                                            href={item.href}
+                                            icon={item.icon}
+                                            label={item.label}
+                                            active={isActive(item.href)}
+                                            onClick={handleNavClick}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
                         {user?.isAdmin && (
                             <NavItem
                                 href="/admin"

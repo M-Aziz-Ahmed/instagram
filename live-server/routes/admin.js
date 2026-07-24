@@ -3,8 +3,11 @@ const User = require("../models/user");
 const Role = require("../models/role");
 const Ad = require("../models/ad");
 const Post = require("../models/post");
+const ContentFilter = require("../models/contentFilter");
+const ModerationLog = require("../models/moderationLog");
 const { requireAdmin } = require("../middleware/auth");
 const { getLogs } = require("../logBuffer");
+const { VALID_PERMISSIONS } = require("../models/role");
 
 const router = express.Router();
 
@@ -312,6 +315,224 @@ router.get("/logs", requireAdmin, (req, res) => {
         const { level, since, limit } = req.query;
         const logs = getLogs({ level, since, limit: parseInt(limit) || 200 });
         return res.json(logs);
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// GET /permissions — list all valid permission keys
+router.get("/permissions", requireAdmin, (req, res) => {
+    return res.json(VALID_PERMISSIONS);
+});
+
+// PATCH /roles/:id/permissions — set permissions for a role
+router.patch("/roles/:id/permissions", requireAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { permissions } = req.body;
+        if (!Array.isArray(permissions)) return res.status(400).json({ error: "permissions array required" });
+
+        const valid = permissions.filter((p) => VALID_PERMISSIONS.includes(p));
+        const role = await Role.findByIdAndUpdate(id, { permissions: valid }, { returnDocument: "after" }).lean();
+        if (!role) return res.status(404).json({ error: "Role not found" });
+        return res.json({ id: role._id.toString(), name: role.name, badge: role.badge, color: role.color, permissions: role.permissions });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// GET /moderation — list moderation logs
+router.get("/moderation", requireAdmin, async (req, res) => {
+    try {
+        const limit = Math.min(parseInt(req.query.limit || "50", 10), 200);
+        const logs = await ModerationLog.find({}).sort({ timeStamp: -1 }).limit(limit).lean();
+        return res.json(logs.map((l) => ({
+            id: l._id.toString(),
+            postId: l.postId?.toString() || "",
+            action: l.action,
+            moderator: l.moderator,
+            reason: l.reason,
+            postOwner: l.postOwner,
+            postPreview: l.postPreview,
+            timeStamp: l.timeStamp,
+        })));
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// GET /moderation/flagged — list removed posts
+router.get("/moderation/flagged", requireAdmin, async (req, res) => {
+    try {
+        const limit = Math.min(parseInt(req.query.limit || "50", 10), 200);
+        const posts = await Post.find({ isRemoved: true }).sort({ removedAt: -1 }).limit(limit).lean();
+        return res.json(posts.map((p) => ({
+            id: p._id.toString(),
+            text: (p.text || "").slice(0, 200),
+            sender: p.sender,
+            imageUrl: p.imageUrl || "",
+            removedBy: p.removedBy,
+            removedReason: p.removedReason,
+            removedAt: p.removedAt,
+            timeStamp: p.timeStamp,
+        })));
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// POST /moderation/remove — take down a post
+router.post("/moderation/remove", requireAdmin, async (req, res) => {
+    try {
+        const { postId, reason } = req.body;
+        if (!postId) return res.status(400).json({ error: "postId required" });
+
+        const post = await Post.findById(postId);
+        if (!post) return res.status(404).json({ error: "Post not found" });
+
+        const moderator = await User.findById(req.userId).select("username").lean();
+
+        post.isRemoved = true;
+        post.removedBy = moderator?.username || "admin";
+        post.removedReason = reason || "No reason provided";
+        post.removedAt = new Date();
+        await post.save();
+
+        await ModerationLog.create({
+            postId: post._id,
+            action: "remove",
+            moderator: moderator?.username || "admin",
+            reason: reason || "No reason provided",
+            postOwner: post.sender,
+            postPreview: (post.text || "").slice(0, 200),
+        });
+
+        return res.json({ ok: true });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// POST /moderation/restore — restore a taken-down post
+router.post("/moderation/restore", requireAdmin, async (req, res) => {
+    try {
+        const { postId } = req.body;
+        if (!postId) return res.status(400).json({ error: "postId required" });
+
+        const post = await Post.findById(postId);
+        if (!post) return res.status(404).json({ error: "Post not found" });
+
+        const moderator = await User.findById(req.userId).select("username").lean();
+
+        post.isRemoved = false;
+        post.removedBy = null;
+        post.removedReason = "";
+        post.removedAt = null;
+        await post.save();
+
+        await ModerationLog.create({
+            postId: post._id,
+            action: "restore",
+            moderator: moderator?.username || "admin",
+            reason: "Restored by moderator",
+            postOwner: post.sender,
+            postPreview: (post.text || "").slice(0, 200),
+        });
+
+        return res.json({ ok: true });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// GET /content-filter — get content filter settings
+router.get("/content-filter", requireAdmin, async (req, res) => {
+    try {
+        let filter = await ContentFilter.findOne({}).lean();
+        if (!filter) {
+            filter = await ContentFilter.create({ toxicWords: [], nudityKeywords: [], blockNudity: true, blurToxicWords: true });
+            filter = filter.toObject();
+        }
+        return res.json({
+            toxicWords: filter.toxicWords || [],
+            nudityKeywords: filter.nudityKeywords || [],
+            blockNudity: filter.blockNudity !== false,
+            blurToxicWords: filter.blurToxicWords !== false,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// PATCH /content-filter — update content filter settings
+router.patch("/content-filter", requireAdmin, async (req, res) => {
+    try {
+        const { toxicWords, nudityKeywords, blockNudity, blurToxicWords } = req.body;
+        const update = { updatedAt: new Date() };
+        if (Array.isArray(toxicWords)) update.toxicWords = toxicWords;
+        if (Array.isArray(nudityKeywords)) update.nudityKeywords = nudityKeywords;
+        if (typeof blockNudity === "boolean") update.blockNudity = blockNudity;
+        if (typeof blurToxicWords === "boolean") update.blurToxicWords = blurToxicWords;
+
+        let filter = await ContentFilter.findOne({});
+        if (!filter) {
+            filter = await ContentFilter.create(update);
+        } else {
+            Object.assign(filter, update);
+            await filter.save();
+        }
+
+        return res.json({
+            toxicWords: filter.toxicWords || [],
+            nudityKeywords: filter.nudityKeywords || [],
+            blockNudity: filter.blockNudity !== false,
+            blurToxicWords: filter.blurToxicWords !== false,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// GET /content-filter/public — public endpoint for client-side toxic word blurring (no auth required)
+router.get("/content-filter/public", async (req, res) => {
+    try {
+        let filter = await ContentFilter.findOne({}).lean();
+        if (!filter) {
+            return res.json({ toxicWords: [], blurToxicWords: true });
+        }
+        return res.json({
+            toxicWords: filter.toxicWords || [],
+            blurToxicWords: filter.blurToxicWords !== false,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// PATCH /users/:id/suspend — suspend/unsuspend a user
+router.patch("/users/:id/suspend", requireAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { suspended, suspendedUntil, suspendedReason } = req.body;
+
+        const user = await User.findById(id);
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        user.suspended = !!suspended;
+        user.suspendedUntil = suspendedUntil || null;
+        user.suspendedReason = suspendedReason || "";
+        await user.save();
+
+        return res.json({ ok: true, suspended: user.suspended });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });

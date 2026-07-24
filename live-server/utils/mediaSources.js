@@ -76,6 +76,17 @@ const MediaSource = {
         coverBaseUrl: "https://img.anili.st/media/",
         defaultGenres: ["Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror", "Mystery", "Romance", "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller"],
     },
+    CHANNEL: {
+        type: "channel",
+        label: "Channels",
+        emoji: "📺",
+        searchType: "TV",
+        apiRoute: "/api/media",
+        metadataSource: "tvmaze",
+        streamSource: "VIDSRC",
+        coverBaseUrl: "https://static.tvmaze.com/uploads/images/medium_portrait/",
+        defaultGenres: ["Action", "Comedy", "Drama", "News", "Reality", "Sports", "Talk Show", "Documentary", "Animation", "Kids"],
+    },
 };
 
 const MediaSourceList = Object.values(MediaSource);
