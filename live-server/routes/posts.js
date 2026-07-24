@@ -1178,7 +1178,7 @@ router.get("/bookmarks", async (req, res) => {
             _id: { $in: ids },
             $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
             isRemoved: { $ne: true },
-        }).lean();
+        }).sort({ timeStamp: -1 }).lean();
         if (posts.length === 0) return res.json([]);
 
         const authorUsernames = [...new Set(posts.map((p) => p.sender))];
