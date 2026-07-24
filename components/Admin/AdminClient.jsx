@@ -816,6 +816,9 @@ function PermissionsPanel() {
             if (res.ok) {
                 const data = await res.json();
                 setRoles((prev) => prev.map((r) => r.id === roleId ? { ...r, permissions: data.permissions } : r));
+            } else {
+                showToast("Failed to save permissions", "error");
+                refresh();
             }
         } catch (e) {
             console.error(e);

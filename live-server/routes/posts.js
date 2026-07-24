@@ -42,7 +42,8 @@ async function getUserPermissions(userId) {
         if (user.isAdmin) return { isAdmin: true, permissions: [] };
         const perms = (user.roles || []).flatMap((r) => r.permissions || []);
         return { isAdmin: false, permissions: [...new Set(perms)] };
-    } catch {
+    } catch (e) {
+        console.error("[getUserPermissions] Error:", e.message);
         return { isAdmin: false, permissions: [] };
     }
 }
@@ -619,6 +620,11 @@ router.post("/:id/like", verifyToken, async (req, res) => {
         const username = user?.username;
         if (!username) return res.status(400).json({ error: "Username not found" });
 
+        const { isAdmin, permissions } = await getUserPermissions(req.userId);
+        if (!isAdmin && !permissions.includes("react")) {
+            return res.status(403).json({ error: "You don't have permission to react" });
+        }
+
         const post = await Post.findById(id);
         if (!post) return res.status(404).json({ error: "Not found" });
 
@@ -673,6 +679,11 @@ router.post("/:id/react", verifyToken, async (req, res) => {
         const user = await User.findById(req.userId).select("username").lean();
         const username = user?.username;
         if (!username) return res.status(400).json({ error: "Username not found" });
+
+        const { isAdmin, permissions } = await getUserPermissions(req.userId);
+        if (!isAdmin && !permissions.includes("react")) {
+            return res.status(403).json({ error: "You don't have permission to react" });
+        }
 
         const post = await Post.findById(id);
         if (!post) return res.status(404).json({ error: "Not found" });
@@ -732,6 +743,11 @@ router.post("/:id/comment", verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
         const { text, imageUrl, audioUrl, parentId } = req.body;
+
+        const { isAdmin, permissions } = await getUserPermissions(req.userId);
+        if (!isAdmin && !permissions.includes("create_comment")) {
+            return res.status(403).json({ error: "You don't have permission to comment" });
+        }
 
         const hasText = text?.trim();
         const hasImage = imageUrl;
@@ -802,12 +818,24 @@ router.delete("/:id/comment/:commentId", verifyToken, async (req, res) => {
         const user = await User.findById(req.userId).select("username").lean();
         const username = user?.username;
 
+        const { isAdmin, permissions } = await getUserPermissions(req.userId);
+
         const post = await Post.findById(id);
         if (!post) return res.status(404).json({ error: "Not found" });
 
         const comment = post.comments.find((c) => c.commentId === commentId);
         if (!comment) return res.status(404).json({ error: "Comment not found" });
-        if (comment.sender !== username) return res.status(403).json({ error: "Unauthorized" });
+
+        const isOwner = comment.sender === username;
+        const canDeleteAny = isAdmin || permissions.includes("delete_any_comment");
+        const canDeleteOwn = permissions.includes("delete_own_comment");
+
+        if (!isOwner && !canDeleteAny) {
+            return res.status(403).json({ error: "Unauthorized" });
+        }
+        if (isOwner && !canDeleteOwn && !canDeleteAny) {
+            return res.status(403).json({ error: "You don't have permission to delete comments" });
+        }
 
         post.comments = post.comments.filter((c) => c.commentId !== commentId && c.parentId !== commentId);
         if (comment?.parentId) {
@@ -910,6 +938,11 @@ router.post("/:id/bookmark", verifyToken, async (req, res) => {
         const user = await User.findById(req.userId);
         if (!user) return res.status(404).json({ error: "User not found" });
 
+        const { isAdmin, permissions } = await getUserPermissions(req.userId);
+        if (!isAdmin && !permissions.includes("bookmark")) {
+            return res.status(403).json({ error: "You don't have permission to bookmark" });
+        }
+
         const isBookmarked = user.bookmarks.includes(postId);
         if (isBookmarked) {
             user.bookmarks = user.bookmarks.filter((b) => b !== postId);
@@ -932,6 +965,11 @@ router.post("/:id/repost", verifyToken, async (req, res) => {
 
         if (!id || !/^[0-9a-fA-F]{24}$/.test(id)) {
             return res.status(400).json({ error: "Invalid post ID" });
+        }
+
+        const { isAdmin, permissions } = await getUserPermissions(req.userId);
+        if (!isAdmin && !permissions.includes("repost")) {
+            return res.status(403).json({ error: "You don't have permission to repost" });
         }
 
         const userDoc = await User.findById(req.userId).select("username avatarColor avatarUrl");
