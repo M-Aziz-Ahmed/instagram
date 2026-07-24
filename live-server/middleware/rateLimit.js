@@ -58,10 +58,10 @@ function tieredKeyGenerator(req, fallbackFn) {
 
 // ── Limiters ────────────────────────────────────────────────────
 
-// General API: 300/min auth, 200/min anon
+// General API: 500/min auth, 300/min anon
 const apiLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: (req) => decodeToken(req)?.userId ? 300 : 200,
+    max: (req) => decodeToken(req)?.userId ? 500 : 300,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => tieredKeyGenerator(req, (r) => r.ip),
@@ -79,10 +79,10 @@ const authLimiter = rateLimit({
     message: { error: "Too many auth attempts, try again later" },
 });
 
-// Public read: 400/min auth, 200/min anon
+// Public read: 600/min auth, 400/min anon
 const readLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: (req) => decodeToken(req)?.userId ? 400 : 200,
+    max: (req) => decodeToken(req)?.userId ? 600 : 400,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => tieredKeyGenerator(req, (r) => r.ip),
@@ -90,10 +90,10 @@ const readLimiter = rateLimit({
     message: { error: "Rate limit exceeded" },
 });
 
-// Write: 150/min auth, 50/min anon
+// Write: 200/min auth, 100/min anon
 const writeLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: (req) => decodeToken(req)?.userId ? 150 : 50,
+    max: (req) => decodeToken(req)?.userId ? 200 : 100,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => tieredKeyGenerator(req, (r) => r.ip),
