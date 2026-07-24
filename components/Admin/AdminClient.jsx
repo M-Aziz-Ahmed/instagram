@@ -652,6 +652,8 @@ function RolesPanel() {
                 </form>
             </div>
 
+            <SeedNormalRole onSeeded={refresh} />
+
             <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
                     <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Existing roles</span>
@@ -668,18 +670,18 @@ function RolesPanel() {
                     <div className="divide-y divide-gray-100 dark:divide-gray-800">
                         {roles.map((r) => (
                             <div key={r.id} className="px-4 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                                <span className="w-9 h-9 rounded-lg flex items-center justify-center text-lg text-white font-bold"
+                                <span className="w-9 h-9 rounded-lg flex items-center justify-center text-lg text-white font-bold shrink-0"
                                     style={{ backgroundColor: r.color }}>
-                                    {r.badge}
+                                    {r.badge || "\u00A0"}
                                 </span>
                                 <div className="flex-1 min-w-0">
                                     <p className="font-semibold text-sm text-gray-900 dark:text-gray-100">{r.name}</p>
                                     <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">{r.color}</p>
                                 </div>
-                                <span className="inline-flex items-center gap-0.5 px-2 py-1 rounded-full text-white text-xs font-bold"
+                                {r.badge && <span className="inline-flex items-center gap-0.5 px-2 py-1 rounded-full text-white text-xs font-bold"
                                     style={{ backgroundColor: r.color }}>
                                     {r.badge} {r.name}
-                                </span>
+                                </span>}
                                 <button onClick={() => handleDelete(r.id)}
                                     title="Delete role"
                                     className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
@@ -691,6 +693,52 @@ function RolesPanel() {
                         ))}
                     </div>
                 )}
+            </div>
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  Seed Normal Role                                                          */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+function SeedNormalRole({ onSeeded }) {
+    const { showToast } = useToast();
+    const [seeding, setSeeding] = useState(false);
+    const [done, setDone] = useState(false);
+
+    const handleSeed = async () => {
+        if (seeding) return;
+        setSeeding(true);
+        try {
+            const res = await fetch("/api/admin/roles/seed-normal", { method: "POST" });
+            const data = await res.json();
+            if (!res.ok) { showToast(data.error || "Failed", "error"); return; }
+            showToast(`Normal User role ready — assigned to ${data.usersUpdated} user${data.usersUpdated !== 1 ? "s" : ""}`, "success");
+            setDone(true);
+            onSeeded?.();
+        } catch {
+            showToast("Failed to seed role", "error");
+        }
+        setSeeding(false);
+    };
+
+    if (done) return null;
+
+    return (
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-200 dark:border-blue-800 p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-4">
+                <div>
+                    <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">Normal User role</p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">Create a default "Normal User" role (no badge) and assign it to every user who has no role yet.</p>
+                </div>
+                <button
+                    onClick={handleSeed}
+                    disabled={seeding}
+                    className="shrink-0 px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                    {seeding ? "Seeding\u2026" : "Seed Role"}
+                </button>
             </div>
         </div>
     );

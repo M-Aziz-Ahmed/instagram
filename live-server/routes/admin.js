@@ -109,6 +109,40 @@ router.delete("/roles", requireAdmin, async (req, res) => {
     }
 });
 
+// POST /roles/seed-normal — create "Normal User" role (no badge) and assign to all users without roles
+router.post("/roles/seed-normal", requireAdmin, async (req, res) => {
+    try {
+        let normalRole = await Role.findOne({ name: "Normal User" });
+        if (!normalRole) {
+            normalRole = await Role.create({
+                name: "Normal User",
+                badge: "",
+                color: "#6b7280",
+                permissions: [
+                    "create_post", "delete_own_post",
+                    "create_comment", "delete_own_comment",
+                    "react", "bookmark", "repost",
+                    "use_voice_chat", "use_live_stream", "access_entertainment",
+                ],
+            });
+        }
+
+        const result = await User.updateMany(
+            { roles: { $eq: [] } },
+            { $addToSet: { roles: normalRole._id } }
+        );
+
+        return res.json({
+            roleId: normalRole._id.toString(),
+            roleName: normalRole.name,
+            usersUpdated: result.modifiedCount,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
 // GET /ads
 router.get("/ads", requireAdmin, async (req, res) => {
     try {
