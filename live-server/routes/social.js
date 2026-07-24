@@ -10,7 +10,7 @@ router.get("/leaderboard", async (req, res) => {
         const { period, metric, limit: limitStr } = req.query;
         const limit = Math.min(parseInt(limitStr || "20", 10), 50);
 
-        let matchStage = { isScheduled: false };
+        let matchStage = { isScheduled: false, isRemoved: { $ne: true } };
         if (period === "week") {
             matchStage.timeStamp = { $gte: new Date(Date.now() - 7 * 86400000) };
         } else if (period === "month") {
@@ -136,7 +136,7 @@ router.get("/suggested", async (req, res) => {
         const since = new Date(Date.now() - 30 * 86400000);
 
         const activeUsers = await Post.aggregate([
-            { $match: { timeStamp: { $gte: since }, isScheduled: false } },
+            { $match: { timeStamp: { $gte: since }, isScheduled: false, isRemoved: { $ne: true } } },
             { $group: { _id: "$sender", postCount: { $sum: 1 }, totalLikes: { $sum: { $size: "$likes" } } } },
             { $match: { _id: { $nin: [...followingSet] } } },
             { $sort: { totalLikes: -1 } },

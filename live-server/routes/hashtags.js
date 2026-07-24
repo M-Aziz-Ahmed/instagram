@@ -9,7 +9,7 @@ router.get("/trending", async (req, res) => {
         const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
         const result = await Post.aggregate([
-            { $match: { timeStamp: { $gte: since }, hashtags: { $exists: true, $ne: [] } } },
+            { $match: { timeStamp: { $gte: since }, hashtags: { $exists: true, $ne: [] }, isRemoved: { $ne: true } } },
             { $unwind: "$hashtags" },
             { $group: { _id: "$hashtags", count: { $sum: 1 } } },
             { $sort: { count: -1 } },

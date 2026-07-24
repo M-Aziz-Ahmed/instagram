@@ -17,10 +17,11 @@ router.get("/", async (req, res) => {
             .populate("roles", "name badge color")
             .limit(10).lean();
 
-        const posts = await Post.find({ $or: [{ text: regex }, { hashtags: regex }] })
+        const posts = await Post.find({ $or: [{ text: regex }, { hashtags: regex }], isRemoved: { $ne: true } })
             .sort({ timeStamp: -1 }).limit(20).lean();
 
         const hashtagResults = await Post.aggregate([
+            { $match: { isRemoved: { $ne: true } } },
             { $unwind: "$hashtags" },
             { $match: { hashtags: regex } },
             { $group: { _id: "$hashtags", count: { $sum: 1 } } },

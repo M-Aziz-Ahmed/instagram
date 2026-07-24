@@ -16,7 +16,7 @@ router.get("/", async (req, res) => {
 
         if (!user) return res.status(404).json({ error: "User not found" });
 
-        const posts = await Post.find({ sender: username })
+        const posts = await Post.find({ sender: username, isRemoved: { $ne: true } })
             .select("text imageUrl likes comments viewCount mentions hashtags timeStamp")
             .sort({ timeStamp: -1 }).lean();
 

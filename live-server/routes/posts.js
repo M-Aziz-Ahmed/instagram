@@ -54,20 +54,20 @@ async function getUserPermissions(userId) {
 }
 
 const ACHIEVEMENTS = [
-    { id: "first_post",     name: "First Post",     icon: "🎉", description: "Created your first post",           check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username })) >= 1 },
-    { id: "posts_10",       name: "Active Voice",    icon: "🔊", description: "Created 10 posts",                  check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username })) >= 10 },
-    { id: "posts_50",       name: "Power Poster",   icon: "💪", description: "Created 50 posts",                  check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username })) >= 50 },
-    { id: "posts_100",      name: "Century Club",   icon: "💯", description: "Created 100 posts",                 check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username })) >= 100 },
+    { id: "first_post",     name: "First Post",     icon: "🎉", description: "Created your first post",           check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 1 },
+    { id: "posts_10",       name: "Active Voice",    icon: "🔊", description: "Created 10 posts",                  check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 10 },
+    { id: "posts_50",       name: "Power Poster",   icon: "💪", description: "Created 50 posts",                  check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 50 },
+    { id: "posts_100",      name: "Century Club",   icon: "💯", description: "Created 100 posts",                 check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 100 },
     { id: "streak_3",       name: "On Fire",         icon: "🔥", description: "3-day posting streak",              check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 3; } },
     { id: "streak_7",       name: "Week Warrior",   icon: "⚔️", description: "7-day posting streak",              check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 7; } },
     { id: "streak_30",      name: "Unstoppable",    icon: "🏆", description: "30-day posting streak",             check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 30; } },
-    { id: "liked_10",       name: "Crowd Pleaser",  icon: "❤️", description: "Received 10 likes total",           check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return (result[0]?.total || 0) >= 10; } },
-    { id: "liked_100",      name: "Fan Favorite",   icon: "😍", description: "Received 100 likes total",          check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return (result[0]?.total || 0) >= 100; } },
-    { id: "comment_10",     name: "Conversationalist", icon: "💬", description: "Left 10 comments",              check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $unwind: "$comments" }, { $match: { "comments.sender": username } }, { $count: "total" }]); return (result[0]?.total || 0) >= 10; } },
-    { id: "views_1000",     name: "Influencer",      icon: "👁️", description: "Posts received 1,000 views",       check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username } }, { $group: { _id: null, total: { $sum: "$viewCount" } } }]); return (result[0]?.total || 0) >= 1000; } },
-    { id: "views_10000",    name: "Viral",           icon: "🌟", description: "Posts received 10,000 views",      check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username } }, { $group: { _id: null, total: { $sum: "$viewCount" } } }]); return (result[0]?.total || 0) >= 10000; } },
-    { id: "bookmarked_10",  name: "Saved",           icon: "🔖", description: "Your posts were bookmarked 10 times", check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return false; } },
-    { id: "repost_5",       name: "Amplifier",       icon: "🔄", description: "Posts were reposted 5 times",       check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const count = await Post.countDocuments({ originalSender: username }); return count >= 5; } },
+    { id: "liked_10",       name: "Crowd Pleaser",  icon: "❤️", description: "Received 10 likes total",           check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return (result[0]?.total || 0) >= 10; } },
+    { id: "liked_100",      name: "Fan Favorite",   icon: "😍", description: "Received 100 likes total",          check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return (result[0]?.total || 0) >= 100; } },
+    { id: "comment_10",     name: "Conversationalist", icon: "💬", description: "Left 10 comments",              check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { isRemoved: { $ne: true } } }, { $unwind: "$comments" }, { $match: { "comments.sender": username } }, { $count: "total" }]); return (result[0]?.total || 0) >= 10; } },
+    { id: "views_1000",     name: "Influencer",      icon: "👁️", description: "Posts received 1,000 views",       check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $group: { _id: null, total: { $sum: "$viewCount" } } }]); return (result[0]?.total || 0) >= 1000; } },
+    { id: "views_10000",    name: "Viral",           icon: "🌟", description: "Posts received 10,000 views",      check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $group: { _id: null, total: { $sum: "$viewCount" } } }]); return (result[0]?.total || 0) >= 10000; } },
+    { id: "bookmarked_10",  name: "Saved",           icon: "🔖", description: "Your posts were bookmarked 10 times", check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return false; } },
+    { id: "repost_5",       name: "Amplifier",       icon: "🔄", description: "Posts were reposted 5 times",       check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const count = await Post.countDocuments({ originalSender: username, isRemoved: { $ne: true } }); return count >= 5; } },
 ];
 
 async function updateStreak(userId) {
@@ -379,6 +379,10 @@ router.get("/:id", async (req, res) => {
         }
         const post = await Post.findById(id);
         if (!post) return res.status(404).json({ error: "Not found" });
+        if (post.isRemoved) {
+            const viewer = req.query.username ? await User.findOne({ username: req.query.username }).select("isAdmin").lean() : null;
+            if (!viewer?.isAdmin) return res.status(404).json({ error: "Not found" });
+        }
         const enriched = await enrichPost(post);
         return res.json(enriched);
     } catch (error) {
@@ -1387,17 +1391,18 @@ router.get("/user-stats", verifyToken, async (req, res) => {
         const user = await User.findById(req.userId).select("username postingStreak longestStreak achievements defaultTheme").lean();
         if (!user?.username) return res.json({});
 
-        const postCount = await Post.countDocuments({ sender: user.username, isScheduled: false });
+        const postCount = await Post.countDocuments({ sender: user.username, isScheduled: false, isRemoved: { $ne: true } });
         const likesResult = await Post.aggregate([
-            { $match: { sender: user.username } },
+            { $match: { sender: user.username, isRemoved: { $ne: true } } },
             { $project: { count: { $size: "$likes" } } },
             { $group: { _id: null, total: { $sum: "$count" } } },
         ]);
         const viewsResult = await Post.aggregate([
-            { $match: { sender: user.username } },
+            { $match: { sender: user.username, isRemoved: { $ne: true } } },
             { $group: { _id: null, total: { $sum: "$viewCount" } } },
         ]);
         const commentResult = await Post.aggregate([
+            { $match: { isRemoved: { $ne: true } } },
             { $unwind: "$comments" },
             { $match: { "comments.sender": user.username } },
             { $count: "total" },

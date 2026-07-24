@@ -5,7 +5,7 @@ const User = require("../models/user");
 const router = express.Router();
 
 function getDefaultMatch(before) {
-    const match = { $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] };
+    const match = { $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }], isRemoved: { $ne: true } };
     if (before) match.timeStamp = { $lt: new Date(before) };
     return match;
 }
@@ -124,7 +124,7 @@ router.get("/smart", async (req, res) => {
         const isColdStart = following.length === 0;
 
         if (isColdStart) {
-            const matchStage = { sender: { $ne: username }, ...timeFilter, ...expiryCondition };
+            const matchStage = { sender: { $ne: username }, isRemoved: { $ne: true }, ...timeFilter, ...expiryCondition };
             const posts = await Post.aggregate([
                 { $match: matchStage },
                 { $sort: { timeStamp: -1 } },
@@ -142,11 +142,12 @@ router.get("/smart", async (req, res) => {
             });
         }
 
-        const followedMatch = { sender: { $in: following }, ...timeFilter, ...expiryCondition };
+        const followedMatch = { sender: { $in: following }, isRemoved: { $ne: true }, ...timeFilter, ...expiryCondition };
         const likedMatch = {
             $and: [
                 { $or: [{ likes: username }, { "reactions.like": username }, { "reactions.love": username }, { "reactions.fire": username }] },
                 { sender: { $ne: username } },
+                { isRemoved: { $ne: true } },
                 ...Object.keys(timeFilter).length > 0 ? [timeFilter] : [],
                 ...Object.keys(expiryCondition).length > 0 ? [expiryCondition] : [],
             ],
@@ -157,6 +158,7 @@ router.get("/smart", async (req, res) => {
             const samplePosts = await Post.find({
                 $or: [{ sender: { $in: following } }, { likes: username }],
                 hashtags: { $exists: true, $ne: [] },
+                isRemoved: { $ne: true },
             }).select("hashtags").limit(50).lean();
             const tagCounts = {};
             samplePosts.forEach((p) => {
@@ -171,11 +173,12 @@ router.get("/smart", async (req, res) => {
         const interestMatch = interestTags.length > 0 ? {
             hashtags: { $in: interestTags },
             sender: { $ne: username },
+            isRemoved: { $ne: true },
             ...timeFilter,
             ...expiryCondition,
         } : null;
 
-        const fallbackMatch = { sender: { $ne: username }, ...timeFilter, ...expiryCondition };
+        const fallbackMatch = { sender: { $ne: username }, isRemoved: { $ne: true }, ...timeFilter, ...expiryCondition };
         const batchSize = limit + 20;
 
         const PATTERN = [
