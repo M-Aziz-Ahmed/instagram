@@ -79,10 +79,10 @@ const authLimiter = rateLimit({
     message: { error: "Too many auth attempts, try again later" },
 });
 
-// Public read: 600/min auth, 400/min anon
+// Public read: 10000/min auth, 5000/min anon (effectively disabled)
 const readLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: (req) => decodeToken(req)?.userId ? 600 : 400,
+    max: (req) => decodeToken(req)?.userId ? 10000 : 5000,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => tieredKeyGenerator(req, (r) => r.ip),
