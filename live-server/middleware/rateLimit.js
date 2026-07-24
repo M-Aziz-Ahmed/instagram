@@ -58,10 +58,10 @@ function tieredKeyGenerator(req, fallbackFn) {
 
 // ── Limiters ────────────────────────────────────────────────────
 
-// General API: 300/min auth, 100/min anon
+// General API: 300/min auth, 200/min anon
 const apiLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: (req) => decodeToken(req)?.userId ? 300 : 100,
+    max: (req) => decodeToken(req)?.userId ? 300 : 200,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => tieredKeyGenerator(req, (r) => r.ip),
@@ -69,20 +69,20 @@ const apiLimiter = rateLimit({
     message: { error: "Too many requests, try again later" },
 });
 
-// Auth endpoints: 10/min per IP (keep strict — prevent OTP brute force)
+// Auth endpoints: 15/min per IP (keep strict — prevent OTP brute force)
 const authLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 10,
+    max: 15,
     standardHeaders: true,
     legacyHeaders: false,
     store: makeRedisStore("auth"),
     message: { error: "Too many auth attempts, try again later" },
 });
 
-// Public read: 200/min auth, 60/min anon
+// Public read: 400/min auth, 200/min anon
 const readLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: (req) => decodeToken(req)?.userId ? 200 : 60,
+    max: (req) => decodeToken(req)?.userId ? 400 : 200,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => tieredKeyGenerator(req, (r) => r.ip),
@@ -90,10 +90,10 @@ const readLimiter = rateLimit({
     message: { error: "Rate limit exceeded" },
 });
 
-// Write: 90/min auth, 30/min anon
+// Write: 150/min auth, 50/min anon
 const writeLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: (req) => decodeToken(req)?.userId ? 90 : 30,
+    max: (req) => decodeToken(req)?.userId ? 150 : 50,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => tieredKeyGenerator(req, (r) => r.ip),
