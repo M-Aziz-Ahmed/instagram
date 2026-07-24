@@ -40,6 +40,7 @@ function sendUserPayload(user) {
             name:  r.name  ?? "",
             badge: r.badge ?? "",
             color: r.color ?? "",
+            permissions: r.permissions || [],
         })),
         bookmarks:       user.bookmarks || [],
         following:       user.following || [],
