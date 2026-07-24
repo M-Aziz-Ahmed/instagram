@@ -9,7 +9,7 @@ import UserBadges from "@/components/shared/UserBadges";
 import { useUser } from "@/context/UserContext";
 import { timeAgo } from "@/utils/timeAgo";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 5;
 
 function SearchResults({ query, onClear, onHashtag }) {
     const [users, setUsers]             = useState([]);
@@ -300,7 +300,14 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                 url = `/api/posts?${params}`;
             }
 
-            const res = await fetch(url, { cache: "no-store" });
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+            const res = await fetch(url, { 
+                cache: "no-store",
+                signal: controller.signal 
+            });
+            clearTimeout(timeoutId);
             if (res.status === 401) {
                 onAuthError?.();
                 return;
@@ -344,7 +351,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
     useEffect(() => {
         const id = setInterval(() => {
             const now = Date.now();
-            if (now - lastRefreshRef.current < 12000) return;
+            if (now - lastRefreshRef.current < 60000) return;
             lastRefreshRef.current = now;
 
             const params = new URLSearchParams();
@@ -358,7 +365,13 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             }
             params.set("limit", "5");
 
-            fetch(`/api/posts?${params}`, { cache: "no-store" })
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+            fetch(`/api/posts?${params}`, { 
+                cache: "no-store",
+                signal: controller.signal
+            })
                 .then((r) => r.ok ? r.json() : null)
                 .then((data) => {
                     if (!data?.posts || !Array.isArray(data.posts)) return;
