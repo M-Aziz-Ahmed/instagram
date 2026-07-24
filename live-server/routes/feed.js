@@ -55,7 +55,13 @@ async function fetchLiked(username, limit) {
     return Post.aggregate([
         { $match: {
             $and: [
-                { $or: [{ likes: username }, { "reactions.like": username }, { "reactions.love": username }, { "reactions.fire": username }, { "reactions.sad": username }] },
+                { $or: [
+                    { likes: username }, 
+                    { "reactions.like": username }, 
+                    { "reactions.love": username }, 
+                    { "reactions.fire": username }, 
+                    { "reactions.sad": username }
+                ] },
                 { sender: { $ne: username } },
                 { isRemoved: { $ne: true } }
             ],
