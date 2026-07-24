@@ -88,6 +88,7 @@ async function getUserInterestTags(viewer) {
             const tag = hashtag.toLowerCase();
             tagCounts[tag] = (tagCounts[tag] || 0) + 1;
         });
+    });
     
     return Object.entries(tagCounts)
         .sort((a, b) => b[1] - a[1])
@@ -156,27 +157,6 @@ async function getRecommendedPosts(limit) {
     };
     
     return fetchBatch(recommendedMatch, limit);
-}
-
-async function getUserInterestTags(viewer) {
-    const userPosts = await Post.find({
-        sender: { $in: viewer.following },
-        timeStamp: { $gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // last 30 days
-    })
-        .select("hashtags")
-        .lean();
-    
-    const tagCounts = {};
-    userPosts.forEach(post => {
-        (post.hashtags || []).forEach(hashtag => {
-            const tag = hashtag.toLowerCase();
-            tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-        });
-    
-    return Object.entries(tagCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([tag]) => tag);
 }
 
 async function fetchBatch(matchStage, limit) {
