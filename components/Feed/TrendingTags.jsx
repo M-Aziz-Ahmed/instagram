@@ -43,7 +43,6 @@ export default function TrendingTags({ activeTag, onTagClick }) {
                         &#x2715; Clear filter
                     </button>
                 )}
-            </div>
-        </aside>
+        </div>
     );
 }
