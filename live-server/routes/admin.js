@@ -76,7 +76,7 @@ router.patch("/users", requireAdmin, async (req, res) => {
 router.get("/roles", requireAdmin, async (req, res) => {
     try {
         const roles = await Role.find({}).sort({ createdAt: -1 }).lean();
-        return res.json(roles.map((r) => ({ id: r._id.toString(), name: r.name, badge: r.badge, color: r.color })));
+        return res.json(roles.map((r) => ({ id: r._id.toString(), name: r.name, badge: r.badge, color: r.color, permissions: r.permissions || [] })));
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });
