@@ -332,7 +332,7 @@ router.post("/", verifyToken, async (req, res) => {
             hashtags,
             mentions,
             visibility: visibility || "public",
-            theme:     theme || senderUser?.defaultTheme || "default",
+            theme:     { type: theme || senderUser?.defaultTheme || "default", bg: "" },
             scheduledAt: isScheduled ? new Date(scheduledAt) : null,
             isScheduled,
             ...(poll?.enabled && poll.options?.length >= 2 ? {
