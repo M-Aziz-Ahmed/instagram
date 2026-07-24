@@ -235,6 +235,11 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
     const [showMutedWords, setShowMutedWords] = useState(false);
     const [entertainmentOpen, setEntertainmentOpen] = useState(false);
 
+    const isActive = (path) => {
+        if (path === "/") return pathname === "/";
+        return pathname.startsWith(path);
+    };
+
     const entertainmentRoutes = ["/anime", "/manga", "/movies", "/kdramas", "/seasons", "/cdramas", "/cartoons", "/channels"];
     const isEntertainmentActive = entertainmentRoutes.some((r) => isActive(r));
 
@@ -252,11 +257,6 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
 
     const handleNavClick = () => {
         onClose();
-    };
-
-    const isActive = (path) => {
-        if (path === "/") return pathname === "/";
-        return pathname.startsWith(path);
     };
 
     // Escape key to close mobile sidebar + body scroll lock
