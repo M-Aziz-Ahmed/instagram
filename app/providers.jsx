@@ -63,11 +63,11 @@ export default function Providers({ children }) {
                     <VoiceChatProvider>
                         <ToastProvider>
                             <ErrorBoundary>
-                                <OnlineStatusTracker />
-                                <PushNotificationManager />
                                 <CallWrapper>
                                     {children}
                                 </CallWrapper>
+                                <OnlineStatusTracker />
+                                <PushNotificationManager />
                             </ErrorBoundary>
                         </ToastProvider>
                     </VoiceChatProvider>
