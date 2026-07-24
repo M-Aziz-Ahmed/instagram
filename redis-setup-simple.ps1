@@ -1,3 +1,5 @@
+# This is the simplified redis-setup.ps1 script for Windows:
+
 function Execute-Command {
     param (
         [string]$Command,
@@ -47,12 +49,7 @@ Write-Host "Starting Redis installation..." -ForegroundColor Cyan
 Write-Host ""
 
 # Step 1: Install Redis
-$redisInstall = @"
-sudo apt update
-sudo apt install redis-server -y
-"@"
-
-if (-not (Execute-Command $redisInstall "Redis Package")) {
+if (-not (Execute-Command "sudo apt update; sudo apt install redis-server -y" "Redis Package")) {
     Write-Host "Please install Redis manually using WSL or SSH command." -ForegroundColor Red
     Write-Host ""
     Write-Host "Manual commands:" -ForegroundColor Yellow
@@ -64,21 +61,13 @@ if (-not (Execute-Command $redisInstall "Redis Package")) {
 }
 
 # Step 2: Enable and start Redis service
-$redisConfigure = @"
-sudo systemctl enable --now redis-server
-"@"
-
-if (-not (Execute-Command $redisConfigure "Redis Service Configuration")) {
+if (-not (Execute-Command "sudo systemctl enable --now redis-server" "Redis Service Configuration")) {
     Write-Host "Please configure Redis service manually." -ForegroundColor Red
     return
 }
 
 # Step 3: Verify Redis installation
-$redisVerify = @"
-redis-cli ping
-"@"
-
-if (Execute-Command $redisVerify "Redis Verification") {
+if (Execute-Command "redis-cli ping" "Redis Verification") {
     Write-Host ""
     Write-Host "Redis installation successful!" -ForegroundColor Green
     Write-Host ""
