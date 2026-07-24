@@ -202,68 +202,46 @@ router.get("/", async (req, res) => {
         const { tag, feed, username, lang, before } = req.query;
         const limit = Math.min(parseInt(req.query.limit || "20", 10), 50);
 
-        let viewer = null;
-        if (username) {
-            viewer = await User.findOne({ username }).select("mutedWords closeFriends following").lean();
-        }
-
-        const matchStage = {};
-        matchStage.$or = [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }];
-
+        let query = {};
         let viewerIsAdmin = false;
+
         if (username) {
             const viewerDoc = await User.findOne({ username }).select("isAdmin").lean();
             viewerIsAdmin = !!viewerDoc?.isAdmin;
         }
-        if (!viewerIsAdmin) {
-            matchStage.isRemoved = { $ne: true };
-        }
 
-        if (tag) matchStage.hashtags = tag.toLowerCase();
-        if (feed === "following" && username) {
-            if (viewer?.following?.length) {
-                matchStage.sender = { $in: viewer.following };
-            } else {
-                return res.json({ posts: [], hasMore: false });
-            }
-        }
-        if (before) matchStage.timeStamp = { $lt: new Date(before) };
-
-        const extraMatch = {};
-        if (username && viewer) {
-            extraMatch.$or = [
-                { visibility: { $ne: "closeFriends" } },
-                { sender: { $in: viewer.closeFriends || [] } },
-                { sender: username },
-            ];
-        }
-
-        const query = {};
-
-        if (tag) query.hashtags = tag.toLowerCase();
-        if (feed === "following" && username && viewer?.following?.length) {
-            query.sender = { $in: viewer.following };
-        }
         query.$or = [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }];
 
-        let finalQuery = Post.find(query);
+        if (!viewerIsAdmin) {
+            query.isRemoved = { $ne: true };
+        }
 
-        if (!viewerIsAdmin) finalQuery = finalQuery.where({ isRemoved: { $ne: true } });
-
-        finalQuery = finalQuery.sort({ timeStamp: -1 }).limit(limit + 10);
-
-        const rawPosts = await finalQuery.lean();
-
-        const filtered = rawPosts.filter((p) => {
-            if (p.visibility === "closeFriends" && p.sender !== username) {
-                if (!viewer?.closeFriends?.includes(p.sender)) return false;
+        if (tag) query.hashtags = tag.toLowerCase();
+        if (feed === "following" && username) {
+            const viewer = await User.findOne({ username }).select("following").lean();
+            if (!viewer?.following?.length) {
+                return res.json({ posts: [], hasMore: false });
             }
-            return true;
-        }).slice(0, 100);
+            query.sender = { $in: viewer.following };
+        }
+        if (before) query.timeStamp = { $lt: new Date(before) };
+
+        if (username) {
+            const visibilityQuery = { visibility: { $ne: "closeFriends" } };
+            const closeFriendsQuery = { sender: { $in: (await User.findOne({ username }).select("closeFriends").lean())?.closeFriends || [] } };
+            const ownQuery = { sender: username };
+            query.$or = [visibilityQuery, closeFriendsQuery, ownQuery];
+        }
+
+        const rawPosts = await Post.find(query)
+            .sort({ timeStamp: -1 })
+            .limit(limit + 10)
+            .lean();
+
+        const filtered = rawPosts.slice(0, 100);
 
         const hasMore = filtered.length > limit;
-        const sliced = hasMore ? filtered.slice(0, limit) : filtered;
-        const posts = await enrichPosts(sliced);
+        const posts = await enrichPosts(filtered.slice(0, limit));
 
         return res.json({ posts, hasMore });
     } catch (error) {
