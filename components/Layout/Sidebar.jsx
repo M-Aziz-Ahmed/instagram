@@ -427,6 +427,13 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                             active={isActive("/leaderboard")}
                             onClick={handleNavClick}
                         />
+                        <NavItem
+                            href="/trending"
+                            icon={<TrendingIcon />}
+                            label="What&apos;s Happening"
+                            active={isActive("/trending")}
+                            onClick={handleNavClick}
+                        />
 
                         {/* Entertainment Dropdown */}
                         <div>
