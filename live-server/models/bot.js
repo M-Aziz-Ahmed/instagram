@@ -8,6 +8,8 @@ const botSchema = new mongoose.Schema({
     avatarColor:  { type: String, default: "#10b981" },
     topics:       [{ type: String, trim: true }],
     style:        { type: String, enum: ["casual", "professional", "funny", "news", "hype"], default: "casual" },
+    useRealNews:  { type: Boolean, default: true },
+    includeImages:{ type: Boolean, default: true },
     active:       { type: Boolean, default: true },
     postsPerDay:  { type: Number, default: 1, min: 1, max: 10 },
     postTimes:    [{ type: String, default: ["09:00"] }],

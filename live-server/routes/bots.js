@@ -3,87 +3,94 @@ const Bot = require("../models/bot");
 const Post = require("../models/post");
 const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
+const { getRandomNewsForTopic, FEEDS } = require("../newsService");
 
 const router = express.Router();
 
-const BOT_TEMPLATES = {
+const COMMENTARY = {
     casual: [
-        "Just saw something interesting today... {topic} is really evolving. What do you all think?",
-        "Anyone else following {topic}? The latest developments are wild 🤯",
-        "Hot take on {topic} — change my mind.",
-        "Can we talk about {topic} for a second? I have thoughts.",
-        "Not gonna lie, {topic} has been on my mind all day. Thoughts?",
-        "PSA: If you're not paying attention to {topic}, you're missing out.",
-        "Unpopular opinion about {topic}: it's more important than people think.",
-        "Been researching {topic} all morning. Here's what I found interesting...",
-        "The {topic} discourse online is getting out of hand lol",
-        "Friendly reminder that {topic} exists and it matters.",
+        "Just came across this 👀",
+        "Thoughts on this?",
+        "Anyone else seeing this?",
+        "Interesting stuff",
+        "Had to share this one",
+        "Worth reading 👇",
+        "This caught my eye today",
+        "Not gonna lie, this is wild",
+        "Can't believe this is real",
+        "My feed has been wild today",
     ],
     professional: [
-        "Analysis: {topic} continues to show significant momentum. Key indicators suggest...",
-        "The {topic} landscape is shifting. Here are the main takeaways:",
-        "Breaking down the latest in {topic} — what professionals are saying:",
-        "New developments in {topic} worth noting. Industry implications are substantial.",
-        "Data point: {topic} metrics are trending upward. Full breakdown below.",
-        "Expert consensus on {topic} is forming. Here's the current state of play.",
-        "Deep dive: Understanding the nuances of {topic} in today's environment.",
-        "Market update: {topic} is generating significant attention from stakeholders.",
-        "The intersection of {topic} and broader trends deserves closer examination.",
-        "Quarterly look: {topic} performance and outlook remain strong.",
+        "Key insight worth noting:",
+        "Analysis worth reading:",
+        "Important development to track:",
+        "Industry context:",
+        "Data-driven perspective:",
+        "Noteworthy trend:",
+        "Strategic implications:",
     ],
     funny: [
-        "Me explaining to my friends why {topic} matters for the 47th time 😂",
-        "POV: You just discovered {topic} and now it's your entire personality",
-        "Tell me you follow {topic} without telling me you follow {topic} 🙃",
-        "The {topic} fandom is unhinged and I'm here for it",
-        "My algorithm keeps showing me {topic} content and honestly... fair enough",
-        "That moment when {topic} hits different at 3am 💀",
-        "Plot twist: {topic} was the friends we made along the way",
-        "No because why is {topic} actually interesting though?? I didn't ask for this",
-        "Starting a support group for people obsessed with {topic}. Meetings Tuesdays.",
-        "The way {topic} lives rent-free in my head is concerning",
+        "my algorithm is absolutely cooking today 💀",
+        "the simulation is getting wild again",
+        "tell me why this is actually insane tho",
+        "adding this to the list of things I didn't expect today",
+        "the vibes are immaculate",
+        "we live in the funniest timeline",
+        "no because this is actually important lol",
     ],
     news: [
-        "📰 Trending: {topic} is making headlines today. Here's what you need to know.",
-        "⚡ Quick update on {topic} — major developments emerging.",
-        "📢 {topic} alert: Something significant just happened. Details below.",
-        "🔍 In focus: {topic} — a comprehensive look at what's happening right now.",
-        "📊 {topic} update: Numbers are in and they're telling an interesting story.",
-        "🚨 Breaking: {topic} developments you shouldn't miss.",
-        "💡 Spotlight on {topic}: Why this matters right now.",
-        "📌 Key takeaway: {topic} is evolving faster than expected.",
-        "🌍 Global perspective: How {topic} is shaping conversations everywhere.",
-        "⏳ Don't sleep on {topic} — here's why it matters today.",
+        "Breaking:",
+        "Developing story:",
+        "Just in:",
+        "Report:",
+        "Update:",
+        "Key development:",
+        "Trending now:",
     ],
     hype: [
-        "🔥 {topic} is absolutely CRUSHING it right now!!! Let's goooo!",
-        "🚀 {topic} TO THE MOON! Who else is hyped?!",
-        "⚡ WAKE UP everyone! {topic} just dropped something HUGE!",
-        "💎 {topic} gems incoming! This is NOT a drill!",
-        "🎉 BIG {topic} energy today! The vibes are immaculate!",
-        "💥 {topic} just went CRAZY! You love to see it!",
-        "🏆 {topic} supremacy! We are SO back!",
-        "✨ Major {topic} W today! The haters are QUIET!",
-        "🌟 {topic} moment of the day! This is what we've been waiting for!",
-        "👊 {topic} winning nonstop! Get on board or get left behind!",
+        "THIS IS HUGE 🔥",
+        "YO CHECK THIS OUT",
+        "ABSOLUTELY INSANE",
+        "WE ARE SO BACK",
+        "THE FUTURE IS NOW",
+        "THIS CHANGES EVERYTHING",
+        "LET'S GOOO",
     ],
 };
 
-const DEFAULT_TOPICS = [
-    "technology", "AI and machine learning", "space exploration",
-    "climate change", "crypto markets", "gaming news",
-    "music releases", "movie trailers", "sports highlights",
-    "social media trends", "health and wellness", "startups",
-    "web development", "cybersecurity", "electric vehicles",
-    "cooking trends", "fitness challenges", "travel destinations",
-    "book recommendations", "pet trends", "sustainability",
-    "virtual reality", "blockchain", "renewable energy",
-];
+function buildPost(article, style) {
+    const lines = COMMENTARY[style] || COMMENTARY.casual;
+    const commentary = lines[Math.floor(Math.random() * lines.length)];
 
-function pickTemplate(style, topic) {
-    const templates = BOT_TEMPLATES[style] || BOT_TEMPLATES.casual;
-    const template = templates[Math.floor(Math.random() * templates.length)];
-    return template.replace(/\{topic\}/g, topic);
+    const hashtag = article.topic
+        ? `#${article.topic.toLowerCase().replace(/[^a-z0-9]+/g, "")}`
+        : "";
+
+    const sourceTag = article.source ? `via ${article.source}` : "";
+
+    let text = "";
+    if (style === "news") {
+        text = `${article.title}\n\n${article.description ? article.description.slice(0, 200) : ""}`;
+        if (sourceTag) text += `\n\n${sourceTag}`;
+    } else if (style === "professional") {
+        text = `${commentary}\n\n${article.title}`;
+        if (article.description) text += `\n${article.description.slice(0, 180)}`;
+        if (sourceTag) text += `\n\n${sourceTag}`;
+    } else if (style === "hype") {
+        text = `${commentary}\n\n${article.title}`;
+        if (hashtag) text += `\n${hashtag}`;
+    } else {
+        text = `${commentary}\n\n${article.title}`;
+        if (article.description) {
+            const desc = article.description.slice(0, 150);
+            text += `\n${desc}${article.description.length > 150 ? "..." : ""}`;
+        }
+        if (hashtag) text += `\n${hashtag}`;
+    }
+
+    if (article.link) text += `\n\n🔗 ${article.link}`;
+
+    return { text, image: article.image || null, hashtag };
 }
 
 // GET / — list all bots
@@ -97,14 +104,13 @@ router.get("/", verifyToken, async (req, res) => {
     }
 });
 
-// GET /topics — available topic categories
+// GET /topics — available topic categories with feed info
 router.get("/topics", verifyToken, (req, res) => {
-    return res.json(DEFAULT_TOPICS);
-});
-
-// GET /templates — bot style templates preview
-router.get("/templates", verifyToken, (req, res) => {
-    return res.json(BOT_TEMPLATES);
+    const topics = Object.keys(FEEDS).map((t) => ({
+        name: t,
+        feedCount: FEEDS[t].length,
+    }));
+    return res.json(topics);
 });
 
 // GET /:id — single bot
@@ -119,10 +125,25 @@ router.get("/:id", verifyToken, async (req, res) => {
     }
 });
 
+// POST /preview — preview what a bot would post from a topic
+router.post("/preview", verifyToken, async (req, res) => {
+    try {
+        const { topic, style } = req.body;
+        if (!topic) return res.status(400).json({ error: "Topic required" });
+        const article = await getRandomNewsForTopic(topic);
+        if (!article) return res.status(404).json({ error: "No news found for this topic" });
+        const post = buildPost({ ...article, topic }, style || "casual");
+        return res.json(post);
+    } catch (error) {
+        console.error("[bots] Preview error:", error.message);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
 // POST / — create a bot
 router.post("/", verifyToken, async (req, res) => {
     try {
-        const { name, username, bio, avatarColor, topics, style, postsPerDay, postTimes } = req.body;
+        const { name, username, bio, avatarColor, topics, style, postsPerDay, postTimes, useRealNews, includeImages } = req.body;
         if (!name || !username) {
             return res.status(400).json({ error: "Name and username required" });
         }
@@ -141,6 +162,8 @@ router.post("/", verifyToken, async (req, res) => {
             avatarColor: avatarColor || "#10b981",
             topics: topics || [],
             style: style || "casual",
+            useRealNews: useRealNews !== false,
+            includeImages: includeImages !== false,
             postsPerDay: Math.min(Math.max(parseInt(postsPerDay) || 1, 1), 10),
             postTimes: postTimes?.length ? postTimes : ["09:00"],
             createdBy: req.session?.userId || "admin",
@@ -157,7 +180,7 @@ router.patch("/:id", verifyToken, async (req, res) => {
     try {
         const bot = await Bot.findById(req.params.id);
         if (!bot) return res.status(404).json({ error: "Bot not found" });
-        const { name, bio, avatarColor, topics, style, postsPerDay, postTimes } = req.body;
+        const { name, bio, avatarColor, topics, style, postsPerDay, postTimes, useRealNews, includeImages } = req.body;
         if (name !== undefined) bot.name = name;
         if (bio !== undefined) bot.bio = bio;
         if (avatarColor !== undefined) bot.avatarColor = avatarColor;
@@ -165,6 +188,8 @@ router.patch("/:id", verifyToken, async (req, res) => {
         if (style !== undefined) bot.style = style;
         if (postsPerDay !== undefined) bot.postsPerDay = Math.min(Math.max(parseInt(postsPerDay) || 1, 1), 10);
         if (postTimes !== undefined) bot.postTimes = postTimes;
+        if (useRealNews !== undefined) bot.useRealNews = useRealNews;
+        if (includeImages !== undefined) bot.includeImages = includeImages;
         await bot.save();
         return res.json(bot);
     } catch (error) {
@@ -199,26 +224,37 @@ router.delete("/:id", verifyToken, async (req, res) => {
     }
 });
 
-// POST /:id/post-now — force a bot to post immediately
+// POST /:id/post-now — force a bot to post immediately (real news)
 router.post("/:id/post-now", verifyToken, async (req, res) => {
     try {
         const bot = await Bot.findById(req.params.id);
         if (!bot) return res.status(404).json({ error: "Bot not found" });
         if (!bot.topics.length) return res.status(400).json({ error: "Bot has no topics" });
+
         const topic = bot.topics[Math.floor(Math.random() * bot.topics.length)];
-        const text = pickTemplate(bot.style, topic);
+        const article = await getRandomNewsForTopic(topic);
+        if (!article) return res.status(404).json({ error: `No news found for "${topic}". Try again later.` });
+
+        const post = buildPost({ ...article, topic }, bot.style);
+
         const botUser = await User.findOne({ username: bot.username });
-        if (!botUser) return res.status(400).json({ error: "Bot user account not found — create the bot user first" });
-        const post = await Post.create({
-            text,
+        if (!botUser) return res.status(400).json({ error: "Bot user account not found" });
+
+        const postData = {
+            text: post.text,
             sender: bot.username,
             color: bot.avatarColor,
-            hashtags: [topic.toLowerCase().replace(/\s+/g, "").replace(/[^a-z0-9]/g, "")].filter(Boolean),
-        });
+            hashtags: [topic.toLowerCase().replace(/[^a-z0-9]+/g, "")].filter(Boolean),
+        };
+        if (bot.includeImages && post.image) {
+            postData.imageUrl = post.image;
+        }
+
+        const createdPost = await Post.create(postData);
         bot.lastPostedAt = new Date();
         bot.totalPosts += 1;
         await bot.save();
-        return res.json({ post, bot });
+        return res.json({ post: createdPost, article, bot });
     } catch (error) {
         console.error("[bots] Error:", error.message);
         return res.status(500).json({ error: "Failed" });
@@ -229,11 +265,11 @@ router.post("/:id/post-now", verifyToken, async (req, res) => {
 router.post("/seed-defaults", verifyToken, async (req, res) => {
     try {
         const defaultBots = [
-            { name: "Tech Daily", username: "techdaily", bio: "Your daily dose of tech news and trends 🤖", style: "news", topics: ["technology", "AI and machine learning", "web development", "cybersecurity"], postsPerDay: 3, postTimes: ["09:00", "14:00", "20:00"], avatarColor: "#3b82f6" },
-            { name: "Space Explorer", username: "spaceexplorer", bio: "Blast off into the cosmos! 🚀", style: "hype", topics: ["space exploration", "renewable energy", "virtual reality"], postsPerDay: 2, postTimes: ["10:00", "18:00"], avatarColor: "#8b5cf6" },
-            { name: "Chill Vibes", username: "chillvibes", bio: "Keeping it real with casual takes on everything", style: "casual", topics: ["health and wellness", "cooking trends", "travel destinations", "pet trends", "book recommendations"], postsPerDay: 2, postTimes: ["11:00", "19:00"], avatarColor: "#10b981" },
-            { name: "Meme Machine", username: "mememachine", bio: "Internet culture commentator. Professional shitposter.", style: "funny", topics: ["gaming news", "social media trends", "music releases", "movie trailers"], postsPerDay: 3, postTimes: ["12:00", "17:00", "22:00"], avatarColor: "#f59e0b" },
-            { name: "Market Watch", username: "marketwatch", bio: "Financial insights and market trends 📊", style: "professional", topics: ["crypto markets", "startups", "electric vehicles", "sustainability"], postsPerDay: 2, postTimes: ["08:00", "16:00"], avatarColor: "#ef4444" },
+            { name: "Tech Daily", username: "techdaily", bio: "Your daily dose of real tech news from top sources 🤖", style: "news", topics: ["technology", "ai and machine learning", "web development", "cybersecurity"], postsPerDay: 3, postTimes: ["09:00", "14:00", "20:00"], avatarColor: "#3b82f6", useRealNews: true, includeImages: true },
+            { name: "Space Explorer", username: "spaceexplorer", bio: "Blast off into the cosmos with real space news! 🚀", style: "hype", topics: ["space exploration", "renewable energy", "virtual reality"], postsPerDay: 2, postTimes: ["10:00", "18:00"], avatarColor: "#8b5cf6", useRealNews: true, includeImages: true },
+            { name: "Chill Vibes", username: "chillvibes", bio: "Real stories about health, food, travel, and life", style: "casual", topics: ["health and wellness", "cooking trends", "travel destinations", "pet trends", "book recommendations"], postsPerDay: 2, postTimes: ["11:00", "19:00"], avatarColor: "#10b981", useRealNews: true, includeImages: true },
+            { name: "Meme Machine", username: "mememachine", bio: "Gaming, music, movies — the internet culture pulse 💀", style: "funny", topics: ["gaming news", "social media trends", "music releases", "movie trailers"], postsPerDay: 3, postTimes: ["12:00", "17:00", "22:00"], avatarColor: "#f59e0b", useRealNews: true, includeImages: true },
+            { name: "Market Watch", username: "marketwatch", bio: "Financial insights and market news in real time 📊", style: "professional", topics: ["crypto markets", "startups", "electric vehicles", "sustainability"], postsPerDay: 2, postTimes: ["08:00", "16:00"], avatarColor: "#ef4444", useRealNews: true, includeImages: true },
         ];
 
         const created = [];
@@ -253,7 +289,7 @@ router.post("/seed-defaults", verifyToken, async (req, res) => {
             const bot = await Bot.create({ ...b, createdBy: "system" });
             created.push(bot.username);
         }
-        return res.json({ created, message: `Seeded ${created.length} bot(s)` });
+        return res.json({ created, message: `Seeded ${created.length} bot(s) with real news enabled` });
     } catch (error) {
         console.error("[bots] seed error:", error.message);
         return res.status(500).json({ error: "Failed" });
@@ -273,8 +309,9 @@ async function runBotPosts() {
 
         for (const bot of activeBots) {
             if (!bot.postTimes?.includes(currentTime)) continue;
-            const lastPosted = bot.lastPostedAt ? new Date(bot.lastPostedAt) : null;
+
             const todayStr = now.toISOString().slice(0, 10);
+            const lastPosted = bot.lastPostedAt ? new Date(bot.lastPostedAt) : null;
             if (lastPosted && lastPosted.toISOString().slice(0, 10) === todayStr) {
                 const postsToday = await Post.countDocuments({
                     sender: bot.username,
@@ -284,18 +321,32 @@ async function runBotPosts() {
             }
 
             const topic = bot.topics[Math.floor(Math.random() * bot.topics.length)];
-            const text = pickTemplate(bot.style, topic);
+
+            let postData = {
+                sender: bot.username,
+                color: bot.avatarColor,
+                hashtags: [topic.toLowerCase().replace(/[^a-z0-9]+/g, "")].filter(Boolean),
+            };
+
+            if (bot.useRealNews) {
+                const article = await getRandomNewsForTopic(topic);
+                if (!article) {
+                    console.log(`[Bots] No news for ${bot.username} on "${topic}", skipping`);
+                    continue;
+                }
+                const post = buildPost({ ...article, topic }, bot.style);
+                postData.text = post.text;
+                if (bot.includeImages && post.image) {
+                    postData.imageUrl = post.image;
+                }
+            } else {
+                postData.text = `Random thought about ${topic}... more updates coming soon!`;
+            }
 
             const botUser = await User.findOne({ username: bot.username });
             if (!botUser) continue;
 
-            await Post.create({
-                text,
-                sender: bot.username,
-                color: bot.avatarColor,
-                hashtags: [topic.toLowerCase().replace(/\s+/g, "").replace(/[^a-z0-9]/g, "")].filter(Boolean),
-            });
-
+            await Post.create(postData);
             bot.lastPostedAt = now;
             bot.totalPosts += 1;
             await bot.save();
