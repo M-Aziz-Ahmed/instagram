@@ -206,14 +206,48 @@ const io = new Server(server, {
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://azizahmed:I_hateyou2@localhost:27017/?authSource=admin";
 
 mongoose.connect(MONGODB_URI, {
-    maxPoolSize: 10,
+    maxPoolSize: 50,
+    minPoolSize: 10,
     serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+    family: 4,
+    readPreference: "primaryPreferred",
+    readConcern: { level: "majority" },
 }).then(() => {
-    console.log("[DB] MongoDB connected");
+    console.log("[DB] MongoDB connected (pool: 50)");
 }).catch((err) => {
     console.error("[DB] MongoDB connection failed:", err.message);
     process.exit(1);
 });
+
+// ── Database Indexes (run once, safe to call repeatedly) ────────
+async function ensureIndexes() {
+    try {
+        const db = mongoose.connection.db;
+        await Promise.all([
+            db.collection("posts").createIndex({ createdAt: -1 }),
+            db.collection("posts").createIndex({ author: 1, createdAt: -1 }),
+            db.collection("posts").createIndex({ isRemoved: 1, createdAt: -1 }),
+            db.collection("posts").createIndex({ tags: 1 }),
+            db.collection("posts").createIndex({ likes: -1 }),
+            db.collection("posts").createIndex({ views: -1 }),
+            db.collection("posts").createIndex({ scheduledAt: 1, isScheduled: 1 }),
+            db.collection("users").createIndex({ username: 1 }, { unique: true }),
+            db.collection("users").createIndex({ email: 1 }, { unique: true, sparse: true }),
+            db.collection("users").createIndex({ isVerified: 1 }),
+            db.collection("users").createIndex({ roles: 1 }),
+            db.collection("comments").createIndex({ postId: 1, createdAt: -1 }),
+            db.collection("comments").createIndex({ author: 1 }),
+            db.collection("notifications").createIndex({ userId: 1, read: 1, createdAt: -1 }),
+            db.collection("moderationlogs").createIndex({ targetType: 1, targetId: 1, createdAt: -1 }),
+            db.collection("moderationlogs").createIndex({ moderatorId: 1, createdAt: -1 }),
+        ]);
+        console.log("[DB] Indexes ensured");
+    } catch (err) {
+        console.warn("[DB] Index creation warning:", err.message);
+    }
+}
+mongoose.connection.once("open", () => ensureIndexes());
 
 const { getLogs } = require("./logBuffer");
 
