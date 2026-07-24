@@ -277,6 +277,9 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
 
     const fetchPosts = useCallback(async ({ append = false } = {}) => {
         try {
+            if (!append) setLoading(true);
+            setLoadingMore(true);
+            
             let url;
             const params = new URLSearchParams();
 
@@ -335,6 +338,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             }
         } catch (err) {
             console.error(err);
+            if (!append) setPosts([]); // Show empty state on error
         } finally {
             setLoading(false);
             setLoadingMore(false);
