@@ -387,15 +387,15 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
         lastRefreshRef.current = 0;
     }, [activeTag, feedType, username]);
 
-    // Initial fetch
+    // Initial fetch - run once per mount
+    const initialFetched = useRef(false);
     useEffect(() => {
-        let mounted = true;
-        if (!mounted) return;
+        if (initialFetched.current) return;
+        initialFetched.current = true;
         fetchPosts().finally(() => {
-            if (mounted) setLoading(false);
+            setLoading(false);
         });
-        return () => { mounted = false; };
-    }, [fetchPosts]);
+    }, []); // Run once on mount
 
 // Auto-refresh for new posts (every 60s, skip if loading)
     useEffect(() => {
