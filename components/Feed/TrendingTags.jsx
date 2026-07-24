@@ -15,9 +15,8 @@ export default function TrendingTags({ activeTag, onTagClick }) {
     if (tags.length === 0) return null;
 
     return (
-        <aside className="hidden lg:block w-72 shrink-0">
-            <div className="sticky top-20 bg-gray-50 dark:bg-gray-900 rounded-2xl p-4">
-                <h2 className="font-bold text-sm text-gray-900 dark:text-gray-100 mb-3">Trending</h2>
+        <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl p-4">
+            <h2 className="font-bold text-sm text-gray-900 dark:text-gray-100 mb-3">Trending</h2>
                 <ul className="flex flex-col gap-1">
                     {tags.map(({ tag, count }) => (
                         <li key={tag}>
