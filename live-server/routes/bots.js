@@ -88,8 +88,6 @@ function buildPost(article, style) {
         if (hashtag) text += `\n${hashtag}`;
     }
 
-    if (article.link) text += `\n\n🔗 ${article.link}`;
-
     return { text, image: article.image || null, hashtag };
 }
 

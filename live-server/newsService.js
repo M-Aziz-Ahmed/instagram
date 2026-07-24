@@ -117,12 +117,34 @@ const FALLBACK_FEEDS = [
 ];
 
 function extractImage(item) {
-    if (item.enclosure && item.enclosure.url) return item.enclosure.url;
-    if (item["media:thumbnail"] && item["media:thumbnail"]["$"]) return item["media:thumbnail"]["$"].url;
-    if (item["media:content"] && item["media:content"]["$"]) return item["media:content"]["$"].url;
+    if (item.image && typeof item.image === "string") return item.image;
+    if (item.image && item.image.url) return item.image.url;
+
+    const enc = item.enclosure;
+    if (enc && enc.url && enc.type && enc.type.startsWith("image/")) return enc.url;
+    if (enc && enc.url && !enc.type) return enc.url;
+
+    const thumb = item["media:thumbnail"];
+    if (thumb) {
+        const t = Array.isArray(thumb) ? thumb[0] : thumb;
+        if (t?.["$"]?.url) return t["$"].url;
+        if (t?.url) return t.url;
+    }
+
+    const media = item["media:content"];
+    if (media) {
+        const m = Array.isArray(media) ? media[0] : media;
+        if (m?.["$"]?.url) return m["$"].url;
+        if (m?.url) return m.url;
+    }
+
     const content = item.content || item.contentSnippet || "";
     const imgMatch = content.match(/<img[^>]+src=["']([^"']+)["']/);
     if (imgMatch) return imgMatch[1];
+
+    const ogMatch = content.match(/<figure[^>]*>.*?<img[^>]+src=["']([^"']+)["']/s);
+    if (ogMatch) return ogMatch[1];
+
     return null;
 }
 
