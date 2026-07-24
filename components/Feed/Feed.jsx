@@ -210,6 +210,10 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
     const lastRefreshRef                = useRef(0);
     const viewBatchRef                  = useRef([]);
     const viewTimerRef                  = useRef(null);
+    const postsRef                      = useRef([]);
+
+    // Keep postsRef in sync
+    postsRef.current = posts;
 
     const isSmartFeed = !!user && !activeTag && feedType !== "following";
 
@@ -279,8 +283,8 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             if (isSmartFeed) {
                 params.set("username", username || user.username);
                 if (user?.autoTranslate && user?.language) params.set("lang", user.language);
-                if (append && posts.length > 0) {
-                    const oldest = posts[posts.length - 1];
+                if (append && postsRef.current.length > 0) {
+                    const oldest = postsRef.current[postsRef.current.length - 1];
                     if (oldest?.timeStamp) params.set("before", oldest.timeStamp);
                 }
                 params.set("limit", String(PAGE_SIZE + 10));
@@ -292,8 +296,8 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                     params.set("username", username);
                 }
                 if (user?.autoTranslate && user?.language) params.set("lang", user.language);
-                if (append && posts.length > 0) {
-                    const oldest = posts[posts.length - 1];
+                if (append && postsRef.current.length > 0) {
+                    const oldest = postsRef.current[postsRef.current.length - 1];
                     if (oldest?.timeStamp) params.set("before", oldest.timeStamp);
                 }
                 params.set("limit", String(PAGE_SIZE));
@@ -335,7 +339,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [activeTag, onAuthError, feedType, username, posts, user, isSmartFeed]);
+    }, [activeTag, onAuthError, feedType, username, user, isSmartFeed, loadingMore]);
 
     useEffect(() => {
         setPosts([]);
@@ -344,14 +348,22 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
         lastRefreshRef.current = 0;
     }, [activeTag, feedType, username]);
 
+    // Initial fetch
     useEffect(() => {
-        if (loading) fetchPosts();
-    }, [fetchPosts, loading]);
+        let mounted = true;
+        if (!mounted) return;
+        fetchPosts().finally(() => {
+            if (mounted) setLoading(false);
+        });
+        return () => { mounted = false; };
+    }, [fetchPosts]);
 
+// Auto-refresh for new posts (every 60s, skip if loading)
     useEffect(() => {
         const id = setInterval(() => {
             const now = Date.now();
             if (now - lastRefreshRef.current < 60000) return;
+            if (loading || loadingMore) return;
             lastRefreshRef.current = now;
 
             const params = new URLSearchParams();
@@ -386,7 +398,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                     });
                 })
                 .catch(() => {});
-        }, 30000);
+        }, 60000);
         return () => clearInterval(id);
     }, [activeTag, feedType, username, user?.autoTranslate, user?.language]);
 
