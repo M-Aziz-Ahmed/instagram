@@ -38,12 +38,17 @@ async function checkNudity(text) {
 async function getUserPermissions(userId) {
     try {
         const user = await User.findById(userId).select("isAdmin roles").populate("roles", "permissions").lean();
-        if (!user) return { isAdmin: false, permissions: [] };
+        if (!user) {
+            console.log(`[getUserPermissions] User not found: ${userId}`);
+            return { isAdmin: false, permissions: [] };
+        }
         if (user.isAdmin) return { isAdmin: true, permissions: [] };
         const perms = (user.roles || []).flatMap((r) => r.permissions || []);
-        return { isAdmin: false, permissions: [...new Set(perms)] };
+        const uniquePerms = [...new Set(perms)];
+        console.log(`[getUserPermissions] userId=${userId} roles=${JSON.stringify((user.roles || []).map((r) => ({ id: r._id?.toString(), name: r.name, permissions: r.permissions })))} resolvedPerms=${JSON.stringify(uniquePerms)}`);
+        return { isAdmin: false, permissions: uniquePerms };
     } catch (e) {
-        console.error("[getUserPermissions] Error:", e.message);
+        console.error("[getUserPermissions] Error:", e.message, e.stack);
         return { isAdmin: false, permissions: [] };
     }
 }

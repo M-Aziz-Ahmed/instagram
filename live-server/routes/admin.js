@@ -552,6 +552,43 @@ router.get("/content-filter/public", async (req, res) => {
     }
 });
 
+// GET /debug/user-permissions/:userId — debug the permission resolution chain for a user
+router.get("/debug/user-permissions/:userId", requireAdmin, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const user = await User.findById(userId).lean();
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        const rawRoles = (user.roles || []).map((r) => r.toString());
+        const populatedUser = await User.findById(userId).select("isAdmin roles").populate("roles", "permissions name badge color").lean();
+
+        const roleDetails = (populatedUser.roles || []).map((r) => ({
+            id: r._id?.toString(),
+            name: r.name,
+            badge: r.badge,
+            color: r.color,
+            permissions: r.permissions || [],
+        }));
+
+        const allPerms = roleDetails.flatMap((r) => r.permissions);
+        const uniquePerms = [...new Set(allPerms)];
+
+        return res.json({
+            userId: user._id.toString(),
+            username: user.username,
+            isAdmin: user.isAdmin,
+            suspended: user.suspended || false,
+            rawRoleIds: rawRoles,
+            roleCount: roleDetails.length,
+            roles: roleDetails,
+            resolvedPermissions: uniquePerms,
+        });
+    } catch (error) {
+        console.error("[debug/user-permissions] Error:", error.message, error.stack);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
 // PATCH /users/:id/suspend — suspend/unsuspend a user
 router.patch("/users/:id/suspend", requireAdmin, async (req, res) => {
     try {
