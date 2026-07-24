@@ -280,10 +280,12 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             if (!append) setLoading(true);
             setLoadingMore(true);
             
+            // Try fast path first for initial load, fallback to smart feed
+            const useFastPath = !append && isSmartFeed;
             let url;
             const params = new URLSearchParams();
 
-            if (isSmartFeed) {
+            if (isSmartFeed && !useFastPath) {
                 params.set("username", username || user.username);
                 if (user?.autoTranslate && user?.language) params.set("lang", user.language);
                 if (append && postsRef.current.length > 0) {
@@ -308,7 +310,8 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             }
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const timeoutMs = useFastPath ? 8000 : 15000;
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
             const res = await fetch(url, { 
                 cache: "no-store",
@@ -338,7 +341,39 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             }
         } catch (err) {
             console.error(err);
-            if (!append) setPosts([]); // Show empty state on error
+            // Fallback: if fast path failed, try smart feed
+            if (useFastPath && !append) {
+                try {
+                    const params = new URLSearchParams();
+                    params.set("username", username || user.username);
+                    if (user?.autoTranslate && user?.language) params.set("lang", user.language);
+                    params.set("limit", String(PAGE_SIZE + 10));
+                    const fallbackUrl = `/api/feed/smart?${params}`;
+
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+                    const res = await fetch(fallbackUrl, { 
+                        cache: "no-store",
+                        signal: controller.signal 
+                    });
+                    clearTimeout(timeoutId);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.translations) {
+                            setServerTranslations((prev) => ({ ...prev, ...data.translations }));
+                        }
+                        const newPosts = Array.isArray(data.posts) ? data.posts : [];
+                        setPosts(newPosts);
+                        setHasMore(data.hasMore);
+                    }
+                } catch (fallbackErr) {
+                    console.error("Fallback also failed:", fallbackErr);
+                    setPosts([]);
+                }
+            } else if (!append) {
+                setPosts([]);
+            }
         } finally {
             setLoading(false);
             setLoadingMore(false);
