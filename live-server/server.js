@@ -2824,10 +2824,10 @@ io.on("connection", async (socket) => {
 });
 
 // ── API Routes ───────────────────────────────────────────────────
-const { apiLimiter, authLimiter } = require("./middleware/rateLimit");
+const { apiLimiter, authLimiter, readLimiter } = require("./middleware/rateLimit");
 
 app.use("/api/auth", authLimiter, require("./routes/auth"));
-app.use("/api/posts", apiLimiter, require("./routes/posts"));
+app.use("/api/posts", readLimiter, require("./routes/posts"));
 app.use("/api/feed", apiLimiter, require("./routes/feed"));
 app.use("/api/users", apiLimiter, require("./routes/users"));
 app.use("/api/admin", apiLimiter, require("./routes/admin"));
