@@ -19,7 +19,6 @@ function fenToBoard(fen) {
     }
     return { board, turn: parts[1] };
 }
-
 function getPieceValue(type) {
     return PIECE_VALUES[type] || 0;
 }
