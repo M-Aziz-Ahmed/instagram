@@ -4,8 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 import { io } from "socket.io-client";
-
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
+import { getSocketConfig } from "@/utils/socketClient";
 
 function Avatar({ player }) {
     if (!player) return null;
@@ -42,7 +41,7 @@ export default function ReactionDuelGameClient({ gameId }) {
 
     useEffect(() => {
         if (!myUsername) return;
-        const s = io(LIVE_SERVER, { query: { username: myUsername }, transports: ["polling", "websocket"], withCredentials: true });
+        const s = io(...Object.values(getSocketConfig({ username: myUsername })));
         socketRef.current = s;
         s.emit("reactionduel:join-game", { gameId });
 

@@ -11,8 +11,7 @@ import ChessChat from "./ChessChat";
 import ChessReviewPanel from "./ChessReviewPanel";
 import { playMoveSound, playCaptureSound, playCheckSound, playCheckmateSound, playCastleSound, playPromotionSound, playClickSound, setSoundEnabled } from "./chessSounds";
 import { useGameReplay } from "@/components/Games/useGameReplay";
-
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
+import { getSocketConfig } from "@/utils/socketClient";
 
 const INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -208,7 +207,7 @@ export default function ChessGameClient({ gameId }) {
 
     useEffect(() => {
         if (!user?.username) return;
-        const s = io(LIVE_SERVER, { query: { username: user.username }, transports: ["polling", "websocket"], upgrade: true, rememberUpgrade: false, reconnectionAttempts: 30, timeout: 30000, withCredentials: true });
+        const s = io(...Object.values(getSocketConfig({ username: user.username, reconnectionAttempts: 30, timeout: 30000 })));
         socketRef.current = s;
 
         s.emit("chess:join-game", { gameId });

@@ -3,8 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { useUser } from "@/context/UserContext";
-
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
+import { getSocketConfig } from "@/utils/socketClient";
 
 const VoiceChatContext = createContext({
     socket: null,
@@ -23,21 +22,16 @@ export function VoiceChatProvider({ children }) {
     const reconnectCountRef = useRef(0);
 
     useEffect(() => {
-        if (!LIVE_SERVER || !user?.username) return;
+        if (!user?.username) return;
 
         let alive = true;
-
-        const s = io(LIVE_SERVER, {
-            query: { username: user.username },
-            transports: ["polling", "websocket"],
-            upgrade: true,
-            rememberUpgrade: false,
+        const { url, config } = getSocketConfig({
+            username: user.username,
             reconnectionAttempts: 10,
-            reconnectionDelay: 1000,
-            reconnectionDelayMax: 5000,
             timeout: 15000,
-            withCredentials: true,
         });
+
+        const s = io(url, config);
 
         s.on("connect_error", (err) => {
             console.warn("[VoiceChat] Connection error:", err?.message || err);

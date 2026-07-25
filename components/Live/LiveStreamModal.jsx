@@ -4,8 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import { io } from "socket.io-client";
 import { ICE_SERVERS } from "@/utils/iceServers";
-
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
+import { getSocketConfig } from "@/utils/socketClient";
 
 const MAX_BITRATE = 8000;
 
@@ -284,7 +283,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
         }
         if (!sid || !username) return null;
 
-        const socket = io(LIVE_SERVER, { transports: ["polling", "websocket"], upgrade: true, rememberUpgrade: false, reconnection: true, reconnectionAttempts: 30, reconnectionDelay: 1000, timeout: 30000 });
+        const socket = io(...Object.values(getSocketConfig({ reconnectionAttempts: 30, timeout: 30000 })));
 
         socket.on("connect", () => {
             socket.emit("join-stream", { streamId: sid, username });

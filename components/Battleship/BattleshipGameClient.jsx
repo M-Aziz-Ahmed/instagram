@@ -7,8 +7,7 @@ import BattleshipGrid from "./BattleshipGrid";
 import ChessChat from "@/components/Chess/ChessChat";
 import { playMoveSound, playCaptureSound, playCheckmateSound, setSoundEnabled } from "@/components/Chess/chessSounds";
 import { useGameReplay } from "@/components/Games/useGameReplay";
-
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
+import { getSocketConfig } from "@/utils/socketClient";
 
 export default function BattleshipGameClient({ gameId }) {
     const { user } = useUser();
@@ -38,7 +37,7 @@ export default function BattleshipGameClient({ gameId }) {
 
     useEffect(() => {
         if (!user?.username) return;
-        const s = io(LIVE_SERVER, { query: { username: user.username }, transports: ["polling", "websocket"], withCredentials: true });
+        const s = io(...Object.values(getSocketConfig({ username: user.username })));
         socketRef.current = s;
         s.emit("battleship:join-game", { gameId });
         s.on("battleship:shot", (data) => {

@@ -7,8 +7,7 @@ import CheckersBoard from "./CheckersBoard";
 import ChessChat from "@/components/Chess/ChessChat";
 import { playMoveSound, playCaptureSound, playCheckmateSound, setSoundEnabled } from "@/components/Chess/chessSounds";
 import { useGameReplay } from "@/components/Games/useGameReplay";
-
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
+import { getSocketConfig } from "@/utils/socketClient";
 
 function PlayerBar({ player, color, active }) {
     const dot = color === "r" ? (player?.avatarColor || "#ef4444") : (player?.avatarColor || "#1f2937");
@@ -66,7 +65,7 @@ export default function CheckersGameClient({ gameId }) {
 
     useEffect(() => {
         if (!user?.username) return;
-        const s = io(LIVE_SERVER, { query: { username: user.username }, transports: ["polling", "websocket"], withCredentials: true });
+        const s = io(...Object.values(getSocketConfig({ username: user.username })));
         socketRef.current = s;
         s.emit("checkers:join-game", { gameId });
 

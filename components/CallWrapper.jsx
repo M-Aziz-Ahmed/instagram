@@ -15,23 +15,18 @@ function CallSocketProvider({ children }) {
         let cancelled = false;
         let sock = null;
 
-        const configured = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "";
-        const url = configured || window.location.origin;
-
         const connect = async () => {
             try {
                 const { io } = await import("socket.io-client");
+                const { getSocketConfig } = await import("@/utils/socketClient");
                 if (cancelled) return;
-                sock = io(url, {
-                    query: { username: user.username },
-                    transports: ["polling", "websocket"],
-                    upgrade: true,
-                    rememberUpgrade: false,
+                const { url, config } = getSocketConfig({
+                    username: user.username,
                     reconnectionAttempts: 30,
-                    reconnectionDelay: 1000,
                     reconnectionDelayMax: 15000,
                     timeout: 15000,
                 });
+                sock = io(url, config);
                 sock.on("connect", () => {
                     if (!cancelled) setSocket(sock);
                 });

@@ -8,8 +8,7 @@ import { countPieces } from "./reversiClientLogic";
 import ChessChat from "@/components/Chess/ChessChat";
 import { playMoveSound, playCaptureSound, playCheckmateSound, setSoundEnabled } from "@/components/Chess/chessSounds";
 import { useGameReplay } from "@/components/Games/useGameReplay";
-
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
+import { getSocketConfig } from "@/utils/socketClient";
 
 function PlayerBar({ player, color, active, count }) {
     return (
@@ -53,7 +52,7 @@ export default function ReversiGameClient({ gameId }) {
 
     useEffect(() => {
         if (!user?.username) return;
-        const s = io(LIVE_SERVER, { query: { username: user.username }, transports: ["polling", "websocket"], withCredentials: true });
+        const s = io(...Object.values(getSocketConfig({ username: user.username })));
         socketRef.current = s;
         s.emit("reversi:join-game", { gameId });
         s.on("reversi:move", (data) => {

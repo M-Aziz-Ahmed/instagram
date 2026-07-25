@@ -6,8 +6,7 @@ import { io } from "socket.io-client";
 import HangmanFigure from "./HangmanFigure";
 import { playMoveSound, playCaptureSound, playCheckmateSound } from "@/components/Chess/chessSounds";
 import { useGameReplay } from "@/components/Games/useGameReplay";
-
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
+import { getSocketConfig } from "@/utils/socketClient";
 
 const MAX_WRONG = 6;
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
@@ -28,7 +27,7 @@ export default function HangmanGameClient({ gameId }) {
 
     useEffect(() => {
         if (!user?.username) return;
-        const s = io(LIVE_SERVER, { query: { username: user.username }, transports: ["polling", "websocket"], withCredentials: true });
+        const s = io(...Object.values(getSocketConfig({ username: user.username })));
         socketRef.current = s;
         s.emit("hangman:join-game", { gameId });
         s.on("hangman:update", (data) => {
