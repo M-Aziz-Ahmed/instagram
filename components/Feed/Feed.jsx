@@ -429,7 +429,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
 
         observer.observe(sentinel);
         return () => observer.disconnect();
-    }, []);
+    }, [loading]);
 
     // Show search results when searchQuery is set
     if (searchQuery) {
