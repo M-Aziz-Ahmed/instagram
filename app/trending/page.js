@@ -51,7 +51,7 @@ export default function TrendingPage() {
 
     const fetchTrending = useCallback(async () => {
         try {
-            const r = await fetch("/api/social/trending");
+            const r = await fetch("/api/trending");
             if (r.ok) setTrending(await r.json());
         } catch {}
     }, []);
