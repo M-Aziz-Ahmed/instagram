@@ -1,3 +1,5 @@
+import FeedClient from "@/components/Feed/FeedClient";
+
 export const metadata = {
   title: 'Home Feed',
   description: 'Discover anonymous posts, stories, and content from users around the world. Share your thoughts freely without revealing your identity.',
@@ -8,5 +10,5 @@ export const metadata = {
 };
 
 export default function Home() {
-    return <Feed />;
+    return <FeedClient />;
 }
