@@ -5,8 +5,6 @@ import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 import { io } from "socket.io-client";
 
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
-
 function Avatar({ player }) {
     if (!player) return null;
     const color = player.avatarColor || "#3b82f6";
@@ -41,12 +39,8 @@ export default function ReactionDuelGameClient({ gameId }) {
     const myUsername = user?.username;
 
     useEffect(() => {
-        if (!LIVE_SERVER || !myUsername) return;
-        const s = io(LIVE_SERVER, {
-            query: { username: myUsername },
-            transports: ["polling", "websocket"],
-            withCredentials: true,
-        });
+        if (!myUsername) return;
+        const s = io("", { path: "/socket.io", query: { username: myUsername }, transports: ["polling", "websocket"], withCredentials: true });
         socketRef.current = s;
         s.emit("reactionduel:join-game", { gameId });
 
@@ -83,7 +77,7 @@ export default function ReactionDuelGameClient({ gameId }) {
     useEffect(() => {
         (async () => {
             try {
-                const res = await fetch(`${LIVE_SERVER}/api/reactionduel/games/${gameId}`);
+                const res = await fetch(`/api/reactionduel/games/${gameId}`);
                 if (res.ok) {
                     const data = await res.json();
                     setGame(data.game);
@@ -110,7 +104,7 @@ export default function ReactionDuelGameClient({ gameId }) {
 
     const handlePlayAgain = useCallback(async () => {
         try {
-            await fetch(`${LIVE_SERVER}/api/reactionduel/games/${gameId}/rematch`, {
+            await fetch(`/api/reactionduel/games/${gameId}/rematch`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({}),

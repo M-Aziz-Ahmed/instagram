@@ -1721,9 +1721,7 @@ function LogsPanel() {
             if (source === "next") {
                 res = await fetch(`/api/admin/logs?${params}`);
             } else if (source === "live") {
-                const url = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
-                if (!url) return;
-                res = await fetch(`${url}/api/logs?${params}`);
+                res = await fetch(`/api/logs?${params}`);
             } else {
                 res = await fetch(`/api/admin/logs/client?${params}`);
             }

@@ -27,9 +27,7 @@ export default function StoryTray() {
 
     const fetchLive = useCallback(async () => {
         try {
-            const url = process.env.NEXT_PUBLIC_LIVE_SERVER_URL
-                ? `${process.env.NEXT_PUBLIC_LIVE_SERVER_URL}/api/streams`
-                : "/api/live";
+            const url = "/api/streams";
             const res = await fetch(url);
             if (res.ok) {
                 const data = await res.json();

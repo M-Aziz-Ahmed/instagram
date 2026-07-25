@@ -5,8 +5,6 @@ import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 import GameProfileHistory from "@/components/Games/GameProfileHistory";
 
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
-
 export default function HangmanLobbyClient() {
     const { user } = useUser();
     const router = useRouter();
@@ -16,7 +14,7 @@ export default function HangmanLobbyClient() {
         if (!user) return;
         setCreating(true);
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/hangman/games`, {
+            const res = await fetch("/api/hangman/games", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

@@ -12,8 +12,6 @@ import ChessReviewPanel from "./ChessReviewPanel";
 import { playMoveSound, playCaptureSound, playCheckSound, playCheckmateSound, playCastleSound, playPromotionSound, playClickSound, setSoundEnabled } from "./chessSounds";
 import { useGameReplay } from "@/components/Games/useGameReplay";
 
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
-
 const INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 function parseFEN(fen) {
@@ -207,16 +205,8 @@ export default function ChessGameClient({ gameId }) {
     }, [isReviewing, reviewIndex, fenHistory]);
 
     useEffect(() => {
-        if (!LIVE_SERVER || !user?.username) return;
-        const s = io(LIVE_SERVER, {
-            query: { username: user.username },
-            transports: ["polling", "websocket"],
-            upgrade: true,
-            rememberUpgrade: false,
-            reconnectionAttempts: 30,
-            timeout: 30000,
-            withCredentials: true,
-        });
+        if (!user?.username) return;
+        const s = io("", { path: "/socket.io", query: { username: user.username }, transports: ["polling", "websocket"], upgrade: true, rememberUpgrade: false, reconnectionAttempts: 30, timeout: 30000, withCredentials: true });
         socketRef.current = s;
 
         s.emit("chess:join-game", { gameId });
@@ -303,7 +293,7 @@ export default function ChessGameClient({ gameId }) {
     useEffect(() => {
         async function fetchGame() {
             try {
-                    const res = await fetch(`${LIVE_SERVER}/api/chess/games/${gameId}`);
+                    const res = await fetch(`/api/chess/games/${gameId}`);
                 if (res.ok) {
                     const data = await res.json();
                     setGame(data.game);

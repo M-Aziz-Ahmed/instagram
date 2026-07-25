@@ -7,8 +7,6 @@ import ChessChat from "@/components/Chess/ChessChat";
 import { playMoveSound, playCheckmateSound, setSoundEnabled } from "@/components/Chess/chessSounds";
 import { useGameReplay } from "@/components/Games/useGameReplay";
 
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
-
 function Mark({ mark, players, small }) {
     if (!mark) return null;
     const color = mark === "x" ? (players?.x?.avatarColor || "#3b82f6") : (players?.o?.avatarColor || "#ef4444");
@@ -72,8 +70,8 @@ export default function TicTacToeGameClient({ gameId }) {
     };
 
     useEffect(() => {
-        if (!LIVE_SERVER || !user?.username) return;
-        const s = io(LIVE_SERVER, { query: { username: user.username }, transports: ["polling", "websocket"], withCredentials: true });
+        if (!user?.username) return;
+        const s = io("", { path: "/socket.io", query: { username: user.username }, transports: ["polling", "websocket"], withCredentials: true });
         socketRef.current = s;
         s.emit("tictactoe:join-game", { gameId });
 
@@ -92,7 +90,7 @@ export default function TicTacToeGameClient({ gameId }) {
     useEffect(() => {
         (async () => {
             try {
-                const res = await fetch(`${LIVE_SERVER}/api/tictactoe/games/${gameId}`);
+                const res = await fetch(`/api/tictactoe/games/${gameId}`);
                 if (res.ok) {
                     const data = await res.json();
                     setGame(data.game);

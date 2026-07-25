@@ -8,8 +8,6 @@ import ChessChat from "@/components/Chess/ChessChat";
 import { playMoveSound, playCaptureSound, playCheckmateSound, setSoundEnabled } from "@/components/Chess/chessSounds";
 import { useGameReplay } from "@/components/Games/useGameReplay";
 
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
-
 function PlayerBar({ player, color, active }) {
     const dot = color === "r" ? (player?.avatarColor || "#ef4444") : (player?.avatarColor || "#1f2937");
     return (
@@ -65,8 +63,8 @@ export default function CheckersGameClient({ gameId }) {
     }, [myColor]);
 
     useEffect(() => {
-        if (!LIVE_SERVER || !user?.username) return;
-        const s = io(LIVE_SERVER, { query: { username: user.username }, transports: ["polling", "websocket"], withCredentials: true });
+        if (!user?.username) return;
+        const s = io("", { path: "/socket.io", query: { username: user.username }, transports: ["polling", "websocket"], withCredentials: true });
         socketRef.current = s;
         s.emit("checkers:join-game", { gameId });
 
@@ -86,7 +84,7 @@ export default function CheckersGameClient({ gameId }) {
     useEffect(() => {
         (async () => {
             try {
-                const res = await fetch(`${LIVE_SERVER}/api/checkers/games/${gameId}`);
+                const res = await fetch(`/api/checkers/games/${gameId}`);
                 if (res.ok) {
                     const data = await res.json();
                     setGame(data.game);

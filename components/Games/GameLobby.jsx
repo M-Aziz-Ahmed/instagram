@@ -6,8 +6,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import GameProfileHistory from "@/components/Games/GameProfileHistory";
 
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
-
 function StatusBadge({ status }) {
     const colors = {
         waiting: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
@@ -45,7 +43,7 @@ export default function GameLobby({
 
     const fetchGames = useCallback(async () => {
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/${apiBase}/games?status=waiting`);
+            const res = await fetch(`/api/${apiBase}/games?status=waiting`);
             if (res.ok) {
                 const data = await res.json();
                 setGames(data.games || []);
@@ -57,7 +55,7 @@ export default function GameLobby({
     const fetchMyGames = useCallback(async () => {
         if (!user?.username) return;
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/${apiBase}/games?status=active&username=${encodeURIComponent(user.username)}`);
+            const res = await fetch(`/api/${apiBase}/games?status=active&username=${encodeURIComponent(user.username)}`);
             if (res.ok) {
                 const data = await res.json();
                 setMyGames(data.games || []);
@@ -76,7 +74,7 @@ export default function GameLobby({
         if (!user) return;
         setCreating(true);
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/${apiBase}/games`, {
+            const res = await fetch(`/api/${apiBase}/games`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -98,7 +96,7 @@ export default function GameLobby({
     const handleJoin = async (gameId) => {
         if (!user) return;
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/${apiBase}/games/${gameId}/join`, {
+            const res = await fetch(`/api/${apiBase}/games/${gameId}/join`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

@@ -40,8 +40,6 @@ const QUALITY_PRESETS = {
     "480":  { bitrate: 2000, width: 854,  height: 480,  fps: 30 },
 };
 
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "";
-
 export default function LiveStreamModal({ streamId: initialStreamId, hostUsername, onClose, autoStart }) {
     const { user } = useUser();
 
@@ -284,15 +282,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
         }
         if (!sid || !username) return null;
 
-        const socket = io(LIVE_SERVER, {
-            transports: ["polling", "websocket"],
-            upgrade: true,
-            rememberUpgrade: false,
-            reconnection: true,
-            reconnectionAttempts: 30,
-            reconnectionDelay: 1000,
-            timeout: 30000,
-        });
+        const socket = io("", { path: "/socket.io", transports: ["polling", "websocket"], upgrade: true, rememberUpgrade: false, reconnection: true, reconnectionAttempts: 30, reconnectionDelay: 1000, timeout: 30000 });
 
         socket.on("connect", () => {
             socket.emit("join-stream", { streamId: sid, username });
@@ -384,15 +374,8 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
             return;
         }
 
-        if (!LIVE_SERVER) {
-            setError("Live server not configured. Set NEXT_PUBLIC_LIVE_SERVER_URL.");
-            setLoading(false);
-            localStreamRef.current?.getTracks().forEach((t) => t.stop());
-            return;
-        }
-
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/streams`, {
+            const res = await fetch("/api/streams", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: user?.username, title: "Live Stream" }),
@@ -654,8 +637,8 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
     const endStream = async () => {
         const sock = socketRef.current;
         const s = stateRef.current;
-        if (s.isHost && s.streamId && LIVE_SERVER) {
-            await fetch(`${LIVE_SERVER}/api/streams/${s.streamId}`, {
+        if (s.isHost && s.streamId) {
+            await fetch(`/api/streams/${s.streamId}`, {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: s.user?.username }),

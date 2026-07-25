@@ -4,8 +4,6 @@ import { useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
-
 export default function ReactionDuelLobbyClient() {
     const { user } = useUser();
     const router = useRouter();
@@ -19,7 +17,7 @@ export default function ReactionDuelLobbyClient() {
         setCreating(true);
         setError(null);
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/reactionduel/games`, {
+            const res = await fetch("/api/reactionduel/games", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -55,7 +53,7 @@ export default function ReactionDuelLobbyClient() {
         setJoining(true);
         setError(null);
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/reactionduel/games/${id}/join`, {
+            const res = await fetch(`/api/reactionduel/games/${id}/join`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

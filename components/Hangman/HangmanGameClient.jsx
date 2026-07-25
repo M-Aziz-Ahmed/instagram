@@ -7,7 +7,6 @@ import HangmanFigure from "./HangmanFigure";
 import { playMoveSound, playCaptureSound, playCheckmateSound } from "@/components/Chess/chessSounds";
 import { useGameReplay } from "@/components/Games/useGameReplay";
 
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
 const MAX_WRONG = 6;
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
@@ -26,8 +25,8 @@ export default function HangmanGameClient({ gameId }) {
     const guessedSet = useMemo(() => new Set(game?.guessed || []), [game?.guessed]);
 
     useEffect(() => {
-        if (!LIVE_SERVER || !user?.username) return;
-        const s = io(LIVE_SERVER, { query: { username: user.username }, transports: ["polling", "websocket"], withCredentials: true });
+        if (!user?.username) return;
+        const s = io("", { path: "/socket.io", query: { username: user.username }, transports: ["polling", "websocket"], withCredentials: true });
         socketRef.current = s;
         s.emit("hangman:join-game", { gameId });
         s.on("hangman:update", (data) => {
@@ -43,7 +42,7 @@ export default function HangmanGameClient({ gameId }) {
     useEffect(() => {
         (async () => {
             try {
-                const res = await fetch(`${LIVE_SERVER}/api/hangman/games/${gameId}`);
+                const res = await fetch(`/api/hangman/games/${gameId}`);
                 if (res.ok) {
                     const data = await res.json();
                     setGame(data.game);

@@ -6,8 +6,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import GameProfileHistory from "@/components/Games/GameProfileHistory";
 
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
-
 const AI_LEVELS = [
     { label: "Beginner", level: 1, desc: "Random-ish" },
     { label: "Easy", level: 2, desc: "Casual" },
@@ -42,7 +40,7 @@ export default function Connect4LobbyClient() {
 
     const fetchGames = useCallback(async () => {
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/connect4/games?status=waiting`);
+            const res = await fetch("/api/connect4/games?status=waiting");
             if (res.ok) {
                 const data = await res.json();
                 setGames(data.games || []);
@@ -54,7 +52,7 @@ export default function Connect4LobbyClient() {
     const fetchMyGames = useCallback(async () => {
         if (!user?.username) return;
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/connect4/games?status=active&username=${encodeURIComponent(user.username)}`);
+            const res = await fetch(`/api/connect4/games?status=active&username=${encodeURIComponent(user.username)}`);
             if (res.ok) {
                 const data = await res.json();
                 setMyGames(data.games || []);
@@ -73,7 +71,7 @@ export default function Connect4LobbyClient() {
         if (!user) return;
         setCreating(true);
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/connect4/games`, {
+            const res = await fetch("/api/connect4/games", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -95,7 +93,7 @@ export default function Connect4LobbyClient() {
     const handleJoin = async (gameId) => {
         if (!user) return;
         try {
-            const res = await fetch(`${LIVE_SERVER}/api/connect4/games/${gameId}/join`, {
+            const res = await fetch(`/api/connect4/games/${gameId}/join`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

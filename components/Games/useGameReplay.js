@@ -4,8 +4,6 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
-
 /**
  * Shared helper for the game-over screen so players can start a fresh game
  * in-place (without returning to the lobby).
@@ -23,7 +21,7 @@ export function useGameReplay(basePath) {
             if (!user) return;
             setCreating(true);
             try {
-                const res = await fetch(`${LIVE_SERVER}${endpoint}`, {
+                const res = await fetch(endpoint, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({

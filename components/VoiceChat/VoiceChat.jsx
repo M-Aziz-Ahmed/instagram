@@ -6,8 +6,6 @@ import { useVoiceChat } from "@/context/VoiceChatContext";
 import MusicPanel from "./MusicPanel";
 import { ICE_SERVERS } from "@/utils/iceServers";
 
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "";
-
 function SpeakingIndicator({ speaking }) {
     return (
         <div className="flex items-center gap-[2px] h-3">
