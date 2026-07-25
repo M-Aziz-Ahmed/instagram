@@ -211,11 +211,12 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
     const viewBatchRef                  = useRef([]);
     const viewTimerRef                  = useRef(null);
     const postsRef                      = useRef([]);
+    const hasMoreRef                    = useRef(true);
+    const postsLoadingRef               = useRef(false);
 
-    // Keep postsRef in sync
+    // Keep refs in sync
     postsRef.current = posts;
-
-    const isSmartFeed = !!user && !activeTag && feedType !== "following";
+    hasMoreRef.current = hasMore;
 
     const handleDelete = useCallback((postId) => {
         setPosts((prev) => prev.filter((p) => p._id !== postId));
@@ -275,45 +276,32 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
         return items;
     }, [ads]);
 
+    const fetchPostsRef = useRef(null);
+
     const fetchPosts = useCallback(async ({ append = false } = {}) => {
+        if (append && (!hasMoreRef.current || postsLoadingRef.current)) return;
         try {
             if (!append) setLoading(true);
+            postsLoadingRef.current = true;
             setLoadingMore(true);
-            
-            // Try fast path first for initial load, fallback to smart feed
-            const useFastPath = !append && isSmartFeed;
-            let url;
-            const params = new URLSearchParams();
 
-            if (isSmartFeed && !useFastPath) {
-                params.set("username", username || user.username);
-                if (user?.autoTranslate && user?.language) params.set("lang", user.language);
-                if (append && postsRef.current.length > 0) {
-                    const oldest = postsRef.current[postsRef.current.length - 1];
-                    if (oldest?.timeStamp) params.set("before", oldest.timeStamp);
-                }
-                params.set("limit", String(PAGE_SIZE + 10));
-                url = `/api/feed/smart?${params}`;
-            } else {
-                if (activeTag) params.set("tag", activeTag);
-                if (feedType === "following" && username) {
-                    params.set("feed", "following");
-                    params.set("username", username);
-                }
-                if (user?.autoTranslate && user?.language) params.set("lang", user.language);
-                if (append && postsRef.current.length > 0) {
-                    const oldest = postsRef.current[postsRef.current.length - 1];
-                    if (oldest?.timeStamp) params.set("before", oldest.timeStamp);
-                }
-                params.set("limit", String(PAGE_SIZE));
-                url = `/api/posts?${params}`;
+            const params = new URLSearchParams();
+            if (activeTag) params.set("tag", activeTag);
+            if (feedType === "following" && username) {
+                params.set("feed", "following");
+                params.set("username", username);
             }
+            if (user?.autoTranslate && user?.language) params.set("lang", user.language);
+            if (append && postsRef.current.length > 0) {
+                const oldest = postsRef.current[postsRef.current.length - 1];
+                if (oldest?.timeStamp) params.set("before", oldest.timeStamp);
+            }
+            params.set("limit", String(PAGE_SIZE));
 
             const controller = new AbortController();
-            const timeoutMs = useFastPath ? 8000 : 15000;
-            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-            const res = await fetch(url, { 
+            const res = await fetch(`/api/posts?${params}`, { 
                 cache: "no-store",
                 signal: controller.signal 
             });
@@ -338,51 +326,31 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                     setPosts(newPosts);
                 }
                 setHasMore(data.hasMore);
+            } else if (!append) {
+                setPosts([]);
+                setHasMore(false);
             }
         } catch (err) {
             console.error(err);
-            // Fallback: if fast path failed, try smart feed
-            if (useFastPath && !append) {
-                try {
-                    const params = new URLSearchParams();
-                    params.set("username", username || user.username);
-                    if (user?.autoTranslate && user?.language) params.set("lang", user.language);
-                    params.set("limit", String(PAGE_SIZE + 10));
-                    const fallbackUrl = `/api/feed/smart?${params}`;
-
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-                    const res = await fetch(fallbackUrl, { 
-                        cache: "no-store",
-                        signal: controller.signal 
-                    });
-                    clearTimeout(timeoutId);
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data.translations) {
-                            setServerTranslations((prev) => ({ ...prev, ...data.translations }));
-                        }
-                        const newPosts = Array.isArray(data.posts) ? data.posts : [];
-                        setPosts(newPosts);
-                        setHasMore(data.hasMore);
-                    }
-                } catch (fallbackErr) {
-                    console.error("Fallback also failed:", fallbackErr);
-                    setPosts([]);
-                }
-            } else if (!append) {
+            if (!append) {
                 setPosts([]);
+                setHasMore(false);
             }
         } finally {
+            postsLoadingRef.current = false;
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [activeTag, onAuthError, feedType, username, user, isSmartFeed, loadingMore]);
+    }, [activeTag, onAuthError, feedType, username, user]);
+
+    // Keep a ref to fetchPosts so the observer always calls the latest version
+    fetchPostsRef.current = fetchPosts;
 
     useEffect(() => {
         setPosts([]);
         setHasMore(true);
+        hasMoreRef.current = true;
+        postsLoadingRef.current = false;
         setLoading(true);
         lastRefreshRef.current = 0;
     }, [activeTag, feedType, username]);
@@ -397,12 +365,17 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
         });
     }, []); // Run once on mount
 
+    const loadingRef = useRef(false);
+    const loadingMoreRef = useRef(false);
+    loadingRef.current = loading;
+    loadingMoreRef.current = loadingMore;
+
 // Auto-refresh for new posts (every 60s, skip if loading)
     useEffect(() => {
         const id = setInterval(() => {
             const now = Date.now();
             if (now - lastRefreshRef.current < 60000) return;
-            if (loading || loadingMore) return;
+            if (loadingRef.current || loadingMoreRef.current) return;
             lastRefreshRef.current = now;
 
             const params = new URLSearchParams();
@@ -447,9 +420,8 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
 
         const observer = new IntersectionObserver(
             (entries) => {
-                if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
-                    setLoadingMore(true);
-                    fetchPosts({ append: true });
+                if (entries[0].isIntersecting) {
+                    fetchPostsRef.current?.({ append: true });
                 }
             },
             { rootMargin: "400px" }
@@ -457,7 +429,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
 
         observer.observe(sentinel);
         return () => observer.disconnect();
-    }, [hasMore, loadingMore, loading, fetchPosts]);
+    }, []);
 
     // Show search results when searchQuery is set
     if (searchQuery) {
