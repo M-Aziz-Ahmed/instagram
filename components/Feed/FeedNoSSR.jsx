@@ -109,7 +109,7 @@ function FeedNoSSR() {
         setHasMore(false);
         setLoading(true);
         fetchPosts({ reset: true });
-    }, [fetchPosts]);
+    }, []);
 
     useEffect(() => {
         const intervalId = setInterval(() => {
