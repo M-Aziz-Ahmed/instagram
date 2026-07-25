@@ -302,40 +302,9 @@ export default function VoiceChat({ isOpen, onClose }) {
 
             if (type === "offer") {
                 let pc = pcsRef.current.get(fromUsername);
-                if (!pc || pc.signalingState === "closed") {
-                    pc = new RTCPeerConnection(ICE_SERVERS);
-                    pcsRef.current.set(fromUsername, pc);
+                const needsNewPC = !pc || pc.signalingState === "closed";
 
-                    const localStream = localStreamRef.current;
-                    if (localStream) {
-                        localStream.getTracks().forEach((track) => {
-                            pc.addTrack(track, localStream);
-                        });
-                    }
-                    if (screenStreamRef.current) {
-                        const vt = screenStreamRef.current.getVideoTracks()[0];
-                        if (vt) pc.addTrack(vt, screenStreamRef.current);
-                    }
-
-                    pc.ontrack = (e) => {
-                        if (e.streams?.[0]) {
-                            peerStreamsRef.current.set(fromUsername, e.streams[0]);
-                            const vt = e.streams[0].getVideoTracks()[0];
-                            if (vt) {
-                                setRemoteScreenSharer(fromUsername);
-                                setRemoteScreenStream(e.streams[0]);
-                            } else {
-                                attachRemoteAudio(fromUsername, e.streams[0]);
-                            }
-                        }
-                    };
-                    pc.onicecandidate = (e) => {
-                        if (e.candidate) {
-                            s.emit("voice:signal", { to: from, from: s.id, fromUsername: u.username, type: "ice-candidate", data: e.candidate.toJSON() });
-                        }
-                    };
-                } else if (pc.signalingState === "stable") {
-                    try { pc.close(); } catch {}
+                if (needsNewPC) {
                     pc = new RTCPeerConnection(ICE_SERVERS);
                     pcsRef.current.set(fromUsername, pc);
 
@@ -369,7 +338,7 @@ export default function VoiceChat({ isOpen, onClose }) {
                     };
                 }
 
-                if (pc.signalingState === "stable") {
+                if (pc.signalingState === "stable" || pc.signalingState === "have-remote-offer") {
                     await pc.setRemoteDescription(new RTCSessionDescription(data));
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
@@ -402,23 +371,24 @@ export default function VoiceChat({ isOpen, onClose }) {
             showNotif(message || "Voice chat error");
         };
 
-        const handleDisconnect = () => {
-            pcsRef.current.forEach((pc) => { try { pc.close(); } catch {} });
-            pcsRef.current.clear();
-            peerStreamsRef.current.forEach((s) => s.getTracks().forEach((t) => t.stop()));
-            peerStreamsRef.current.clear();
-            audioElementsRef.current.forEach((el) => { el.srcObject = null; el.remove(); });
-            audioElementsRef.current.clear();
-            if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-            if (speakingTimerRef.current) clearTimeout(speakingTimerRef.current);
-            analyserRef.current = null;
-            if (audioCtxRef.current) { try { audioCtxRef.current.close(); } catch {} }
-            audioCtxRef.current = null;
-            setParticipants([]);
-            setRemoteScreenSharer(null);
-            setRemoteScreenStream(null);
+        let disconnectTimer = null;
+        const DISCONNECT_GRACE_MS = 5000;
+
+        const handleDisconnect = (reason) => {
+            setSocketConnected(false);
+            if (reason === "io server disconnect") {
+                cleanup();
+                return;
+            }
+            disconnectTimer = setTimeout(() => {
+                disconnectTimer = null;
+                cleanup();
+            }, DISCONNECT_GRACE_MS);
         };
         const handleReconnect = async () => {
+            if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
+            setSocketConnected(true);
+
             const s = socketRef.current;
             const u = userRef.current;
             if (!s || !u) return;
@@ -445,11 +415,9 @@ export default function VoiceChat({ isOpen, onClose }) {
         };
 
         const handleConnect = () => setSocketConnected(true);
-        const handleDisconnectStatus = () => setSocketConnected(false);
 
         setSocketConnected(socket.connected);
         socket.on("connect", handleConnect);
-        socket.on("disconnect", handleDisconnectStatus);
         socket.on("disconnect", handleDisconnect);
         socket.on("reconnect", handleReconnect);
         socket.on("voice:channels", handleChannels);
@@ -493,9 +461,9 @@ export default function VoiceChat({ isOpen, onClose }) {
 
         return () => {
             if (retryTimer) clearInterval(retryTimer);
+            if (disconnectTimer) clearTimeout(disconnectTimer);
             socket.off("connect", handleConnect);
             socket.off("connect", fetchChannels);
-            socket.off("disconnect", handleDisconnectStatus);
             socket.off("disconnect", handleDisconnect);
             socket.off("reconnect", handleReconnect);
             socket.off("voice:channels", handleChannels);
@@ -618,35 +586,25 @@ export default function VoiceChat({ isOpen, onClose }) {
 
             pc.onconnectionstatechange = () => {
                 if (pc.connectionState === "failed") {
+                    if (pc._iceRestartPending) return;
+                    pc._iceRestartPending = true;
                     pc.restartIce();
                     pc.createOffer({ iceRestart: true }).then((offer) => {
                         return pc.setLocalDescription(offer);
                     }).then(() => {
-                        s.emit("voice:signal", {
-                            to: p.socketId,
-                            from: s.id,
-                            fromUsername: u.username,
-                            type: "offer",
-                            data: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
-                        });
-                    }).catch(() => {});
+                        if (pc.localDescription) {
+                            s.emit("voice:signal", {
+                                to: p.socketId,
+                                from: s.id,
+                                fromUsername: u.username,
+                                type: "offer",
+                                data: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+                            });
+                        }
+                    }).catch(() => {}).finally(() => { pc._iceRestartPending = false; });
                 } else if (pc.connectionState === "closed") {
                     pcsRef.current.delete(p.username);
                 }
-            };
-
-            pc.onnegotiationneeded = async () => {
-                try {
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    s.emit("voice:signal", {
-                        to: p.socketId,
-                        from: s.id,
-                        fromUsername: u.username,
-                        type: "offer",
-                        data: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
-                    });
-                } catch {}
             };
 
             try {
