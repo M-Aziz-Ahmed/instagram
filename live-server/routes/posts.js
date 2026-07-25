@@ -35,6 +35,11 @@ async function checkNudity(text) {
     }
 }
 
+const DEFAULT_USER_PERMISSIONS = [
+    "create_post", "delete_own_post", "create_comment", "delete_own_comment",
+    "react", "bookmark", "repost",
+];
+
 async function getUserPermissions(userId) {
     try {
         const user = await User.findById(userId).select("isAdmin roles").populate("roles", "permissions").lean();
@@ -43,9 +48,14 @@ async function getUserPermissions(userId) {
             return { isAdmin: false, permissions: [] };
         }
         if (user.isAdmin) return { isAdmin: true, permissions: [] };
-        const perms = (user.roles || []).flatMap((r) => r.permissions || []);
+        const roles = user.roles || [];
+        if (roles.length === 0) {
+            console.log(`[getUserPermissions] userId=${userId} no roles, using default permissions`);
+            return { isAdmin: false, permissions: DEFAULT_USER_PERMISSIONS };
+        }
+        const perms = roles.flatMap((r) => r.permissions || []);
         const uniquePerms = [...new Set(perms)];
-        console.log(`[getUserPermissions] userId=${userId} roles=${JSON.stringify((user.roles || []).map((r) => ({ id: r._id?.toString(), name: r.name, permissions: r.permissions })))} resolvedPerms=${JSON.stringify(uniquePerms)}`);
+        console.log(`[getUserPermissions] userId=${userId} roles=${JSON.stringify(roles.map((r) => ({ id: r._id?.toString(), name: r.name, permissions: r.permissions })))} resolvedPerms=${JSON.stringify(uniquePerms)}`);
         return { isAdmin: false, permissions: uniquePerms };
     } catch (e) {
         console.error("[getUserPermissions] Error:", e.message, e.stack);
