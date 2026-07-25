@@ -19,16 +19,20 @@ export default function SuggestedUsers() {
             .catch(() => setLoading(false));
     }, [user]);
 
-    const handleFollow = async (username) => {
-        setFollowing((prev) => new Set([...prev, username]));
+    const handleFollow = async (targetUsername) => {
+        setFollowing((prev) => new Set([...prev, targetUsername]));
         try {
-            await fetch("/api/users", {
+            const res = await fetch(`/api/users/${encodeURIComponent(targetUsername)}/follow`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: user.username, target: username }),
+                body: JSON.stringify({ username: user.username }),
             });
+            const data = await res.json();
+            if (data.pending) {
+                setFollowing((prev) => { const n = new Set(prev); n.delete(targetUsername); return n; });
+            }
         } catch {
-            setFollowing((prev) => { const n = new Set(prev); n.delete(username); return n; });
+            setFollowing((prev) => { const n = new Set(prev); n.delete(targetUsername); return n; });
         }
     };
 
