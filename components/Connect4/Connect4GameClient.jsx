@@ -8,6 +8,8 @@ import ChessChat from "@/components/Chess/ChessChat";
 import { playMoveSound, playCaptureSound, playCheckmateSound, setSoundEnabled } from "@/components/Chess/chessSounds";
 import { useGameReplay } from "@/components/Games/useGameReplay";
 
+const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
+
 function PlayerBar({ player, color, active, label }) {
     const dot = color === "r" ? "#ef4444" : "#eab308";
     return (
@@ -61,7 +63,7 @@ export default function Connect4GameClient({ gameId }) {
 
     useEffect(() => {
         if (!user?.username) return;
-        const s = io("", { path: "/socket.io", query: { username: user.username }, transports: ["polling", "websocket"], upgrade: true, reconnectionAttempts: 30, timeout: 30000, withCredentials: true });
+        const s = io(LIVE_SERVER, { query: { username: user.username }, transports: ["polling", "websocket"], upgrade: true, reconnectionAttempts: 30, timeout: 30000, withCredentials: true });
         socketRef.current = s;
         s.emit("connect4:join-game", { gameId });
 

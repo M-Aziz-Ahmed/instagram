@@ -5,6 +5,8 @@ import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 import { io } from "socket.io-client";
 
+const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
+
 function Avatar({ player }) {
     if (!player) return null;
     const color = player.avatarColor || "#3b82f6";
@@ -40,7 +42,7 @@ export default function ReactionDuelGameClient({ gameId }) {
 
     useEffect(() => {
         if (!myUsername) return;
-        const s = io("", { path: "/socket.io", query: { username: myUsername }, transports: ["polling", "websocket"], withCredentials: true });
+        const s = io(LIVE_SERVER, { query: { username: myUsername }, transports: ["polling", "websocket"], withCredentials: true });
         socketRef.current = s;
         s.emit("reactionduel:join-game", { gameId });
 

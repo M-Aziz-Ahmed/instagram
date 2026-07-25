@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { io } from "socket.io-client";
 import { useUser } from "@/context/UserContext";
 
+const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
+
 const VoiceChatContext = createContext({
     socket: null,
     voiceOpen: false,
@@ -21,13 +23,11 @@ export function VoiceChatProvider({ children }) {
     const reconnectCountRef = useRef(0);
 
     useEffect(() => {
-        if (!user?.username) return;
+        if (!LIVE_SERVER || !user?.username) return;
 
         let alive = true;
-        const url = typeof window !== "undefined" ? window.location.origin : "";
 
-        const s = io(url, {
-            path: "/socket.io",
+        const s = io(LIVE_SERVER, {
             query: { username: user.username },
             transports: ["polling", "websocket"],
             upgrade: true,
