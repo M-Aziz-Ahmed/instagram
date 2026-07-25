@@ -1,5 +1,7 @@
 require("dotenv").config();
 require("./logBuffer");
+const { logAuth, logUser, logServer, logDatabase, logGame, logChat, logFrontend, logModeration, logSystem } = require("./logService");
+const { requestLogger } = require("./middleware/requestLogger");
 const express = require("express");
 const https = require("https");
 const http = require("http");
@@ -190,6 +192,7 @@ app.use(cors({
 }));
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
+app.use(requestLogger);
 
 const io = new Server(server, {
     cors: {
@@ -215,8 +218,10 @@ mongoose.connect(MONGODB_URI, {
     readConcern: { level: "majority" },
 }).then(() => {
     console.log("[DB] MongoDB connected (pool: 50)");
+    logSystem("db_connected", { message: "MongoDB connected (pool: 50)" });
 }).catch((err) => {
     console.error("[DB] MongoDB connection failed:", err.message);
+    logSystem("db_connection_failed", { level: "error", message: `MongoDB connection failed: ${err.message}` });
     process.exit(1);
 });
 
@@ -241,8 +246,14 @@ async function ensureIndexes() {
             db.collection("notifications").createIndex({ userId: 1, read: 1, createdAt: -1 }),
             db.collection("moderationlogs").createIndex({ targetType: 1, targetId: 1, createdAt: -1 }),
             db.collection("moderationlogs").createIndex({ moderatorId: 1, createdAt: -1 }),
+            db.collection("systemlogs").createIndex({ category: 1, createdAt: -1 }),
+            db.collection("systemlogs").createIndex({ username: 1, createdAt: -1 }),
+            db.collection("systemlogs").createIndex({ action: 1, createdAt: -1 }),
+            db.collection("systemlogs").createIndex({ level: 1, createdAt: -1 }),
+            db.collection("systemlogs").createIndex({ gameId: 1 }),
         ]);
         console.log("[DB] Indexes ensured");
+        logDatabase("indexes_created", { message: "Database indexes ensured" });
     } catch (err) {
         console.warn("[DB] Index creation warning:", err.message);
     }
@@ -314,6 +325,8 @@ app.post("/api/streams", async (req, res) => {
             startedAt: stream.startedAt,
         });
 
+        logServer("stream_started", { username, message: `Live stream started: ${title || "Untitled"}`, meta: { streamId: stream._id.toString() } });
+
         res.json({ streamId: stream._id, title: stream.title });
     } catch (err) {
         console.error("[API] Failed to create stream:", err.message);
@@ -336,6 +349,8 @@ app.delete("/api/streams/:id", async (req, res) => {
 
         io.to(`stream:${id}`).emit("host-ended", { streamId: id });
         io.emit("stream:ended", { streamId: id });
+
+        logServer("stream_ended", { username, message: `Live stream ended`, meta: { streamId: id } });
 
         res.json({ ok: true });
     } catch (err) {
@@ -397,6 +412,8 @@ app.post("/api/chess/games", async (req, res) => {
             timerLastTick: mode === "ai" ? new Date() : null,
         });
 
+        logGame("chess_created", { username, gameId: game._id.toString(), gameType: mode || "multiplayer", message: `Chess game created: ${mode || "multiplayer"}` });
+
         res.json({ game });
     } catch (err) {
         console.error("[CHESS API] Create game error:", err.message);
@@ -417,6 +434,8 @@ app.post("/api/chess/games/:id/join", async (req, res) => {
         game.status = "active";
         game.timerLastTick = new Date();
         await game.save();
+
+        logGame("chess_joined", { username, gameId: game._id.toString(), message: `${username} joined chess game` });
 
         res.json({ game });
     } catch (err) {
@@ -477,6 +496,7 @@ app.post("/api/chess/games/:id/move", async (req, res) => {
                 game.result = isWhiteTurn ? "1-0" : "0-1";
                 game.resultReason = "Checkmate";
                 game.winner = isWhiteTurn ? whiteName : blackName;
+                logGame("chess_checkmate", { username, gameId: game._id.toString(), message: `Checkmate! Winner: ${game.winner}` });
             } else if (chess.isStalemate()) {
                 game.status = "stalemate";
                 game.result = "1/2-1/2";
@@ -611,6 +631,8 @@ app.post("/api/connect4/games", async (req, res) => {
             yellow: mode === "ai" ? { username: "Computer", avatarUrl: "", avatarColor: "#eab308" } : undefined,
         });
 
+        logGame("connect4_created", { username, gameId: game._id.toString(), gameType: mode || "multiplayer", message: `Connect Four game created: ${mode || "multiplayer"}` });
+
         res.json({ game });
     } catch (err) {
         console.error("[C4 API] Create game error:", err.message);
@@ -675,6 +697,7 @@ app.post("/api/tictactoe/games", async (req, res) => {
             status: mode === "ai" ? "active" : "waiting",
             o: mode === "ai" ? { username: "Computer", avatarUrl: "", avatarColor: "#ef4444" } : undefined,
         });
+        logGame("tictactoe_created", { username, gameId: game._id.toString(), gameType: mode || "multiplayer", message: `Tic-Tac-Toe game created: ${mode || "multiplayer"}` });
         res.json({ game });
     } catch (err) {
         console.error("[TTT API] Create error:", err.message);
@@ -737,6 +760,7 @@ app.post("/api/checkers/games", async (req, res) => {
             status: mode === "ai" ? "active" : "waiting",
             black: mode === "ai" ? { username: "Computer", avatarUrl: "", avatarColor: "#1f2937" } : undefined,
         });
+        logGame("checkers_created", { username, gameId: game._id.toString(), gameType: mode || "multiplayer", message: `Checkers game created: ${mode || "multiplayer"}` });
         res.json({ game });
     } catch (err) {
         console.error("[CHK API] Create error:", err.message);
@@ -799,6 +823,7 @@ app.post("/api/reversi/games", async (req, res) => {
             status: mode === "ai" ? "active" : "waiting",
             white: mode === "ai" ? { username: "Computer", avatarUrl: "", avatarColor: "#e5e7eb" } : undefined,
         });
+        logGame("reversi_created", { username, gameId: game._id.toString(), gameType: mode || "multiplayer", message: `Reversi game created: ${mode || "multiplayer"}` });
         res.json({ game });
     } catch (err) {
         console.error("[REV API] Create error:", err.message);
@@ -873,6 +898,7 @@ app.post("/api/battleship/games", async (req, res) => {
             status: mode === "ai" ? "active" : "waiting",
             p2: mode === "ai" ? { username: "Computer", avatarUrl: "", avatarColor: "#ef4444" } : undefined,
         });
+        logGame("battleship_created", { username, gameId: game._id.toString(), gameType: mode || "multiplayer", message: `Battleship game created: ${mode || "multiplayer"}` });
         res.json({ game });
     } catch (err) {
         console.error("[BS API] Create error:", err.message);
@@ -937,6 +963,7 @@ app.post("/api/hangman/games", async (req, res) => {
             invitedBy: inviteUser || "",
             status: "active",
         });
+        logGame("hangman_created", { username, gameId: game._id.toString(), gameType: mode || "ai", message: `Hangman game created: ${mode || "ai"}` });
         res.json({ game });
     } catch (err) {
         console.error("[HM API] Create error:", err.message);
@@ -1051,6 +1078,7 @@ io.on("connection", async (socket) => {
     socket.data = { ...socket.data, username, isAdmin };
     if (username) socket.join(username);
     console.log(`[WS] Connected: ${socket.id} (admin=${isAdmin})`);
+    logServer("socket_connect", { username, message: `Socket connected: ${socket.id}`, ip: socket.handshake?.address });
 
     socket.on("join-stream", async ({ streamId, username }) => {
         socket.join(`stream:${streamId}`);
@@ -1144,6 +1172,7 @@ io.on("connection", async (socket) => {
             ...msg,
             createdAt: msg.createdAt.toISOString(),
         });
+        logChat("stream_chat", { username, message: `Stream chat: ${text.slice(0, 100)}`, room: streamId, meta: { streamId } });
     });
 
     // ── Voice Channel Events ────────────────────────────────────
@@ -1208,6 +1237,7 @@ io.on("connection", async (socket) => {
         }
 
         console.log(`[VOICE] ${username} joined channel ${channelId} (${ch.participants.size} users)`);
+        logServer("voice_join", { username, message: `${username} joined voice channel ${channelId}`, room: channelId });
     });
 
     socket.on("voice:leave", ({ channelId }) => {
@@ -1243,6 +1273,7 @@ io.on("connection", async (socket) => {
 
         if (participant) {
             io.to(`voice:${channelId}`).emit("voice:user-left", { username: participant.username });
+            logServer("voice_leave", { username: participant.username, message: `${participant.username} left voice channel ${channelId}`, room: channelId });
         }
     });
 
@@ -1343,6 +1374,7 @@ io.on("connection", async (socket) => {
         broadcastChannelParticipants(channelId);
         broadcastChannelList();
         console.log(`[VOICE] Admin ${socket.data.username} kicked ${targetUsername} from ${channelId}`);
+        logServer("voice_admin_kick", { username: socket.data.username, targetUser: targetUsername, message: `Admin kicked ${targetUsername} from voice channel ${channelId}`, room: channelId });
 
         sendPushNotification({
             recipientUsername: targetUsername,
@@ -1378,6 +1410,7 @@ io.on("connection", async (socket) => {
 
         broadcastChannelParticipants(channelId);
         console.log(`[VOICE] Admin ${socket.data.username} ${muted ? "muted" : "unmuted"} ${targetUsername} in ${channelId}`);
+        logServer("voice_admin_mute", { username: socket.data.username, targetUser: targetUsername, message: `Admin ${muted ? "muted" : "unmuted"} ${targetUsername} in voice channel ${channelId}`, room: channelId });
     });
 
     socket.on("voice:admin-timeout", async ({ channelId, targetUsername, duration }) => {
@@ -1414,6 +1447,7 @@ io.on("connection", async (socket) => {
         broadcastChannelList();
         io.emit("voice:user-timeout", { username: targetUsername, until: until.toISOString() });
         console.log(`[VOICE] Admin ${socket.data.username} timed out ${targetUsername} until ${until}`);
+        logServer("voice_admin_timeout", { username: socket.data.username, targetUser: targetUsername, message: `Admin timed out ${targetUsername} until ${until}`, room: channelId });
 
         sendPushNotification({
             recipientUsername: targetUsername,
@@ -1455,6 +1489,7 @@ io.on("connection", async (socket) => {
         broadcastChannelList();
         io.emit("voice:user-banned", { username: targetUsername });
         console.log(`[VOICE] Admin ${socket.data.username} banned ${targetUsername} from voice chat`);
+        logServer("voice_admin_ban", { username: socket.data.username, targetUser: targetUsername, message: `Admin banned ${targetUsername} from voice chat`, level: "warn" });
 
         sendPushNotification({
             recipientUsername: targetUsername,
@@ -1479,6 +1514,7 @@ io.on("connection", async (socket) => {
 
         io.emit("voice:user-unbanned", { username: targetUsername });
         console.log(`[VOICE] Admin ${socket.data.username} unbanned ${targetUsername}`);
+        logServer("voice_admin_unban", { username: socket.data.username, targetUser: targetUsername, message: `Admin unbanned ${targetUsername} from voice chat` });
     });
 
     socket.on("voice:get-bans", async () => {
@@ -1507,6 +1543,7 @@ io.on("connection", async (socket) => {
         socket.join(`chess:${gameId}`);
         socket.data.chessGameId = gameId;
         console.log(`[CHESS] ${username} joined game room ${gameId}`);
+        logGame("chess_joined", { username, gameId, message: `${username} joined chess game` });
     });
 
     socket.on("chess:leave-game", ({ gameId }) => {
@@ -1696,6 +1733,7 @@ io.on("connection", async (socket) => {
                 ...msg,
                 createdAt: msg.createdAt.toISOString(),
             });
+            logChat("chess_chat", { username, message: `Chess chat: ${text.slice(0, 100)}`, room: gameId, gameId });
         } catch (err) {
             console.error("[CHESS] Chat error:", err.message);
         }
@@ -1720,6 +1758,7 @@ io.on("connection", async (socket) => {
                 resultReason: game.resultReason,
                 winner: game.winner,
             });
+            logGame("chess_resign", { username, gameId, message: `${username} resigned chess game. Winner: ${game.winner}` });
         } catch (err) {
             console.error("[CHESS] Resign error:", err.message);
         }
@@ -1786,6 +1825,7 @@ io.on("connection", async (socket) => {
         socket.join(`connect4:${gameId}`);
         socket.data.connect4GameId = gameId;
         console.log(`[C4] ${username} joined game room ${gameId}`);
+        logGame("connect4_joined", { username, gameId, message: `${username} joined Connect Four game` });
     });
 
     socket.on("connect4:leave-game", ({ gameId }) => {
@@ -1910,6 +1950,7 @@ io.on("connection", async (socket) => {
                 resultReason: game.resultReason,
                 winner: game.winner,
             });
+            logGame("connect4_game_over", { username, gameId, message: `Connect Four game over: ${game.winner || "draw"}`, meta: { status: game.status, winner: game.winner } });
         } catch (err) {
             console.error("[C4] Resign error:", err.message);
         }
@@ -2030,6 +2071,7 @@ io.on("connection", async (socket) => {
             io.to(`tictactoe:${gameId}`).emit("tictactoe:game-over", {
                 gameId, status: game.status, result: game.result, resultReason: game.resultReason, winner: game.winner,
             });
+            logGame("tictactoe_game_over", { username, gameId, message: `Tic-Tac-Toe game over: ${game.winner || "draw"}`, meta: { status: game.status, winner: game.winner } });
         } catch (err) {
             console.error("[TTT] Resign error:", err.message);
         }
@@ -2143,6 +2185,7 @@ io.on("connection", async (socket) => {
             io.to(`checkers:${gameId}`).emit("checkers:game-over", {
                 gameId, status: game.status, result: game.result, resultReason: game.resultReason, winner: game.winner,
             });
+            logGame("checkers_game_over", { username, gameId, message: `Checkers game over: ${game.winner || "draw"}`, meta: { status: game.status, winner: game.winner } });
         } catch (err) {
             console.error("[CHK] Resign error:", err.message);
         }
@@ -2258,6 +2301,7 @@ io.on("connection", async (socket) => {
             game.resultReason = "Resignation";
             await game.save();
             io.to(`reversi:${gameId}`).emit("reversi:game-over", { gameId, status: game.status, result: game.result, resultReason: game.resultReason, winner: game.winner });
+            logGame("reversi_game_over", { username, gameId, message: `Reversi game over: ${game.winner || "draw"}`, meta: { status: game.status, winner: game.winner } });
         } catch (err) {
             console.error("[REV] Resign error:", err.message);
         }
@@ -2364,6 +2408,7 @@ io.on("connection", async (socket) => {
             game.resultReason = "Resignation";
             await game.save();
             io.to(`battleship:${gameId}`).emit("battleship:game-over", { gameId, status: game.status, result: game.result, resultReason: game.resultReason, winner: game.winner });
+            logGame("battleship_game_over", { username, gameId, message: `Battleship game over: ${game.winner || "draw"}`, meta: { status: game.status, winner: game.winner } });
         } catch (err) {
             console.error("[BS] Resign error:", err.message);
         }
@@ -2472,6 +2517,7 @@ io.on("connection", async (socket) => {
                     resultReason: game.resultReason,
                     reactions: game.reactions,
                 });
+                logGame("reactionduel_game_over", { username, gameId, message: `Reaction Duel over: ${game.winner || "draw"}`, meta: { status: "finished", winner: game.winner, loser: game.loser } });
             }
         } catch (err) {
             console.error("[RD] finish error:", err.message);
@@ -2820,6 +2866,7 @@ io.on("connection", async (socket) => {
         }
 
         console.log(`[WS] Disconnected: ${socket.id} (${username})`);
+        logServer("socket_disconnect", { username, message: `Socket disconnected: ${socket.id}` });
     });
 });
 
@@ -2833,6 +2880,7 @@ app.use("/api/posts", require("./routes/posts"));
 app.use("/api/feed", apiLimiter, require("./routes/feed"));
 app.use("/api/users", apiLimiter, require("./routes/users"));
 app.use("/api/admin", apiLimiter, require("./routes/admin"));
+app.use("/api/admin/system-logs", apiLimiter, require("./routes/systemLogs"));
 app.use("/api/messages", apiLimiter, require("./routes/messages"));
 app.use("/api/groups", apiLimiter, require("./routes/groups"));
 app.use("/api/stories", apiLimiter, require("./routes/stories"));
@@ -2887,4 +2935,5 @@ if (fs.existsSync(caddyPath)) {
 server.listen(PORT, () => {
     console.log(`[Live Server] Running on port ${PORT}`);
     console.log(`[Live Server] CORS allowed: ${CORS_ORIGIN}`);
+    logSystem("server_started", { message: `Live server started on port ${PORT}`, meta: { port: PORT, cors: CORS_ORIGIN } });
 });

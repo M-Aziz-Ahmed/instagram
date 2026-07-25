@@ -23,10 +23,17 @@ async function flush() {
     if (queue.length === 0) return;
     const batch = queue.splice(0, MAX_QUEUE);
     try {
-        await fetch("/api/admin/logs/client", {
+        const logs = batch.map((entry) => ({
+            category: "frontend",
+            level: entry.level || "info",
+            action: entry.action || "console_output",
+            message: entry.msg || "",
+            path: typeof window !== "undefined" ? window.location.pathname : "",
+        }));
+        await fetch("/api/admin/system-logs", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(batch),
+            body: JSON.stringify(logs),
             keepalive: true,
         });
     } catch {
@@ -56,15 +63,22 @@ export function installLogInterceptor() {
     window.addEventListener("error", (e) => {
         queue.push({
             level: "error",
+            action: "uncaught_error",
             msg: `Uncaught: ${e.message}\n  at ${e.filename}:${e.lineno}:${e.colno}`,
         });
     });
 
     window.addEventListener("unhandledrejection", (e) => {
         const reason = e.reason instanceof Error ? (e.reason.stack || e.reason.message) : String(e.reason);
-        queue.push({ level: "error", msg: `Unhandled promise rejection: ${reason}` });
+        queue.push({ level: "error", action: "unhandled_rejection", msg: `Unhandled promise rejection: ${reason}` });
     });
 
     timer = setInterval(flush, FLUSH_INTERVAL);
     window.addEventListener("beforeunload", flush);
+}
+
+export function logFrontendEvent(action, message, meta = {}) {
+    if (typeof window === "undefined") return;
+    queue.push({ level: "info", action, msg: message, ...meta });
+    if (queue.length >= MAX_QUEUE) flush();
 }

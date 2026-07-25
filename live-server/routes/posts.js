@@ -4,6 +4,7 @@ const User = require("../models/user");
 const Notification = require("../models/notification");
 const ContentFilter = require("../models/contentFilter");
 const { verifyToken, optionalAuth, requirePermission } = require("../middleware/auth");
+const { logServer } = require("../logService");
 
 const router = express.Router();
 
@@ -396,6 +397,7 @@ router.post("/", verifyToken, async (req, res) => {
         if (!isScheduled) {
             updateStreak(req.userId);
             checkAchievements(req.userId, sender.trim());
+            logServer("post_created", { username: sender, message: `Post created by ${sender}`, meta: { postId: post._id.toString(), hasImage: finalImageUrls.length > 0, hasAudio: !!audioUrl } });
         }
 
         return res.status(201).json(post);

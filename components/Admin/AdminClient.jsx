@@ -8,6 +8,7 @@ import { useSidebar } from "@/context/SidebarContext";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BotsPanel from "@/components/Admin/BotsPanel";
+import AdminLogsPanel from "@/components/Admin/AdminLogsPanel";
 
 const EMOJI_PRESETS = ["⭐","🛡️","👑","💎","🔥","🎯","🏆","🎨","🧪","🤖","💡","🌟"];
 
@@ -107,7 +108,7 @@ export default function AdminClient() {
                 {tab === "analytics" && <AnalyticsPanel />}
                 {tab === "voice" && <VoicePanel />}
                 {tab === "ads" && <AdsPanel />}
-                {tab === "logs" && <LogsPanel />}
+                {tab === "logs" && <AdminLogsPanel />}
                 {tab === "adult" && <AdultMangaPanel />}
                 {tab === "bots" && <BotsPanel />}
             </div>

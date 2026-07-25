@@ -3,6 +3,7 @@ const Message = require("../models/messages");
 const Notification = require("../models/notification");
 const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
+const { logChat } = require("../logService");
 
 const router = express.Router();
 
@@ -119,6 +120,7 @@ router.post("/", verifyToken, async (req, res) => {
         }).catch(() => {});
 
         return res.status(201).json(message.toObject());
+        logChat("dm_sent", { username: sender, targetUser: recipient.trim(), message: `DM from ${sender} to ${recipient.trim()}: ${(text || "").slice(0, 100)}` });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed to send message" });

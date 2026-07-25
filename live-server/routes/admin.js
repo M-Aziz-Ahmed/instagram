@@ -8,6 +8,7 @@ const ModerationLog = require("../models/moderationLog");
 const { requireAdmin, requirePermission } = require("../middleware/auth");
 const { getLogs } = require("../logBuffer");
 const { VALID_PERMISSIONS } = require("../models/role");
+const { logModeration, logUser } = require("../logService");
 
 const router = express.Router();
 
@@ -66,6 +67,13 @@ router.patch("/users", requireAdmin, async (req, res) => {
                 roles: user.roles.map((r) => ({ id: r._id.toString(), name: r.name, badge: r.badge, color: r.color })),
             },
         });
+        const changes = [];
+        if (isVerified !== undefined) changes.push(`verified=${isVerified}`);
+        if (makeAdmin !== undefined) changes.push(`admin=${makeAdmin}`);
+        if (liveStreamAllowed !== undefined) changes.push(`live=${liveStreamAllowed}`);
+        if (addRole) changes.push(`added role`);
+        if (removeRole) changes.push(`removed role`);
+        logUser("user_updated", req.userId?.toString(), { targetUser: user.username, message: `User ${user.username} updated: ${changes.join(", ")}`, meta: { userId: user._id.toString(), changes } });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });
@@ -446,6 +454,7 @@ router.post("/moderation/remove", requirePermission("moderate_posts"), async (re
         });
 
         return res.json({ ok: true });
+        logModeration("post_removed", { username: moderator?.username, targetUser: post.sender, message: `Post removed by ${moderator?.username}: ${reason || "No reason"}`, meta: { postId: post._id.toString() } });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });
@@ -479,6 +488,7 @@ router.post("/moderation/restore", requirePermission("moderate_posts"), async (r
         });
 
         return res.json({ ok: true });
+        logModeration("post_restored", { username: moderator?.username, targetUser: post.sender, message: `Post restored by ${moderator?.username}`, meta: { postId: post._id.toString() } });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });
@@ -604,6 +614,7 @@ router.patch("/users/:id/suspend", requireAdmin, async (req, res) => {
         await user.save();
 
         return res.json({ ok: true, suspended: user.suspended });
+        logUser(suspended ? "user_suspended" : "user_unsuspended", user.username, { targetUser: user.username, message: `User ${suspended ? "suspended" : "unsuspended"}: ${user.username}`, level: suspended ? "warn" : "info" });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });

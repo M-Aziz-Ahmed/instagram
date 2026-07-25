@@ -4,6 +4,7 @@ const nodemailer = require("nodemailer");
 const OTP = require("../models/otp");
 const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
+const { logAuth } = require("../logService");
 
 const router = express.Router();
 const SECRET = process.env.JWT_SECRET || "anonfeed_jwt_secret_change_in_production_32chars";
@@ -101,6 +102,7 @@ router.post("/send-otp", async (req, res) => {
         }
 
         return res.json({ ok: true });
+        logAuth("otp_sent", null, { message: `OTP sent to ${email}`, ip: req.ip });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed to send OTP" });
@@ -123,6 +125,7 @@ router.post("/verify-otp", async (req, res) => {
         });
 
         if (!otp) {
+            logAuth("otp_failed", null, { level: "warn", message: `Invalid OTP for ${email}`, ip: req.ip });
             return res.status(401).json({ error: "Invalid or expired code" });
         }
 
@@ -157,6 +160,7 @@ router.post("/verify-otp", async (req, res) => {
             path: "/",
         });
         return res.json({ ok: true, needsSetup, userId: user._id, user: userData });
+        logAuth("login_success", user.username || email, { message: `User logged in: ${user.username || email}`, ip: req.ip });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Verification failed" });
