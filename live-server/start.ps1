@@ -35,4 +35,6 @@ try {
 
 # 3) Launch the Node live-server in the foreground.
 Write-Host "[start] Launching live-server (node server.js)..." -ForegroundColor Cyan
+Push-Location
+cd "C:\Users\munee\Desktop\work\instagram\live-server"
 & node server.js

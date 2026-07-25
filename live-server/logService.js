@@ -1,4 +1,4 @@
-const SystemLog = require("../models/systemLog");
+const SystemLog = require("./models/systemLog");
 
 const LOG_CATEGORIES = ["frontend", "database", "server", "games", "users", "chats", "auth", "moderation", "system"];
 const LOG_LEVELS = ["info", "warn", "error", "debug"];
