@@ -59,6 +59,14 @@ router.patch("/users", requireAdmin, async (req, res) => {
         await user.save();
         await user.populate("roles");
 
+        const changes = [];
+        if (isVerified !== undefined) changes.push(`verified=${isVerified}`);
+        if (makeAdmin !== undefined) changes.push(`admin=${makeAdmin}`);
+        if (liveStreamAllowed !== undefined) changes.push(`live=${liveStreamAllowed}`);
+        if (addRole) changes.push(`added role`);
+        if (removeRole) changes.push(`removed role`);
+        logUser("user_updated", req.userId?.toString(), { targetUser: user.username, message: `User ${user.username} updated: ${changes.join(", ")}`, meta: { userId: user._id.toString(), changes } });
+
         return res.json({
             ok: true,
             user: {
@@ -67,13 +75,6 @@ router.patch("/users", requireAdmin, async (req, res) => {
                 roles: user.roles.map((r) => ({ id: r._id.toString(), name: r.name, badge: r.badge, color: r.color })),
             },
         });
-        const changes = [];
-        if (isVerified !== undefined) changes.push(`verified=${isVerified}`);
-        if (makeAdmin !== undefined) changes.push(`admin=${makeAdmin}`);
-        if (liveStreamAllowed !== undefined) changes.push(`live=${liveStreamAllowed}`);
-        if (addRole) changes.push(`added role`);
-        if (removeRole) changes.push(`removed role`);
-        logUser("user_updated", req.userId?.toString(), { targetUser: user.username, message: `User ${user.username} updated: ${changes.join(", ")}`, meta: { userId: user._id.toString(), changes } });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });
@@ -453,8 +454,8 @@ router.post("/moderation/remove", requirePermission("moderate_posts"), async (re
             postPreview: (post.text || "").slice(0, 200),
         });
 
-        return res.json({ ok: true });
         logModeration("post_removed", { username: moderator?.username, targetUser: post.sender, message: `Post removed by ${moderator?.username}: ${reason || "No reason"}`, meta: { postId: post._id.toString() } });
+        return res.json({ ok: true });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });
@@ -487,8 +488,8 @@ router.post("/moderation/restore", requirePermission("moderate_posts"), async (r
             postPreview: (post.text || "").slice(0, 200),
         });
 
-        return res.json({ ok: true });
         logModeration("post_restored", { username: moderator?.username, targetUser: post.sender, message: `Post restored by ${moderator?.username}`, meta: { postId: post._id.toString() } });
+        return res.json({ ok: true });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });
@@ -613,8 +614,8 @@ router.patch("/users/:id/suspend", requireAdmin, async (req, res) => {
         user.suspendedReason = suspendedReason || "";
         await user.save();
 
-        return res.json({ ok: true, suspended: user.suspended });
         logUser(suspended ? "user_suspended" : "user_unsuspended", user.username, { targetUser: user.username, message: `User ${suspended ? "suspended" : "unsuspended"}: ${user.username}`, level: suspended ? "warn" : "info" });
+        return res.json({ ok: true, suspended: user.suspended });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });

@@ -101,8 +101,8 @@ router.post("/send-otp", async (req, res) => {
             return res.status(500).json({ error: "Failed to send email. Please try again." });
         }
 
-        return res.json({ ok: true });
         logAuth("otp_sent", null, { message: `OTP sent to ${email}`, ip: req.ip });
+        return res.json({ ok: true });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed to send OTP" });
@@ -159,8 +159,8 @@ router.post("/verify-otp", async (req, res) => {
             maxAge: MAX_AGE,
             path: "/",
         });
-        return res.json({ ok: true, needsSetup, userId: user._id, user: userData });
         logAuth("login_success", user.username || email, { message: `User logged in: ${user.username || email}`, ip: req.ip });
+        return res.json({ ok: true, needsSetup, userId: user._id, user: userData });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Verification failed" });

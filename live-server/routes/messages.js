@@ -119,8 +119,8 @@ router.post("/", verifyToken, async (req, res) => {
             text: preview,
         }).catch(() => {});
 
-        return res.status(201).json(message.toObject());
         logChat("dm_sent", { username: sender, targetUser: recipient.trim(), message: `DM from ${sender} to ${recipient.trim()}: ${(text || "").slice(0, 100)}` });
+        return res.status(201).json(message.toObject());
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed to send message" });
