@@ -15,12 +15,14 @@ function CallSocketProvider({ children }) {
         let cancelled = false;
         let sock = null;
 
+        const configured = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "";
+        const url = configured || window.location.origin;
+
         const connect = async () => {
             try {
                 const { io } = await import("socket.io-client");
                 if (cancelled) return;
-                const wsUrl = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "http://localhost:3001";
-                sock = io(wsUrl, {
+                sock = io(url, {
                     query: { username: user.username },
                     transports: ["polling", "websocket"],
                     upgrade: true,
@@ -28,7 +30,7 @@ function CallSocketProvider({ children }) {
                     reconnectionAttempts: 30,
                     reconnectionDelay: 1000,
                     reconnectionDelayMax: 15000,
-                    timeout: 30000,
+                    timeout: 15000,
                 });
                 sock.on("connect", () => {
                     if (!cancelled) setSocket(sock);

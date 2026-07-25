@@ -4,8 +4,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { io } from "socket.io-client";
 import { useUser } from "@/context/UserContext";
 
-const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL;
-
 const VoiceChatContext = createContext({
     socket: null,
     voiceOpen: false,
@@ -22,10 +20,14 @@ export function VoiceChatProvider({ children }) {
     const [socketError, setSocketError] = useState(null);
     const reconnectCountRef = useRef(0);
 
-    const createSocket = useCallback(() => {
-        if (!LIVE_SERVER || !user?.username) return;
-        setSocketError(null);
-        const s = io(LIVE_SERVER, {
+    useEffect(() => {
+        if (!user?.username) return;
+
+        let alive = true;
+        const url = typeof window !== "undefined" ? window.location.origin : "";
+
+        const s = io(url, {
+            path: "/socket.io",
             query: { username: user.username },
             transports: ["polling", "websocket"],
             upgrade: true,
@@ -36,6 +38,7 @@ export function VoiceChatProvider({ children }) {
             timeout: 15000,
             withCredentials: true,
         });
+
         s.on("connect_error", (err) => {
             console.warn("[VoiceChat] Connection error:", err?.message || err);
             reconnectCountRef.current++;
@@ -43,24 +46,29 @@ export function VoiceChatProvider({ children }) {
                 setSocketError("Could not reach voice server. Check your connection and try again.");
             }
         });
+
         s.on("connect", () => {
             reconnectCountRef.current = 0;
             setSocketError(null);
         });
-        setSocket(s);
-        return s;
-    }, [user?.username]);
 
-    useEffect(() => {
-        const s = createSocket();
-        return () => { s?.disconnect(); setSocket(null); setSocketError(null); reconnectCountRef.current = 0; };
-    }, [createSocket]);
+        if (alive) setSocket(s);
+
+        return () => {
+            alive = false;
+            s?.removeAllListeners();
+            s?.disconnect();
+            setSocket(null);
+            setSocketError(null);
+            reconnectCountRef.current = 0;
+        };
+    }, [user?.username]);
 
     const reconnectSocket = useCallback(() => {
         reconnectCountRef.current = 0;
+        setSocketError(null);
         socket?.disconnect();
-        createSocket();
-    }, [socket, createSocket]);
+    }, [socket]);
 
     const openVoiceChat = useCallback(() => setVoiceOpen(true), []);
     const closeVoiceChat = useCallback(() => setVoiceOpen(false), []);
