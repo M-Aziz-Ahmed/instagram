@@ -966,6 +966,16 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                 <PostAvatar sender={post.sender} color={post.color} avatarUrl={post.avatarUrl} author={author} />
 
                 <div className="flex-1 min-w-0">
+                    {/* Community attribution */}
+                    {post._community && (
+                        <Link href={`/communities/${post.communityId}`} className="inline-flex items-center gap-1 mb-0.5 text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                            <span className="w-3.5 h-3.5 rounded-sm flex items-center justify-center text-white text-[8px] font-bold shrink-0" style={{ backgroundColor: post._community.color || "#3b82f6" }}>
+                                {post._community.name?.[0]?.toUpperCase()}
+                            </span>
+                            {post._community.name}
+                            <span className="text-gray-300 dark:text-gray-600">/</span>
+                        </Link>
+                    )}
                     <div className="flex items-center gap-2">
                         <span className="inline-flex items-center gap-1">
                             <Link
@@ -978,6 +988,11 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         </span>
                         <span className="text-gray-400 dark:text-gray-500 text-xs">&middot;</span>
                         <span className="text-gray-400 dark:text-gray-500 text-xs">{timeAgo(post.timeStamp)}</span>
+                        {post.flair?.name && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-medium rounded-full text-white" style={{ backgroundColor: post.flair.color || "#3b82f6" }}>
+                                {post.flair.emoji && `${post.flair.emoji} `}{post.flair.name}
+                            </span>
+                        )}
                         {author?.postingStreak > 0 && (
                             <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-orange-500" title={`${author.postingStreak}-day streak`}>
                                 🔥{author.postingStreak}

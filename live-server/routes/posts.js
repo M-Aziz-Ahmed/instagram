@@ -196,10 +196,15 @@ async function enrichPost(post) {
     allUsernames.add(post.sender);
     (post.comments || []).forEach((c) => allUsernames.add(c.sender));
 
-    const users = await User.find({ username: { $in: [...allUsernames] } })
-        .select("username avatarUrl isVerified isAdmin roles postingStreak achievements")
-        .populate("roles", "name badge color")
-        .lean();
+    const [users, community] = await Promise.all([
+        User.find({ username: { $in: [...allUsernames] } })
+            .select("username avatarUrl isVerified isAdmin roles postingStreak achievements")
+            .populate("roles", "name badge color")
+            .lean(),
+        post.communityId
+            ? require("../models/community").findById(post.communityId).select("name color avatarUrl").lean()
+            : null,
+    ]);
 
     const userMap = {};
     users.forEach((u) => {
@@ -220,6 +225,7 @@ async function enrichPost(post) {
 
     const obj = post.toObject ? post.toObject() : { ...post };
     obj._author = userMap[post.sender] || null;
+    obj._community = community ? { name: community.name, color: community.color, avatarUrl: community.avatarUrl } : null;
     obj.comments = (obj.comments || []).map((c) => ({
         ...c,
         _author: userMap[c.sender] || null,
@@ -235,51 +241,27 @@ router.get("/", async (req, res) => {
 
         let query = {};
 
-        // Parallel fetch: get viewer info in one go
         let viewerIsAdmin = false;
         let viewerFollowing = [];
         let viewerCloseFriends = [];
 
         if (username) {
-            const [viewerDoc] = await Promise.all([
-                User.findOne({ username }).select("isAdmin following closeFriends").lean(),
-            ]);
+            const viewerDoc = await User.findOne({ username }).select("isAdmin following closeFriends").lean();
             viewerIsAdmin = !!viewerDoc?.isAdmin;
             viewerFollowing = viewerDoc?.following || [];
             viewerCloseFriends = viewerDoc?.closeFriends || [];
         }
 
-        // Community filtering
-        const orConditions = [];
-        if (communityId) {
-            query.communityId = communityId;
-        } else {
-            // Main feed: include posts with no community OR community posts (for user's communities)
-            if (username) {
-                const Community = require("../models/community");
-                const memberCommunities = await Community.find({ "members.username": username }).select("_id").lean();
-                const communityIds = memberCommunities.map((c) => c._id);
-                if (communityIds.length > 0) {
-                    orConditions.push(
-                        { communityId: null },
-                        { communityId: { $in: communityIds } }
-                    );
-                } else {
-                    query.communityId = null;
-                }
-            } else {
-                query.communityId = null;
-            }
-        }
-
-        // Expiry filter
-        orConditions.push({ expiresAt: null }, { expiresAt: { $gt: new Date() } });
+        // Expiry filter (always applied)
+        query.$and = query.$and || [];
+        query.$and.push({ $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] });
 
         if (!viewerIsAdmin) {
             query.isRemoved = { $ne: true };
         }
 
         if (tag) query.hashtags = tag.toLowerCase();
+        if (before) query.timeStamp = { $lt: new Date(before) };
 
         if (feed === "following" && username) {
             if (!viewerFollowing.length) {
@@ -287,22 +269,39 @@ router.get("/", async (req, res) => {
             }
             query.sender = { $in: viewerFollowing };
         }
-        if (before) query.timeStamp = { $lt: new Date(before) };
+
+        // Community filter
+        if (communityId) {
+            query.communityId = communityId;
+        } else if (username) {
+            const Community = require("../models/community");
+            const memberCommunities = await Community.find({ "members.username": username }).select("_id").lean();
+            const communityIds = memberCommunities.map((c) => c._id);
+            if (communityIds.length > 0) {
+                query.$and.push({ $or: [
+                    { communityId: null },
+                    { communityId: { $in: communityIds } },
+                ]});
+            } else {
+                query.communityId = null;
+            }
+        } else {
+            query.communityId = null;
+        }
 
         // Visibility filter
         if (username) {
-            orConditions.push(
+            query.$and.push({ $or: [
                 { visibility: { $ne: "closeFriends" } },
                 { sender: { $in: viewerCloseFriends } },
-                { sender: username }
-            );
+                { sender: username },
+            ]});
         }
 
-        if (orConditions.length > 0) {
-            query.$or = orConditions;
-        }
+        if (query.$and.length === 0) delete query.$and;
 
-        // Fetch posts with minimal projection first
+        // Fetch more posts than needed for smart ranking
+        const fetchLimit = Math.min(limit * 3, 150);
         const rawPosts = await Post.find(query, {
             _id: 1,
             sender: 1,
@@ -338,11 +337,50 @@ router.get("/", async (req, res) => {
             flair: 1,
         })
             .sort({ timeStamp: -1 })
-            .limit(limit + 10)
+            .limit(fetchLimit)
             .lean();
 
+        // Smart feed scoring
+        const now = Date.now();
+        const HOUR = 3600000;
+        const followedSet = new Set(viewerFollowing);
+
+        const scored = rawPosts.map((p) => {
+            let s = 0;
+            const age = now - new Date(p.timeStamp).getTime();
+            const ageHours = age / HOUR;
+
+            // Recency: newer = higher (decays over 48h)
+            s += Math.max(0, 48 - ageHours) * 2;
+
+            // Engagement: likes + comments + reposts + viewWeight
+            const likeCount = (p.likes || []).length;
+            const commentCount = (p.comments || []).length;
+            const repostCount = p.repostCount || 0;
+            const viewWeight = Math.min((p.viewCount || 0) / 100, 10);
+            s += likeCount * 3 + commentCount * 4 + repostCount * 5 + viewWeight;
+
+            // Community score boost
+            if (p.communityId) s += 2;
+
+            // Follow boost: posts from people you follow
+            if (followedSet.has(p.sender)) s += 15;
+
+            // Viral boost: high engagement in short time
+            if (ageHours < 6 && (likeCount + commentCount) > 10) {
+                s += (likeCount + commentCount) * 2;
+            }
+
+            // Penalty for very old posts
+            if (ageHours > 72) s -= 20;
+
+            return { ...p, _rankScore: s };
+        });
+
+        // Sort by score, then paginate
+        scored.sort((a, b) => b._rankScore - a._rankScore);
         const hasMore = rawPosts.length > limit;
-        const posts = await enrichPosts(rawPosts.slice(0, limit));
+        const posts = await enrichPosts(scored.slice(0, limit));
 
         return res.json({ posts, hasMore });
     } catch (error) {

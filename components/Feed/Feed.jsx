@@ -289,8 +289,8 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             if (activeTag) params.set("tag", activeTag);
             if (feedType === "following" && username) {
                 params.set("feed", "following");
-                params.set("username", username);
             }
+            if (username) params.set("username", username);
             if (user?.autoTranslate && user?.language) params.set("lang", user.language);
             if (append && postsRef.current.length > 0) {
                 const oldest = postsRef.current[postsRef.current.length - 1];
