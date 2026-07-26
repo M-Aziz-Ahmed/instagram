@@ -98,6 +98,10 @@ export default function AdminClient() {
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "bots" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         🤖 Bots
                     </button>
+                    <button onClick={() => setTab("communities")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "communities" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        🏘 Communities
+                    </button>
                 </div>
 
                 {tab === "users" && <UsersPanel />}
@@ -111,6 +115,7 @@ export default function AdminClient() {
                 {tab === "logs" && <AdminLogsPanel />}
                 {tab === "adult" && <AdultMangaPanel />}
                 {tab === "bots" && <BotsPanel />}
+                {tab === "communities" && <CommunitiesPanel />}
             </div>
         </div>
     );
@@ -2000,6 +2005,145 @@ function AdultMangaPanel() {
                     <button onClick={() => query ? doSearch(query) : loadBrowse(pageNum - 2)} disabled={pageNum <= 1} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 rounded-lg disabled:opacity-30">Prev</button>
                     <span className="text-xs text-gray-500 px-2">Page {pageNum} / {totalPages}</span>
                     <button onClick={() => query ? doSearch(query) : loadBrowse(pageNum)} disabled={pageNum >= totalPages} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 rounded-lg disabled:opacity-30">Next</button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  Communities Panel                                                        */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+function CommunitiesPanel() {
+    const [communities, setCommunities] = useState([]);
+    const [total, setTotal] = useState(0);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState("");
+    const [sort, setSort] = useState("memberCount");
+    const [editing, setEditing] = useState(null);
+    const [editName, setEditName] = useState("");
+    const [editDesc, setEditDesc] = useState("");
+    const [editColor, setEditColor] = useState("#3b82f6");
+    const [editPublic, setEditPublic] = useState(true);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const params = new URLSearchParams({ sort, limit: "50" });
+            if (search) params.set("search", search);
+            const res = await fetch(`/api/admin/communities?${params}`, { credentials: "include" });
+            const data = await res.json();
+            setCommunities(data.communities || []);
+            setTotal(data.total || 0);
+        } catch {}
+        setLoading(false);
+    }, [sort, search]);
+
+    useEffect(() => { load(); }, [load]);
+
+    const deleteCommunity = async (id, name) => {
+        if (!confirm(`Delete "${name}" permanently?`)) return;
+        const res = await fetch(`/api/admin/communities/${id}`, { method: "DELETE", credentials: "include" });
+        if (res.ok) load();
+    };
+
+    const startEdit = (c) => {
+        setEditing(c._id);
+        setEditName(c.name);
+        setEditDesc(c.description || "");
+        setEditColor(c.color || "#3b82f6");
+        setEditPublic(c.settings?.isPublic !== false);
+    };
+
+    const saveEdit = async (id) => {
+        const res = await fetch(`/api/admin/communities/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ name: editName, description: editDesc, color: editColor, settings: { isPublic: editPublic } }),
+        });
+        if (res.ok) { setEditing(null); load(); }
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <h2 className="font-bold text-lg text-gray-900 dark:text-gray-100">Communities ({total})</h2>
+                <div className="flex gap-2">
+                    <select value={sort} onChange={(e) => setSort(e.target.value)}
+                        className="px-3 py-1.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg text-xs text-gray-700 dark:text-gray-300 outline-none">
+                        <option value="memberCount">By Members</option>
+                        <option value="newest">Newest</option>
+                        <option value="name">Name</option>
+                    </select>
+                </div>
+            </div>
+
+            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search communities..."
+                className="w-full px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500" />
+
+            {loading ? (
+                <div className="flex justify-center py-12"><div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" /></div>
+            ) : communities.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-12">No communities found</p>
+            ) : (
+                <div className="space-y-2">
+                    {communities.map((c) => (
+                        <div key={c._id} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+                            <div className="h-1.5" style={{ backgroundColor: c.color || "#3b82f6" }} />
+                            <div className="p-4">
+                                {editing === c._id ? (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 overflow-hidden" style={{ backgroundColor: editColor }}>
+                                                {c.avatarUrl ? <img src={c.avatarUrl} alt="" className="w-full h-full object-cover" /> : c.name?.[0]?.toUpperCase()}
+                                            </div>
+                                            <input type="color" value={editColor} onChange={(e) => setEditColor(e.target.value)} className="w-8 h-8 rounded border-0 cursor-pointer" />
+                                            <div className="flex-1">
+                                                <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
+                                                    className="w-full px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm text-gray-900 dark:text-gray-100 outline-none" />
+                                            </div>
+                                        </div>
+                                        <textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)} rows={2} placeholder="Description"
+                                            className="w-full px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs text-gray-900 dark:text-gray-100 outline-none resize-none" />
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={editPublic} onChange={(e) => setEditPublic(e.target.checked)} className="rounded" />
+                                            <span className="text-xs text-gray-600 dark:text-gray-400">Public</span>
+                                        </label>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => saveEdit(c._id)} className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">Save</button>
+                                            <button onClick={() => setEditing(null)} className="px-3 py-1.5 text-gray-400 hover:text-gray-600 text-xs">Cancel</button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 overflow-hidden" style={{ backgroundColor: c.color || "#3b82f6" }}>
+                                            {c.avatarUrl ? <img src={c.avatarUrl} alt="" className="w-full h-full object-cover" /> : c.name?.[0]?.toUpperCase()}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <Link href={`/communities/${c._id}`} className="text-sm font-semibold text-gray-900 dark:text-gray-100 hover:underline truncate block">{c.name}</Link>
+                                            <div className="flex items-center gap-3 text-[11px] text-gray-400 dark:text-gray-500">
+                                                <span>{c.memberCount || 0} members</span>
+                                                <span>by {c.creator}</span>
+                                                <span>{c.settings?.isPublic !== false ? "Public" : "Private"}</span>
+                                                {c.rules?.length > 0 && <span>{c.rules.length} rules</span>}
+                                                {c.flairs?.length > 0 && <span>{c.flairs.length} flairs</span>}
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-1.5 shrink-0">
+                                            <button onClick={() => startEdit(c)} className="px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
+                                                Edit
+                                            </button>
+                                            <button onClick={() => deleteCommunity(c._id, c.name)} className="px-2.5 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors">
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
         </div>

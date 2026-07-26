@@ -5,6 +5,7 @@ const Ad = require("../models/ad");
 const Post = require("../models/post");
 const ContentFilter = require("../models/contentFilter");
 const ModerationLog = require("../models/moderationLog");
+const Community = require("../models/community");
 const { requireAdmin, requirePermission } = require("../middleware/auth");
 const { getLogs } = require("../logBuffer");
 const { VALID_PERMISSIONS } = require("../models/role");
@@ -618,6 +619,77 @@ router.patch("/users/:id/suspend", requireAdmin, async (req, res) => {
         return res.json({ ok: true, suspended: user.suspended });
     } catch (error) {
         console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// ── Community Management ────────────────────────────────────────────────
+
+// GET /communities — list all communities for admin
+router.get("/communities", requireAdmin, async (req, res) => {
+    try {
+        const { search, sort = "memberCount", page = 1, limit = 50 } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const query = {};
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: "i" } },
+                { description: { $regex: search, $options: "i" } },
+                { creator: { $regex: search, $options: "i" } },
+            ];
+        }
+        const sortObj = sort === "newest" ? { createdAt: -1 } : sort === "name" ? { name: 1 } : { memberCount: -1 };
+        const communities = await Community.find(query).sort(sortObj).skip(skip).limit(parseInt(limit)).lean();
+        const total = await Community.countDocuments(query);
+        return res.json({ communities, total });
+    } catch (error) {
+        console.error("Admin communities error:", error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// DELETE /communities/:id — admin delete any community
+router.delete("/communities/:id", requireAdmin, async (req, res) => {
+    try {
+        const community = await Community.findByIdAndDelete(req.params.id);
+        if (!community) return res.status(404).json({ error: "Community not found" });
+        logModeration("community_deleted", "admin", { target: community.name, level: "warn" });
+        return res.json({ ok: true });
+    } catch (error) {
+        console.error("Admin community delete error:", error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// PATCH /communities/:id — admin edit any community
+router.patch("/communities/:id", requireAdmin, async (req, res) => {
+    try {
+        const community = await Community.findById(req.params.id);
+        if (!community) return res.status(404).json({ error: "Community not found" });
+
+        const allowed = ["name", "description", "avatarUrl", "bannerUrl", "color", "settings", "rules", "flairs"];
+        for (const key of allowed) {
+            if (req.body[key] !== undefined) {
+                if (key === "settings") {
+                    Object.assign(community.settings, req.body.settings);
+                } else if (key === "flairs") {
+                    community.flairs = (req.body.flairs || []).map((f, i) => ({
+                        id: f.id || `flair-${Date.now()}-${i}`,
+                        name: f.name,
+                        color: f.color || "#3b82f6",
+                        emoji: f.emoji || "",
+                    }));
+                } else if (key === "rules") {
+                    community.rules = req.body.rules || [];
+                } else {
+                    community[key] = req.body[key];
+                }
+            }
+        }
+        await community.save();
+        return res.json(community);
+    } catch (error) {
+        console.error("Admin community update error:", error);
         return res.status(500).json({ error: "Failed" });
     }
 });
