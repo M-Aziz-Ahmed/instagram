@@ -203,6 +203,7 @@ export default function VoiceChat({ isOpen, onClose }) {
     const peerStreamsRef  = useRef(new Map());
     const pcsRef         = useRef(new Map());
     const audioElementsRef = useRef(new Map());
+    const iceCandidateBufferRef = useRef(new Map());
     const speakingTimerRef = useRef(null);
     const analyserRef    = useRef(null);
     const audioCtxRef    = useRef(null);
@@ -214,6 +215,7 @@ export default function VoiceChat({ isOpen, onClose }) {
     const speakingThrottleRef = useRef(0);
     const lastJoinedChannelRef = useRef(null);
     const remoteScreenSharerRef = useRef(null);
+    const participantUsernamesRef = useRef(new Set());
     useEffect(() => { socketRef.current = socket; }, [socket]);
     useEffect(() => { userRef.current = user; }, [user]);
     useEffect(() => { activeChannelRef.current = activeChannel; }, [activeChannel]);
@@ -244,6 +246,7 @@ export default function VoiceChat({ isOpen, onClose }) {
         peerStreamsRef.current.clear();
         audioElementsRef.current.forEach((el) => { el.srcObject = null; el.remove(); });
         audioElementsRef.current.clear();
+        iceCandidateBufferRef.current.clear();
         analyserRef.current = null;
         if (audioCtxRef.current) { try { audioCtxRef.current.close(); } catch {} }
         audioCtxRef.current = null;
@@ -285,6 +288,7 @@ export default function VoiceChat({ isOpen, onClose }) {
             const el = audioElementsRef.current.get(username);
             if (el) { el.srcObject = null; el.remove(); }
             audioElementsRef.current.delete(username);
+            iceCandidateBufferRef.current.delete(username);
             if (remoteScreenSharerRef.current === username) {
                 setRemoteScreenSharer(null);
                 setRemoteScreenStream(null);
@@ -322,12 +326,14 @@ export default function VoiceChat({ isOpen, onClose }) {
                     pc.ontrack = (e) => {
                         if (e.streams?.[0]) {
                             peerStreamsRef.current.set(fromUsername, e.streams[0]);
-                            const vt = e.streams[0].getVideoTracks()[0];
-                            if (vt) {
+                            const hasAudio = e.streams[0].getAudioTracks().length > 0;
+                            const hasVideo = e.streams[0].getVideoTracks().length > 0;
+                            if (hasAudio) {
+                                attachRemoteAudio(fromUsername, e.streams[0]);
+                            }
+                            if (hasVideo) {
                                 setRemoteScreenSharer(fromUsername);
                                 setRemoteScreenStream(e.streams[0]);
-                            } else {
-                                attachRemoteAudio(fromUsername, e.streams[0]);
                             }
                         }
                     };
@@ -338,22 +344,45 @@ export default function VoiceChat({ isOpen, onClose }) {
                     };
                 }
 
-                if (pc.signalingState === "stable" || pc.signalingState === "have-remote-offer") {
+                if (pc.signalingState === "stable") {
                     await pc.setRemoteDescription(new RTCSessionDescription(data));
+                    flushIceBuffer(fromUsername);
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
                     pc._remoteSocketId = from;
                     s.emit("voice:signal", { to: from, from: s.id, fromUsername: u.username, type: "answer", data: { type: answer.type, sdp: answer.sdp } });
+                } else if (pc.signalingState === "have-local-offer") {
+                    // Offer glare: both sides sent offers simultaneously.
+                    // Resolve with username tiebreaker — higher username wins (rolls back).
+                    if (u.username > fromUsername) {
+                        await pc.setLocalDescription({ type: "rollback" });
+                        await pc.setRemoteDescription(new RTCSessionDescription(data));
+                        flushIceBuffer(fromUsername);
+                        const answer = await pc.createAnswer();
+                        await pc.setLocalDescription(answer);
+                        pc._remoteSocketId = from;
+                        s.emit("voice:signal", { to: from, from: s.id, fromUsername: u.username, type: "answer", data: { type: answer.type, sdp: answer.sdp } });
+                    }
+                    // If we lose the tiebreak, our offer is still in flight — the remote side will rollback and answer ours
                 }
+                // Ignore duplicate offers (have-remote-offer)
             } else if (type === "answer") {
                 const pc = pcsRef.current.get(fromUsername);
                 if (pc && pc.signalingState === "have-local-offer") {
                     await pc.setRemoteDescription(new RTCSessionDescription(data));
+                    flushIceBuffer(fromUsername);
                 }
             } else if (type === "ice-candidate") {
                 const pc = pcsRef.current.get(fromUsername);
-                if (pc && pc.signalingState !== "closed") {
+                if (pc && pc.signalingState === "closed") return;
+                if (pc && (pc.signalingState === "stable" || pc.remoteDescription)) {
                     try { await pc.addIceCandidate(new RTCIceCandidate(data)); } catch {}
+                } else {
+                    // Buffer until setRemoteDescription is called
+                    if (!iceCandidateBufferRef.current.has(fromUsername)) {
+                        iceCandidateBufferRef.current.set(fromUsername, []);
+                    }
+                    iceCandidateBufferRef.current.get(fromUsername).push(data);
                 }
             }
         };
@@ -494,6 +523,20 @@ export default function VoiceChat({ isOpen, onClose }) {
         el.srcObject = stream;
     }, []);
 
+    const flushIceBuffer = useCallback((username) => {
+        const buffered = iceCandidateBufferRef.current.get(username);
+        if (!buffered) return;
+        const pc = pcsRef.current.get(username);
+        if (!pc || pc.signalingState === "closed") {
+            iceCandidateBufferRef.current.delete(username);
+            return;
+        }
+        for (const candidate of buffered) {
+            pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+        }
+        iceCandidateBufferRef.current.delete(username);
+    }, []);
+
     const startSpeakingDetection = useCallback((stream) => {
         try {
             if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -562,12 +605,14 @@ export default function VoiceChat({ isOpen, onClose }) {
             pc.ontrack = (e) => {
                 if (e.streams?.[0]) {
                     peerStreamsRef.current.set(p.username, e.streams[0]);
-                    const videoTrack = e.streams[0].getVideoTracks()[0];
-                    if (videoTrack) {
+                    const hasAudio = e.streams[0].getAudioTracks().length > 0;
+                    const hasVideo = e.streams[0].getVideoTracks().length > 0;
+                    if (hasAudio) {
+                        attachRemoteAudio(p.username, e.streams[0]);
+                    }
+                    if (hasVideo) {
                         setRemoteScreenSharer(p.username);
                         setRemoteScreenStream(e.streams[0]);
-                    } else {
-                        attachRemoteAudio(p.username, e.streams[0]);
                     }
                 }
             };
@@ -653,6 +698,9 @@ export default function VoiceChat({ isOpen, onClose }) {
         const u = userRef.current;
         if (!u) return;
         const others = participants.filter((p) => p.username !== u.username);
+        const usernames = others.map((p) => p.username).sort().join(",");
+        if (usernames === participantUsernamesRef.current._key) return;
+        participantUsernamesRef.current._key = usernames;
         if (others.length > 0 && localStreamRef.current) {
             createPeerConnections(others);
         }

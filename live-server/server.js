@@ -2723,7 +2723,7 @@ io.on("connection", async (socket) => {
     socket.on("voice:music:play", ({ channelId, songId }) => {
         if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
         const state = getMusicState(channelId);
-        if (state.dj !== socket.data.username) return;
+        if (state.dj !== socket.data.username && !socket.data.isAdmin) return;
         if (songId) {
             const idx = state.queue.findIndex((s) => s.id === songId);
             if (idx === -1) return;
@@ -2739,7 +2739,7 @@ io.on("connection", async (socket) => {
     socket.on("voice:music:pause", ({ channelId }) => {
         if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
         const state = getMusicState(channelId);
-        if (state.dj !== socket.data.username) return;
+        if (state.dj !== socket.data.username && !socket.data.isAdmin) return;
         state.position = state.startedAt ? (Date.now() - state.startedAt) / 1000 : 0;
         state.playing = false;
         state.startedAt = null;
@@ -2749,7 +2749,6 @@ io.on("connection", async (socket) => {
     socket.on("voice:music:skip", ({ channelId }) => {
         if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
         const state = getMusicState(channelId);
-        if (state.dj !== socket.data.username && !socket.data.isAdmin) return;
         state.current = state.queue.length > 0 ? state.queue.shift() : null;
         state.playing = !!state.current;
         state.position = 0;
@@ -2770,7 +2769,7 @@ io.on("connection", async (socket) => {
     socket.on("voice:music:volume", ({ channelId, volume }) => {
         if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
         const state = getMusicState(channelId);
-        if (state.dj !== socket.data.username) return;
+        if (state.dj !== socket.data.username && !socket.data.isAdmin) return;
         state.volume = Math.max(0, Math.min(1, volume));
         broadcastMusicState(channelId);
     });
@@ -2778,15 +2777,16 @@ io.on("connection", async (socket) => {
     socket.on("voice:music:transfer-dj", ({ channelId, toUsername }) => {
         if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
         const state = getMusicState(channelId);
-        if (state.dj !== socket.data.username) return;
+        if (state.dj !== socket.data.username && !socket.data.isAdmin) return;
         state.dj = toUsername;
         broadcastMusicState(channelId);
     });
 
     socket.on("voice:music:clear", ({ channelId }) => {
-        if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
         const state = getMusicState(channelId);
-        if (state.dj !== socket.data.username) return;
+        if (state.dj !== socket.data.username && !socket.data.isAdmin) return;
+        // Admin can clear even when not in the voice channel
+        if (!socket.data.isAdmin && (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId)) return;
         state.queue = [];
         state.current = null;
         state.playing = false;

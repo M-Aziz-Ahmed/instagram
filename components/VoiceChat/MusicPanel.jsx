@@ -176,8 +176,7 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
                         if (e.data === window.YT.PlayerState.ENDED) {
                             const s = socketRef.current;
                             const ch = channelIdRef.current;
-                            const u = userRef.current;
-                            if (s && ch && musicStateRef.current?.dj === u?.username) {
+                            if (s && ch) {
                                 s.emit("voice:music:skip", { channelId: ch });
                             }
                         }
@@ -501,7 +500,7 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
                                                 <button onClick={() => playSong(song.id)} className="p-1 rounded bg-green-600/20 text-green-400 hover:bg-green-600/40 transition-colors" title="Play now">
                                                     <PlayIcon />
                                                 </button>
-                                                {(isDJ || song.addedBy === user?.username) && (
+                                                {(isDJ || song.addedBy === user?.username || user?.isAdmin) && (
                                                     <button onClick={() => removeSong(song.id)} className="p-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/40 transition-colors" title="Remove">
                                                         <TrashIcon />
                                                     </button>
