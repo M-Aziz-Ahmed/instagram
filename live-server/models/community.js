@@ -27,6 +27,14 @@ const memberSchema = new mongoose.Schema(
     { _id: false }
 );
 
+const voiceChannelSchema = new mongoose.Schema(
+    {
+        id: { type: String, required: true },
+        name: { type: String, required: true, maxlength: 50 },
+    },
+    { _id: false }
+);
+
 const communitySchema = new mongoose.Schema({
     name: { type: String, required: true, maxlength: 100, trim: true },
     description: { type: String, default: "", maxlength: 500 },
@@ -37,6 +45,7 @@ const communitySchema = new mongoose.Schema({
     members: [memberSchema],
     rules: [ruleSchema],
     flairs: [flairSchema],
+    voiceChannels: [voiceChannelSchema],
     settings: {
         whoCanPost: { type: String, enum: ["everyone", "members"], default: "members" },
         whoCanInvite: { type: String, enum: ["owner", "admin", "member"], default: "member" },

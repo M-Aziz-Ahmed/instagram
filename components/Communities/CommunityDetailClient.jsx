@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
+import { useVoiceChat } from "@/context/VoiceChatContext";
 import Link from "next/link";
 import InviteModal from "./InviteModal";
 
@@ -18,6 +19,7 @@ export default function CommunityDetailClient() {
     const { id } = useParams();
     const router = useRouter();
     const { user } = useUser();
+    const { openVoiceChat } = useVoiceChat();
     const [community, setCommunity] = useState(null);
     const [members, setMembers] = useState([]);
     const [posts, setPosts] = useState([]);
@@ -176,7 +178,7 @@ export default function CommunityDetailClient() {
 
             {/* Tabs */}
             <div className="flex gap-1 mb-4 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
-                {["feed", "rules", "members"].map((t) => (
+                {["feed", "voice", "rules", "members"].map((t) => (
                     <button key={t} onClick={() => setTab(t)} className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors capitalize ${tab === t ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm" : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"}`}>
                         {t}
                     </button>
@@ -240,6 +242,43 @@ export default function CommunityDetailClient() {
                                 <PostCard key={p._id} post={p} user={user} onVote={vote} />
                             ))}
                         </div>
+                    )}
+                </div>
+            )}
+
+            {/* Voice tab */}
+            {tab === "voice" && (
+                <div className="space-y-2">
+                    {!isMember ? (
+                        <p className="text-center text-gray-400 text-sm py-8">Join to access voice channels</p>
+                    ) : (
+                        <>
+                            {isAdmin && (
+                                <CreateVoiceChannelButton communityId={id} onCreated={load} />
+                            )}
+                            {(!community.voiceChannels || community.voiceChannels.length === 0) ? (
+                                <p className="text-center text-gray-400 text-sm py-8">No voice channels yet</p>
+                            ) : (
+                                community.voiceChannels.map((ch) => (
+                                    <div key={ch.id} className="flex items-center gap-3 p-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
+                                        <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-500/20 flex items-center justify-center shrink-0">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 text-purple-500">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                                            </svg>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{ch.name}</p>
+                                        </div>
+                                        <button
+                                            onClick={() => openVoiceChat()}
+                                            className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shrink-0"
+                                        >
+                                            Join
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </>
                     )}
                 </div>
             )}
@@ -369,5 +408,61 @@ function PostCard({ post: p, user, onVote }) {
                 </div>
             </div>
         </div>
+    );
+}
+
+function CreateVoiceChannelButton({ communityId, onCreated }) {
+    const [open, setOpen] = useState(false);
+    const [name, setName] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    const create = async (e) => {
+        e.preventDefault();
+        if (!name.trim()) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/communities/${communityId}/voice-channels`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ name: name.trim() }),
+            });
+            if (res.ok) {
+                setName("");
+                setOpen(false);
+                onCreated();
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!open) {
+        return (
+            <button onClick={() => setOpen(true)} className="w-full py-2.5 text-sm font-medium text-purple-600 bg-purple-50 dark:bg-purple-500/10 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-colors">
+                                + Create Voice Channel
+                            </button>
+        );
+    }
+
+    return (
+        <form onSubmit={create} className="flex gap-2 p-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
+            <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Channel name"
+                autoFocus
+                className="flex-1 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none"
+            />
+            <button type="submit" disabled={loading || !name.trim()} className="px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors">
+                {loading ? "..." : "Create"}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} className="px-2 py-1.5 text-gray-400 hover:text-gray-600 text-xs">
+                Cancel
+            </button>
+        </form>
     );
 }

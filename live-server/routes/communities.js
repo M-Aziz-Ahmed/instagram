@@ -52,6 +52,7 @@ router.post("/", verifyToken, async (req, res) => {
                 color: f.color || "#3b82f6",
                 emoji: f.emoji || "",
             })),
+            voiceChannels: [{ id: "vc-general", name: "General" }],
             settings: { isPublic: isPublic !== false },
         });
 
@@ -418,6 +419,58 @@ router.get("/:id/posts", verifyToken, async (req, res) => {
     } catch (err) {
         console.error("Community POSTS error:", err);
         return res.status(500).json({ error: "Failed to fetch posts" });
+    }
+});
+
+// ── Voice Channels ────────────────────────────────────────────
+
+router.post("/:id/voice-channels", verifyToken, async (req, res) => {
+    try {
+        const user = await User.findById(req.userId).select("username").lean();
+        if (!user?.username) return res.status(400).json({ error: "Username required" });
+
+        const community = await Community.findById(req.params.id);
+        if (!community) return res.status(404).json({ error: "Community not found" });
+
+        const member = getMember(community, user.username);
+        if (!member || !["owner", "admin"].includes(member.role)) {
+            return res.status(403).json({ error: "Admin access required" });
+        }
+
+        const { name } = req.body;
+        if (!name?.trim()) return res.status(400).json({ error: "Channel name required" });
+
+        const id = `vc-${Date.now()}`;
+        community.voiceChannels.push({ id, name: name.trim() });
+        await community.save();
+
+        return res.json(community);
+    } catch (err) {
+        console.error("Community VOICE CHANNEL CREATE error:", err);
+        return res.status(500).json({ error: "Failed to create voice channel" });
+    }
+});
+
+router.delete("/:id/voice-channels/:channelId", verifyToken, async (req, res) => {
+    try {
+        const user = await User.findById(req.userId).select("username").lean();
+        if (!user?.username) return res.status(400).json({ error: "Username required" });
+
+        const community = await Community.findById(req.params.id);
+        if (!community) return res.status(404).json({ error: "Community not found" });
+
+        const member = getMember(community, user.username);
+        if (!member || !["owner", "admin"].includes(member.role)) {
+            return res.status(403).json({ error: "Admin access required" });
+        }
+
+        community.voiceChannels = community.voiceChannels.filter((ch) => ch.id !== req.params.channelId);
+        await community.save();
+
+        return res.json(community);
+    } catch (err) {
+        console.error("Community VOICE CHANNEL DELETE error:", err);
+        return res.status(500).json({ error: "Failed to delete voice channel" });
     }
 });
 
