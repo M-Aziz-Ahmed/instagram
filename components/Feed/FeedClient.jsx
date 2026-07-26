@@ -7,6 +7,7 @@ import Compose from "./Compose";
 import Feed from "./Feed";
 import TrendingTags from "./TrendingTags";
 import TrendingSidebar from "@/components/TrendingSidebar";
+import TopCommunities from "@/components/TopCommunities";
 import SuggestedUsers from "@/components/SuggestedUsers";
 import SearchBar from "./SearchBar";
 import NotificationBell from "@/components/Notifications/NotificationBell";
@@ -19,7 +20,12 @@ export default function FeedClient() {
     const router                  = useRouter();
     const { openSidebar }         = useSidebar();
     const [refreshTrigger, setRefreshTrigger] = useState(0);
-    const [activeTag, setActiveTag]           = useState(null);
+    const [activeTag, setActiveTag]           = useState(() => {
+        if (typeof window !== "undefined") {
+            return new URLSearchParams(window.location.search).get("tag");
+        }
+        return null;
+    });
     const [feedType, setFeedType]             = useState("all");
     const [searchQuery, setSearchQuery]       = useState(null);
 
@@ -188,7 +194,8 @@ export default function FeedClient() {
                 </main>
                 <aside className="hidden lg:block w-80 shrink-0 space-y-4 pt-4">
                     <SuggestedUsers />
-                    <TrendingSidebar />
+                    <TopCommunities />
+                    <TrendingSidebar onTagClick={handleHashtag} activeTag={activeTag} />
                     <TrendingTags activeTag={activeTag} onTagClick={handleHashtag} />
                 </aside>
             </div>

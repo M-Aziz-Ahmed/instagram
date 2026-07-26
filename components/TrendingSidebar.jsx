@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
-export default function TrendingSidebar() {
+export default function TrendingSidebar({ onTagClick, activeTag }) {
     const [trending, setTrending] = useState({ hashtags: [], hotPosts: [] });
     const [loading, setLoading] = useState(true);
 
@@ -37,11 +37,15 @@ export default function TrendingSidebar() {
                     <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Trending Tags</p>
                     <div className="space-y-2">
                         {trending.hashtags.slice(0, 5).map((h) => (
-                            <Link key={h.tag} href={`/?tag=${h.tag}`}
-                                className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                            <button key={h.tag} onClick={() => onTagClick?.(h.tag === activeTag ? null : h.tag)}
+                                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-colors text-left ${
+                                    h.tag === activeTag
+                                        ? "bg-blue-100 dark:bg-blue-900/30"
+                                        : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                                }`}>
                                 <span className="text-sm font-medium text-blue-500">#{h.tag}</span>
                                 <span className="text-xs text-gray-400 dark:text-gray-500">{h.count} posts</span>
-                            </Link>
+                            </button>
                         ))}
                     </div>
                 </div>
@@ -52,7 +56,7 @@ export default function TrendingSidebar() {
                     <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Hot Posts</p>
                     <div className="space-y-3">
                         {trending.hotPosts.slice(0, 3).map((p) => (
-                            <Link key={p.id} href={`/?highlight=${p.id}`}
+                            <Link key={p.id} href={`/post/${p.id}`}
                                 className="block p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                                 <div className="flex items-center gap-2 mb-1.5">
                                     <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold"

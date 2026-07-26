@@ -63,7 +63,7 @@ router.post("/", verifyToken, async (req, res) => {
     }
 });
 
-router.get("/", verifyToken, async (req, res) => {
+router.get("/", async (req, res) => {
     try {
         const { search, sort = "memberCount", page = 1, limit = 20 } = req.query;
         const skip = (parseInt(page) - 1) * parseInt(limit);
