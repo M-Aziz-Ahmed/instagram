@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { useVoiceChat } from "@/context/VoiceChatContext";
 import Link from "next/link";
 import InviteModal from "./InviteModal";
+
+const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
 const ROLE_BADGES = { owner: "Owner", admin: "Admin", moderator: "Mod", member: "" };
 const ROLE_COLORS = { owner: "text-yellow-500", admin: "text-blue-500", moderator: "text-green-500" };
@@ -30,6 +33,10 @@ export default function CommunityDetailClient() {
     const [selectedFlair, setSelectedFlair] = useState(null);
     const [newPost, setNewPost] = useState("");
     const [posting, setPosting] = useState(false);
+    const [imageFile, setImageFile] = useState(null);
+    const [imagePreview, setImagePreview] = useState(null);
+    const [uploadingImg, setUploadingImg] = useState(false);
+    const fileRef = useRef(null);
 
     const load = useCallback(async () => {
         try {
@@ -78,12 +85,46 @@ export default function CommunityDetailClient() {
         }
     };
 
+    const uploadToCloudinary = (file) => {
+        return new Promise((resolve, reject) => {
+            const fd = new FormData();
+            fd.append("file", file);
+            fd.append("upload_preset", UPLOAD_PRESET);
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`);
+            xhr.onload = () => xhr.status === 200 ? resolve(JSON.parse(xhr.responseText).secure_url) : reject(new Error("Upload failed"));
+            xhr.onerror = () => reject(new Error("Network error"));
+            xhr.send(fd);
+        });
+    };
+
+    const handleImageSelect = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 10 * 1024 * 1024) return;
+        setImageFile(file);
+        setImagePreview(URL.createObjectURL(file));
+    };
+
     const submitPost = async (e) => {
         e.preventDefault();
-        if (!newPost.trim() || posting) return;
+        if ((!newPost.trim() && !imageFile) || posting) return;
         setPosting(true);
         try {
-            const body = { content: newPost.trim(), communityId: id };
+            let imageUrl = "";
+            let imageUrls = [];
+            if (imageFile) {
+                setUploadingImg(true);
+                imageUrl = await uploadToCloudinary(imageFile);
+                imageUrls = [imageUrl];
+                setUploadingImg(false);
+            }
+            const body = {
+                text: newPost.trim(),
+                imageUrl,
+                imageUrls,
+                communityId: id,
+            };
             if (selectedFlair) body.flair = selectedFlair;
             const res = await fetch("/api/posts", {
                 method: "POST",
@@ -94,12 +135,15 @@ export default function CommunityDetailClient() {
             if (res.ok) {
                 setNewPost("");
                 setSelectedFlair(null);
+                setImageFile(null);
+                setImagePreview(null);
                 load();
             }
         } catch (e) {
             console.error(e);
         } finally {
             setPosting(false);
+            setUploadingImg(false);
         }
     };
 
@@ -198,6 +242,17 @@ export default function CommunityDetailClient() {
                                 rows={3}
                                 className="w-full bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 resize-none outline-none"
                             />
+
+                            {/* Image preview */}
+                            {imagePreview && (
+                                <div className="relative mt-2 mb-2">
+                                    <img src={imagePreview} alt="" className="rounded-lg max-h-40 object-cover" />
+                                    <button type="button" onClick={() => { setImageFile(null); setImagePreview(null); }} className="absolute top-1 right-1 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center text-white text-xs hover:bg-black/80">
+                                        ✕
+                                    </button>
+                                </div>
+                            )}
+
                             {/* Flair picker */}
                             {community.flairs?.length > 0 && (
                                 <div className="flex gap-1.5 flex-wrap mt-2 mb-2">
@@ -214,9 +269,18 @@ export default function CommunityDetailClient() {
                                     ))}
                                 </div>
                             )}
-                            <div className="flex justify-end">
-                                <button type="submit" disabled={!newPost.trim() || posting} className="px-4 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                                    {posting ? "Posting..." : "Post"}
+
+                            <div className="flex items-center justify-between mt-1">
+                                <div className="flex items-center gap-1">
+                                    <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+                                    <button type="button" onClick={() => fileRef.current?.click()} className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" title="Add image">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <button type="submit" disabled={(!newPost.trim() && !imageFile) || posting || uploadingImg} className="px-4 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                                    {uploadingImg ? "Uploading..." : posting ? "Posting..." : "Post"}
                                 </button>
                             </div>
                         </form>
