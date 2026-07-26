@@ -131,6 +131,7 @@ function Participant({ participant, isLocal, onAdminAction }) {
 }
 
 function ChannelCard({ channel, isActive, onJoin, onDelete, participantCount, isAdmin }) {
+    const isCommunity = !!channel.communityId;
     return (
         <div className={`flex items-center gap-1 rounded-xl transition-all ${
             isActive
@@ -142,7 +143,7 @@ function ChannelCard({ channel, isActive, onJoin, onDelete, participantCount, is
                 className="flex-1 flex items-center gap-3 px-3 py-2.5 text-left"
             >
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                    isActive ? "bg-green-500/20 text-green-400" : "bg-white/10 text-gray-400"
+                    isActive ? "bg-green-500/20 text-green-400" : isCommunity ? "bg-purple-500/20 text-purple-400" : "bg-white/10 text-gray-400"
                 }`}>
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
@@ -1053,31 +1054,72 @@ export default function VoiceChat({ isOpen, onClose }) {
             )}
 
             {/* Channel list */}
-            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
-                <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-1 mb-1">Channels</p>
-                {channels.map((ch) => (
-                    <ChannelCard
-                        key={ch.id}
-                        channel={ch}
-                        isActive={activeChannel === ch.id}
-                        onJoin={() => joinChannel(ch.id)}
-                        onDelete={isAdmin ? handleDeleteChannel : null}
-                        participantCount={ch.participantCount}
-                        isAdmin={isAdmin}
-                    />
-                ))}
-                {channels.length === 0 && !socketConnected && !socketError && (
-                    <p className="text-xs text-yellow-400/80 text-center py-4">Connecting to voice server...</p>
-                )}
-                {channels.length === 0 && socketError && (
-                    <div className="text-center py-4 space-y-2">
-                        <p className="text-xs text-red-400">{socketError}</p>
-                        <button onClick={reconnectSocket} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors">Retry</button>
-                    </div>
-                )}
-                {channels.length === 0 && socketConnected && !socketError && (
-                    <p className="text-xs text-gray-500 text-center py-4">No channels yet</p>
-                )}
+            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
+                {(() => {
+                    const globalChannels = channels.filter((ch) => !ch.communityId);
+                    const communityGroups = {};
+                    channels.filter((ch) => ch.communityId).forEach((ch) => {
+                        const key = ch.communityId;
+                        if (!communityGroups[key]) communityGroups[key] = { name: ch.communityName || "Community", channels: [] };
+                        communityGroups[key].channels.push(ch);
+                    });
+
+                    return (
+                        <>
+                            {globalChannels.length > 0 && (
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-1 mb-1">Channels</p>
+                                    {globalChannels.map((ch) => (
+                                        <ChannelCard
+                                            key={ch.id}
+                                            channel={ch}
+                                            isActive={activeChannel === ch.id}
+                                            onJoin={() => joinChannel(ch.id)}
+                                            onDelete={isAdmin ? handleDeleteChannel : null}
+                                            participantCount={ch.participantCount}
+                                            isAdmin={isAdmin}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+
+                            {Object.entries(communityGroups).map(([communityId, group]) => (
+                                <div key={communityId} className="space-y-1">
+                                    <p className="text-[10px] font-semibold text-purple-400 dark:text-purple-300 uppercase tracking-wider px-1 mb-1 flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                                        </svg>
+                                        {group.name}
+                                    </p>
+                                    {group.channels.map((ch) => (
+                                        <ChannelCard
+                                            key={ch.id}
+                                            channel={ch}
+                                            isActive={activeChannel === ch.id}
+                                            onJoin={() => joinChannel(ch.id)}
+                                            onDelete={isAdmin ? handleDeleteChannel : null}
+                                            participantCount={ch.participantCount}
+                                            isAdmin={isAdmin}
+                                        />
+                                    ))}
+                                </div>
+                            ))}
+
+                            {channels.length === 0 && !socketConnected && !socketError && (
+                                <p className="text-xs text-yellow-400/80 text-center py-4">Connecting to voice server...</p>
+                            )}
+                            {channels.length === 0 && socketError && (
+                                <div className="text-center py-4 space-y-2">
+                                    <p className="text-xs text-red-400">{socketError}</p>
+                                    <button onClick={reconnectSocket} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors">Retry</button>
+                                </div>
+                            )}
+                            {channels.length === 0 && socketConnected && !socketError && (
+                                <p className="text-xs text-gray-500 text-center py-4">No channels yet</p>
+                            )}
+                        </>
+                    );
+                })()}
             </div>
 
             {/* Active channel participants */}
@@ -1149,10 +1191,10 @@ export default function VoiceChat({ isOpen, onClose }) {
             {/* Controls */}
             {activeChannel && (
                 <div className="shrink-0 border-t border-white/10 px-4 py-3 safe-bottom">
-                    <div className="flex items-center justify-center gap-2">
+                    <div className="flex items-center justify-center gap-3">
                         <button
                             onClick={toggleScreenShare}
-                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
                                 sharing ? "bg-blue-500 text-white" : "bg-white/10 text-white hover:bg-white/20"
                             }`}
                             title={sharing ? "Stop sharing" : "Share screen"}
@@ -1186,7 +1228,7 @@ export default function VoiceChat({ isOpen, onClose }) {
                                 }
                             }}
                             onContextMenu={(e) => { e.preventDefault(); if (ptt) setPttListening(true); }}
-                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
                                 pttListening ? "bg-orange-500 text-white animate-pulse"
                                 : ptt ? (pttActive ? "bg-green-500 text-white" : "bg-yellow-500 text-white")
                                 : "bg-white/10 text-white hover:bg-white/20"
@@ -1199,7 +1241,7 @@ export default function VoiceChat({ isOpen, onClose }) {
                         </button>
                         <button
                             onClick={toggleMute}
-                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
                                 muted ? "bg-red-500 text-white" : "bg-white/10 text-white hover:bg-white/20"
                             }`}
                             title={muted ? "Unmute" : "Mute"}
@@ -1217,7 +1259,7 @@ export default function VoiceChat({ isOpen, onClose }) {
                         </button>
                         <button
                             onClick={toggleDeafen}
-                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                            className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
                                 deafened ? "bg-red-500 text-white" : "bg-white/10 text-white hover:bg-white/20"
                             }`}
                             title={deafened ? "Undeafen" : "Deafen"}
@@ -1235,7 +1277,7 @@ export default function VoiceChat({ isOpen, onClose }) {
                         </button>
                         <button
                             onClick={leaveChannel}
-                            className="w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
+                            className="w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
                             title="Disconnect"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">

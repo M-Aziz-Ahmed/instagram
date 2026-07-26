@@ -230,7 +230,7 @@ async function enrichPost(post) {
 // GET /
 router.get("/", async (req, res) => {
     try {
-        const { tag, feed, username, lang, before } = req.query;
+        const { tag, feed, username, lang, before, communityId, channelId } = req.query;
         const limit = Math.min(parseInt(req.query.limit || "20", 10), 50);
 
         let query = {};
@@ -247,6 +247,30 @@ router.get("/", async (req, res) => {
             viewerIsAdmin = !!viewerDoc?.isAdmin;
             viewerFollowing = viewerDoc?.following || [];
             viewerCloseFriends = viewerDoc?.closeFriends || [];
+        }
+
+        // Community/channel filtering
+        if (communityId) {
+            query.communityId = communityId;
+            if (channelId) query.channelId = channelId;
+            else query.channelId = null; // community home (no specific channel)
+        } else {
+            // Main feed: include posts with no community (regular posts) OR community posts (for user's communities)
+            if (username) {
+                const Community = require("../models/community");
+                const memberCommunities = await Community.find({ "members.username": username }).select("_id").lean();
+                const communityIds = memberCommunities.map((c) => c._id);
+                if (communityIds.length > 0) {
+                    query.$or = [
+                        { communityId: null },
+                        { communityId: { $in: communityIds } },
+                    ];
+                } else {
+                    query.communityId = null;
+                }
+            } else {
+                query.communityId = null;
+            }
         }
 
         query.$or = [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }];
@@ -301,6 +325,8 @@ router.get("/", async (req, res) => {
             comments: 1,
             _originalPost: 1,
             isRepost: 1,
+            communityId: 1,
+            channelId: 1,
         })
             .sort({ timeStamp: -1 })
             .limit(limit + 10)
@@ -319,7 +345,7 @@ router.get("/", async (req, res) => {
 // POST /
 router.post("/", verifyToken, async (req, res) => {
     try {
-        const { text, imageUrl, imageUrls, audioUrl, visibility, poll, theme, scheduledAt } = req.body;
+        const { text, imageUrl, imageUrls, audioUrl, visibility, poll, theme, scheduledAt, communityId, channelId } = req.body;
         const username = req.body.sender || req.session?.userId;
 
         const senderUser = await User.findById(req.userId).select("username avatarUrl suspended defaultTheme").lean();
@@ -371,6 +397,8 @@ router.post("/", verifyToken, async (req, res) => {
             theme:     { type: theme || senderUser?.defaultTheme || "default", bg: "" },
             scheduledAt: isScheduled ? new Date(scheduledAt) : null,
             isScheduled,
+            communityId: communityId || null,
+            channelId: channelId || null,
             ...(poll?.enabled && poll.options?.length >= 2 ? {
                 poll: {
                     enabled: true,

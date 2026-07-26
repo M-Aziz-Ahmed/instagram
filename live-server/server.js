@@ -13,6 +13,7 @@ const cors = require("cors");
 
 const { Chess } = require("chess.js");
 const LiveStream = require("./models/liveStream");
+const Community = require("./models/community");
 const ChessGame = require("./models/chessGame");
 const Connect4Game = require("./models/connect4Game");
 const connect4Logic = require("./connect4Logic");
@@ -996,6 +997,8 @@ function getChannelState(channelId) {
     return {
         id: ch.id,
         name: ch.name,
+        communityId: ch.communityId || null,
+        communityName: ch.communityName || null,
         participants: Array.from(ch.participants.values()).map((p) => ({
             username: p.username,
             avatarUrl: p.avatarUrl,
@@ -1024,6 +1027,8 @@ function getAllChannelsState() {
         id: ch.id,
         name: ch.name,
         participantCount: ch.participants.size,
+        communityId: ch.communityId || null,
+        communityName: ch.communityName || null,
     }));
 }
 
@@ -1176,12 +1181,63 @@ io.on("connection", async (socket) => {
     });
 
     // ── Voice Channel Events ────────────────────────────────────
-    socket.on("voice:get-channels", () => {
+    socket.on("voice:get-channels", async () => {
+        // Get community voice channels for this user
+        try {
+            const username = socket.data?.username;
+            if (username) {
+                const communities = await Community.find({ "members.username": username }).lean();
+                for (const c of communities) {
+                    const voiceChannelsList = (c.channels || []).filter((ch) => ch.type === "voice");
+                    for (const ch of voiceChannelsList) {
+                        const memKey = `community-${c._id}-${ch.id}`;
+                        if (!voiceChannels.has(memKey)) {
+                            voiceChannels.set(memKey, {
+                                id: memKey,
+                                name: ch.name,
+                                participants: new Map(),
+                                communityId: c._id.toString(),
+                                communityName: c.name,
+                            });
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.error("[VOICE] Error fetching community channels:", err.message);
+        }
         socket.emit("voice:channels", getAllChannelsState());
     });
 
     socket.on("voice:join", async ({ channelId, username, avatarUrl, color }) => {
-        const ch = voiceChannels.get(channelId);
+        let ch = voiceChannels.get(channelId);
+
+        // Auto-create community voice channel in memory if not found
+        if (!ch && channelId.startsWith("community-")) {
+            const parts = channelId.split("-");
+            // Format: community-{communityId}-{channelId} (communityId is ObjectId, may contain hyphens)
+            // We need to find the community and channel from MongoDB
+            try {
+                const allCommunities = await Community.find({ "members.username": username }).lean();
+                for (const c of allCommunities) {
+                    const voiceCh = (c.channels || []).find((ch) => ch.type === "voice" && `community-${c._id}-${ch.id}` === channelId);
+                    if (voiceCh) {
+                        ch = {
+                            id: channelId,
+                            name: voiceCh.name,
+                            participants: new Map(),
+                            communityId: c._id.toString(),
+                            communityName: c.name,
+                        };
+                        voiceChannels.set(channelId, ch);
+                        break;
+                    }
+                }
+            } catch (err) {
+                console.error("[VOICE] Error auto-creating community channel:", err.message);
+            }
+        }
+
         if (!ch) return socket.emit("voice:error", { message: "Channel not found" });
 
         // Check if user is banned
@@ -1270,6 +1326,13 @@ io.on("connection", async (socket) => {
 
         broadcastChannelParticipants(channelId);
         broadcastChannelList();
+
+        // Clean up empty community voice channels from memory (persisted in MongoDB anyway)
+        if (ch.communityId && ch.participants.size === 0) {
+            voiceChannels.delete(channelId);
+            if (io._voiceMusic) io._voiceMusic.delete(channelId);
+            channelMutedUsers.delete(channelId);
+        }
 
         if (participant) {
             io.to(`voice:${channelId}`).emit("voice:user-left", { username: participant.username });
@@ -2723,7 +2786,6 @@ io.on("connection", async (socket) => {
     socket.on("voice:music:play", ({ channelId, songId }) => {
         if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
         const state = getMusicState(channelId);
-        if (state.dj !== socket.data.username && !socket.data.isAdmin) return;
         if (songId) {
             const idx = state.queue.findIndex((s) => s.id === songId);
             if (idx === -1) return;
@@ -2739,7 +2801,6 @@ io.on("connection", async (socket) => {
     socket.on("voice:music:pause", ({ channelId }) => {
         if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
         const state = getMusicState(channelId);
-        if (state.dj !== socket.data.username && !socket.data.isAdmin) return;
         state.position = state.startedAt ? (Date.now() - state.startedAt) / 1000 : 0;
         state.playing = false;
         state.startedAt = null;
@@ -2769,7 +2830,6 @@ io.on("connection", async (socket) => {
     socket.on("voice:music:volume", ({ channelId, volume }) => {
         if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
         const state = getMusicState(channelId);
-        if (state.dj !== socket.data.username && !socket.data.isAdmin) return;
         state.volume = Math.max(0, Math.min(1, volume));
         broadcastMusicState(channelId);
     });
@@ -2784,9 +2844,8 @@ io.on("connection", async (socket) => {
 
     socket.on("voice:music:clear", ({ channelId }) => {
         const state = getMusicState(channelId);
-        if (state.dj !== socket.data.username && !socket.data.isAdmin) return;
-        // Admin can clear even when not in the voice channel
-        if (!socket.data.isAdmin && (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId)) return;
+        // Any participant in the channel can clear
+        if (!socket.data?.voiceChannel || socket.data.voiceChannel !== channelId) return;
         state.queue = [];
         state.current = null;
         state.playing = false;
@@ -2835,6 +2894,12 @@ io.on("connection", async (socket) => {
                 broadcastChannelParticipants(socket.data.voiceChannel);
                 broadcastChannelList();
                 io.to(`voice:${socket.data.voiceChannel}`).emit("voice:user-left", { username });
+                // Clean up empty community voice channels from memory
+                if (ch.communityId && ch.participants.size === 0) {
+                    voiceChannels.delete(socket.data.voiceChannel);
+                    if (io._voiceMusic) io._voiceMusic.delete(socket.data.voiceChannel);
+                    channelMutedUsers.delete(socket.data.voiceChannel);
+                }
             }
         }
 
@@ -2883,6 +2948,7 @@ app.use("/api/admin", apiLimiter, require("./routes/admin"));
 app.use("/api/admin/system-logs", apiLimiter, require("./routes/systemLogs"));
 app.use("/api/messages", apiLimiter, require("./routes/messages"));
 app.use("/api/groups", apiLimiter, require("./routes/groups"));
+app.use("/api/communities", apiLimiter, require("./routes/communities"));
 app.use("/api/stories", apiLimiter, require("./routes/stories"));
 app.use("/api/search", apiLimiter, require("./routes/search"));
 app.use("/api/hashtags", apiLimiter, require("./routes/hashtags"));

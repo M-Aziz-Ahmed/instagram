@@ -56,8 +56,9 @@ export default function LayoutWrapper({ children }) {
             </div>
             <BottomNav unreadCount={unreadCount} />
 
-            {/* Voice Chat Panel - slides in from right */}
-            <div className={`fixed top-0 right-0 h-full z-50 transition-transform duration-300 ease-in-out ${
+            {/* Voice Chat Panel - right sidebar on desktop, bottom sheet on mobile */}
+            {/* Desktop: slides from right */}
+            <div className={`hidden lg:block fixed top-0 right-0 h-full w-80 z-50 transition-transform duration-300 ease-in-out ${
                 voiceOpen ? "translate-x-0" : "translate-x-full"
             }`}>
                 <div className="h-full w-80 bg-white dark:bg-gray-950 border-l border-gray-200 dark:border-gray-800 shadow-xl overflow-y-auto">
@@ -65,12 +66,20 @@ export default function LayoutWrapper({ children }) {
                 </div>
             </div>
 
-            {/* Backdrop for voice chat on mobile */}
+            {/* Mobile: bottom sheet */}
             {voiceOpen && (
-                <div
-                    className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-                    onClick={closeVoiceChat}
-                />
+                <div className="lg:hidden fixed inset-0 z-50">
+                    <div className="absolute inset-0 bg-black/50" onClick={closeVoiceChat} />
+                    <div className="absolute bottom-0 left-0 right-0 h-[75vh] bg-gray-950 rounded-t-2xl shadow-2xl overflow-hidden flex flex-col animate-slide-up">
+                        {/* Drag handle */}
+                        <div className="flex justify-center pt-3 pb-1 shrink-0">
+                            <div className="w-10 h-1 bg-gray-600 rounded-full" />
+                        </div>
+                        <div className="flex-1 overflow-y-auto">
+                            <VoiceChat isOpen={voiceOpen} onClose={closeVoiceChat} />
+                        </div>
+                    </div>
+                </div>
             )}
         </>
     );

@@ -73,6 +73,8 @@ const postSchema = new mongoose.Schema({
     },
     scheduledAt:  { type: Date, default: null },
     isScheduled:  { type: Boolean, default: false },
+    communityId:  { type: mongoose.Schema.Types.ObjectId, ref: "Community", default: null },
+    channelId:    { type: String, default: null },
     timeStamp:    { type: Date, default: Date.now },
 });
 
@@ -87,5 +89,7 @@ postSchema.index({ originalPostId: 1 });
 postSchema.index({ sender: 1, expiresAt: 1, isRemoved: 1, timeStamp: -1 });
 postSchema.index({ "comments.sender": 1, "comments.likes": 1 });
 postSchema.index({ timeStamp: -1, isRemoved: 1, expiresAt: 1 });
+postSchema.index({ communityId: 1, timeStamp: -1 });
+postSchema.index({ communityId: 1, channelId: 1, timeStamp: -1 });
 
 module.exports = mongoose.models.Post || mongoose.model("Post", postSchema);
