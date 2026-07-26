@@ -110,7 +110,7 @@ function CommunityCard({ community: c, isMember, onJoin, onLeave, user }) {
                 <Link href={`/communities/${c._id}`} className="font-semibold text-sm text-gray-900 dark:text-gray-100 hover:underline truncate block">
                     {c.name}
                 </Link>
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.memberCount} member{c.memberCount !== 1 ? "s" : ""} · {c.channels?.length || 0} channels</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.memberCount} member{c.memberCount !== 1 ? "s" : ""}</p>
             </div>
             {isMember ? (
                 <div className="flex items-center gap-2 shrink-0">

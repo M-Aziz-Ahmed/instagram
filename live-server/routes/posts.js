@@ -230,7 +230,7 @@ async function enrichPost(post) {
 // GET /
 router.get("/", async (req, res) => {
     try {
-        const { tag, feed, username, lang, before, communityId, channelId } = req.query;
+        const { tag, feed, username, lang, before, communityId } = req.query;
         const limit = Math.min(parseInt(req.query.limit || "20", 10), 50);
 
         let query = {};
@@ -249,22 +249,21 @@ router.get("/", async (req, res) => {
             viewerCloseFriends = viewerDoc?.closeFriends || [];
         }
 
-        // Community/channel filtering
+        // Community filtering
+        const orConditions = [];
         if (communityId) {
             query.communityId = communityId;
-            if (channelId) query.channelId = channelId;
-            else query.channelId = null; // community home (no specific channel)
         } else {
-            // Main feed: include posts with no community (regular posts) OR community posts (for user's communities)
+            // Main feed: include posts with no community OR community posts (for user's communities)
             if (username) {
                 const Community = require("../models/community");
                 const memberCommunities = await Community.find({ "members.username": username }).select("_id").lean();
                 const communityIds = memberCommunities.map((c) => c._id);
                 if (communityIds.length > 0) {
-                    query.$or = [
+                    orConditions.push(
                         { communityId: null },
-                        { communityId: { $in: communityIds } },
-                    ];
+                        { communityId: { $in: communityIds } }
+                    );
                 } else {
                     query.communityId = null;
                 }
@@ -273,7 +272,8 @@ router.get("/", async (req, res) => {
             }
         }
 
-        query.$or = [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }];
+        // Expiry filter
+        orConditions.push({ expiresAt: null }, { expiresAt: { $gt: new Date() } });
 
         if (!viewerIsAdmin) {
             query.isRemoved = { $ne: true };
@@ -289,11 +289,17 @@ router.get("/", async (req, res) => {
         }
         if (before) query.timeStamp = { $lt: new Date(before) };
 
+        // Visibility filter
         if (username) {
-            const visibilityQuery = { visibility: { $ne: "closeFriends" } };
-            const closeFriendsQuery = { sender: { $in: viewerCloseFriends } };
-            const ownQuery = { sender: username };
-            query.$or = [visibilityQuery, closeFriendsQuery, ownQuery];
+            orConditions.push(
+                { visibility: { $ne: "closeFriends" } },
+                { sender: { $in: viewerCloseFriends } },
+                { sender: username }
+            );
+        }
+
+        if (orConditions.length > 0) {
+            query.$or = orConditions;
         }
 
         // Fetch posts with minimal projection first
@@ -326,7 +332,10 @@ router.get("/", async (req, res) => {
             _originalPost: 1,
             isRepost: 1,
             communityId: 1,
-            channelId: 1,
+            upvotes: 1,
+            downvotes: 1,
+            score: 1,
+            flair: 1,
         })
             .sort({ timeStamp: -1 })
             .limit(limit + 10)
@@ -345,7 +354,7 @@ router.get("/", async (req, res) => {
 // POST /
 router.post("/", verifyToken, async (req, res) => {
     try {
-        const { text, imageUrl, imageUrls, audioUrl, visibility, poll, theme, scheduledAt, communityId, channelId } = req.body;
+        const { text, imageUrl, imageUrls, audioUrl, visibility, poll, theme, scheduledAt, communityId, flair } = req.body;
         const username = req.body.sender || req.session?.userId;
 
         const senderUser = await User.findById(req.userId).select("username avatarUrl suspended defaultTheme").lean();
@@ -398,7 +407,7 @@ router.post("/", verifyToken, async (req, res) => {
             scheduledAt: isScheduled ? new Date(scheduledAt) : null,
             isScheduled,
             communityId: communityId || null,
-            channelId: channelId || null,
+            flair: flair || {},
             ...(poll?.enabled && poll.options?.length >= 2 ? {
                 poll: {
                     enabled: true,
@@ -1522,6 +1531,51 @@ async function publishScheduledPosts() {
         return 0;
     }
 }
+
+// ── Voting ────────────────────────────────────────────────────
+
+router.post("/:id/vote", verifyToken, async (req, res) => {
+    try {
+        const { direction } = req.body; // "up", "down", or "none"
+        const user = await User.findById(req.userId).select("username").lean();
+        if (!user?.username) return res.status(400).json({ error: "Username required" });
+
+        const post = await Post.findById(req.params.id);
+        if (!post) return res.status(404).json({ error: "Post not found" });
+
+        const wasUpvoted = post.upvotes.includes(user.username);
+        const wasDownvoted = post.downvotes.includes(user.username);
+
+        // Remove existing votes
+        post.upvotes = post.upvotes.filter((u) => u !== user.username);
+        post.downvotes = post.downvotes.filter((u) => u !== user.username);
+
+        // Apply new vote
+        if (direction === "up" && !wasUpvoted) {
+            post.upvotes.push(user.username);
+        } else if (direction === "down" && !wasDownvoted) {
+            post.downvotes.push(user.username);
+        }
+        // direction === "none" or clicking same vote = remove vote (already removed above)
+
+        post.score = post.upvotes.length - post.downvotes.length;
+        await post.save();
+
+        return res.json({
+            score: post.score,
+            upvotes: post.upvotes.length,
+            downvotes: post.downvotes.length,
+            userVote: direction === "up" && post.upvotes.includes(user.username)
+                ? "up"
+                : direction === "down" && post.downvotes.includes(user.username)
+                    ? "down"
+                    : "none",
+        });
+    } catch (err) {
+        console.error("Post VOTE error:", err);
+        return res.status(500).json({ error: "Failed to vote" });
+    }
+});
 
 module.exports = router;
 module.exports.publishScheduledPosts = publishScheduledPosts;

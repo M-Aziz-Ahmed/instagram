@@ -1,16 +1,19 @@
 const mongoose = require("mongoose");
 
-const channelSchema = new mongoose.Schema(
+const flairSchema = new mongoose.Schema(
     {
         id: { type: String, required: true },
-        name: { type: String, required: true, maxlength: 50 },
-        type: { type: String, enum: ["text", "voice", "announcement"], default: "text" },
-        description: { type: String, default: "", maxlength: 200 },
-        permissions: {
-            whoCanJoin: { type: String, enum: ["everyone", "members", "admin-invite"], default: "members" },
-            whoCanSpeak: { type: String, enum: ["everyone", "members", "admin-only"], default: "everyone" },
-            whoCanPost: { type: String, enum: ["everyone", "members", "admin-only"], default: "members" },
-        },
+        name: { type: String, required: true, maxlength: 30 },
+        color: { type: String, default: "#3b82f6" },
+        emoji: { type: String, default: "" },
+    },
+    { _id: false }
+);
+
+const ruleSchema = new mongoose.Schema(
+    {
+        title: { type: String, required: true, maxlength: 100 },
+        description: { type: String, default: "", maxlength: 500 },
     },
     { _id: false }
 );
@@ -32,12 +35,13 @@ const communitySchema = new mongoose.Schema({
     color: { type: String, default: "#3b82f6" },
     creator: { type: String, required: true },
     members: [memberSchema],
-    channels: [channelSchema],
+    rules: [ruleSchema],
+    flairs: [flairSchema],
     settings: {
-        whoCanCreateChannels: { type: String, enum: ["owner", "admin", "member"], default: "admin" },
+        whoCanPost: { type: String, enum: ["everyone", "members"], default: "members" },
         whoCanInvite: { type: String, enum: ["owner", "admin", "member"], default: "member" },
-        whoCanManageVoice: { type: String, enum: ["owner", "admin", "member"], default: "admin" },
         isPublic: { type: Boolean, default: true },
+        requirePostFlair: { type: Boolean, default: false },
     },
     inviteCode: { type: String, unique: true, sparse: true },
     memberCount: { type: Number, default: 0 },

@@ -26,13 +26,12 @@ function hasPermission(member, setting, community) {
 
 // ── Community CRUD ────────────────────────────────────────────
 
-// Create community
 router.post("/", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId).select("username").lean();
         if (!user?.username) return res.status(400).json({ error: "Username required" });
 
-        const { name, description, avatarUrl, bannerUrl, color, isPublic } = req.body;
+        const { name, description, avatarUrl, bannerUrl, color, isPublic, rules, flairs } = req.body;
         if (!name?.trim()) return res.status(400).json({ error: "Community name required" });
         if (name.length > 100) return res.status(400).json({ error: "Name too long (max 100)" });
 
@@ -46,10 +45,13 @@ router.post("/", verifyToken, async (req, res) => {
             members: [{ username: user.username, role: "owner" }],
             memberCount: 1,
             inviteCode: generateInviteCode(),
-            channels: [
-                { id: "general", name: "General", type: "text", description: "General discussion" },
-                { id: "voice-general", name: "General", type: "voice", description: "Voice chat" },
-            ],
+            rules: (rules || []).slice(0, 10),
+            flairs: (flairs || []).map((f, i) => ({
+                id: `flair-${Date.now()}-${i}`,
+                name: f.name,
+                color: f.color || "#3b82f6",
+                emoji: f.emoji || "",
+            })),
             settings: { isPublic: isPublic !== false },
         });
 
@@ -60,7 +62,6 @@ router.post("/", verifyToken, async (req, res) => {
     }
 });
 
-// List public communities
 router.get("/", verifyToken, async (req, res) => {
     try {
         const { search, sort = "memberCount", page = 1, limit = 20 } = req.query;
@@ -84,7 +85,6 @@ router.get("/", verifyToken, async (req, res) => {
     }
 });
 
-// Get user's communities
 router.get("/mine", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId).select("username").lean();
@@ -101,7 +101,6 @@ router.get("/mine", verifyToken, async (req, res) => {
     }
 });
 
-// Get single community
 router.get("/:id", verifyToken, async (req, res) => {
     try {
         const community = await Community.findById(req.params.id).lean();
@@ -121,7 +120,6 @@ router.get("/:id", verifyToken, async (req, res) => {
     }
 });
 
-// Update community
 router.patch("/:id", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId).select("username").lean();
@@ -135,11 +133,18 @@ router.patch("/:id", verifyToken, async (req, res) => {
             return res.status(403).json({ error: "Admin access required" });
         }
 
-        const allowed = ["name", "description", "avatarUrl", "bannerUrl", "color", "settings"];
+        const allowed = ["name", "description", "avatarUrl", "bannerUrl", "color", "settings", "rules", "flairs"];
         for (const key of allowed) {
             if (req.body[key] !== undefined) {
                 if (key === "settings") {
                     Object.assign(community.settings, req.body.settings);
+                } else if (key === "flairs") {
+                    community.flairs = req.body.flairs.map((f, i) => ({
+                        id: f.id || `flair-${Date.now()}-${i}`,
+                        name: f.name,
+                        color: f.color || "#3b82f6",
+                        emoji: f.emoji || "",
+                    }));
                 } else {
                     community[key] = req.body[key];
                 }
@@ -154,7 +159,6 @@ router.patch("/:id", verifyToken, async (req, res) => {
     }
 });
 
-// Delete community
 router.delete("/:id", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId).select("username").lean();
@@ -176,7 +180,6 @@ router.delete("/:id", verifyToken, async (req, res) => {
 
 // ── Membership ────────────────────────────────────────────────
 
-// Join via invite code
 router.post("/join/:inviteCode", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId).select("username").lean();
@@ -200,7 +203,6 @@ router.post("/join/:inviteCode", verifyToken, async (req, res) => {
     }
 });
 
-// Join by community ID
 router.post("/:id/join", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId).select("username").lean();
@@ -228,7 +230,6 @@ router.post("/:id/join", verifyToken, async (req, res) => {
     }
 });
 
-// Leave community
 router.post("/:id/leave", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId).select("username").lean();
@@ -252,7 +253,6 @@ router.post("/:id/leave", verifyToken, async (req, res) => {
     }
 });
 
-// Update member role
 router.patch("/:id/members/:username", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId).select("username").lean();
@@ -285,7 +285,6 @@ router.patch("/:id/members/:username", verifyToken, async (req, res) => {
     }
 });
 
-// Remove member
 router.delete("/:id/members/:username", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId).select("username").lean();
@@ -314,7 +313,6 @@ router.delete("/:id/members/:username", verifyToken, async (req, res) => {
     }
 });
 
-// Get members
 router.get("/:id/members", verifyToken, async (req, res) => {
     try {
         const community = await Community.findById(req.params.id).lean();
@@ -352,7 +350,6 @@ router.get("/:id/members", verifyToken, async (req, res) => {
 
 // ── Invite ────────────────────────────────────────────────────
 
-// Regenerate invite code
 router.post("/:id/invite", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId).select("username").lean();
@@ -376,103 +373,11 @@ router.post("/:id/invite", verifyToken, async (req, res) => {
     }
 });
 
-// ── Channels ──────────────────────────────────────────────────
+// ── Community Posts (with voting & sorting) ────────────────────
 
-// Create channel
-router.post("/:id/channels", verifyToken, async (req, res) => {
-    try {
-        const user = await User.findById(req.userId).select("username").lean();
-        if (!user?.username) return res.status(400).json({ error: "Username required" });
-
-        const community = await Community.findById(req.params.id);
-        if (!community) return res.status(404).json({ error: "Community not found" });
-
-        const member = getMember(community, user.username);
-        if (!member || !hasPermission(member, "whoCanCreateChannels", community)) {
-            return res.status(403).json({ error: "No permission to create channels" });
-        }
-
-        const { name, type = "text", description } = req.body;
-        if (!name?.trim()) return res.status(400).json({ error: "Channel name required" });
-
-        const id = `${type === "voice" ? "voice-" : ""}${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
-
-        community.channels.push({ id, name: name.trim(), type, description: description || "" });
-        await community.save();
-
-        return res.json(community);
-    } catch (err) {
-        console.error("Community CHANNEL CREATE error:", err);
-        return res.status(500).json({ error: "Failed to create channel" });
-    }
-});
-
-// Update channel
-router.patch("/:id/channels/:channelId", verifyToken, async (req, res) => {
-    try {
-        const user = await User.findById(req.userId).select("username").lean();
-        if (!user?.username) return res.status(400).json({ error: "Username required" });
-
-        const community = await Community.findById(req.params.id);
-        if (!community) return res.status(404).json({ error: "Community not found" });
-
-        const member = getMember(community, user.username);
-        if (!member || !["owner", "admin"].includes(member.role)) {
-            return res.status(403).json({ error: "Admin access required" });
-        }
-
-        const channel = community.channels.find((c) => c.id === req.params.channelId);
-        if (!channel) return res.status(404).json({ error: "Channel not found" });
-
-        const allowed = ["name", "description", "permissions"];
-        for (const key of allowed) {
-            if (req.body[key] !== undefined) {
-                if (key === "permissions") {
-                    Object.assign(channel.permissions, req.body.permissions);
-                } else {
-                    channel[key] = req.body[key];
-                }
-            }
-        }
-
-        await community.save();
-        return res.json(community);
-    } catch (err) {
-        console.error("Community CHANNEL UPDATE error:", err);
-        return res.status(500).json({ error: "Failed to update channel" });
-    }
-});
-
-// Delete channel
-router.delete("/:id/channels/:channelId", verifyToken, async (req, res) => {
-    try {
-        const user = await User.findById(req.userId).select("username").lean();
-        if (!user?.username) return res.status(400).json({ error: "Username required" });
-
-        const community = await Community.findById(req.params.id);
-        if (!community) return res.status(404).json({ error: "Community not found" });
-
-        const member = getMember(community, user.username);
-        if (!member || !["owner", "admin"].includes(member.role)) {
-            return res.status(403).json({ error: "Admin access required" });
-        }
-
-        community.channels = community.channels.filter((c) => c.id !== req.params.channelId);
-        await community.save();
-
-        return res.json(community);
-    } catch (err) {
-        console.error("Community CHANNEL DELETE error:", err);
-        return res.status(500).json({ error: "Failed to delete channel" });
-    }
-});
-
-// ── Community Posts ───────────────────────────────────────────
-
-// Get posts for a community
 router.get("/:id/posts", verifyToken, async (req, res) => {
     try {
-        const { page = 1, limit = 20 } = req.query;
+        const { page = 1, limit = 20, sort = "hot", flair } = req.query;
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
         const community = await Community.findById(req.params.id).lean();
@@ -485,8 +390,26 @@ router.get("/:id/posts", verifyToken, async (req, res) => {
             return res.status(403).json({ error: "Not a member" });
         }
 
-        const posts = await Post.find({ communityId: req.params.id, isRemoved: { $ne: true } })
-            .sort({ timeStamp: -1 })
+        const query = { communityId: req.params.id, isRemoved: { $ne: true } };
+        if (flair) query["flair.id"] = flair;
+
+        let sortObj;
+        switch (sort) {
+            case "new":
+                sortObj = { timeStamp: -1 };
+                break;
+            case "top":
+                sortObj = { score: -1 };
+                break;
+            case "hot":
+            default:
+                // Hot = combination of score and recency
+                sortObj = { score: -1, timeStamp: -1 };
+                break;
+        }
+
+        const posts = await Post.find(query)
+            .sort(sortObj)
             .skip(skip)
             .limit(parseInt(limit))
             .lean();
