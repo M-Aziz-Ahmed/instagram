@@ -963,29 +963,37 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                 </div>
             )}
             <div className="flex gap-3">
-                <PostAvatar sender={post.sender} color={post.color} avatarUrl={post.avatarUrl} author={author} />
+                {post._community ? (
+                    <Link href={`/communities/${post.communityId}`} className="shrink-0 mt-0.5">
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold overflow-hidden" style={{ backgroundColor: post._community.color || "#3b82f6" }}>
+                            {post._community.avatarUrl ? (
+                                <img src={post._community.avatarUrl} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                                post._community.name?.[0]?.toUpperCase()
+                            )}
+                        </div>
+                    </Link>
+                ) : (
+                    <PostAvatar sender={post.sender} color={post.color} avatarUrl={post.avatarUrl} author={author} />
+                )}
 
                 <div className="flex-1 min-w-0">
-                    {/* Community attribution */}
-                    {post._community && (
-                        <Link href={`/communities/${post.communityId}`} className="inline-flex items-center gap-1 mb-0.5 text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
-                            <span className="w-3.5 h-3.5 rounded-sm flex items-center justify-center text-white text-[8px] font-bold shrink-0" style={{ backgroundColor: post._community.color || "#3b82f6" }}>
-                                {post._community.name?.[0]?.toUpperCase()}
-                            </span>
-                            {post._community.name}
-                            <span className="text-gray-300 dark:text-gray-600">/</span>
-                        </Link>
-                    )}
-                    <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1">
-                            <Link
-                                href={`/profile/${encodeURIComponent(post.sender)}`}
-                                className="font-bold text-sm text-gray-900 dark:text-gray-100 hover:underline"
-                            >
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        {post._community ? (
+                            <Link href={`/communities/${post.communityId}`} className="font-bold text-sm text-gray-900 dark:text-gray-100 hover:underline">
+                                {post._community.name}
+                            </Link>
+                        ) : (
+                            <Link href={`/profile/${encodeURIComponent(post.sender)}`} className="font-bold text-sm text-gray-900 dark:text-gray-100 hover:underline">
                                 {post.sender}
                             </Link>
-                            <UserBadges isVerified={author?.isVerified} isAdmin={author?.isAdmin} roles={author?.roles || []} size="sm" />
-                        </span>
+                        )}
+                        {post._community && (
+                            <Link href={`/profile/${encodeURIComponent(post.sender)}`} className="text-xs text-gray-500 dark:text-gray-400 hover:underline">
+                                u/{post.sender}
+                            </Link>
+                        )}
+                        {!post._community && <UserBadges isVerified={author?.isVerified} isAdmin={author?.isAdmin} roles={author?.roles || []} size="sm" />}
                         <span className="text-gray-400 dark:text-gray-500 text-xs">&middot;</span>
                         <span className="text-gray-400 dark:text-gray-500 text-xs">{timeAgo(post.timeStamp)}</span>
                         {post.flair?.name && (

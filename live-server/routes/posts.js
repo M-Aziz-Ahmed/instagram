@@ -129,11 +129,13 @@ async function checkAchievements(userId, username) {
 async function enrichPosts(posts) {
     const allUsernames = new Set();
     const originalPostIds = [];
+    const communityIds = new Set();
 
     posts.forEach((p) => {
         allUsernames.add(p.sender);
         (p.comments || []).forEach((c) => allUsernames.add(c.sender));
         if (p.originalPostId) originalPostIds.push(p.originalPostId);
+        if (p.communityId) communityIds.add(p.communityId.toString());
     });
 
     // Fetch original posts in batch if any
@@ -150,12 +152,21 @@ async function enrichPosts(posts) {
         });
     }
 
-    if (allUsernames.size === 0) return posts;
+    if (allUsernames.size === 0 && communityIds.size === 0) return posts;
 
-    const users = await User.find({ username: { $in: [...allUsernames] } })
-        .select("username avatarUrl isVerified isAdmin roles postingStreak achievements")
-        .populate("roles", "name badge color")
-        .lean();
+    const [users, communities] = await Promise.all([
+        allUsernames.size > 0
+            ? User.find({ username: { $in: [...allUsernames] } })
+                .select("username avatarUrl isVerified isAdmin roles postingStreak achievements")
+                .populate("roles", "name badge color")
+                .lean()
+            : [],
+        communityIds.size > 0
+            ? require("../models/community").find({ _id: { $in: [...communityIds] } })
+                .select("name color avatarUrl")
+                .lean()
+            : [],
+    ]);
 
     const userMap = {};
     users.forEach((u) => {
@@ -174,11 +185,17 @@ async function enrichPosts(posts) {
         };
     });
 
+    const communityMap = {};
+    communities.forEach((c) => {
+        communityMap[c._id.toString()] = { name: c.name, color: c.color, avatarUrl: c.avatarUrl };
+    });
+
     return posts.map((p) => {
         const originalPost = p.originalPostId ? originalPostMap[p.originalPostId.toString()] : null;
         return {
             ...p,
             _author: userMap[p.sender] || null,
+            _community: p.communityId ? communityMap[p.communityId.toString()] || null : null,
             _originalPost: originalPost ? {
                 ...originalPost,
                 _author: userMap[originalPost.sender] || null,
