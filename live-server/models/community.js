@@ -51,9 +51,8 @@ communitySchema.index({ inviteCode: 1 });
 communitySchema.index({ memberCount: -1 });
 communitySchema.index({ createdAt: -1 });
 
-communitySchema.pre("save", function (next) {
+communitySchema.pre("save", function () {
     this.updatedAt = new Date();
-    next();
 });
 
 module.exports = mongoose.model("Community", communitySchema);
