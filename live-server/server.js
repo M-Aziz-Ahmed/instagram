@@ -1,3 +1,4 @@
+const { initWarEraTracker } = require("./warera-tracker");
 require("dotenv").config();
 require("./logBuffer");
 const { logAuth, logUser, logServer, logDatabase, logGame, logChat, logFrontend, logModeration, logSystem } = require("./logService");
@@ -212,7 +213,7 @@ const MONGODB_URI = process.env.MONGODB_URI || "mongodb://azizahmed:I_hateyou2@l
 mongoose.connect(MONGODB_URI, {
     maxPoolSize: 50,
     minPoolSize: 10,
-    serverSelectionTimeoutMS: 5000,
+    serverSelectionTimeoutMS: 30000,
     socketTimeoutMS: 45000,
     family: 4,
     readPreference: "primaryPreferred",
@@ -3003,3 +3004,4 @@ server.listen(PORT, () => {
     console.log(`[Live Server] CORS allowed: ${CORS_ORIGIN}`);
     logSystem("server_started", { message: `Live server started on port ${PORT}`, meta: { port: PORT, cors: CORS_ORIGIN } });
 });
+initWarEraTracker();
