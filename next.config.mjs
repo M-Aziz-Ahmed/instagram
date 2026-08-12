@@ -38,7 +38,7 @@ const nextConfig = {
             },
             {
                 source: "/sio/:path*",
-                destination: "https://anontweet.duckdns.org/socket.io/:path*",
+                destination: "https://anontweet.duckdns.org/sio/:path*",
             },
         ];
     },

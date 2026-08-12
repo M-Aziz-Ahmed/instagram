@@ -568,6 +568,20 @@ export default function VoiceChat({ isOpen, onClose }) {
         pc.onnegotiationneeded = () => sendNegotiationOffer(pc, remoteSocketId);
     }, [sendNegotiationOffer]);
 
+    const flushIceBuffer = useCallback((username) => {
+        const buffered = iceCandidateBufferRef.current.get(username);
+        if (!buffered) return;
+        const pc = pcsRef.current.get(username);
+        if (!pc || pc.signalingState === "closed") {
+            iceCandidateBufferRef.current.delete(username);
+            return;
+        }
+        for (const candidate of buffered) {
+            pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+        }
+        iceCandidateBufferRef.current.delete(username);
+    }, []);
+
     const startSpeakingDetection = useCallback((stream) => {
         try {
             if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
