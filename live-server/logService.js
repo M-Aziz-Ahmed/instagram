@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const SystemLog = require("./models/systemLog");
 
 const LOG_CATEGORIES = ["frontend", "database", "server", "games", "users", "chats", "auth", "moderation", "system"];
@@ -6,10 +8,50 @@ const LOG_LEVELS = ["info", "warn", "error", "debug"];
 const BATCH_SIZE = 20;
 const FLUSH_INTERVAL_MS = 3000;
 
+const LOG_DIR = path.join(__dirname, "logs");
+const LOG_FILE = path.join(LOG_DIR, "system.log");
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_FILES = 5;
+
 let logQueue = [];
+let fileQueue = [];
 let flushTimer = null;
 
+function ensureLogDir() {
+    if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+}
+
+function rotateIfNeeded() {
+    ensureLogDir();
+    try {
+        const stat = fs.statSync(LOG_FILE);
+        if (stat.size < MAX_FILE_BYTES) return;
+    } catch { return; }
+    try {
+        const oldest = `${LOG_FILE}.${MAX_FILES}`;
+        if (fs.existsSync(oldest)) fs.unlinkSync(oldest);
+        for (let i = MAX_FILES - 1; i >= 1; i--) {
+            const from = `${LOG_FILE}.${i}`;
+            if (fs.existsSync(from)) fs.renameSync(from, `${LOG_FILE}.${i + 1}`);
+        }
+        fs.renameSync(LOG_FILE, `${LOG_FILE}.1`);
+    } catch {}
+}
+
+function writeFileQueue() {
+    if (fileQueue.length === 0) return;
+    ensureLogDir();
+    rotateIfNeeded();
+    const lines = fileQueue.splice(0).join("\n") + "\n";
+    try {
+        fs.appendFileSync(LOG_FILE, lines);
+    } catch (err) {
+        console.error("[LogService] File write failed:", err.message);
+    }
+}
+
 function flushLogs() {
+    writeFileQueue();
     if (logQueue.length === 0) return;
     const batch = logQueue.splice(0, BATCH_SIZE);
     SystemLog.insertMany(batch, { ordered: false }).catch(() => {});
@@ -18,6 +60,13 @@ function flushLogs() {
 function startFlushTimer() {
     if (flushTimer) return;
     flushTimer = setInterval(flushLogs, FLUSH_INTERVAL_MS);
+}
+
+function shouldPersistToDB(entry) {
+    if (entry.level === "error") return true;
+    if (entry.category === "auth" || entry.category === "moderation" || entry.category === "system") return true;
+    if (entry.action === "http_request") return false;
+    return entry.level === "warn";
 }
 
 function log(entry) {
@@ -44,9 +93,12 @@ function log(entry) {
         room: entry.room || null,
     };
 
-    logQueue.push(doc);
+    fileQueue.push(JSON.stringify({ ...doc, createdAt: new Date().toISOString() }));
+    if (shouldPersistToDB(doc)) {
+        logQueue.push(doc);
+        if (logQueue.length >= BATCH_SIZE) flushLogs();
+    }
     startFlushTimer();
-    if (logQueue.length >= BATCH_SIZE) flushLogs();
 }
 
 function logAuth(action, username, extra = {}) {
@@ -87,6 +139,7 @@ function logSystem(action, extra = {}) {
 
 function flushNow() {
     return new Promise((resolve) => {
+        writeFileQueue();
         if (logQueue.length === 0) return resolve();
         const batch = logQueue.splice(0);
         SystemLog.insertMany(batch, { ordered: false }).then(() => resolve()).catch(() => resolve());

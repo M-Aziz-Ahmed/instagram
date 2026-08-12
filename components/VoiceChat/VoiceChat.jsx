@@ -311,6 +311,8 @@ export default function VoiceChat({ isOpen, onClose }) {
 
                 if (needsNewPC) {
                     pc = new RTCPeerConnection(ICE_SERVERS);
+                    pc._remoteSocketId = from;
+                    attachNegotiationHandler(pc, from);
                     pcsRef.current.set(fromUsername, pc);
 
                     const localStream = localStreamRef.current;
@@ -324,20 +326,8 @@ export default function VoiceChat({ isOpen, onClose }) {
                         if (vt) pc.addTrack(vt, screenStreamRef.current);
                     }
 
-                    pc.ontrack = (e) => {
-                        if (e.streams?.[0]) {
-                            peerStreamsRef.current.set(fromUsername, e.streams[0]);
-                            const hasAudio = e.streams[0].getAudioTracks().length > 0;
-                            const hasVideo = e.streams[0].getVideoTracks().length > 0;
-                            if (hasAudio) {
-                                attachRemoteAudio(fromUsername, e.streams[0]);
-                            }
-                            if (hasVideo) {
-                                setRemoteScreenSharer(fromUsername);
-                                setRemoteScreenStream(e.streams[0]);
-                            }
-                        }
-                    };
+                    pc.ontrack = (e) => handlePeerTrack(fromUsername, e);
+
                     pc.onicecandidate = (e) => {
                         if (e.candidate) {
                             s.emit("voice:signal", { to: from, from: s.id, fromUsername: u.username, type: "ice-candidate", data: e.candidate.toJSON() });
@@ -460,6 +450,14 @@ export default function VoiceChat({ isOpen, onClose }) {
         socket.on("voice:admin-muted", handleAdminMuted);
         socket.on("voice:error", handleVoiceError);
 
+        const handleScreenShare = ({ username: sharer, sharing: isSharing }) => {
+            if (!isSharing && remoteScreenSharerRef.current === sharer) {
+                setRemoteScreenSharer(null);
+                setRemoteScreenStream(null);
+            }
+        };
+        socket.on("voice:screen-share", handleScreenShare);
+
         const handleMusicState = (state) => {
             if (state.addedSong) showNotif(`${state.addedBy} added a song to the queue`);
         };
@@ -505,6 +503,7 @@ export default function VoiceChat({ isOpen, onClose }) {
             socket.off("voice:kicked", handleKicked);
             socket.off("voice:admin-muted", handleAdminMuted);
             socket.off("voice:error", handleVoiceError);
+            socket.off("voice:screen-share", handleScreenShare);
             socket.off("voice:music:state", handleMusicState);
             socket.off("voice:music:queue-add", handleMusicQueueAdd);
             socket.off("voice:music:queue-remove", handleMusicQueueRemove);
@@ -522,21 +521,52 @@ export default function VoiceChat({ isOpen, onClose }) {
             audioElementsRef.current.set(username, el);
         }
         el.srcObject = stream;
+        el.muted = false;
+        el.volume = 1;
+        el.play().catch(() => {});
     }, []);
 
-    const flushIceBuffer = useCallback((username) => {
-        const buffered = iceCandidateBufferRef.current.get(username);
-        if (!buffered) return;
-        const pc = pcsRef.current.get(username);
-        if (!pc || pc.signalingState === "closed") {
-            iceCandidateBufferRef.current.delete(username);
-            return;
+    const handlePeerTrack = useCallback((username, e) => {
+        const track = e.track;
+        if (!track) return;
+        let peerStream = peerStreamsRef.current.get(username);
+        if (!peerStream) {
+            peerStream = new MediaStream();
+            peerStreamsRef.current.set(username, peerStream);
         }
-        for (const candidate of buffered) {
-            pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+        peerStream.addTrack(track);
+        if (track.kind === "audio") {
+            const audioStream = new MediaStream([track]);
+            attachRemoteAudio(username, audioStream);
+        } else if (track.kind === "video") {
+            setRemoteScreenSharer(username);
+            setRemoteScreenStream(peerStream);
         }
-        iceCandidateBufferRef.current.delete(username);
+    }, [attachRemoteAudio]);
+
+    const sendNegotiationOffer = useCallback(async (pc, remoteSocketId) => {
+        const s = socketRef.current;
+        const u = userRef.current;
+        if (!s || !u || !pc || !remoteSocketId) return;
+        if (pc.signalingState !== "stable") return;
+        try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            if (pc.localDescription) {
+                s.emit("voice:signal", {
+                    to: remoteSocketId,
+                    from: s.id,
+                    fromUsername: u.username,
+                    type: "offer",
+                    data: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+                });
+            }
+        } catch {}
     }, []);
+
+    const attachNegotiationHandler = useCallback((pc, remoteSocketId) => {
+        pc.onnegotiationneeded = () => sendNegotiationOffer(pc, remoteSocketId);
+    }, [sendNegotiationOffer]);
 
     const startSpeakingDetection = useCallback((stream) => {
         try {
@@ -575,7 +605,7 @@ export default function VoiceChat({ isOpen, onClose }) {
         } catch {}
     }, []);
 
-    const createPeerConnections = useCallback(async (channelParticipants) => {
+const createPeerConnections = useCallback(async (channelParticipants) => {
         const s = socketRef.current;
         const u = userRef.current;
         if (!s || !u) return;
@@ -589,6 +619,8 @@ export default function VoiceChat({ isOpen, onClose }) {
             if (!p.socketId) continue;
 
             const pc = new RTCPeerConnection(ICE_SERVERS);
+            pc._remoteSocketId = p.socketId;
+            attachNegotiationHandler(pc, p.socketId);
             pcsRef.current.set(p.username, pc);
 
             localStream.getTracks().forEach((track) => {
@@ -602,20 +634,7 @@ export default function VoiceChat({ isOpen, onClose }) {
                 }
             }
 
-            pc.ontrack = (e) => {
-                if (e.streams?.[0]) {
-                    peerStreamsRef.current.set(p.username, e.streams[0]);
-                    const hasAudio = e.streams[0].getAudioTracks().length > 0;
-                    const hasVideo = e.streams[0].getVideoTracks().length > 0;
-                    if (hasAudio) {
-                        attachRemoteAudio(p.username, e.streams[0]);
-                    }
-                    if (hasVideo) {
-                        setRemoteScreenSharer(p.username);
-                        setRemoteScreenStream(e.streams[0]);
-                    }
-                }
-            };
+            pc.ontrack = (e) => handlePeerTrack(p.username, e);
 
             pc.onicecandidate = (e) => {
                 if (e.candidate) {
@@ -652,11 +671,12 @@ export default function VoiceChat({ isOpen, onClose }) {
                             }
                         }).catch(() => {}).finally(() => { pc._iceRestartPending = false; });
                     } else {
-                        // Direct + ICE restart failed — retry with TURN relay only
                         try { pc.close(); } catch {}
                         pcsRef.current.delete(p.username);
 
                         const relayPc = new RTCPeerConnection(RELAY_ONLY_ICE_SERVERS);
+                        relayPc._remoteSocketId = p.socketId;
+                        attachNegotiationHandler(relayPc, p.socketId);
                         pcsRef.current.set(p.username, relayPc);
 
                         const ls = localStreamRef.current;
@@ -668,18 +688,7 @@ export default function VoiceChat({ isOpen, onClose }) {
                             if (vt) relayPc.addTrack(vt, screenStreamRef.current);
                         }
 
-                        relayPc.ontrack = (e) => {
-                            if (e.streams?.[0]) {
-                                peerStreamsRef.current.set(p.username, e.streams[0]);
-                                const hasAudio = e.streams[0].getAudioTracks().length > 0;
-                                const hasVideo = e.streams[0].getVideoTracks().length > 0;
-                                if (hasAudio) attachRemoteAudio(p.username, e.streams[0]);
-                                if (hasVideo) {
-                                    setRemoteScreenSharer(p.username);
-                                    setRemoteScreenStream(e.streams[0]);
-                                }
-                            }
-                        };
+                        relayPc.ontrack = (e) => handlePeerTrack(p.username, e);
                         relayPc.onicecandidate = (e) => {
                             if (e.candidate) {
                                 s.emit("voice:signal", {
@@ -723,7 +732,7 @@ export default function VoiceChat({ isOpen, onClose }) {
                 });
             } catch {}
         }
-    }, [attachRemoteAudio]);
+    }, [attachRemoteAudio, attachNegotiationHandler, handlePeerTrack]);
 
     const joinChannel = useCallback(async (channelId) => {
         const s = socketRef.current;

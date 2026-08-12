@@ -84,6 +84,24 @@ export function CallProvider({ children, socket }) {
             }
         };
 
+        // Renegotiation handler for adding/removing tracks (video toggle, screen share)
+        pc.onnegotiationneeded = async () => {
+            if (pc.signalingState !== "stable") return;
+            const cs = callStateRef.current;
+            if (!cs || !socket) return;
+            try {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                if (pc.localDescription) {
+                    socket.emit("call:signal", {
+                        callId: cs.callId,
+                        to: peerUsername,
+                        signal: { type: "offer", sdp: pc.localDescription },
+                    });
+                }
+            } catch {}
+        };
+
         return pc;
     }, [socket]);
 
@@ -292,17 +310,22 @@ export function CallProvider({ children, socket }) {
             const cs = callStateRef.current;
 
             if (signal.type === "offer") {
-                // We're receiving an offer (we're the callee)
+                // We're receiving an offer (we're the callee) or renegotiation
                 const stream = localStreamRef.current || await getLocalStream(true, callStateRef.current?.callType === "video");
                 if (!stream) return;
 
-                // If we already have a PC for this peer in a non-closed state, close it first
-                const existing = peerConnections.current[from];
-                if (existing && existing.signalingState !== "closed") {
-                    try { existing.close(); } catch {}
+                let pc = peerConnections.current[from];
+                // Reuse existing PC if it's established (connected/completed) for renegotiation
+                // Only close if PC is closed/failed
+                if (pc && (pc.signalingState === "closed" || pc.connectionState === "failed" || pc.connectionState === "disconnected")) {
+                    try { pc.close(); } catch {}
+                    pc = null;
                 }
 
-                const pc = createPeerConnection(from, stream, false);
+                if (!pc) {
+                    pc = createPeerConnection(from, stream, false);
+                }
+
                 await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);

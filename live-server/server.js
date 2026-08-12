@@ -1384,6 +1384,14 @@ io.on("connection", async (socket) => {
         io.to(to).emit("voice:signal", { from: actualFrom, fromUsername: actualFromUsername, type, data });
     });
 
+    // Screen share presence broadcast
+    socket.on("voice:screen-share", ({ channelId, sharing }) => {
+        if (!channelId) return;
+        const username = socket.data?.username;
+        if (!username) return;
+        socket.to(`voice:${channelId}`).emit("voice:screen-share", { username, sharing });
+    });
+
     // ── Voice Channel Admin Events ──────────────────────────────
 
     socket.on("voice:create-channel", async ({ name }) => {
