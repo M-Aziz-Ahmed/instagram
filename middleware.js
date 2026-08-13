@@ -48,7 +48,10 @@ function isStaticPath(pathname) {
         pathname.endsWith(".svg") ||
         pathname.endsWith(".xml") ||
         pathname.endsWith(".txt") ||
-        pathname.endsWith(".woff2")
+        pathname.endsWith(".woff2") ||
+        pathname.endsWith(".json") ||
+        pathname === "/manifest.json" ||
+        pathname === "/site.webmanifest"
     );
 }
 
