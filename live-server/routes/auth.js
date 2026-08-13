@@ -5,6 +5,7 @@ const OTP = require("../models/otp");
 const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
 const { logAuth } = require("../logService");
+const { isValidPin, hashPin, verifyPin } = require("../utils/pin");
 
 const router = express.Router();
 const SECRET = process.env.JWT_SECRET || "anonfeed_jwt_secret_change_in_production_32chars";
@@ -54,6 +55,7 @@ function sendUserPayload(user) {
         longestStreak:  user.longestStreak || 0,
         achievements:   user.achievements || [],
         defaultTheme:   user.defaultTheme || "default",
+        hasPin:         !!user.pinHash,
         needsSetup: !user.username,
     };
 }
@@ -61,9 +63,18 @@ function sendUserPayload(user) {
 // POST /send-otp
 router.post("/send-otp", async (req, res) => {
     try {
-        const { email } = req.body;
+        const { email, force } = req.body;
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             return res.status(400).json({ error: "Valid email required" });
+        }
+
+        // If the account has a PIN set, offer PIN login instead of emailing an OTP
+        // (unless the user explicitly requested a code, e.g. forgot-PIN flow).
+        if (!force) {
+            const existing = await User.findOne({ email: email.toLowerCase() }, { pinHash: 1 }).lean();
+            if (existing?.pinHash) {
+                return res.json({ ok: true, hasPin: true });
+            }
         }
 
         const recent = await OTP.countDocuments({
@@ -102,7 +113,7 @@ router.post("/send-otp", async (req, res) => {
         }
 
         logAuth("otp_sent", null, { message: `OTP sent to ${email}`, ip: req.ip });
-        return res.json({ ok: true });
+        return res.json({ ok: true, hasPin: false });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed to send OTP" });
@@ -164,6 +175,121 @@ router.post("/verify-otp", async (req, res) => {
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Verification failed" });
+    }
+});
+
+// POST /verify-pin
+router.post("/verify-pin", async (req, res) => {
+    try {
+        const { email, pin } = req.body;
+        if (!email || !pin) {
+            return res.status(400).json({ error: "Email and PIN required" });
+        }
+
+        const user = await User.findOne({ email: email.toLowerCase() });
+        if (!user?.pinHash || !verifyPin(pin, user.pinHash)) {
+            logAuth("pin_failed", null, { level: "warn", message: `Invalid PIN attempt for ${email}`, ip: req.ip });
+            return res.status(401).json({ error: "Invalid PIN" });
+        }
+
+        const token = jwt.sign({ userId: user._id.toString() }, SECRET, { expiresIn: "365d" });
+        await user.populate("roles");
+        const needsSetup = !user.username;
+
+        const secure = isProd();
+        const sameSite = secure ? "none" : "lax";
+        res.cookie("af_session", token, {
+            httpOnly: true,
+            secure,
+            sameSite,
+            maxAge: MAX_AGE,
+            path: "/",
+        });
+        logAuth("login_success", user.username || email, { message: `User logged in with PIN: ${user.username || email}`, ip: req.ip });
+        return res.json({ ok: true, needsSetup, user: sendUserPayload(user) });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Verification failed" });
+    }
+});
+
+// POST /set-pin  — create or change the login PIN (requires current PIN when one is set)
+router.post("/set-pin", verifyToken, async (req, res) => {
+    try {
+        const { pin, currentPin } = req.body;
+        if (!isValidPin(pin)) {
+            return res.status(400).json({ error: "PIN must be 4\u20138 digits" });
+        }
+
+        const user = await User.findById(req.userId);
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        if (user.pinHash) {
+            if (!currentPin || !verifyPin(currentPin, user.pinHash)) {
+                return res.status(401).json({ error: "Current PIN is incorrect" });
+            }
+            if (currentPin === pin) {
+                return res.status(400).json({ error: "New PIN must be different" });
+            }
+        }
+
+        user.pinHash = hashPin(pin);
+        user.pinChangedAt = new Date();
+        await user.save();
+
+        logAuth("pin_set", user.username, { message: `User ${user.username} set/updated PIN`, ip: req.ip });
+        return res.json({ ok: true, hasPin: true });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed to save PIN" });
+    }
+});
+
+// POST /forgot-pin  — verify OTP for the account, then set a new PIN and log in
+router.post("/forgot-pin", async (req, res) => {
+    try {
+        const { email, code, pin } = req.body;
+        if (!email || !code) return res.status(400).json({ error: "Email and code required" });
+        if (!isValidPin(pin)) return res.status(400).json({ error: "PIN must be 4\u20138 digits" });
+
+        const otp = await OTP.findOne({
+            email:     email.toLowerCase(),
+            code,
+            used:      false,
+            expiresAt: { $gt: new Date() },
+        });
+        if (!otp) {
+            return res.status(401).json({ error: "Invalid or expired code" });
+        }
+
+        const user = await User.findOne({ email: email.toLowerCase() });
+        if (!user) {
+            return res.status(404).json({ error: "No account found with this email" });
+        }
+
+        otp.used = true;
+        await otp.save();
+
+        user.pinHash = hashPin(pin);
+        user.pinChangedAt = new Date();
+        await user.save();
+        await user.populate("roles");
+
+        const token = jwt.sign({ userId: user._id.toString() }, SECRET, { expiresIn: "365d" });
+        const secure = isProd();
+        const sameSite = secure ? "none" : "lax";
+        res.cookie("af_session", token, {
+            httpOnly: true,
+            secure,
+            sameSite,
+            maxAge: MAX_AGE,
+            path: "/",
+        });
+        logAuth("pin_reset", user.username, { message: `User ${user.username} reset PIN via OTP`, ip: req.ip });
+        return res.json({ ok: true, needsSetup: !user.username, user: sendUserPayload(user) });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed to reset PIN" });
     }
 });
 

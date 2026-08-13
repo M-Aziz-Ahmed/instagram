@@ -9,6 +9,8 @@ const userSchema = new mongoose.Schema({
     avatarUrl:   { type: String, default: "" },
     isVerified:  { type: Boolean, default: false },
     isAdmin:     { type: Boolean, default: false },
+    pinHash:     { type: String, default: null },
+    pinChangedAt: { type: Date, default: null },
     liveStreamAllowed: { type: Boolean, default: false },
     voiceChatBanned:   { type: Boolean, default: false },
     voiceChatBannedUntil: { type: Date, default: null },

@@ -5,13 +5,14 @@ const OFFLINE_URL = '/offline.html';
 // Install event - cache essential assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll([
-        '/',
-        '/offline.html',
-        '/manifest.json',
-      ]);
-    })
+    caches.open(CACHE_NAME)
+      .then((cache) => {
+        return Promise.allSettled([
+          cache.add('/'),
+          cache.add('/offline.html'),
+          cache.add('/manifest.json'),
+        ]);
+      })
   );
   self.skipWaiting();
 });
@@ -121,23 +122,22 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Clone the response before caching
+        // Clone the response before caching (ignore failures, e.g. opaque/auth responses)
         const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
+        caches.open(CACHE_NAME)
+          .then((cache) => cache.put(event.request, responseToCache))
+          .catch(() => {});
         return response;
       })
       .catch(() => {
         // If network fails, try cache
-        return caches.match(event.request).then((response) => {
-          if (response) {
-            return response;
-          }
+        return caches.match(event.request).then((cached) => {
+          if (cached) return cached;
           // If no cache and navigation request, show offline page
           if (event.request.mode === 'navigate') {
-            return caches.match(OFFLINE_URL);
+            return caches.match(OFFLINE_URL).then((offline) => offline || new Response('Offline', { status: 503, statusText: 'Offline' }));
           }
+          return new Response('Not found', { status: 404, statusText: 'Not Found' });
         });
       })
   );

@@ -19,6 +19,10 @@ export default function EditProfileModal({ onClose }) {
     const [saving, setSaving]       = useState(false);
     const [uploading, setUploading] = useState(false);
     const [error, setError]         = useState("");
+    const [pin, setPin]             = useState("");
+    const [currentPin, setCurrentPin] = useState("");
+    const [savingPin, setSavingPin] = useState(false);
+    const [pinError, setPinError]   = useState("");
     const fileRef                   = useRef(null);
 
     const handleAvatarChange = async (e) => {
@@ -74,6 +78,35 @@ export default function EditProfileModal({ onClose }) {
     };
 
     const displayColor = avatarUrl ? "#3b82f6" : color;
+
+    const handleSetPin = async (e) => {
+        e.preventDefault();
+        if (savingPin) return;
+        if (!pin.trim()) { setPinError("Enter a PIN"); return; }
+        if (pin.length < 4 || pin.length > 8 || !/^\d+$/.test(pin)) {
+            setPinError("PIN must be 4\u20138 digits");
+            return;
+        }
+        setSavingPin(true);
+        setPinError("");
+        try {
+            const res = await fetch("/api/auth/set-pin", {
+                method:  "POST",
+                headers: { "Content-Type": "application/json" },
+                body:    JSON.stringify({ pin: pin.trim(), currentPin: currentPin.trim() || undefined }),
+            });
+            const data = await res.json();
+            if (!res.ok) { setPinError(data.error); return; }
+            await reloadUser();
+            setPin("");
+            setCurrentPin("");
+            showToast("PIN saved", "success");
+        } catch {
+            setPinError("Something went wrong.");
+        } finally {
+            setSavingPin(false);
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
@@ -231,6 +264,46 @@ export default function EditProfileModal({ onClose }) {
                     </div>
 
                     {error && <p className="text-xs text-red-500">{error}</p>}
+
+                    <div className="border-t border-gray-200 dark:border-gray-800 pt-4 flex flex-col gap-3">
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Login PIN</label>
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-2">
+                                {user?.hasPin
+                                    ? "A PIN is enabled. You can log in with your PIN or an OTP code."
+                                    : "Create a 4\u20138 digit PIN so you can log in without waiting for an email code."}
+                            </p>
+                            {user?.hasPin && (
+                                <input
+                                    type="password"
+                                    value={currentPin}
+                                    onChange={(e) => { setCurrentPin(e.target.value.replace(/\D/g, "").slice(0, 8)); setPinError(""); }}
+                                    placeholder="Current PIN"
+                                    inputMode="numeric"
+                                    maxLength={8}
+                                    className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-center text-lg font-mono tracking-widest rounded-xl px-4 py-2.5 text-sm outline-none focus:border-black dark:focus:border-gray-500 transition-colors mb-2"
+                                />
+                            )}
+                            <input
+                                type="password"
+                                value={pin}
+                                onChange={(e) => { setPin(e.target.value.replace(/\D/g, "").slice(0, 8)); setPinError(""); }}
+                                placeholder={user?.hasPin ? "New PIN" : "New PIN (4\u20138 digits)"}
+                                inputMode="numeric"
+                                maxLength={8}
+                                className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-center text-lg font-mono tracking-widest rounded-xl px-4 py-2.5 text-sm outline-none focus:border-black dark:focus:border-gray-500 transition-colors"
+                            />
+                        </div>
+                        {pinError && <p className="text-xs text-red-500">{pinError}</p>}
+                        <button
+                            type="button"
+                            onClick={handleSetPin}
+                            disabled={savingPin || !pin.trim()}
+                            className="w-full bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold py-2.5 rounded-xl disabled:opacity-40 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
+                        >
+                            {savingPin ? "Saving\u2026" : user?.hasPin ? "Update PIN" : "Set PIN"}
+                        </button>
+                    </div>
 
                     <button type="submit" disabled={saving || uploading}
                         className="w-full bg-black dark:bg-gray-100 text-white dark:text-gray-900 font-bold py-2.5 rounded-xl disabled:opacity-40 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors">

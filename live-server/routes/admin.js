@@ -10,6 +10,7 @@ const { requireAdmin, requirePermission } = require("../middleware/auth");
 const { getLogs } = require("../logBuffer");
 const { VALID_PERMISSIONS } = require("../models/role");
 const { logModeration, logUser } = require("../logService");
+const { isValidPin, hashPin } = require("../utils/pin");
 
 const router = express.Router();
 
@@ -79,6 +80,44 @@ router.patch("/users", requireAdmin, async (req, res) => {
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// POST /users — admin creates a user with a login PIN ("create user with a code")
+router.post("/users", requireAdmin, async (req, res) => {
+    try {
+        const { email, username, pin } = req.body;
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ error: "Valid email required" });
+        }
+        if (!username?.trim() || !/^[a-zA-Z0-9_]{2,30}$/.test(username.trim())) {
+            return res.status(400).json({ error: "Username must be 2\u201330 characters (letters, numbers, underscores)" });
+        }
+        if (!isValidPin(pin)) {
+            return res.status(400).json({ error: "PIN must be 4\u20138 digits" });
+        }
+
+        const emailLower = email.toLowerCase();
+        const existing = await User.findOne({
+            $or: [{ email: emailLower }, { username: { $regex: `^${username.trim()}$`, $options: "i" } }],
+        }).lean();
+        if (existing) {
+            return res.status(409).json({ error: "A user with this email or username already exists" });
+        }
+
+        const user = await User.create({
+            email:      emailLower,
+            username:   username.trim(),
+            pinHash:    hashPin(pin),
+            pinChangedAt: new Date(),
+            isVerified: false,
+        });
+
+        logUser("user_created", req.userId?.toString(), { targetUser: user.username, message: `Admin created user ${user.username}`, meta: { userId: user._id.toString() } });
+        return res.status(201).json({ ok: true, user: { id: user._id.toString(), email: user.email, username: user.username } });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed to create user" });
     }
 });
 

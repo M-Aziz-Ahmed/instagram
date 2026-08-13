@@ -1034,8 +1034,42 @@ function getAllChannelsState() {
     }));
 }
 
+// Membership cache so we don't hit Mongo on every channel-list broadcast.
+const communityMembershipCache = new Map(); // username -> { ids:Set, at:timestamp }
+const COMMUNITY_MEMBERSHIP_CACHE_MS = 15000;
+
+async function getCommunityMembershipSet(username) {
+    if (!username) return new Set();
+    const cached = communityMembershipCache.get(username);
+    if (cached && Date.now() - cached.at < COMMUNITY_MEMBERSHIP_CACHE_MS) return cached.ids;
+    let ids = new Set();
+    try {
+        const communities = await Community.find({ "members.username": username }, { _id: 1 }).lean();
+        ids = new Set(communities.map((c) => c._id.toString()));
+    } catch {}
+    communityMembershipCache.set(username, { ids, at: Date.now() });
+    return ids;
+}
+
+// Only include community channels the user is a member of. Global channels are visible to all.
+async function getVisibleChannelsState(username) {
+    const all = getAllChannelsState();
+    const hasCommunityChannels = all.some((ch) => ch.communityId);
+    if (!hasCommunityChannels) return all;
+    const memberIds = await getCommunityMembershipSet(username);
+    return all.filter((ch) => !ch.communityId || memberIds.has(ch.communityId));
+}
+
 function broadcastChannelList() {
-    io.emit("voice:channels", getAllChannelsState());
+    io.sockets.sockets.forEach((sock) => {
+        getVisibleChannelsState(sock.data?.username)
+            .then((list) => {
+                if (sock.connected) sock.emit("voice:channels", list);
+            })
+            .catch(() => {
+                if (sock.connected) sock.emit("voice:channels", getAllChannelsState().filter((ch) => !ch.communityId));
+            });
+    });
 }
 
 function broadcastChannelParticipants(channelId) {
@@ -1190,7 +1224,7 @@ io.on("connection", async (socket) => {
             if (username) {
                 const communities = await Community.find({ "members.username": username }).lean();
                 for (const c of communities) {
-                    const voiceChannelsList = (c.channels || []).filter((ch) => ch.type === "voice");
+                    const voiceChannelsList = (c.voiceChannels || []);
                     for (const ch of voiceChannelsList) {
                         const memKey = `community-${c._id}-${ch.id}`;
                         if (!voiceChannels.has(memKey)) {
@@ -1208,35 +1242,40 @@ io.on("connection", async (socket) => {
         } catch (err) {
             console.error("[VOICE] Error fetching community channels:", err.message);
         }
-        socket.emit("voice:channels", getAllChannelsState());
+        socket.emit("voice:channels", await getVisibleChannelsState(socket.data?.username));
     });
 
     socket.on("voice:join", async ({ channelId, username, avatarUrl, color }) => {
         let ch = voiceChannels.get(channelId);
 
-        // Auto-create community voice channel in memory if not found
-        if (!ch && channelId.startsWith("community-")) {
-            const parts = channelId.split("-");
-            // Format: community-{communityId}-{channelId} (communityId is ObjectId, may contain hyphens)
-            // We need to find the community and channel from MongoDB
+        // Community voice channels: always verify the user is a member before joining.
+        if (channelId.startsWith("community-")) {
             try {
-                const allCommunities = await Community.find({ "members.username": username }).lean();
-                for (const c of allCommunities) {
-                    const voiceCh = (c.channels || []).find((ch) => ch.type === "voice" && `community-${c._id}-${ch.id}` === channelId);
+                const communities = await Community.find({ "members.username": username }).lean();
+                let matched = null;
+                for (const c of communities) {
+                    const voiceCh = (c.voiceChannels || []).find((vc) => `community-${c._id}-${vc.id}` === channelId);
                     if (voiceCh) {
-                        ch = {
-                            id: channelId,
-                            name: voiceCh.name,
-                            participants: new Map(),
-                            communityId: c._id.toString(),
-                            communityName: c.name,
-                        };
-                        voiceChannels.set(channelId, ch);
+                        matched = { community: c, voiceCh };
                         break;
                     }
                 }
+                if (!matched) {
+                    return socket.emit("voice:error", { message: "You are not a member of this community" });
+                }
+                if (!ch) {
+                    ch = {
+                        id: channelId,
+                        name: matched.voiceCh.name,
+                        participants: new Map(),
+                        communityId: matched.community._id.toString(),
+                        communityName: matched.community.name,
+                    };
+                    voiceChannels.set(channelId, ch);
+                }
             } catch (err) {
-                console.error("[VOICE] Error auto-creating community channel:", err.message);
+                console.error("[VOICE] Error checking community membership:", err.message);
+                return socket.emit("voice:error", { message: "Could not verify community membership" });
             }
         }
 

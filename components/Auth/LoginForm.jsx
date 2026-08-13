@@ -1,10 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 
 export default function LoginForm({ onSuccess }) {
     const { reloadUser }          = useUser();
+    const router                  = useRouter();
     const [step, setStep]         = useState("email");
     const [email, setEmail]       = useState("");
     const [otp, setOtp]           = useState(["", "", "", "", "", ""]);
@@ -16,7 +18,7 @@ export default function LoginForm({ onSuccess }) {
     const [resendCooldown, setResendCooldown] = useState(0);
     const inputRefs               = useRef([]);
 
-    const handleSendOTP = async (e) => {
+    const handleSendOTP = async (e, force = false) => {
         e?.preventDefault();
         if (!email.trim() || loading) return;
         setLoading(true);
@@ -26,11 +28,11 @@ export default function LoginForm({ onSuccess }) {
                 method:  "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
-                body:    JSON.stringify({ email: email.trim() }),
+                body:    JSON.stringify({ email: email.trim(), force }),
             });
             const data = await res.json();
             if (!res.ok) { setError(data.error); return; }
-            if (data.hasPin) {
+            if (data.hasPin && !force) {
                 setHasPin(true);
                 setStep("pin");
             } else {
@@ -203,6 +205,20 @@ export default function LoginForm({ onSuccess }) {
                         >
                             {"\u2190"} Change email
                         </button>
+                        <button
+                            type="button"
+                            onClick={() => { setPin(""); setError(""); handleSendOTP(null, true); }}
+                            className="text-sm text-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
+                        >
+                            Use a code instead
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setPin(""); setError(""); router.push("/forgot-pin"); }}
+                            className="text-sm text-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
+                        >
+                            Forgot PIN?
+                        </button>
                     </div>
                 </form>
             ) : (
@@ -245,7 +261,7 @@ export default function LoginForm({ onSuccess }) {
                             {"\u2190"} Change email
                         </button>
                         <button
-                            onClick={() => { if (!resendCooldown) { setOtp(["","","","","",""]); handleSendOTP(); } }}
+                            onClick={() => { if (!resendCooldown) { setOtp(["","","","","",""]); handleSendOTP(null, true); } }}
                             disabled={!!resendCooldown || loading}
                             className="text-sm text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-40"
                         >
