@@ -20,7 +20,7 @@ export function getSocketConfig(opts = {}) {
     if (sameOrigin) {
         return {
             url: LIVE_SERVER,
-            config: { ...base, transports: ["polling", "websocket"], upgrade: true, rememberUpgrade: false },
+            config: { ...base, path: "/sio", transports: ["polling", "websocket"], upgrade: true, rememberUpgrade: false },
         };
     }
 
