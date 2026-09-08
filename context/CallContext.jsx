@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useRef, useCallback, useEffect } f
 import { useUser } from "./UserContext";
 import { ICE_SERVERS } from "@/utils/iceServers";
 import { startIncomingRing, startOutgoingRing, stopRing, unlockCallAudio } from "@/utils/callSound";
+import { showBackgroundNotification } from "@/utils/systemNotification";
 
 const CallContext = createContext(null);
 
@@ -384,6 +385,12 @@ export function CallProvider({ children, socket }) {
                 caller: data.caller,
                 recipients: data.recipients || [],
                 status: "ringing",
+            });
+            // OS notification when the app is in the background (no VAPID needed)
+            showBackgroundNotification(`Incoming ${data.callType === "video" ? "video" : "audio"} call`, {
+                body: `${data.caller} is calling you`,
+                url: "/inbox",
+                tag: `call_${data.callId}`,
             });
             // Auto-reject after 30 seconds
             ringTimeout.current = setTimeout(() => {

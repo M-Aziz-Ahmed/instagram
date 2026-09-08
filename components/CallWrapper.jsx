@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { CallProvider } from "@/context/CallContext";
 import CallModal from "@/components/Inbox/CallModal";
 import { useUser } from "@/context/UserContext";
+import { getActiveChat } from "@/utils/activeChat";
+import { showBackgroundNotification } from "@/utils/systemNotification";
 
 function CallSocketProvider({ children }) {
     const { user } = useUser();
@@ -32,6 +34,19 @@ function CallSocketProvider({ children }) {
                 });
                 sock.on("disconnect", () => {});
                 sock.on("connect_error", () => {});
+
+                // Real-time DM notifications for background/closed-look app
+                // (delivered over the socket — no Web Push / VAPID needed).
+                sock.on("message:new", (data) => {
+                    if (!data?.from) return;
+                    if (typeof document !== "undefined" && !document.hidden) return;
+                    if (getActiveChat() === data.from) return;
+                    showBackgroundNotification(`${data.from} sent you a message`, {
+                        body: data.body || "",
+                        url: `/inbox?user=${encodeURIComponent(data.from)}`,
+                        tag: `dm_${data.from}`,
+                    });
+                });
             } catch {}
         };
 

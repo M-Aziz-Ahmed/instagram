@@ -207,6 +207,7 @@ const io = new Server(server, {
     pingTimeout: 20000,
     allowEIO3: true,
 });
+app.locals.io = io;
 
 // ── MongoDB ─────────────────────────────────────────────────────
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://azizahmed:I_hateyou2@localhost:27017/?authSource=admin";

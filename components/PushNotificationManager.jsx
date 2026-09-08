@@ -13,26 +13,54 @@ export default function PushNotificationManager() {
     const timerRef = useRef(null);
 
     useEffect(() => {
-        if (!user || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+        if (!user) return;
+        if (!("Notification" in window)) return;
 
-        const dismissedKey = `push_dismissed_${user.username}`;
-        if (localStorage.getItem(dismissedKey)) {
-            setDismissed(true);
-            return;
-        }
+        let alive = true;
+        (async () => {
+            await Promise.resolve(); // defer so the effect body has no sync setState
+            if (!alive) return;
 
-        navigator.serviceWorker.ready.then((reg) => {
-            return reg.pushManager.getSubscription();
-        }).then((existing) => {
-            if (existing) {
-                setSubscribed(true);
-                saveSubscription(existing);
+            const dismissedKey = `push_dismissed_${user.username}`;
+            if (localStorage.getItem(dismissedKey)) {
+                setDismissed(true);
                 return;
             }
-            timerRef.current = setTimeout(() => setShowBanner(true), DELAY_MS);
-        });
 
-        return () => clearTimeout(timerRef.current);
+            const enabledKey = `notifications_enabled_${user.username}`;
+            if (localStorage.getItem(enabledKey)) {
+                setSubscribed(true);
+                return;
+            }
+
+            // Already granted permission (e.g. no VAPID push, just Notification API).
+            if (Notification.permission === "granted") {
+                setSubscribed(true);
+                return;
+            }
+
+            if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+                timerRef.current = setTimeout(() => setShowBanner(true), DELAY_MS);
+                return;
+            }
+            navigator.serviceWorker.ready.then((reg) => {
+                return reg.pushManager.getSubscription();
+            }).then((existing) => {
+                if (existing) {
+                    setSubscribed(true);
+                    saveSubscription(existing);
+                    return;
+                }
+                timerRef.current = setTimeout(() => setShowBanner(true), DELAY_MS);
+            }).catch(() => {
+                timerRef.current = setTimeout(() => setShowBanner(true), DELAY_MS);
+            });
+        })();
+
+        return () => {
+            alive = false;
+            clearTimeout(timerRef.current);
+        };
     }, [user]);
 
     async function saveSubscription(subscription) {
@@ -54,16 +82,23 @@ export default function PushNotificationManager() {
             const permission = await Notification.requestPermission();
             if (permission !== "granted") return;
 
-            const reg = await navigator.serviceWorker.ready;
-            const sub = await reg.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(
-                    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-                ),
-            });
-
-            await saveSubscription(sub);
+            // Remember so the banner doesn't nag on every load even without a
+            // Web Push subscription (Notification API works regardless).
+            localStorage.setItem(`notifications_enabled_${user?.username}`, "1");
             setSubscribed(true);
+
+            // Optional: full Web Push (covers a fully-closed app). Only runs
+            // when a VAPID public key is configured — everything else still
+            // works without it.
+            const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+            if (vapidKey && "PushManager" in window && "serviceWorker" in navigator) {
+                const reg = await navigator.serviceWorker.ready;
+                const sub = await reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(vapidKey),
+                });
+                await saveSubscription(sub);
+            }
         } catch {}
     }
 

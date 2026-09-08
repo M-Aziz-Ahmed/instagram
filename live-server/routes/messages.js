@@ -131,6 +131,19 @@ router.post("/", verifyToken, async (req, res) => {
             });
         }
 
+        // Real-time socket event so an open/background tab can notify instantly
+        // (works without Web Push / VAPID).
+        try {
+            const io = req.app.locals?.io;
+            if (io) {
+                io.to(recipient.trim()).emit("message:new", {
+                    from: sender,
+                    body: preview,
+                    timeStamp: message.timeStamp || Date.now(),
+                });
+            }
+        } catch {}
+
         logChat("dm_sent", { username: sender, targetUser: recipient.trim(), message: `DM from ${sender} to ${recipient.trim()}: ${(text || "").slice(0, 100)}` });
         return res.status(201).json(message.toObject());
     } catch (error) {
