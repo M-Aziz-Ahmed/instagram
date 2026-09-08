@@ -11,6 +11,7 @@ import TopCommunities from "@/components/TopCommunities";
 import SuggestedUsers from "@/components/SuggestedUsers";
 import SearchBar from "./SearchBar";
 import NotificationBell from "@/components/Notifications/NotificationBell";
+import DownloadBanner from "@/components/Downloads/DownloadBanner";
 import { useSidebar } from "@/context/SidebarContext";
 import Link from "next/link";
 import StoryTray from "@/components/Stories/StoryTray";
@@ -113,6 +114,9 @@ export default function FeedClient() {
                     </div>
                 </div>
             </header>
+
+            {/* ── Download the AnonTweet app (desktop + mobile) ───── */}
+            <DownloadBanner />
 
             {/* ── Guest sign-in banner ───────────────────────────────── */}
             {isGuest && (

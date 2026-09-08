@@ -10,6 +10,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import OnlineStatusTracker from "@/components/OnlineStatusTracker";
 import PushNotificationManager from "@/components/PushNotificationManager";
 import FcmPushBridge from "@/components/FcmPushBridge";
+import AutoUpdater from "@/components/Updates/AutoUpdater";
 import { useEffect } from "react";
 import { installLogInterceptor } from "@/utils/logInterceptor";
 
@@ -70,6 +71,7 @@ export default function Providers({ children }) {
                                 <OnlineStatusTracker />
                                 <PushNotificationManager />
                                 <FcmPushBridge />
+                                <AutoUpdater />
                             </ErrorBoundary>
                         </ToastProvider>
                     </VoiceChatProvider>
