@@ -17,38 +17,57 @@ function applyAudioRoute(el, loudspeaker) {
     })(0);
 }
 
-function VideoGrid({ remoteStreams, localStream, videoOn, callType, loudspeaker }) {
+// WhatsApp-style video layout: the other person fills the screen and your own
+// camera is a small PiP box in the corner that doesn't block the view.
+function VideoGrid({ remoteStreams, localStream, videoOn, loudspeaker }) {
     const peers = Object.entries(remoteStreams);
-    const count = peers.length + (localStream ? 1 : 0);
+    const isOneToOne = peers.length === 1;
 
     return (
-        <div className={`grid gap-2 w-full h-full ${count <= 1 ? "grid-cols-1" : count <= 4 ? "grid-cols-2" : "grid-cols-3"}`}>
-            {localStream && (
-                <div className="relative rounded-xl overflow-hidden bg-gray-900 flex items-center justify-center">
-                    <video
-                        ref={el => { if (el) el.srcObject = localStream; }}
-                        autoPlay playsInline muted
-                        className="w-full h-full object-cover"
-                        style={{ transform: "scaleX(-1)" }}
-                    />
-                    {!videoOn && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80">
-                            <div className="w-16 h-16 rounded-full bg-gray-700 flex items-center justify-center text-white text-xl font-bold">
-                                You
-                            </div>
-                        </div>
-                    )}
-                    <span className="absolute bottom-2 left-2 text-xs text-white bg-black/50 px-2 py-0.5 rounded-full">You</span>
+        <div className="relative w-full h-full bg-black">
+            {isOneToOne ? (
+                <div className="absolute inset-0">
+                    <RemoteVideo username={peers[0][0]} stream={peers[0][1]} loudspeaker={loudspeaker} fill />
+                </div>
+            ) : (
+                <div className={`w-full h-full grid gap-1 ${peers.length <= 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+                    {peers.map(([username, stream]) => (
+                        <RemoteVideo key={username} username={username} stream={stream} loudspeaker={loudspeaker} />
+                    ))}
                 </div>
             )}
-            {peers.map(([username, stream]) => (
-                <RemoteVideo key={username} username={username} stream={stream} loudspeaker={loudspeaker} />
-            ))}
+
+            {/* Floating self-view */}
+            <div className="absolute top-3 right-3 z-10 w-24 h-36 sm:w-32 sm:h-48 rounded-xl overflow-hidden border-2 border-white/20 shadow-lg bg-gray-900">
+                <LocalVideo localStream={localStream} videoOn={videoOn} />
+            </div>
         </div>
     );
 }
 
-function RemoteVideo({ username, stream, loudspeaker }) {
+function LocalVideo({ localStream, videoOn }) {
+    return (
+        <div className="relative w-full h-full">
+            {localStream && (
+                <video
+                    ref={el => { if (el) el.srcObject = localStream; }}
+                    autoPlay playsInline muted
+                    className="w-full h-full object-cover"
+                    style={{ transform: "scaleX(-1)" }}
+                />
+            )}
+            {!videoOn && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-900/90">
+                    <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white text-sm font-bold">
+                        You
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function RemoteVideo({ username, stream, loudspeaker, fill }) {
     const ref = useRef(null);
     useEffect(() => {
         if (ref.current && stream) {
@@ -60,7 +79,7 @@ function RemoteVideo({ username, stream, loudspeaker }) {
     const hasVideo = stream?.getVideoTracks().length > 0 && stream.getVideoTracks().some(t => t.enabled);
 
     return (
-        <div className="relative rounded-xl overflow-hidden bg-gray-900 flex items-center justify-center">
+        <div className={`relative overflow-hidden bg-gray-900 flex items-center justify-center ${fill ? "w-full h-full" : "rounded-xl"}`}>
             {/* Always attach the stream so remote AUDIO plays, even when the camera is off */}
             <video ref={ref} autoPlay playsInline className="w-full h-full object-cover" />
             {!hasVideo && (
@@ -70,7 +89,7 @@ function RemoteVideo({ username, stream, loudspeaker }) {
                     </div>
                 </div>
             )}
-            <span className="absolute bottom-2 left-2 text-xs text-white bg-black/50 px-2 py-0.5 rounded-full">{username}</span>
+            {!fill && <span className="absolute bottom-2 left-2 text-xs text-white bg-black/50 px-2 py-0.5 rounded-full">{username}</span>}
         </div>
     );
 }
@@ -137,7 +156,6 @@ export default function CallModal() {
                                     remoteStreams={remoteStreams}
                                     localStream={localStream}
                                     videoOn={videoOn}
-                                    callType={callType}
                                     loudspeaker={isLoudspeaker}
                                 />
                             ) : (
