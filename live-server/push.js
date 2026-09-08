@@ -59,11 +59,13 @@ async function sendPushNotification({ recipientUsername, type, fromUser, text, u
 
 function titleFor(type, fromUser) {
     switch (type) {
-        case "voice_invite":  return `${fromUser} invited you to voice chat`;
-        case "voice_kicked":  return `You were kicked from voice chat`;
-        case "voice_banned":  return `You were banned from voice chat`;
-        case "voice_timeout": return `You were timed out in voice chat`;
-        default:              return `Notification from ${fromUser || "system"}`;
+        case "message":        return `${fromUser} sent you a message`;
+        case "call_incoming":  return `${fromUser} is calling you`;
+        case "voice_invite":   return `${fromUser} invited you to voice chat`;
+        case "voice_kicked":   return `You were kicked from voice chat`;
+        case "voice_banned":   return `You were banned from voice chat`;
+        case "voice_timeout":  return `You were timed out in voice chat`;
+        default:               return `Notification from ${fromUser || "system"}`;
     }
 }
 

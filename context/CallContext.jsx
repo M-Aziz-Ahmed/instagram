@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useRef, useCallback, useEffect } from "react";
 import { useUser } from "./UserContext";
 import { ICE_SERVERS } from "@/utils/iceServers";
+import { startIncomingRing, startOutgoingRing, stopRing, unlockCallAudio } from "@/utils/callSound";
 
 const CallContext = createContext(null);
 
@@ -30,6 +31,21 @@ export function CallProvider({ children, socket }) {
     // Keep ref in sync
     useEffect(() => { callStateRef.current = callState; }, [callState]);
     useEffect(() => { videoOnRef.current = videoOn; }, [videoOn]);
+
+    // Ring tone lifecycle: ring while "ringing" (incoming for callee, ringback
+    // for caller), stop as soon as the state leaves it.
+    useEffect(() => {
+        if (!callState || callState.status !== "ringing") {
+            stopRing();
+            return;
+        }
+        unlockCallAudio();
+        if (callState.caller === user?.username) {
+            startOutgoingRing();
+        } else {
+            startIncomingRing();
+        }
+    }, [callState, user?.username]);
 
     const getLocalStream = useCallback(async (audio = true, video = false) => {
         try {
@@ -138,6 +154,7 @@ export function CallProvider({ children, socket }) {
 
     const startCall = useCallback(async (recipient, callType = "audio", groupId = null) => {
         if (!user || !socket) return;
+        unlockCallAudio();
         const callId = `call_${user.username}_${Date.now()}`;
         const video = callType === "video";
         const stream = await getLocalStream(true, video);
@@ -184,6 +201,7 @@ export function CallProvider({ children, socket }) {
 
     const startGroupCall = useCallback(async (recipients, callType = "audio") => {
         if (!user || !socket || !recipients.length) return;
+        unlockCallAudio();
         const callId = `groupcall_${user.username}_${Date.now()}`;
         const video = callType === "video";
         const stream = await getLocalStream(true, video);
@@ -231,6 +249,7 @@ export function CallProvider({ children, socket }) {
 
     const acceptCall = useCallback(async (callId) => {
         if (!user || !socket) return;
+        unlockCallAudio();
         const cs = callStateRef.current;
         if (!cs || cs.callId !== callId) return;
         const video = cs.callType === "video";
@@ -475,6 +494,14 @@ export function CallProvider({ children, socket }) {
             cleanup();
         };
 
+        const handleCancelled = (data) => {
+            // Caller hung up while we were still ringing — stop ringing cleanly.
+            const cs = callStateRef.current;
+            if (cs && cs.callId === data.callId && cs.status === "ringing") {
+                cleanup();
+            }
+        };
+
         const handlePeerLeft = (data) => {
             setRemoteStreams(prev => {
                 const n = { ...prev };
@@ -501,6 +528,7 @@ export function CallProvider({ children, socket }) {
         socket.on("call:accepted", handleAccepted);
         socket.on("call:rejected", handleRejected);
         socket.on("call:ended", handleEnded);
+        socket.on("call:cancelled", handleCancelled);
         socket.on("call:peer-left", handlePeerLeft);
         socket.on("call:mute", handleMute);
         socket.on("call:video-toggle", handleVideoToggle);
@@ -511,6 +539,7 @@ export function CallProvider({ children, socket }) {
             socket.off("call:accepted", handleAccepted);
             socket.off("call:rejected", handleRejected);
             socket.off("call:ended", handleEnded);
+            socket.off("call:cancelled", handleCancelled);
             socket.off("call:peer-left", handlePeerLeft);
             socket.off("call:mute", handleMute);
             socket.off("call:video-toggle", handleVideoToggle);
@@ -520,6 +549,7 @@ export function CallProvider({ children, socket }) {
     // Cleanup on unmount
     useEffect(() => {
         return () => {
+            stopRing();
             cleanup();
         };
     }, [cleanup]);

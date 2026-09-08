@@ -2709,8 +2709,9 @@ io.on("connection", async (socket) => {
     });
 
     // ── Call Signaling (1:1 + Group) ──────────────────────────────
-    // Map<callId, Set<socketId>>
+    // Map<callId, Set<socketId>> + Map<callId, recipient usernames[]>
     if (!io._callRooms) io._callRooms = new Map();
+    if (!io._callRecipients) io._callRecipients = new Map();
 
     socket.on("call:initiate", async (data) => {
         // data: { callId, caller, recipients: string[], callType: "audio"|"video", groupId?: string }
@@ -2718,11 +2719,24 @@ io.on("connection", async (socket) => {
         if (!callId || !caller) return;
         // Track this call room
         io._callRooms.set(callId, new Set([socket.id]));
+        io._callRecipients.set(callId, recipients || []);
         // Join the socket into the call room
         socket.join(`call:${callId}`);
         // Notify each recipient
         recipients.forEach(r => {
             io.to(r).emit("call:incoming", { callId, caller, callType, groupId, recipients });
+        });
+        // Push notification for recipients who aren't connected (app closed)
+        (recipients || []).forEach(r => {
+            const online = io.sockets.adapter.rooms.get(r)?.size > 0;
+            if (online) return;
+            sendPushNotification({
+                recipientUsername: r,
+                type: "call_incoming",
+                fromUser: caller,
+                text: `${callType === "video" ? "Video" : "Audio"} call from ${caller}`,
+                url: "/inbox",
+            });
         });
         // Persist call session
         try {
@@ -2757,6 +2771,10 @@ io.on("connection", async (socket) => {
         if (!callId) return;
         io.to(`call:${callId}`).emit("call:ended", { callId, username: socket.data.username });
         io._callRooms?.delete(callId);
+        // Stop ringing on any recipient still in "ringing" state
+        const recips = io._callRecipients?.get(callId) || [];
+        recips.forEach(r => io.to(r).emit("call:cancelled", { callId }));
+        io._callRecipients?.delete(callId);
         try {
             const CallSession = require("../models/callSession").default || require("../models/callSession");
             CallSession.updateOne({ callId }, { status: "ended", endedAt: new Date() }).catch(() => {});
@@ -2960,6 +2978,10 @@ io.on("connection", async (socket) => {
                     io.to(`call:${callId}`).emit("call:peer-left", { callId, username: socket.data.username });
                     if (sockets.size === 0) {
                         io._callRooms.delete(callId);
+                        // Tell still-ringing recipients the call is gone
+                        const recips = io._callRecipients?.get(callId) || [];
+                        recips.forEach(r => io.to(r).emit("call:cancelled", { callId }));
+                        io._callRecipients?.delete(callId);
                         try { const CallSession = require("./models/callSession"); CallSession.updateOne({ callId }, { status: "ended", endedAt: new Date() }).catch(() => {}); } catch (e) {}
                     }
                 }

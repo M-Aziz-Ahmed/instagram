@@ -197,6 +197,17 @@ export default function CallModal() {
                                 </svg>
                             </button>
                         </>
+                    ) : status === "ringing" ? (
+                        // We're the caller still ringing — allow cancelling the call.
+                        <button
+                            onClick={endCall}
+                            className="w-14 h-14 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white transition-colors"
+                            aria-label="Cancel call"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 3.75 18 6m0 0 2.25 2.25M18 6l2.25-2.25M18 6l-2.25 2.25m1.5 13.5c-8.284 0-15-6.716-15-15V4.5A2.25 2.25 0 0 1 4.5 2.25H6.75A2.25 2.25 0 0 1 9 4.5v2.25c0 .28.224.5.5.5H12a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5H9.75" />
+                            </svg>
+                        </button>
                     ) : status === "active" || status === "connecting" ? (
                         <>
                             {isAudioOnly && (

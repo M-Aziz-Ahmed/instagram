@@ -4,6 +4,7 @@ const Notification = require("../models/notification");
 const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
 const { logChat } = require("../logService");
+const { sendPushNotification } = require("../push");
 
 const router = express.Router();
 
@@ -118,6 +119,17 @@ router.post("/", verifyToken, async (req, res) => {
             postId: message._id.toString(),
             text: preview,
         }).catch(() => {});
+
+        // OS push so the recipient gets notified even when the app is closed
+        if (recipient.trim() !== sender) {
+            sendPushNotification({
+                recipientUsername: recipient.trim(),
+                type: "message",
+                fromUser: sender,
+                text: preview,
+                url: `/inbox?user=${encodeURIComponent(sender)}`,
+            });
+        }
 
         logChat("dm_sent", { username: sender, targetUser: recipient.trim(), message: `DM from ${sender} to ${recipient.trim()}: ${(text || "").slice(0, 100)}` });
         return res.status(201).json(message.toObject());
