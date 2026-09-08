@@ -9,6 +9,7 @@ import CallWrapper from "@/components/CallWrapper";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import OnlineStatusTracker from "@/components/OnlineStatusTracker";
 import PushNotificationManager from "@/components/PushNotificationManager";
+import FcmPushBridge from "@/components/FcmPushBridge";
 import { useEffect } from "react";
 import { installLogInterceptor } from "@/utils/logInterceptor";
 
@@ -68,6 +69,7 @@ export default function Providers({ children }) {
                                 </CallWrapper>
                                 <OnlineStatusTracker />
                                 <PushNotificationManager />
+                                <FcmPushBridge />
                             </ErrorBoundary>
                         </ToastProvider>
                     </VoiceChatProvider>

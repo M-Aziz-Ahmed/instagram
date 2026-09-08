@@ -46,3 +46,23 @@ next-env.d.ts
 
 # duckdns logs
 live-server/duckdns.log
+
+# service account / secrets — never commit these
+live-server/*firebase-adminsdk*.json
+live-server/*service-account*.json
+**/*.service-account.json
+# Firebase Android/iOS configs contain API keys & project data
+mobile/google-services.json
+mobile/GoogleService-Info.plist
+mobile/android/app/google-services.json
+mobile/ios/App/App/GoogleService-Info.plist
+
+# desktop (Tauri) scaffold
+desktop/node_modules
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+
+# mobile (Capacitor) scaffold
+mobile/node_modules
+mobile/android
+mobile/ios

@@ -13,6 +13,7 @@ import { useSidebar } from "@/context/SidebarContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Compose from "@/components/Feed/Compose";
+import NotificationSettings from "@/components/Notifications/NotificationSettings";
 
 function colorFromUsername(name = "") {
     const palette = ["#f97316","#ec4899","#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444","#3b82f6"];
@@ -452,6 +453,8 @@ export default function ProfileClient({ username }) {
                                 </div>
                             </div>
                         </div>
+
+                        {isOwn && <NotificationSettings />}
 
                         {/* Posts grid + list */}
                         {isPrivateProfile ? (
