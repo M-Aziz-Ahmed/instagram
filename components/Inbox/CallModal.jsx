@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useCall } from "@/context/CallContext";
+import { useUser } from "@/context/UserContext";
 
 function VideoGrid({ remoteStreams, localStream, videoOn, callType }) {
     const peers = Object.entries(remoteStreams);
@@ -46,11 +47,13 @@ function RemoteVideo({ username, stream }) {
 
     return (
         <div className="relative rounded-xl overflow-hidden bg-gray-900 flex items-center justify-center">
-            {hasVideo ? (
-                <video ref={ref} autoPlay playsInline className="w-full h-full object-cover" />
-            ) : (
-                <div className="w-16 h-16 rounded-full bg-gray-700 flex items-center justify-center text-white text-xl font-bold">
-                    {username[0]?.toUpperCase()}
+            {/* Always attach the stream so remote AUDIO plays, even when the camera is off */}
+            <video ref={ref} autoPlay playsInline className="w-full h-full object-cover" />
+            {!hasVideo && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-900/90">
+                    <div className="w-16 h-16 rounded-full bg-gray-700 flex items-center justify-center text-white text-xl font-bold">
+                        {username[0]?.toUpperCase()}
+                    </div>
                 </div>
             )}
             <span className="absolute bottom-2 left-2 text-xs text-white bg-black/50 px-2 py-0.5 rounded-full">{username}</span>
@@ -58,16 +61,30 @@ function RemoteVideo({ username, stream }) {
     );
 }
 
+// Plays remote audio for audio-only calls (no visible video element needed).
+function RemoteAudio({ stream }) {
+    const ref = useRef(null);
+    useEffect(() => {
+        if (ref.current && stream) {
+            ref.current.srcObject = stream;
+        }
+    }, [stream]);
+    return <audio ref={ref} autoPlay playsInline />;
+}
+
 export default function CallModal() {
     const {
         callState, localStream, remoteStreams, isMuted, isDeafened, videoOn,
         acceptCall, rejectCall, endCall, toggleMute, toggleDeafen, toggleVideo,
     } = useCall();
+    const { user } = useUser();
 
     if (!callState) return null;
 
     const { status, caller, callType, callId, type, recipients } = callState;
-    const isIncoming = status === "ringing" && caller !== null;
+    // Incoming = we're the callee. "caller !== null" is true for OUR OWN outgoing
+    // calls too (caller is our username), so compare against the current user.
+    const isIncoming = status === "ringing" && caller !== user?.username;
     const isAudioOnly = callType === "audio";
     const peerNames = type === "1:1" ? recipients.join(", ") : recipients.join(", ");
     const displayName = caller || "Unknown";
@@ -98,6 +115,10 @@ export default function CallModal() {
                         <div className="w-full h-full">
                             {isAudioOnly ? (
                                 <div className="flex flex-col items-center justify-center h-full">
+                                    {/* Remote audio output */}
+                                    {Object.entries(remoteStreams).map(([username, stream]) => (
+                                        <RemoteAudio key={username} stream={stream} />
+                                    ))}
                                     <div className="w-20 h-20 rounded-full bg-gray-800 flex items-center justify-center text-white text-2xl font-bold mb-4">
                                         {type === "1:1" ? (recipients[0]?.[0]?.toUpperCase() || "?") : `${Object.keys(remoteStreams).length + 1}`}
                                     </div>

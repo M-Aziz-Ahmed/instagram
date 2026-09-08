@@ -14,6 +14,17 @@ export default function LayoutWrapper({ children }) {
     const { voiceOpen, closeVoiceChat } = useVoiceChat();
     const [unreadCount, setUnreadCount] = useState(0);
 
+    // Only mount ONE VoiceChat instance (desktop drawer OR mobile bottom sheet).
+    // Previously both were mounted simultaneously on mobile, so the hidden
+    // desktop panel listened on the same socket and produced duplicate joins.
+    const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 1024);
+    useEffect(() => {
+        const mq = window.matchMedia("(max-width: 1023.98px)");
+        const handler = (e) => setIsMobile(e.matches);
+        mq.addEventListener?.("change", handler);
+        return () => mq.removeEventListener?.("change", handler);
+    }, []);
+
     useEffect(() => {
         if (!user) return;
         const ping = () => {
@@ -58,17 +69,17 @@ export default function LayoutWrapper({ children }) {
 
             {/* Voice Chat Panel - right sidebar on desktop, bottom sheet on mobile */}
             {/* Desktop: slides from right */}
-            <div className={`hidden lg:block fixed top-0 right-0 h-full w-80 z-50 transition-transform duration-300 ease-in-out ${
-                voiceOpen ? "translate-x-0" : "translate-x-full"
-            }`}>
-                <div className="h-full w-80 bg-white dark:bg-gray-950 border-l border-gray-200 dark:border-gray-800 shadow-xl overflow-y-auto">
-                    <VoiceChat isOpen={voiceOpen} onClose={closeVoiceChat} />
+            {!isMobile && voiceOpen && (
+                <div className="fixed top-0 right-0 h-full w-80 z-50">
+                    <div className="h-full w-80 bg-white dark:bg-gray-950 border-l border-gray-200 dark:border-gray-800 shadow-xl overflow-y-auto">
+                        <VoiceChat isOpen={voiceOpen} onClose={closeVoiceChat} />
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Mobile: bottom sheet */}
-            {voiceOpen && (
-                <div className="lg:hidden fixed inset-0 z-50">
+            {isMobile && voiceOpen && (
+                <div className="fixed inset-0 z-50">
                     <div className="absolute inset-0 bg-black/50" onClick={closeVoiceChat} />
                     <div className="absolute bottom-0 left-0 right-0 h-[75vh] bg-gray-950 rounded-t-2xl shadow-2xl overflow-hidden flex flex-col animate-slide-up">
                         {/* Drag handle */}

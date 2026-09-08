@@ -20,6 +20,10 @@ export function CallProvider({ children, socket }) {
     const localStreamRef = useRef(null);
     const callStateRef = useRef(null);
     const ringTimeout = useRef(null);
+    // Buffered incoming offer until the callee accepts the call
+    const pendingOfferRef = useRef(null); // { callId, from, sdp }
+    // Buffered ICE candidates for a peer connection that doesn't exist yet
+    const candidateBufferRef = useRef({}); // { from: [candidate] }
 
     // Keep ref in sync
     useEffect(() => { callStateRef.current = callState; }, [callState]);
@@ -43,6 +47,22 @@ export function CallProvider({ children, socket }) {
         }
         setLocalStream(null);
     }, []);
+
+    const cleanup = useCallback(() => {
+        Object.values(peerConnections.current).forEach(pc => {
+            try { pc.close(); } catch {}
+        });
+        peerConnections.current = {};
+        stopLocalStream();
+        setRemoteStreams({});
+        setCallState(null);
+        setIsMuted(false);
+        setIsDeafened(false);
+        setVideoOn(false);
+        if (ringTimeout.current) clearTimeout(ringTimeout.current);
+        pendingOfferRef.current = null;
+        candidateBufferRef.current = {};
+    }, [stopLocalStream]);
 
     const createPeerConnection = useCallback((peerUsername, stream, isInitiator) => {
         const pc = new RTCPeerConnection(ICE_SERVERS);
@@ -75,7 +95,14 @@ export function CallProvider({ children, socket }) {
         };
 
         pc.onconnectionstatechange = () => {
-            if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
+            if (pc.connectionState === "connected") {
+                // Transition the UI out of "Connecting..." as soon as media can flow.
+                setCallState(prev => prev ? { ...prev, status: "active" } : prev);
+                // Drain any candidates that arrived before this PC was answerable.
+                const buffered = candidateBufferRef.current[peerUsername] || [];
+                candidateBufferRef.current[peerUsername] = [];
+                buffered.forEach(cand => pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {}));
+            } else if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
                 setRemoteStreams(prev => {
                     const n = { ...prev };
                     delete n[peerUsername];
@@ -122,6 +149,14 @@ export function CallProvider({ children, socket }) {
         };
         setCallState(cs);
 
+        // Give up ringing if the callee never answers (e.g. offline).
+        ringTimeout.current = setTimeout(() => {
+            const cur = callStateRef.current;
+            if (cur && cur.caller === user.username && cur.status === "ringing") {
+                cleanup();
+            }
+        }, 45000);
+
         // Create peer connection and initiate offer
         const pc = createPeerConnection(recipient, stream, true);
         const offer = await pc.createOffer();
@@ -141,7 +176,7 @@ export function CallProvider({ children, socket }) {
             to: recipient,
             signal: { type: "offer", sdp: pc.localDescription },
         });
-    }, [user, socket, getLocalStream, createPeerConnection]);
+    }, [user, socket, getLocalStream, createPeerConnection, cleanup]);
 
     const startGroupCall = useCallback(async (recipients, callType = "audio") => {
         if (!user || !socket || !recipients.length) return;
@@ -159,6 +194,14 @@ export function CallProvider({ children, socket }) {
             status: "ringing",
         };
         setCallState(cs);
+
+        // Manage ringing timeout for the whole group call
+        ringTimeout.current = setTimeout(() => {
+            const cur = callStateRef.current;
+            if (cur && cur.caller === user.username && cur.status === "ringing") {
+                cleanup();
+            }
+        }, 45000);
 
         // Notify all recipients
         socket.emit("call:initiate", {
@@ -180,12 +223,12 @@ export function CallProvider({ children, socket }) {
                 signal: { type: "offer", sdp: pc.localDescription },
             });
         }
-    }, [user, socket, getLocalStream, createPeerConnection]);
+    }, [user, socket, getLocalStream, createPeerConnection, cleanup]);
 
     const acceptCall = useCallback(async (callId) => {
         if (!user || !socket) return;
         const cs = callStateRef.current;
-        if (!cs) return;
+        if (!cs || cs.callId !== callId) return;
         const video = cs.callType === "video";
         const stream = await getLocalStream(true, video);
         if (!stream) return;
@@ -194,23 +237,39 @@ export function CallProvider({ children, socket }) {
 
         socket.emit("call:accept", { callId, username: user.username });
 
-        // For group calls, the caller's offer will come via signal events
-        // For 1:1, the offer should already be queued
-    }, [user, socket, getLocalStream]);
+        // The caller's offer (and its ICE candidates) may have arrived while we
+        // were still ringing. Establish the peer connection only now that the
+        // user actually accepted.
+        const pending = pendingOfferRef.current;
+        if (pending && pending.callId === callId) {
+            pendingOfferRef.current = null;
+            const { from, sdp } = pending;
+            const local = localStreamRef.current || stream;
+            let pc = peerConnections.current[from];
+            if (pc && (pc.signalingState === "closed" || pc.connectionState === "failed")) {
+                try { pc.close(); } catch {}
+                pc = null;
+            }
+            if (!pc) pc = createPeerConnection(from, local, false);
 
-    const cleanup = useCallback(() => {
-        Object.values(peerConnections.current).forEach(pc => {
-            try { pc.close(); } catch {}
-        });
-        peerConnections.current = {};
-        stopLocalStream();
-        setRemoteStreams({});
-        setCallState(null);
-        setIsMuted(false);
-        setIsDeafened(false);
-        setVideoOn(false);
-        if (ringTimeout.current) clearTimeout(ringTimeout.current);
-    }, [stopLocalStream]);
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                socket.emit("call:signal", {
+                    callId,
+                    to: from,
+                    signal: { type: "answer", sdp: pc.localDescription },
+                });
+
+                const buffered = candidateBufferRef.current[from] || [];
+                candidateBufferRef.current[from] = [];
+                for (const cand of buffered) {
+                    try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch {}
+                }
+            } catch {}
+        }
+    }, [user, socket, getLocalStream, createPeerConnection]);
 
     const rejectCall = useCallback(() => {
         const cs = callStateRef.current;
@@ -310,8 +369,19 @@ export function CallProvider({ children, socket }) {
             const cs = callStateRef.current;
 
             if (signal.type === "offer") {
-                // We're receiving an offer (we're the callee) or renegotiation
-                const stream = localStreamRef.current || await getLocalStream(true, callStateRef.current?.callType === "video");
+                const isCurrent = cs && cs.callId === callId;
+                if (!isCurrent) return; // offer for another/unknown call — ignore
+                const accepted = cs.status === "connecting" || cs.status === "active";
+
+                if (!accepted && cs.caller !== user?.username) {
+                    // We're the callee and haven't accepted yet — hold the offer
+                    // until Accept is pressed (acceptCall picks it up).
+                    pendingOfferRef.current = { callId, from, sdp: signal.sdp };
+                    return;
+                }
+
+                // We're already accepted (or the caller handling a renegotiation).
+                const stream = localStreamRef.current || await getLocalStream(true, cs.callType === "video");
                 if (!stream) return;
 
                 let pc = peerConnections.current[from];
@@ -326,15 +396,23 @@ export function CallProvider({ children, socket }) {
                     pc = createPeerConnection(from, stream, false);
                 }
 
-                await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
+                try {
+                    await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
 
-                socket.emit("call:signal", {
-                    callId,
-                    to: from,
-                    signal: { type: "answer", sdp: pc.localDescription },
-                });
+                    socket.emit("call:signal", {
+                        callId,
+                        to: from,
+                        signal: { type: "answer", sdp: pc.localDescription },
+                    });
+
+                    const buffered = candidateBufferRef.current[from] || [];
+                    candidateBufferRef.current[from] = [];
+                    for (const cand of buffered) {
+                        try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch {}
+                    }
+                } catch {}
 
                 setCallState(prev => prev ? { ...prev, status: "connecting" } : null);
             } else if (signal.type === "answer") {
@@ -347,7 +425,11 @@ export function CallProvider({ children, socket }) {
             } else if (signal.type === "candidate") {
                 const pc = peerConnections.current[from];
                 if (pc && signal.candidate && pc.signalingState !== "closed") {
-                    await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+                    await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch(() => {});
+                } else if (signal.candidate && from) {
+                    // No PC yet (we haven't accepted) — buffer until accept creates it.
+                    if (!candidateBufferRef.current[from]) candidateBufferRef.current[from] = [];
+                    candidateBufferRef.current[from].push(signal.candidate);
                 }
             }
         };
