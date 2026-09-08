@@ -4,7 +4,20 @@ import { useEffect, useRef } from "react";
 import { useCall } from "@/context/CallContext";
 import { useUser } from "@/context/UserContext";
 
-function VideoGrid({ remoteStreams, localStream, videoOn, callType }) {
+// Route the remote stream to the earpiece (default) or the loudspeaker.
+// Chrome Android exposes "telephony"/"communications" (earpiece) and
+// "speaker"/"default" (loud) as output sink ids. Throw onto desktop — the
+// catch falls back through the list and silently no-ops where unsupported.
+function applyAudioRoute(el, loudspeaker) {
+    if (!el || typeof el.setSinkId !== "function") return;
+    const sinks = loudspeaker ? ["speaker", "default"] : ["telephony", "communications"];
+    (function trySink(i) {
+        if (i >= sinks.length) return;
+        el.setSinkId(sinks[i]).catch(() => trySink(i + 1));
+    })(0);
+}
+
+function VideoGrid({ remoteStreams, localStream, videoOn, callType, loudspeaker }) {
     const peers = Object.entries(remoteStreams);
     const count = peers.length + (localStream ? 1 : 0);
 
@@ -29,19 +42,20 @@ function VideoGrid({ remoteStreams, localStream, videoOn, callType }) {
                 </div>
             )}
             {peers.map(([username, stream]) => (
-                <RemoteVideo key={username} username={username} stream={stream} />
+                <RemoteVideo key={username} username={username} stream={stream} loudspeaker={loudspeaker} />
             ))}
         </div>
     );
 }
 
-function RemoteVideo({ username, stream }) {
+function RemoteVideo({ username, stream, loudspeaker }) {
     const ref = useRef(null);
     useEffect(() => {
         if (ref.current && stream) {
             ref.current.srcObject = stream;
         }
-    }, [stream]);
+        applyAudioRoute(ref.current, loudspeaker);
+    }, [stream, loudspeaker]);
 
     const hasVideo = stream?.getVideoTracks().length > 0 && stream.getVideoTracks().some(t => t.enabled);
 
@@ -62,20 +76,21 @@ function RemoteVideo({ username, stream }) {
 }
 
 // Plays remote audio for audio-only calls (no visible video element needed).
-function RemoteAudio({ stream }) {
+function RemoteAudio({ stream, loudspeaker }) {
     const ref = useRef(null);
     useEffect(() => {
         if (ref.current && stream) {
             ref.current.srcObject = stream;
         }
-    }, [stream]);
+        applyAudioRoute(ref.current, loudspeaker);
+    }, [stream, loudspeaker]);
     return <audio ref={ref} autoPlay playsInline />;
 }
 
 export default function CallModal() {
     const {
-        callState, localStream, remoteStreams, isMuted, isDeafened, videoOn,
-        acceptCall, rejectCall, endCall, toggleMute, toggleDeafen, toggleVideo,
+        callState, localStream, remoteStreams, isMuted, isDeafened, videoOn, isLoudspeaker,
+        acceptCall, rejectCall, endCall, toggleMute, toggleDeafen, toggleVideo, toggleLoudspeaker,
     } = useCall();
     const { user } = useUser();
 
@@ -86,6 +101,10 @@ export default function CallModal() {
     // calls too (caller is our username), so compare against the current user.
     const isIncoming = status === "ringing" && caller !== user?.username;
     const isAudioOnly = callType === "audio";
+    const hasVideoTrack = Object.values(remoteStreams).some(s => s?.getVideoTracks?.().some(t => t.enabled));
+    // Show the video grid once video is enabled (or the call is a video call),
+    // even if the call started as audio-only.
+    const showVideo = !isAudioOnly || videoOn || hasVideoTrack;
     const peerNames = type === "1:1" ? recipients.join(", ") : recipients.join(", ");
     const displayName = caller || "Unknown";
 
@@ -113,24 +132,25 @@ export default function CallModal() {
 
                     {status === "active" && (
                         <div className="w-full h-full">
-                            {isAudioOnly ? (
+                            {showVideo ? (
+                                <VideoGrid
+                                    remoteStreams={remoteStreams}
+                                    localStream={localStream}
+                                    videoOn={videoOn}
+                                    callType={callType}
+                                    loudspeaker={isLoudspeaker}
+                                />
+                            ) : (
                                 <div className="flex flex-col items-center justify-center h-full">
                                     {/* Remote audio output */}
                                     {Object.entries(remoteStreams).map(([username, stream]) => (
-                                        <RemoteAudio key={username} stream={stream} />
+                                        <RemoteAudio key={username} stream={stream} loudspeaker={isLoudspeaker} />
                                     ))}
                                     <div className="w-20 h-20 rounded-full bg-gray-800 flex items-center justify-center text-white text-2xl font-bold mb-4">
                                         {type === "1:1" ? (recipients[0]?.[0]?.toUpperCase() || "?") : `${Object.keys(remoteStreams).length + 1}`}
                                     </div>
                                     <p className="text-white font-medium">{type === "1:1" ? recipients[0] : `${Object.keys(remoteStreams).length + 1} participants`}</p>
                                 </div>
-                            ) : (
-                                <VideoGrid
-                                    remoteStreams={remoteStreams}
-                                    localStream={localStream}
-                                    videoOn={videoOn}
-                                    callType={callType}
-                                />
                             )}
                         </div>
                     )}
@@ -204,6 +224,19 @@ export default function CallModal() {
                                 ) : (
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                                    </svg>
+                                )}
+                            </button>
+                            <button onClick={toggleLoudspeaker}
+                                className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isLoudspeaker ? "bg-blue-500 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}
+                                aria-label="Toggle loudspeaker">
+                                {isLoudspeaker ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                                    </svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
                                     </svg>
                                 )}
                             </button>

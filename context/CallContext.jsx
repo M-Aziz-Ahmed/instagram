@@ -15,6 +15,8 @@ export function CallProvider({ children, socket }) {
     const [isMuted, setIsMuted] = useState(false);
     const [isDeafened, setIsDeafened] = useState(false);
     const [videoOn, setVideoOn] = useState(false);
+    const videoOnRef = useRef(false);
+    const [isLoudspeaker, setIsLoudspeaker] = useState(false);
 
     const peerConnections = useRef({}); // { username: RTCPeerConnection }
     const localStreamRef = useRef(null);
@@ -27,6 +29,7 @@ export function CallProvider({ children, socket }) {
 
     // Keep ref in sync
     useEffect(() => { callStateRef.current = callState; }, [callState]);
+    useEffect(() => { videoOnRef.current = videoOn; }, [videoOn]);
 
     const getLocalStream = useCallback(async (audio = true, video = false) => {
         try {
@@ -59,6 +62,7 @@ export function CallProvider({ children, socket }) {
         setIsMuted(false);
         setIsDeafened(false);
         setVideoOn(false);
+        setIsLoudspeaker(false);
         if (ringTimeout.current) clearTimeout(ringTimeout.current);
         pendingOfferRef.current = null;
         candidateBufferRef.current = {};
@@ -315,31 +319,37 @@ export function CallProvider({ children, socket }) {
         });
     }, [socket]);
 
+    const toggleLoudspeaker = useCallback(() => {
+        setIsLoudspeaker(prev => !prev);
+    }, []);
+
     const toggleVideo = useCallback(async () => {
-        setVideoOn(prev => {
-            const next = !prev;
-            if (localStreamRef.current) {
-                const videoTrack = localStreamRef.current.getVideoTracks()[0];
-                if (videoTrack) {
-                    videoTrack.enabled = next;
-                } else if (next) {
-                    // Need to add video track
-                    navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
-                        const videoTrack = stream.getVideoTracks()[0];
-                        if (videoTrack) {
-                            localStreamRef.current.addTrack(videoTrack);
-                            Object.values(peerConnections.current).forEach(pc => {
-                                pc.addTrack(videoTrack, localStreamRef.current);
-                            });
-                        }
-                    });
-                }
+        const next = !videoOnRef.current;
+        videoOnRef.current = next;
+        setVideoOn(next);
+
+        if (localStreamRef.current) {
+            const videoTrack = localStreamRef.current.getVideoTracks()[0];
+            if (videoTrack) {
+                videoTrack.enabled = next;
+            } else if (next) {
+                // Need to add video track
+                try {
+                    const cam = await navigator.mediaDevices.getUserMedia({ video: true });
+                    const track = cam.getVideoTracks()[0];
+                    if (track) {
+                        localStreamRef.current.addTrack(track);
+                        Object.values(peerConnections.current).forEach(pc => {
+                            pc.addTrack(track, localStreamRef.current);
+                        });
+                    }
+                } catch {}
             }
-            if (socket && callStateRef.current) {
-                socket.emit("call:video-toggle", { callId: callStateRef.current.callId, videoOn: next });
-            }
-            return next;
-        });
+        }
+
+        if (socket && callStateRef.current) {
+            socket.emit("call:video-toggle", { callId: callStateRef.current.callId, videoOn: next });
+        }
     }, [socket]);
 
     // Socket event listeners
@@ -414,13 +424,15 @@ export function CallProvider({ children, socket }) {
                     }
                 } catch {}
 
-                setCallState(prev => prev ? { ...prev, status: "connecting" } : null);
+                // Only transition into "connecting" during initial call setup;
+                // a renegotiation (video toggle) must not regress an active call.
+                setCallState(prev => prev && prev.status === "ringing" ? { ...prev, status: "connecting" } : prev);
             } else if (signal.type === "answer") {
                 // We received an answer to our offer
                 const pc = peerConnections.current[from];
                 if (pc && pc.signalingState === "have-local-offer") {
                     await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-                    setCallState(prev => prev ? { ...prev, status: "connecting" } : null);
+                    setCallState(prev => prev && prev.status === "ringing" ? { ...prev, status: "connecting" } : prev);
                 }
             } else if (signal.type === "candidate") {
                 const pc = peerConnections.current[from];
@@ -513,9 +525,9 @@ export function CallProvider({ children, socket }) {
     }, [cleanup]);
 
     const value = {
-        callState, localStream, remoteStreams, isMuted, isDeafened, videoOn,
+        callState, localStream, remoteStreams, isMuted, isDeafened, videoOn, isLoudspeaker,
         startCall, startGroupCall, acceptCall, rejectCall, endCall,
-        toggleMute, toggleDeafen, toggleVideo, cleanup,
+        toggleMute, toggleDeafen, toggleVideo, toggleLoudspeaker, cleanup,
     };
 
     return <CallContext.Provider value={value}>{children}</CallContext.Provider>;
