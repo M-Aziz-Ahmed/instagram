@@ -4,6 +4,53 @@ import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 
 const DELAY_MS = 3000;
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+
+// Create or refresh the Web Push subscription for the *closed* app case.
+// Requires a VAPID public key baked into the client build + granted
+// permission. Falls back silently when VAPID is absent — background-tab
+// notifications still work via the Notification API + socket.
+async function ensurePushSubscription() {
+    if (!VAPID_PUBLIC_KEY || !("PushManager" in window) || !("serviceWorker" in navigator)) {
+        return false;
+    }
+    if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
+        return false;
+    }
+    try {
+        const reg = await navigator.serviceWorker.ready;
+        const existing = await reg.pushManager.getSubscription();
+        if (existing) {
+            saveSubscription(existing);
+            return true;
+        }
+        const sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+        saveSubscription(sub);
+        return true;
+    } catch (err) {
+        console.warn(
+            "[push] subscribe failed — verify the built NEXT_PUBLIC_VAPID_PUBLIC_KEY matches the live-server VAPID_PUBLIC_KEY:",
+            err?.name || err
+        );
+        return false;
+    }
+}
+
+async function saveSubscription(subscription) {
+    try {
+        await fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                subscription: subscription.toJSON(),
+                userAgent: navigator.userAgent,
+            }),
+        });
+    } catch {}
+}
 
 export default function PushNotificationManager() {
     const { user } = useUser();
@@ -11,6 +58,17 @@ export default function PushNotificationManager() {
     const [subscribed, setSubscribed] = useState(false);
     const [dismissed, setDismissed] = useState(false);
     const timerRef = useRef(null);
+    const ensuringRef = useRef(false);
+
+    async function handleEnsureSubscription() {
+        if (ensuringRef.current) return false;
+        ensuringRef.current = true;
+        try {
+            return await ensurePushSubscription();
+        } finally {
+            ensuringRef.current = false;
+        }
+    }
 
     useEffect(() => {
         if (!user) return;
@@ -30,31 +88,19 @@ export default function PushNotificationManager() {
             const enabledKey = `notifications_enabled_${user.username}`;
             if (localStorage.getItem(enabledKey)) {
                 setSubscribed(true);
-                return;
             }
 
-            // Already granted permission (e.g. no VAPID push, just Notification API).
             if (Notification.permission === "granted") {
                 setSubscribed(true);
-                return;
+            } else if (Notification.permission !== "denied") {
+                timerRef.current = setTimeout(() => setShowBanner(true), DELAY_MS);
             }
 
-            if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-                timerRef.current = setTimeout(() => setShowBanner(true), DELAY_MS);
-                return;
-            }
-            navigator.serviceWorker.ready.then((reg) => {
-                return reg.pushManager.getSubscription();
-            }).then((existing) => {
-                if (existing) {
-                    setSubscribed(true);
-                    saveSubscription(existing);
-                    return;
-                }
-                timerRef.current = setTimeout(() => setShowBanner(true), DELAY_MS);
-            }).catch(() => {
-                timerRef.current = setTimeout(() => setShowBanner(true), DELAY_MS);
-            });
+            // Attempt Web Push subscription independently of the banner —
+            // permission may have been granted before VAPID existed, so no
+            // subscription was ever created and closed-app pushes never fired.
+            const subscribedNow = await handleEnsureSubscription();
+            if (subscribedNow) setSubscribed(true);
         })();
 
         return () => {
@@ -63,42 +109,15 @@ export default function PushNotificationManager() {
         };
     }, [user]);
 
-    async function saveSubscription(subscription) {
-        try {
-            await fetch("/api/push/subscribe", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    subscription: subscription.toJSON(),
-                    userAgent: navigator.userAgent,
-                }),
-            });
-        } catch {}
-    }
-
     async function handleAllow() {
         setShowBanner(false);
         try {
             const permission = await Notification.requestPermission();
             if (permission !== "granted") return;
 
-            // Remember so the banner doesn't nag on every load even without a
-            // Web Push subscription (Notification API works regardless).
             localStorage.setItem(`notifications_enabled_${user?.username}`, "1");
             setSubscribed(true);
-
-            // Optional: full Web Push (covers a fully-closed app). Only runs
-            // when a VAPID public key is configured — everything else still
-            // works without it.
-            const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-            if (vapidKey && "PushManager" in window && "serviceWorker" in navigator) {
-                const reg = await navigator.serviceWorker.ready;
-                const sub = await reg.pushManager.subscribe({
-                    userVisibleOnly: true,
-                    applicationServerKey: urlBase64ToUint8Array(vapidKey),
-                });
-                await saveSubscription(sub);
-            }
+            await handleEnsureSubscription();
         } catch {}
     }
 

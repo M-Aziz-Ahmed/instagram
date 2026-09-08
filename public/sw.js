@@ -64,6 +64,7 @@ self.addEventListener('push', (event) => {
       icon:  data.icon  || '/icon-192.svg',
       badge: data.badge || '/icon-192.svg',
       data:  { url: data.url || '/' },
+      tag:   data.tag, // same tag as the page-side notification = no duplicates
       vibrate: [100, 50, 100],
     });
   }));

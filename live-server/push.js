@@ -9,9 +9,12 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
     try {
         const email = VAPID_EMAIL.startsWith("mailto:") ? VAPID_EMAIL : `mailto:${VAPID_EMAIL}`;
         webPush.setVapidDetails(email, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+        console.log("[PUSH] VAPID configured (public key set, private key length " + VAPID_PRIVATE_KEY.length + ")");
     } catch (err) {
         console.error("[PUSH] VAPID setup error:", err.message);
     }
+} else {
+    console.warn("[PUSH] VAPID keys missing — closed-app push notifications DISABLED (set VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY in live-server/.env)");
 }
 
 /**
@@ -24,12 +27,18 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
  * @param {string} [opts.url]
  */
 async function sendPushNotification({ recipientUsername, type, fromUser, text, url }) {
-    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+        console.warn(`[PUSH] Skipping ${type} -> ${recipientUsername} (no VAPID keys)`);
+        return;
+    }
 
     try {
         const col = mongoose.connection.db.collection("pushsubscriptions");
         const subs = await col.find({ username: recipientUsername }).toArray();
-        if (!subs.length) return;
+        if (!subs.length) {
+            console.warn(`[PUSH] No subscription found for ${recipientUsername} (${type})`);
+            return;
+        }
 
         const payload = JSON.stringify({
             title: titleFor(type, fromUser),
@@ -38,6 +47,7 @@ async function sendPushNotification({ recipientUsername, type, fromUser, text, u
             badge: "/icon-192.svg",
             url:   url || "/",
             type,
+            tag:   type === "message" ? `dm_${fromUser}` : type === "call_incoming" ? `call_${fromUser}` : undefined,
         });
 
         for (const sub of subs) {
@@ -49,6 +59,8 @@ async function sendPushNotification({ recipientUsername, type, fromUser, text, u
             } catch (err) {
                 if (err.statusCode === 404 || err.statusCode === 410) {
                     await col.deleteOne({ _id: sub._id });
+                } else {
+                    console.warn(`[PUSH] Send ${type} -> ${recipientUsername} failed:`, err.statusCode || "", err.message || err);
                 }
             }
         }
