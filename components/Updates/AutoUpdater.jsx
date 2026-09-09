@@ -65,10 +65,9 @@ export default function AutoUpdater() {
 
     if (!inTauri || closed) return null;
 
-    const pct =
-        progress && progress.total > 0
-            ? Math.min(100, Math.round((progress.loaded / progress.total) * 100))
-            : null;
+    // Some Tauri versions expose the incoming version on `version`; fall back
+    // to `currentVersion` so the popup never shows a blank "v".
+    const incomingVersion = update?.version || update?.currentVersion || "";
 
     return (
         <div className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]">
@@ -84,7 +83,7 @@ export default function AutoUpdater() {
                                     AnonTweet update available
                                 </p>
                                 <p className="text-xs text-gray-400 leading-tight">
-                                    v{update?.version} — stay current, just like Discord.
+                                    {incomingVersion ? `v${incomingVersion} — ` : ""}stay current, just like Discord.
                                 </p>
                             </div>
                         </div>

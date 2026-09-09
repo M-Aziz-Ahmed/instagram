@@ -28,36 +28,49 @@ if (-not (Test-Path (Join-Path $RepoRoot "package.json")) -or
 }
 $DesktopDir = $PSScriptRoot
 $ConfPath   = Join-Path $DesktopDir "src-tauri/tauri.conf.json"
+$CargoPath  = Join-Path $DesktopDir "src-tauri/Cargo.toml"
 
 # --- 1) Prompt for / bump desktop version ----------------------------------
 $conf = Get-Content $ConfPath -Raw | ConvertFrom-Json
-$current = $conf.version
+# The updater compares against the version in Cargo.toml, so read the real one
+# from there (tauri.conf.json mirrors it for the bundle/manifest).
+$cargoVer = (Select-String -Path $CargoPath -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+if ($conf.version -ne $cargoVer) { $currentVer = $cargoVer } else { $currentVer = $conf.version }
 Write-Host ""
-Write-Host "Current desktop version: $current" -ForegroundColor Cyan
+Write-Host "Current desktop version: $currentVer (conf: $($conf.version), cargo: $cargoVer)" -ForegroundColor Cyan
 
 $newVersion = $Version.Trim()
 if (-not $newVersion) {
     if ($Host.Name -ne "ConsoleHost" -or [Environment]::UserInteractive -eq $false) {
         throw "No version supplied and script is non-interactive. Pass -Version X.Y.Z"
     }
-    $newVersion = (Read-Host "New desktop version (blank to keep $current)").Trim()
+    $newVersion = (Read-Host "New desktop version (blank to keep $currentVer)").Trim()
 }
-if ($newVersion -and $newVersion -ne $current) {
+if ($newVersion -and $newVersion -ne $currentVer) {
     if ($newVersion -notmatch '^\d+\.\d+\.\d+$') {
-        throw "Version must be in the form X.Y.Z (e.g. 0.1.1)"
+        throw "Version must be in the form X.Y.Z (e.g. 0.1.3)"
     }
-    # Do a text-only replacement of the "version": "X.Y.Z" value. This avoids
-    # reformatting the file and avoids writing a UTF-8 BOM (which breaks
-    # Tauri's JSON parser at line 1).
+    # Bump tauri.conf.json — text-only replacement so we avoid reformatting and
+    # writing a UTF-8 BOM (which breaks Tauri's JSON parser at line 1).
     $raw = Get-Content $ConfPath -Raw
     $newRaw = $raw -replace '("version"\s*:\s*")[^"]*(")', "`${1}$newVersion`${2}"
     if ($newRaw -eq $raw) { throw "Could not locate the version field in $ConfPath" }
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($ConfPath, $newRaw, $utf8NoBom)
-    # Sanity-check it still parses.
     $check = Get-Content $ConfPath -Raw | ConvertFrom-Json
     if ($check.version -ne $newVersion) { throw "Version bump did not stick (got $($check.version))" }
-    Write-Host "Bumped version to $newVersion" -ForegroundColor Green
+
+    # Bump Cargo.toml too — Tauri reads the app version from here, and the
+    # updater compares the server version against it. Match only the package
+    # `version = "..."` line (line-anchored so `rust-version` is left alone).
+    $cargoRaw = Get-Content $CargoPath -Raw
+    $cargoNew = $cargoRaw -replace '(?m)^version = ".*?"', "version = `"$newVersion`""
+    if ($cargoNew -eq $cargoRaw) { throw "Could not locate the version field in $CargoPath" }
+    [System.IO.File]::WriteAllText($CargoPath, $cargoNew, $utf8NoBom)
+    $cargoCheck = (Select-String -Path $CargoPath -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+    if ($cargoCheck -ne $newVersion) { throw "Cargo.toml version bump did not stick (got $cargoCheck)" }
+
+    Write-Host "Bumped version to $newVersion (tauri.conf.json + Cargo.toml)" -ForegroundColor Green
 }
 
 # --- 2) Publish signed desktop bundles -------------------------------------

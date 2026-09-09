@@ -5,7 +5,7 @@ import { CallProvider } from "@/context/CallContext";
 import CallModal from "@/components/Inbox/CallModal";
 import { useUser } from "@/context/UserContext";
 import { getActiveChat } from "@/utils/activeChat";
-import { showBackgroundNotification } from "@/utils/systemNotification";
+import { showBackgroundNotification, isTauri } from "@/utils/systemNotification";
 
 function CallSocketProvider({ children }) {
     const { user } = useUser();
@@ -39,7 +39,10 @@ function CallSocketProvider({ children }) {
                 // (delivered over the socket — no Web Push / VAPID needed).
                 sock.on("message:new", (data) => {
                     if (!data?.from) return;
-                    if (typeof document !== "undefined" && !document.hidden) return;
+                    // On desktop we rely on native tray notifications regardless
+                    // of document visibility; in a browser only notify when the
+                    // page is actually in the background.
+                    if (!isTauri() && typeof document !== "undefined" && !document.hidden) return;
                     if (getActiveChat() === data.from) return;
                     showBackgroundNotification(`${data.from} sent you a message`, {
                         body: data.body || "",
