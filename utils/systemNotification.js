@@ -35,10 +35,10 @@ export async function showBackgroundNotification(title, { body = "", url = "/", 
 
     if (isTauri()) {
         try {
-            // Route through the Rust `notify` command (lib.rs) which uses
-            // tauri-plugin-notification to raise a native tray notification.
+            // Route through the Rust `show_toast` command (lib.rs) which creates
+            // a custom Discord-style toast window in the bottom-right corner.
             const { invoke } = await import("@tauri-apps/api/core");
-            await invoke("notify", { title, body, url, tag });
+            await invoke("show_toast", { title, body, url });
             return true;
         } catch {
             return false;
