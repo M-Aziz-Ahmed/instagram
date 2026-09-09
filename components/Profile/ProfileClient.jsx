@@ -7,13 +7,12 @@ import UserBadges from "@/components/shared/UserBadges";
 import { ProfileSkeleton } from "@/components/shared/Skeleton";
 import FollowButton from "@/components/shared/FollowButton";
 import ImageLightbox from "@/components/shared/ImageLightbox";
-import EditProfileModal from "@/components/Auth/EditProfileModal";
+import SettingsModal from "@/components/Auth/EditProfileModal";
 import InviteManager from "@/components/shared/InviteManager";
 import { useSidebar } from "@/context/SidebarContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Compose from "@/components/Feed/Compose";
-import NotificationSettings from "@/components/Notifications/NotificationSettings";
 
 function colorFromUsername(name = "") {
     const palette = ["#f97316","#ec4899","#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444","#3b82f6"];
@@ -231,7 +230,7 @@ export default function ProfileClient({ username }) {
     const [data, setData]                     = useState(null);
     const [loading, setLoading]               = useState(true);
     const [expanded, setExpanded]             = useState(null);
-    const [editingProfile, setEditingProfile] = useState(false);
+    const [showSettings, setShowSettings]   = useState(false);
     const { openSidebar }                     = useSidebar();
     const [avatarLightbox, setAvatarLightbox] = useState(false);
     const [listModal, setListModal]           = useState(null);
@@ -353,7 +352,7 @@ export default function ProfileClient({ username }) {
                                 <Avatar username={username} avatarUrl={profile.avatarUrl} color={profile.avatarColor} size="lg" />
                                 {isOwn && (
                                     <button
-                                        onClick={(e) => { e.stopPropagation(); setEditingProfile(true); }}
+                                        onClick={(e) => { e.stopPropagation(); setShowSettings(true); }}
                                         title="Change photo"
                                         aria-label="Change profile photo"
                                         className="absolute inset-0 rounded-full bg-black/30 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity"
@@ -454,8 +453,6 @@ export default function ProfileClient({ username }) {
                             </div>
                         </div>
 
-                        {isOwn && <NotificationSettings />}
-
                         {/* Posts grid + list */}
                         {isPrivateProfile ? (
                             <div className="flex flex-col items-center py-20 text-gray-400 dark:text-gray-600 select-none">
@@ -520,8 +517,8 @@ export default function ProfileClient({ username }) {
                 </div>
             )}
 
-            {editingProfile && (
-                <EditProfileModal onClose={() => { setEditingProfile(false); fetchProfile(); }} />
+            {showSettings && (
+                <SettingsModal onClose={() => { setShowSettings(false); fetchProfile(); }} />
             )}
 
             {avatarLightbox && profile.avatarUrl && (

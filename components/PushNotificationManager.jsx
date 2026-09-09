@@ -6,7 +6,9 @@ import {
     ensurePushSubscription,
     isNotificationSupported,
     isStandalone,
+    isTauri,
     requestPermissionAndSubscribe,
+    requestTauriNotificationPermission,
 } from "@/utils/notifications";
 
 const DELAY_MS = 3000;
@@ -23,7 +25,7 @@ export default function PushNotificationManager() {
 
         let alive = true;
         (async () => {
-            await Promise.resolve(); // defer so the effect body has no sync setState
+            await Promise.resolve();
             if (!alive) return;
 
             const dismissedKey = `push_dismissed_${user.username}`;
@@ -37,8 +39,8 @@ export default function PushNotificationManager() {
                 setSubscribed(true);
             }
 
-            // Notification API unavailable (e.g. iOS Safari that isn't installed
-            // as a PWA) — no point asking, guide the user instead.
+            const tauri = isTauri();
+
             if (!isNotificationSupported()) {
                 if (isStandalone()) return;
                 timerRef.current = setTimeout(() => setBanner({ show: true, mode: "install" }), DELAY_MS);
@@ -47,17 +49,17 @@ export default function PushNotificationManager() {
 
             if (Notification.permission === "granted") {
                 setSubscribed(true);
+                if (tauri) return;
             } else if (Notification.permission === "denied") {
-                // Cannot re-prompt from JS — take the user to the fix.
                 timerRef.current = setTimeout(() => setBanner({ show: true, mode: "blocked" }), DELAY_MS);
             } else {
                 timerRef.current = setTimeout(() => setBanner({ show: true, mode: "ask" }), DELAY_MS);
             }
 
-            // Always try to (re)create the Web Push subscription — permission
-            // may predate VAPID, so the closed-app path may never have existed.
-            const subscribedNow = await ensurePushSubscription();
-            if (subscribedNow) setSubscribed(true);
+            if (!tauri) {
+                const subscribedNow = await ensurePushSubscription();
+                if (subscribedNow) setSubscribed(true);
+            }
         })();
 
         return () => {
@@ -69,7 +71,13 @@ export default function PushNotificationManager() {
     async function handleAllow() {
         setBanner({ show: false, mode: "ask" });
         try {
-            const ok = await requestPermissionAndSubscribe();
+            const tauri = isTauri();
+            let ok;
+            if (tauri) {
+                ok = await requestTauriNotificationPermission();
+            } else {
+                ok = await requestPermissionAndSubscribe();
+            }
             localStorage.setItem(`notifications_enabled_${user?.username}`, "1");
             if (ok) {
                 setSubscribed(true);
@@ -105,7 +113,7 @@ export default function PushNotificationManager() {
                     {isBlocked
                         ? "Enable notifications for this site in your browser settings, then reload."
                         : isInstall
-                            ? "Tap the share button → “Add to Home Screen”, then open the app again."
+                            ? "Tap the share button → \u201CAdd to Home Screen\u201D, then open the app again."
                             : "Get notified about messages and calls even when the app is closed"}
                 </p>
             </div>

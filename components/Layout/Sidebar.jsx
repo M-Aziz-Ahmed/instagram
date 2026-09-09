@@ -6,7 +6,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useSidebar } from "@/context/SidebarContext";
 import { useVoiceChat } from "@/context/VoiceChatContext";
 import { useRouter, usePathname } from "next/navigation";
-import EditProfileModal from "@/components/Auth/EditProfileModal";
+import SettingsModal from "@/components/Auth/EditProfileModal";
 import Link from "next/link";
 import UserBadges from "@/components/shared/UserBadges";
 import CloseFriendsModal from "@/components/Settings/CloseFriendsModal";
@@ -254,7 +254,7 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
     const { voiceOpen, openVoiceChat, closeVoiceChat } = useVoiceChat();
     const router = useRouter();
     const pathname = usePathname();
-    const [editingProfile, setEditingProfile] = useState(false);
+    const [showSettings, setShowSettings]   = useState(false);
     const [showCloseFriends, setShowCloseFriends] = useState(false);
     const [showMutedWords, setShowMutedWords] = useState(false);
     const [entertainmentOpen, setEntertainmentOpen] = useState(false);
@@ -508,8 +508,8 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                         )}
                         <NavItem
                             icon={<SettingsIcon />}
-                            label="Edit Profile"
-                            onClick={() => { handleNavClick(); setEditingProfile(true); }}
+                            label="Settings"
+                            onClick={() => { handleNavClick(); setShowSettings(true); }}
                         />
                         <NavItem
                             icon={theme === "dark" ? <SunIcon /> : <MoonIcon />}
@@ -550,9 +550,9 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                 </div>
             </aside>
 
-            {/* Edit profile modal */}
-            {editingProfile && (
-                <EditProfileModal onClose={() => setEditingProfile(false)} />
+            {/* Settings modal */}
+            {showSettings && (
+                <SettingsModal onClose={() => setShowSettings(false)} />
             )}
             {showCloseFriends && <CloseFriendsModal onClose={() => setShowCloseFriends(false)} />}
             {showMutedWords && <MutedWordsModal onClose={() => setShowMutedWords(false)} />}

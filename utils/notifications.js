@@ -6,13 +6,20 @@ export function getVapidConfigured() {
     return Boolean(VAPID_PUBLIC_KEY);
 }
 
+export function isTauri() {
+    if (typeof window === "undefined") return false;
+    return Boolean(window.__TAURI_INTERNALS__);
+}
+
 export function isNotificationSupported() {
     if (typeof window === "undefined") return false;
+    if (isTauri()) return true;
     return "Notification" in window;
 }
 
 export function isPushSupported() {
     if (typeof window === "undefined") return false;
+    if (isTauri()) return false;
     return "serviceWorker" in navigator && "PushManager" in window;
 }
 
@@ -21,9 +28,10 @@ export function isIOS() {
     return /iP(hone|ad|od)/.test(navigator.userAgent);
 }
 
-// True when installed as a standalone PWA (Android / iOS "Add to Home Screen").
+// True when installed as a standalone PWA (Android / iOS "Add to Home Screen") or Tauri desktop.
 export function isStandalone() {
     if (typeof window === "undefined") return false;
+    if (isTauri()) return true;
     if (window.navigator?.standalone === true) return true;
     if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) return true;
     return false;
@@ -96,4 +104,14 @@ function urlBase64ToUint8Array(base64String) {
         outputArray[i] = rawData.charCodeAt(i);
     }
     return outputArray;
+}
+
+// Tauri native notification permission request (uses the Notification API in Tauri webview,
+// which forwards to the OS notification center via tauri-plugin-notification).
+export async function requestTauriNotificationPermission() {
+    if (!isTauri() || typeof Notification === "undefined") return false;
+    if (Notification.permission === "granted") return true;
+    if (Notification.permission === "denied") return false;
+    const result = await Notification.requestPermission();
+    return result === "granted";
 }
