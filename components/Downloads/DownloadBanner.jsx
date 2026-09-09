@@ -60,9 +60,10 @@ export default function DownloadBanner() {
 
     if (platform === "tauri" || dismissed) return null;
 
-    const winUrl =
-        release?.platforms?.["windows-x86_64"]?.url ||
-        "/downloads/desktop/AnonTweet_0.1.0_x64-setup.exe";
+    // Serve the installer through a route handler that streams the real file.
+    // Direct static URLs to .exe/.msi in public/ return the SPA HTML page on
+    // Vercel (files aren't served as static assets), so we bypass that.
+    const winUrl = "/api/downloads/desktop";
     const version = release?.version || "";
 
     const platformLabel =
