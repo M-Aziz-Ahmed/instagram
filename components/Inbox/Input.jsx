@@ -296,11 +296,11 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
     };
 
     return (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 w-full max-w-full">
             {/* Image preview */}
             {imagePreview && (
                 <div className="relative inline-flex self-start">
-                    <img src={imagePreview} alt="" className="h-24 rounded-xl object-cover border border-gray-200 dark:border-gray-700" />
+                    <img src={imagePreview} alt="" className="h-24 max-w-full rounded-xl object-cover border border-gray-200 dark:border-gray-700" />
                     <button
                         onClick={removeImage}
                         className="absolute -top-2 -right-2 bg-gray-800 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-gray-700 transition-colors shadow"
@@ -351,7 +351,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
             )}
 
             {/* Input row */}
-            <div className="flex items-end gap-1.5 sm:gap-2">
+            <div className="flex items-end gap-1.5 sm:gap-2 w-full max-w-full overflow-hidden">
                 {/* Attach button - hidden on very small screens */}
                 <button
                     onClick={() => fileRef.current?.click()}

@@ -102,12 +102,12 @@ export default function AutoUpdater() {
                         <div className="mt-3">
                             <div className="flex justify-between text-[11px] text-gray-400 mb-1">
                                 <span>Downloading update…</span>
-                                <span>{pct !== null ? `${pct}%` : ""}</span>
+                                <span>{progress?.total ? `${Math.round((progress.loaded / progress.total) * 100)}%` : ""}</span>
                             </div>
                             <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
                                 <div
                                     className="h-full bg-blue-500 rounded-full transition-all"
-                                    style={{ width: `${pct ?? 0}%` }}
+                                    style={{ width: progress?.total ? `${Math.round((progress.loaded / progress.total) * 100)}%` : "0%" }}
                                 />
                             </div>
                         </div>

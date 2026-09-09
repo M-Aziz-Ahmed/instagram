@@ -86,7 +86,7 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
         <div className="flex flex-col h-full">
 
             {/* ── Header ──────────────────────────────────────────────────── */}
-            <header className="flex items-center gap-2 px-3 md:px-6 py-3 md:py-4 border-b border-gray-200 dark:border-gray-800 shrink-0">
+            <header className="sticky top-0 z-20 flex items-center gap-2 px-3 md:px-6 py-3 md:py-4 border-b border-gray-200 dark:border-gray-800 shrink-0 bg-white/95 dark:bg-gray-950/95 backdrop-blur">
 
                 {onBack && (
                     <button
@@ -192,7 +192,7 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
             </div>
 
             {/* ── Input ───────────────────────────────────────────────────── */}
-            <div className="px-3 md:px-4 py-2.5 md:py-3 border-t border-gray-200 dark:border-gray-800 shrink-0">
+            <div className="px-3 md:px-4 py-2.5 md:py-3 border-t border-gray-200 dark:border-gray-800 shrink-0 pb-14 lg:pb-0">
                 <Input onMessageSent={(msg) => setPendingMessage(msg)} recipient={recipient} replyingTo={replyingTo} setReplyingTo={setReplyingTo} />
             </div>
         </div>
