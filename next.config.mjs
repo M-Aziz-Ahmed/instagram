@@ -31,16 +31,20 @@ const nextConfig = {
   allowedDevOrigins: ['39.62.217.128','0.0.0.0','dad-phrases-removable-car.trycloudflare.com'],
     productionBrowserSourceMaps: true,
     async rewrites() {
-        return [
-            {
-                source: "/api/(?!downloads/desktop)(.*)",
-                destination: "https://anontweet.duckdns.org/api/$1",
-            },
-            {
-                source: "/sio/:path*",
-                destination: "https://anontweet.duckdns.org/sio/:path*",
-            },
-        ];
+        return {
+            beforeFiles: [
+                {
+                    source: "/sio/:path*",
+                    destination: "https://anontweet.duckdns.org/sio/:path*",
+                },
+            ],
+            afterFiles: [
+                {
+                    source: "/api/:path*",
+                    destination: "https://anontweet.duckdns.org/api/:path*",
+                },
+            ],
+        };
     },
 };
 
