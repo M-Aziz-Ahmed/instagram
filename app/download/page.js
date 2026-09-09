@@ -25,7 +25,7 @@ export default function DownloadPage() {
         const t = setTimeout(() => {
             setPlatform(detectPlatform());
             try {
-                if (localStorage.getItem("download-banner-dismissed") === "1") setDismissed(true);
+                if (localStorage.getItem("download-page-dismissed") === "1") setDismissed(true);
             } catch {}
         }, 0);
         return () => clearTimeout(t);
@@ -43,7 +43,7 @@ export default function DownloadPage() {
     const dismiss = () => {
         setDismissed(true);
         try {
-            localStorage.setItem("download-banner-dismissed", "1");
+            localStorage.setItem("download-page-dismissed", "1");
         } catch {}
     };
 
