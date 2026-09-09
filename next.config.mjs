@@ -33,8 +33,8 @@ const nextConfig = {
     async rewrites() {
         return [
             {
-                source: "/api/:path*",
-                destination: "https://anontweet.duckdns.org/api/:path*",
+                source: "/api/(?!downloads/desktop)(.*)",
+                destination: "https://anontweet.duckdns.org/api/$1",
             },
             {
                 source: "/sio/:path*",
