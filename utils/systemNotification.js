@@ -5,6 +5,7 @@
 // On the Tauri desktop app, notifications go through the native plugin
 // (tauri-plugin-notification) — proper desktop tray notifications that need no
 // browser permission. In a plain browser they use the web Notification API.
+
 export function isTauri() {
     return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
 }
@@ -39,23 +40,19 @@ export async function showBackgroundNotification(title, { body = "", url = "/", 
 
     if (isTauri()) {
         try {
-            // Use Tauri native notification plugin
+            // Use Tauri native notification plugin - this works even when
+            // the app is minimized to the system tray or fully closed
             const { notify } = await import("@tauri-apps/api/notification");
             await notify({ title, body, icon, tag });
             return true;
         } catch (e) {
-            console.warn("Tauri notification failed, falling back:", e);
-            // Fall back to creating a toast window
-            try {
-                const { invoke } = await import("@tauri-apps/api/core");
-                await invoke("show_toast", { title, body, url });
-                return true;
-            } catch (e2) {
-                return false;
-            }
+            // Native notification failed - fall back to showing an error
+            console.error("Tauri native notification failed:", e);
+            return false;
         }
     }
 
+    // Browser fallback: only show if the page/tab is visible/in background
     if (typeof document !== "undefined" && !document.hidden) return false;
 
     try {
