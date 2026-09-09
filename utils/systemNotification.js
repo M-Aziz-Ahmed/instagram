@@ -3,9 +3,8 @@
 // covers a fully closed app, but this is the VAPID-free fallback.
 //
 // On the Tauri desktop app, notifications go through the native plugin
-// (tauri-plugin-notification) — Discord-style tray notifications that need no
+// (tauri-plugin-notification) — proper desktop tray notifications that need no
 // browser permission. In a plain browser they use the web Notification API.
-
 export function isTauri() {
     return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
 }
@@ -21,12 +20,17 @@ export function canNotify() {
 }
 
 export function requestNotificationsPermission() {
-    if (isTauri()) return Promise.resolve("granted"); // no browser permission needed
-    if (!isNotificationSupported()) return Promise.resolve("unsupported");
-    return Notification.requestPermission();
+    if (isTauri()) {
+        // Tauri native notifications are always available on desktop
+        return Promise.resolve("granted");
+    }
+    if (typeof window !== "undefined" && "Notification" in window) {
+        return Notification.requestPermission();
+    }
+    return Promise.resolve("unsupported");
 }
 
-// Show an OS notification. In Tauri this invokes the native plugin so it
+// Show an OS notification. In Tauri this uses the native plugin so it
 // appears as a proper desktop tray notification even when the window is hidden
 // to the system tray. In a browser it uses the web Notification API and only
 // fires when the page is in the background.
@@ -35,13 +39,20 @@ export async function showBackgroundNotification(title, { body = "", url = "/", 
 
     if (isTauri()) {
         try {
-            // Route through the Rust `show_toast` command (lib.rs) which creates
-            // a custom Discord-style toast window in the bottom-right corner.
-            const { invoke } = await import("@tauri-apps/api/core");
-            await invoke("show_toast", { title, body, url });
+            // Use Tauri native notification plugin
+            const { notify } = await import("@tauri-apps/api/notification");
+            await notify({ title, body, icon, tag });
             return true;
-        } catch {
-            return false;
+        } catch (e) {
+            console.warn("Tauri notification failed, falling back:", e);
+            // Fall back to creating a toast window
+            try {
+                const { invoke } = await import("@tauri-apps/api/core");
+                await invoke("show_toast", { title, body, url });
+                return true;
+            } catch (e2) {
+                return false;
+            }
         }
     }
 

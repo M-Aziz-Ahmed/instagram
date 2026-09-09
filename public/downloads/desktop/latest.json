@@ -1,11 +1,11 @@
 {
     "platforms":  {
                       "windows-x86_64":  {
-                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmhJYzY0VDREUGs2NlEzRTRaVSsySkdOcW8wOXJzb3Q2d3B5WG4rMndCZ3dPSDYrVkg3ajRBUGFkMFZnckxITzRialRmeHlBcGZaRU12VFJLbzh4aTRJNFJ2TlozMGc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4OTc3NzEzCWZpbGU6QW5vblR3ZWV0XzAuMS43X3g2NC1zZXR1cC5leGUKcDhLZ2NpUHdtS0x4QTJNU1g2OHdiYTBYM3lLeHc5S3F4TVNVTi9td3IvRFRJNnlodVVBTXVMM1NTWkgzSFV5bXNnaG92M3RJTG9OYy9IN1dBdmhHQkE9PQo=",
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmhJYzY0VDREUGhlVC9oaG16cWt2bDlVWjh6N21KRjNtTm1NNFJjM1QxSzBzdWFyRUU0ZU5RUllVR21lTVYyaTJ0S3BmUmROUmozZFlJRzl5SVVxRXlmb3dFUUtjWWc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4OTc4NTUzCWZpbGU6QW5vblR3ZWV0XzAuMS43X3g2NC1zZXR1cC5leGUKMHp2QkZ2ek1MUVlCbkw5cnVCWGVPUGRRYnFGT1IrZytSaVpndC9MMXhTc2w4aWpGNlQ4R09IcTE3Wkh3WWJpY2ptNm9zVzIzdWcyQ29OYXhEbFRpQ2c9PQo=",
                                              "url":  "https://anontweet.vercel.app/downloads/desktop/AnonTweet_0.1.7_x64-setup.exe"
                                          }
                   },
-    "pub_date":  "2026-09-09T18:15:13Z",
+    "pub_date":  "2026-09-09T18:29:13Z",
     "version":  "0.1.7",
-    "notes":  "Automatic update with bug fixes and improvements."
+    "notes":  "Fixed native Tauri notifications for system tray/closed-app support"
 }
