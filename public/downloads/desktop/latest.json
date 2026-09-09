@@ -1,11 +1,11 @@
 {
     "platforms":  {
                       "windows-x86_64":  {
-                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmhJYzY0VDREUGhXY3pEOVN0dTZYVUdPSFExUHVjQkxFY0lNM2lQMmN3Rngra1RoYzFpc2xhT3J6WCswZ3NHYjJoWDRoUllhajZabjVOUjdDc2NKbm1ISE1RYStDN0FBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4OTU5MDg3CWZpbGU6QW5vblR3ZWV0XzAuMS40X3g2NC1zZXR1cC5leGUKb1ozWENnelJmUjdZMjNsczFFQmhMNjcza0hSSmEwMjFWeGs5bU1Zb0ErNWFzYUdsM3NKLy8wR242TWtQNWtHdHVudnoxU3hkc2RZNTcwbms5dnB6QVE9PQo=",
-                                             "url":  "https://anontweet.vercel.app/downloads/desktop/AnonTweet_0.1.4_x64-setup.exe"
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmhJYzY0VDREUHBnTE1NL0Vzci9RSG5RbWN1Z3pOYmdnMEU4a0IwZDM3THhYQWlnelRTL0k3bWxvM01wRCtOK094UUtlR0lCOHJXREtkZTFKYzB4clFUanFIUVpOZkFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4OTY2OTQ5CWZpbGU6QW5vblR3ZWV0XzAuMS41X3g2NC1zZXR1cC5leGUKblcxOENEdUhjN2RPQVppaTdhMjdxV09LbG44NlRBVjVyYWRsSmxqU1JldWpIVVowdGNsUTM1T1BuMTVaK0EzNmJsUWp5TTlhUVJvVmx0cVJ3cTJuQmc9PQo=",
+                                             "url":  "https://anontweet.vercel.app/downloads/desktop/AnonTweet_0.1.5_x64-setup.exe"
                                          }
                   },
-    "pub_date":  "2026-09-09T13:04:47Z",
-    "version":  "0.1.4",
-    "notes":  "Automatic update with bug fixes and improvements."
+    "pub_date":  "2026-09-09T15:15:49Z",
+    "version":  "0.1.5",
+    "notes":  "Discord-style toast notifications, sticky chat header, mobile input fixes"
 }
