@@ -1,7 +1,7 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WindowEvent, Url, LogicalPosition, PhysicalSize,
+    Manager, WindowEvent, Url, LogicalPosition, PhysicalSize, WebviewUrl,
 };
 use std::sync::{Arc, Mutex};
 
@@ -55,19 +55,90 @@ fn show_toast(app: tauri::AppHandle, title: String, body: String, url: String) {
         toasts.push(toast);
     }
 
-    // Create toast window using custom URI scheme
+    // Create toast window with HTML content via data URL (avoids custom protocol issues)
     let app_handle = app.clone();
-    let toast_url = format!("anontweet://toast/{id}?title={}&body={}&url={}", 
-        urlencoding::encode(&title),
-        urlencoding::encode(&body),
-        urlencoding::encode(&url)
-    );
+    
+    // Build HTML content
+    let html = format!(r#"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1f1f1f; 
+            color: #fff; 
+            width: 360px; 
+            height: 100px;
+            border-radius: 12px;
+            border: 1px solid #333;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            overflow: hidden;
+        }}
+        .toast {{ 
+            padding: 12px 16px; 
+            height: 100%; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            -webkit-app-region: drag;
+        }}
+        .title {{ font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        .body {{ font-size: 13px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        .progress-bar {{ 
+            position: absolute; 
+            bottom: 0; 
+            left: 0; 
+            height: 3px; 
+            background: #3b82f6; 
+            animation: progress 8s linear forwards;
+        }}
+        @keyframes progress {{ from {{ width: 100%; }} to {{ width: 0%; }} }}
+        .close-btn {{
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #888;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-app-region: no-drag;
+        }}
+        .close-btn:hover {{ background: rgba(255,255,255,0.2); color: #fff; }}
+    </style>
+</head>
+<body>
+    <div class="toast" onclick="window.__TAURI__.invoke('handle_toast_click', {{id: {id}}})">
+        <button class="close-btn" onclick="event.stopPropagation(); window.__TAURI__.invoke('close_toast', {{id: {id}}})">×</button>
+        <div class="title">{title}</div>
+        <div class="body">{body}</div>
+        <div class="progress-bar"></div>
+    </div>
+    <script>
+    </script>
+</body>
+</html>
+"#);
 
-    // Use tauri::WebviewWindowBuilder to create a new window
+    // Encode HTML as data URL
+    let encoded_html = urlencoding::encode(&html);
+    let data_url = format!("data:text/html,{}", encoded_html);
+
+    // Use tauri::WebviewWindowBuilder to create a new window with data URL
     let _ = tauri::WebviewWindowBuilder::new(
         &app_handle,
         format!("toast-{id}"),
-        tauri::WebviewUrl::External(toast_url.parse().unwrap()),
+        tauri::WebviewUrl::External(data_url.parse().unwrap()),
     )
     .title("AnonTweet Notification")
     .inner_size(360.0, 100.0)
@@ -142,114 +213,6 @@ pub fn run() {
             counter: Mutex::new(0),
             active_toasts: Mutex::new(Vec::new()),
         }))
-        .register_uri_scheme_protocol("anontweet", move |_app, request| {
-            let uri = request.uri();
-            let uri_str = uri.to_string();
-            if uri_str.starts_with("anontweet://toast/") {
-                let query = uri_str.strip_prefix("anontweet://toast/").unwrap_or("");
-                let parts: Vec<&str> = query.split('?').collect();
-                let id = parts[0].parse::<u32>().unwrap_or(0);
-                
-                let params = parts.get(1).map_or("", |v| *v);
-                let mut title = String::new();
-                let mut body = String::new();
-                let mut url_str = String::new();
-                
-                for pair in params.split('&') {
-                    let kv: Vec<&str> = pair.split('=').collect();
-                    if kv.len() == 2 {
-                        let value = urlencoding::decode(kv[1]).unwrap_or_default().to_string();
-                        match kv[0] {
-                            "title" => title = value,
-                            "body" => body = value,
-                            "url" => url_str = value,
-                            _ => {}
-                        }
-                    }
-                }
-                
-                let html = format!(r#"
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #1f1f1f; 
-            color: #fff; 
-            width: 360px; 
-            height: 100px;
-            border-radius: 12px;
-            border: 1px solid #333;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-            overflow: hidden;
-        }}
-        .toast {{ 
-            padding: 12px 16px; 
-            height: 100%; 
-            display: flex; 
-            flex-direction: column; 
-            justify-content: center;
-            cursor: pointer;
-            user-select: none;
-            -webkit-app-region: drag;
-        }}
-        .title {{ font-weight: 600; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-        .body {{ font-size: 13px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-        .progress-bar {{ 
-            position: absolute; 
-            bottom: 0; 
-            left: 0; 
-            height: 3px; 
-            background: #3b82f6; 
-            animation: progress 8s linear forwards;
-        }}
-        @keyframes progress {{ from {{ width: 100%; }} to {{ width: 0%; }} }}
-        .close-btn {{
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.1);
-            border: none;
-            color: #888;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            -webkit-app-region: no-drag;
-        }}
-        .close-btn:hover {{ background: rgba(255,255,255,0.2); color: #fff; }}
-    </style>
-</head>
-<body>
-    <div class="toast" onclick="window.__TAURI__.invoke('handle_toast_click', {{id: {id}}})">
-        <button class="close-btn" onclick="event.stopPropagation(); window.__TAURI__.invoke('close_toast', {{id: {id}}})">×</button>
-        <div class="title">{title}</div>
-        <div class="body">{body}</div>
-        <div class="progress-bar"></div>
-    </div>
-    <script>
-    </script>
-</body>
-</html>
-"#);
-                
-                tauri::http::Response::builder()
-                    .header("Content-Type", "text/html")
-                    .body(html.into_bytes())
-                    .unwrap()
-            } else {
-                tauri::http::Response::builder()
-                    .status(404)
-                    .body(b"Not found".to_vec())
-                    .unwrap()
-            }
-        })
         .setup(|app| {
             #[cfg(desktop)]
             {
