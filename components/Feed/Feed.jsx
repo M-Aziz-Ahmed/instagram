@@ -68,12 +68,12 @@ function SearchResults({ query, onClear, onHashtag }) {
                         Clear
                     </button>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-1 overflow-x-auto scrollbar-hide">
                     {tabs.map((tab) => (
                         <button
                             key={tab.key}
                             onClick={() => setActiveTab(tab.key)}
-                            className={`py-2 px-3 text-xs font-medium transition-colors relative ${
+                            className={`py-3 px-4 text-xs font-medium transition-colors relative min-h-[44px] min-w-[80px] flex items-center justify-center whitespace-nowrap ${
                                 activeTab === tab.key
                                     ? "text-gray-900 dark:text-gray-100"
                                     : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"
@@ -81,7 +81,7 @@ function SearchResults({ query, onClear, onHashtag }) {
                         >
                             {tab.label}
                             {activeTab === tab.key && (
-                                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gray-900 dark:bg-gray-100 rounded-full" />
+                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-900 dark:bg-gray-100 rounded-full" />
                             )}
                         </button>
                     ))}

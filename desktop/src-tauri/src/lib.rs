@@ -1,8 +1,9 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WindowEvent,
+    Manager, WindowEvent, Url, WebviewUrl,
 };
+use std::sync::{Arc, Mutex};
 
 fn show_main(app: &tauri::AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
@@ -21,11 +22,46 @@ fn show_notification(app: &tauri::AppHandle, title: &str, body: &str) {
         .show();
 }
 
+fn navigate_to_url(app: &tauri::AppHandle, url_str: &str) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.show();
+        let _ = win.set_focus();
+        if let Ok(url) = url_str.parse::<Url>() {
+            let _ = win.navigate(url);
+        }
+    }
+}
+
+struct NotificationState {
+    pending_url: Mutex<Option<String>>,
+}
+
+#[tauri::command]
+fn notify(app: tauri::AppHandle, title: String, body: String, url: String, _tag: String) {
+    let state: tauri::State<'_, Arc<NotificationState>> = app.state();
+    if !url.is_empty() {
+        *state.pending_url.lock().unwrap() = Some(url.clone());
+    }
+    show_notification(&app, &title, &body);
+}
+
+#[tauri::command]
+fn handle_notification_click(app: tauri::AppHandle) {
+    let state: tauri::State<'_, Arc<NotificationState>> = app.state();
+    let url_opt = state.pending_url.lock().unwrap().take();
+    if let Some(url) = url_opt {
+        navigate_to_url(&app, &url);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init())
+        .manage(Arc::new(NotificationState {
+            pending_url: Mutex::new(None),
+        }))
         .setup(|app| {
             #[cfg(desktop)]
             {
@@ -60,6 +96,26 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            // Listen for window focus to handle notification clicks
+            if let Some(win) = app.get_webview_window("main") {
+                let app_handle = app.handle().clone();
+                let _ = win.on_window_event(move |event| {
+                    if let WindowEvent::Focused(focused) = event {
+                        if *focused {
+                            let state: tauri::State<'_, Arc<NotificationState>> = app_handle.state();
+                            let url_opt = state.pending_url.lock().unwrap().take();
+                            if let Some(url) = url_opt {
+                                if let Some(win) = app_handle.get_webview_window("main") {
+                                    if let Ok(nav_url) = url.parse::<Url>() {
+                                        let _ = win.navigate(nav_url);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -69,12 +125,7 @@ pub fn run() {
                 api.prevent_close();
             }
         })
-        .invoke_handler(tauri::generate_handler![notify])
+        .invoke_handler(tauri::generate_handler![notify, handle_notification_click])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-}
-
-#[tauri::command]
-fn notify(app: tauri::AppHandle, title: String, body: String) {
-    show_notification(&app, &title, &body);
 }

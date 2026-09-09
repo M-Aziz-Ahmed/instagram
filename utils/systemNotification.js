@@ -38,7 +38,7 @@ export async function showBackgroundNotification(title, { body = "", url = "/", 
             // Route through the Rust `notify` command (lib.rs) which uses
             // tauri-plugin-notification to raise a native tray notification.
             const { invoke } = await import("@tauri-apps/api/core");
-            await invoke("notify", { title, body });
+            await invoke("notify", { title, body, url, tag });
             return true;
         } catch {
             return false;

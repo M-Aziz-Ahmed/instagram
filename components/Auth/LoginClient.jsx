@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import LoginForm from "./LoginForm";
 import SetupForm from "./SetupForm";
@@ -9,13 +9,17 @@ import SetupForm from "./SetupForm";
 export default function LoginClient() {
     const { user, ready } = useUser();
     const router          = useRouter();
+    const searchParams    = useSearchParams();
     const [screen, setScreen] = useState("login");
+
+    // Get the intended destination from query param or default to home
+    const redirectTo = searchParams.get("redirect") || "/";
 
     useEffect(() => {
         if (!ready) return;
-        if (user && !user.needsSetup) router.replace("/");
+        if (user && !user.needsSetup) router.replace(redirectTo);
         if (user && user.needsSetup) setScreen("setup");
-    }, [user, ready, router]);
+    }, [user, ready, router, redirectTo]);
 
     if (!ready) {
         return (
@@ -44,12 +48,12 @@ export default function LoginClient() {
                             <LoginForm
                                 onSuccess={(needsSetup) => {
                                     if (needsSetup) setScreen("setup");
-                                    else router.replace("/");
+                                    else router.replace(redirectTo);
                                 }}
                             />
                         </>
                     ) : (
-                        <SetupForm onDone={() => router.replace("/")} />
+                        <SetupForm onDone={() => router.replace(redirectTo)} />
                     )}
                 </div>
             </div>

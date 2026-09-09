@@ -14,7 +14,7 @@ import MutedWordsModal from "@/components/Settings/MutedWordsModal";
 
 function NavItem({ href, icon, label, active, onClick, badge }) {
     const { collapsed } = useSidebar();
-    const classes = `flex items-center ${collapsed ? "justify-center gap-0 px-2" : "gap-3 px-4"} py-3 rounded-xl text-sm font-medium transition-colors min-h-[48px] ${
+    const classes = `flex items-center ${collapsed ? "justify-center gap-0 px-2" : "gap-3 px-4"} py-3.5 rounded-xl text-sm font-medium transition-colors min-h-[48px] min-w-[48px] ${
         active
             ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/60 hover:text-gray-900 dark:hover:text-gray-100"
@@ -307,9 +307,12 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
 
             {/* Sidebar panel */}
             <aside
-                className={`fixed top-0 left-0 h-full ${collapsed ? "w-20" : "w-72"} bg-white dark:bg-gray-900 z-50 shadow-xl transition-all duration-300 ease-in-out lg:translate-x-0 lg:shadow-none lg:border-r lg:border-gray-200 dark:lg:border-gray-800 ${
-                    open ? "translate-x-0" : "-translate-x-full"
-                }`}
+                className={`fixed top-0 left-0 h-full bg-white dark:bg-gray-900 z-50 shadow-xl transition-all duration-300 ease-in-out ${
+                    open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+                } ${collapsed ? "w-20" : "w-72"} ${
+                    // Tablet: always collapsed (icon-only) unless open
+                    ""
+                } lg:shadow-none lg:border-r lg:border-gray-200 dark:lg:border-gray-800`}
             >
                 <div className="flex flex-col h-full">
                     {/* User profile header */}

@@ -77,12 +77,12 @@ export default function FeedClient() {
                         </button>
                     </div>
 
-                    <div className="hidden sm:block flex-1 max-w-xs">
+                    <div className="hidden md:block flex-1 max-w-xs">
                         <SearchBar onSearch={setSearchQuery} searchQuery={searchQuery} onClearSearch={() => setSearchQuery(null)} />
                     </div>
 
-                    <div className="flex items-center gap-0.5 sm:gap-1">
-                        <div className="sm:hidden">
+                    <div className="flex items-center gap-0.5 md:gap-1">
+                        <div className="md:hidden">
                             <SearchBar onSearch={setSearchQuery} searchQuery={searchQuery} onClearSearch={() => setSearchQuery(null)} />
                         </div>
                         {isGuest ? (
@@ -146,10 +146,10 @@ export default function FeedClient() {
             {/* ── Feed tabs ──────────────────────────────────────────────── */}
             {!searchQuery && (
                 <div className="max-w-4xl mx-auto px-3 sm:px-4">
-                    <div className="flex gap-1 border-b border-gray-200 dark:border-gray-800">
+                    <div className="flex gap-1 border-b border-gray-200 dark:border-gray-800 overflow-x-auto scrollbar-hide">
                         <button
                             onClick={() => setFeedType("all")}
-                            className={`flex-1 py-3 text-sm font-semibold transition-colors relative ${
+                            className={`flex-1 min-w-[120px] py-4 text-sm font-semibold transition-colors relative min-h-[44px] flex items-center justify-center ${
                                 feedType === "all"
                                     ? "text-gray-900 dark:text-gray-100"
                                     : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"
@@ -157,13 +157,13 @@ export default function FeedClient() {
                         >
                             {isGuest ? "Trending" : "All"}
                             {feedType === "all" && (
-                                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gray-900 dark:bg-gray-100 rounded-full" />
+                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-900 dark:bg-gray-100 rounded-full" />
                             )}
                         </button>
                         {hasFollowing && (
                             <button
                                 onClick={() => setFeedType("following")}
-                                className={`flex-1 py-3 text-sm font-semibold transition-colors relative ${
+                                className={`flex-1 min-w-[120px] py-4 text-sm font-semibold transition-colors relative min-h-[44px] flex items-center justify-center ${
                                     feedType === "following"
                                         ? "text-gray-900 dark:text-gray-100"
                                         : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"
@@ -171,7 +171,7 @@ export default function FeedClient() {
                             >
                                 For You
                                 {feedType === "following" && (
-                                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gray-900 dark:bg-gray-100 rounded-full" />
+                                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-900 dark:bg-gray-100 rounded-full" />
                                 )}
                             </button>
                         )}
@@ -180,8 +180,8 @@ export default function FeedClient() {
             )}
 
             {/* ── Body ─────────────────────────────────────────────────── */}
-            <div className="max-w-4xl mx-auto flex gap-4 lg:gap-8 px-3 sm:px-4">
-                <main className="flex-1 min-w-0 border-x border-gray-100 dark:border-gray-800">
+            <div className="max-w-4xl mx-auto flex gap-4 lg:gap-8 px-3 sm:px-4 md:px-6 pb-14 lg:pb-0">
+                <main className="flex-1 min-w-0 border-x border-gray-100 dark:border-gray-800 lg:border-x-0">
                     {!isGuest && <StoryTray />}
                     {!searchQuery && !isGuest && <Compose onPosted={() => setRefreshTrigger((n) => n + 1)} />}
                     <Feed
@@ -196,7 +196,7 @@ export default function FeedClient() {
                         isGuest={isGuest}
                     />
                 </main>
-                <aside className="hidden lg:block w-80 shrink-0 space-y-4 pt-4">
+                <aside className="hidden xl:block w-80 shrink-0 space-y-4 pt-4">
                     <SuggestedUsers />
                     <TopCommunities />
                     <TrendingSidebar onTagClick={handleHashtag} activeTag={activeTag} />

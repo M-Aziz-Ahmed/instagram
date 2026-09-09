@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 
 export default function InviteLandingClient({ inviteCode }) {
     const { user, ready } = useUser();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const redirectTo = searchParams.get("redirect") || "/";
     const [validating, setValidating] = useState(true);
     const [valid, setValid] = useState(false);
     const [inviter, setInviter] = useState("");
@@ -14,8 +16,8 @@ export default function InviteLandingClient({ inviteCode }) {
 
     useEffect(() => {
         if (!ready) return;
-        if (user && !user.needsSetup) router.replace("/");
-    }, [user, ready, router]);
+        if (user && !user.needsSetup) router.replace(redirectTo);
+    }, [user, ready, router, redirectTo]);
 
     useEffect(() => {
         const validate = async () => {
@@ -105,7 +107,7 @@ export default function InviteLandingClient({ inviteCode }) {
                             </button>
                             {user && (
                                 <button
-                                    onClick={() => router.replace("/")}
+                                    onClick={() => router.replace(redirectTo)}
                                     className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
                                 >
                                     Skip for now

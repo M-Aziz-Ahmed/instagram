@@ -3,7 +3,8 @@ import "./globals.css";
 import Providers from "./providers";
 import LayoutWrapper from "@/components/Layout/LayoutWrapper";
 import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next"
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import TauriNotificationHandler from "@/components/Tauri/TauriNotificationHandler";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -171,6 +172,7 @@ export default function RootLayout({ children }) {
           <LayoutWrapper>
             {children}
           </LayoutWrapper>
+          <TauriNotificationHandler />
         </Providers>
       </body>
     </html>

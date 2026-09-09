@@ -426,7 +426,7 @@ export default function ProfileClient({ username }) {
                                     <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-3">{profile.bio}</p>
                                 )}
 
-                                <div className="grid grid-cols-4 gap-2 w-full">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full">
                                     <div className="text-center">
                                         <span className="font-black text-gray-900 dark:text-gray-100 block">{data?.postCount ?? 0}</span>
                                         <span className="text-xs text-gray-500 dark:text-gray-400">posts</span>
@@ -474,7 +474,7 @@ export default function ProfileClient({ username }) {
                                 {data.posts.some((p) => p.imageUrl) && (
                                     <div className="mb-6">
                                         <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Photos</p>
-                                        <div className="grid grid-cols-3 gap-1">
+                                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-1">
                                             {data.posts.filter((p) => p.imageUrl).map((p) => (
                                                 <button key={p._id} onClick={() => setExpanded(p._id)}
                                                     className="aspect-square overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 hover:opacity-90 transition-opacity">

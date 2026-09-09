@@ -1,13 +1,15 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/context/UserContext";
 
 export default function ForgotPinClient() {
     const { reloadUser } = useUser();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const redirectTo = searchParams.get("redirect") || "/";
     const [step, setStep]       = useState("email");
     const [email, setEmail]     = useState("");
     const [otp, setOtp]         = useState(["", "", "", "", "", ""]);
@@ -85,7 +87,7 @@ export default function ForgotPinClient() {
             if (!res.ok) { setError(data.error); return; }
             await reloadUser(data.user);
             await new Promise((resolve) => setTimeout(resolve, 100));
-            router.replace("/");
+            router.replace(redirectTo);
         } catch {
             setError("Network error. Try again.");
         } finally {

@@ -72,7 +72,9 @@ export async function middleware(request) {
         if (isApiPath(pathname)) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
-        return NextResponse.redirect(new URL("/login", request.url));
+        const loginUrl = new URL("/login", request.url);
+        loginUrl.searchParams.set("redirect", pathname + request.nextUrl.search);
+        return NextResponse.redirect(loginUrl);
     }
 
     try {
@@ -82,7 +84,9 @@ export async function middleware(request) {
         if (isApiPath(pathname)) {
             return NextResponse.json({ error: "Invalid session" }, { status: 401 });
         }
-        return NextResponse.redirect(new URL("/login", request.url));
+        const loginUrl = new URL("/login", request.url);
+        loginUrl.searchParams.set("redirect", pathname + request.nextUrl.search);
+        return NextResponse.redirect(loginUrl);
     }
 }
 
