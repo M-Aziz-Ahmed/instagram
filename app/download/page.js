@@ -21,6 +21,10 @@ export default function DownloadPage() {
     const [release, setRelease] = useState(null);
     const [dismissed, setDismissed] = useState(false);
 
+    // Don't show download page in Tauri desktop app - it has its own update mechanism
+    const inTauri = typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
+    if (inTauri) return null;
+
     useEffect(() => {
         const t = setTimeout(() => {
             setPlatform(detectPlatform());
