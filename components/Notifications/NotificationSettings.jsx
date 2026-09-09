@@ -7,10 +7,12 @@ import {
     isNotificationSupported,
     isPushSupported,
     isStandalone,
+    isTauri,
     requestPermissionAndSubscribe,
 } from "@/utils/notifications";
 
 export default function NotificationSettings() {
+    const tauri = typeof window !== "undefined" && isTauri();
     const [status, setStatus] = useState({
         checking: true,
         supported: false,
@@ -67,6 +69,35 @@ export default function NotificationSettings() {
     const blocked = permission === "denied";
     const notAsked = permission === "default";
     const needsInstall = supported && push === false && !standalone;
+
+    // Tauri desktop: notifications are native tray notifications — no browser
+    // permission, no Web Push subscription, no VAPID. Just a simple status.
+    if (tauri) {
+        return (
+            <section className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5 mb-6">
+                <div className="flex items-center gap-3 mb-3">
+                    <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 className="font-bold text-gray-900 dark:text-gray-100">Notifications</h2>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Desktop app — shown natively from the system tray.</p>
+                    </div>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-300">Notifications on this device</span>
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400">
+                        On
+                    </span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    Notifications appear as desktop alerts while the app runs in the system tray — no browser permission needed.
+                </p>
+            </section>
+        );
+    }
 
     return (
         <section className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5 mb-6">

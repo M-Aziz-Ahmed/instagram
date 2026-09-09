@@ -28,6 +28,10 @@ export default function PushNotificationManager() {
             await Promise.resolve();
             if (!alive) return;
 
+            // Tauri desktop uses native tray notifications — no browser
+            // permission prompt, no Web Push subscription, no popup banner.
+            if (isTauri()) return;
+
             const dismissedKey = `push_dismissed_${user.username}`;
             if (localStorage.getItem(dismissedKey)) {
                 setDismissed(true);
