@@ -82,15 +82,9 @@ jobs:
       - name: Disable updater artifacts for unsigned (key-less) builds
         if: env.HAS_TAURI_SIGNING_KEY != 'true'
         working-directory: desktop
-        run: |
-          node -e "
-            const fs = require('fs');
-            const path = 'src-tauri/tauri.conf.json';
-            const cfg = JSON.parse(fs.readFileSync(path, 'utf8'));
-            cfg.bundle.createUpdaterArtifacts = false;
-            fs.writeFileSync(path, JSON.stringify(cfg, null, 2) + '\n');
-          "
-          echo \"Unsigned build: updater feed artifacts disabled (installers still published for manual download).\"
+        run: node -e "const fs=require('fs');const p='src-tauri/tauri.conf.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.bundle.createUpdaterArtifacts=false;fs.writeFileSync(p,JSON.stringify(c,null,2))"
+        env:
+          NODE_NO_WARNINGS: "1"
 
       - name: Build Tauri bundles
         working-directory: desktop
