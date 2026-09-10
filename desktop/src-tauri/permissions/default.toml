@@ -1,0 +1,24 @@
+"$schema" = "../gen/schemas/desktop-schema.json"
+
+[default]
+description = "Default permissions for the AnonTweet desktop app commands."
+permissions = [
+  "allow-show-toast",
+  "allow-close-toast",
+  "allow-handle-toast-click",
+]
+
+[[permission]]
+identifier = "allow-show-toast"
+description = "Enables the show_toast command which creates the always-on-top toast notification window."
+commands.allow = ["show_toast"]
+
+[[permission]]
+identifier = "allow-close-toast"
+description = "Enables the close_toast command which closes an open toast notification window."
+commands.allow = ["close_toast"]
+
+[[permission]]
+identifier = "allow-handle-toast-click"
+description = "Enables the handle_toast_click command which opens the toast's target URL in the main window."
+commands.allow = ["handle_toast_click"]

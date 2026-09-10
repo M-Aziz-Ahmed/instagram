@@ -1,11 +1,11 @@
 {
     "platforms":  {
                       "windows-x86_64":  {
-                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmhJYzY0VDREUG4xeERmeWk3dk82QzFvWlFUUDEwWXFUVW9KQXpGNkpxWkFnRVk0T2liRlJHWWM1OFVoVityR3pXUVVlVFlpM01oNkQrVEFSN0JoZzBxeGUrZmgxQndFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MDEwNzQ5CWZpbGU6QW5vblR3ZWV0XzAuMS4xMF94NjQtc2V0dXAuZXhlCm1QMUlYNW5hUzdoQ004UUt3cnhhY0ViUWkxZ1FFS2szWS84YWExQ0JHaTdZdmZnWVJXVXdNdTJhTHdJSVR4L3E3bU1tcTV1OVljSVFpT2NsL2FObUJ3PT0K",
-                                             "url":  "https://anontweet.vercel.app/downloads/desktop/AnonTweet_0.1.10_x64-setup.exe"
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmhJYzY0VDREUHVsNTVuTWwrUG01VEtHalRvNmlVMk1Yd3BiYkFPNS83b2JKdGJDUlZPMTBVckhabVU1cVcwaUNGd2FPVllMdXZuOE9qaldYWDVYSkI4b0NsTDhLc1FNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MDExOTI3CWZpbGU6QW5vblR3ZWV0XzAuMS4xMV94NjQtc2V0dXAuZXhlCmdFSTJsWEEwSC9iOHNMRkJDUWF6WXBaRENjWHhUa1d3cWI5eUVXUFhDTHJaZWNKRnhFNW9Bc2N4YTY4bGY2blp2Ymcyd3RWOG1vck9sUkxxcXVlbUFBPT0K",
+                                             "url":  "https://anontweet.vercel.app/downloads/desktop/AnonTweet_0.1.11_x64-setup.exe"
                                          }
                   },
-    "pub_date":  "2026-09-10T03:25:49Z",
-    "version":  "0.1.10",
-    "notes":  "Desktop notifications: native plugin primary with guaranteed-visible in-app toast fallback; added desktop diagnostics panel (version + test notification buttons + log); enabled withGlobalTauri for toast IPC"
+    "pub_date":  "2026-09-10T03:45:27Z",
+    "version":  "0.1.11",
+    "notes":  "Fix desktop notifications: enable Tauri IPC/ACL for the remote app origin (anontweet.vercel.app) and add app-command permissions for the toast window fallback."
 }
