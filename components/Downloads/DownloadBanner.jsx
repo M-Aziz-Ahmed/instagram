@@ -1,25 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { detectPlatform, fetchAvailableFiles, bestDownloadUrl } from "@/utils/desktopDownloads";
 
-const RELEASE_JSON = "/downloads/desktop/latest.json";
 const STORE = "download-banner-dismissed";
-
-function detectPlatform() {
-    if (typeof window === "undefined") return "unknown";
-    const ua = navigator.userAgent;
-    const inTauri = "__TAURI_INTERNALS__" in window;
-    if (inTauri) return "tauri";
-    if (ua.includes("Windows")) return "windows";
-    if (ua.includes("Mac OS X") || ua.includes("iPad") || ua.includes("iPhone")) return "macos";
-    if (/Android/i.test(ua)) return "android";
-    if (/Linux/i.test(ua)) return "linux";
-    return "unknown";
-}
 
 export default function DownloadBanner() {
     const [platform, setPlatform] = useState("unknown");
-    const [release, setRelease] = useState(null);
+    const [available, setAvailable] = useState(null);
     const [dismissed, setDismissed] = useState(false);
     const [installPrompt, setInstallPrompt] = useState(null);
 
@@ -34,12 +22,7 @@ export default function DownloadBanner() {
     }, []);
 
     useEffect(() => {
-        fetch(RELEASE_JSON)
-            .then((r) => (r.ok ? r.json() : null))
-            .then((data) => {
-                if (data?.version) setRelease(data);
-            })
-            .catch(() => {});
+        fetchAvailableFiles().then(setAvailable);
     }, []);
 
     useEffect(() => {
@@ -60,11 +43,14 @@ export default function DownloadBanner() {
 
     if (platform === "tauri" || dismissed) return null;
 
-    // Serve the installer through a route handler that streams the real file.
-    // Direct static URLs to .exe/.msi in public/ return the SPA HTML page on
-    // Vercel (files aren't served as static assets), so we bypass that.
-    const winUrl = "/api/downloads/desktop";
-    const version = release?.version || "";
+    // Prefer the advertised binary for this platform; before CI publishes
+    // available.json keep the Windows button working via the route handler.
+    const desktopUrl = available
+        ? bestDownloadUrl(available, platform)
+        : platform === "windows" || platform === "unknown"
+            ? "/api/downloads/desktop"
+            : "";
+    const desktopReady = Boolean(desktopUrl);
 
     const platformLabel =
         platform === "windows"
@@ -74,10 +60,6 @@ export default function DownloadBanner() {
               : platform === "linux"
                 ? "Linux"
                 : "Windows 10/11";
-
-    // Only Windows installers are published today; Linux/macOS builds get shipped
-    // by CI but don't exist yet, so don't offer a broken download link.
-    const desktopAvailable = platform === "windows" || platform === "unknown";
 
     const installPWA = async () => {
         if (installPrompt) {
@@ -99,12 +81,10 @@ export default function DownloadBanner() {
                         </div>
                         <div className="min-w-0">
                             <h2 className="text-sm sm:text-base font-bold leading-tight truncate">
-                                Download the AnonTweet app{version ? ` v${version}` : ""}
+                                Download the AnonTweet app
                             </h2>
                             <p className="text-xs text-blue-100/90 leading-snug">
-                                {desktopAvailable
-                                    ? `Desktop for ${platformLabel} · Mobile for Android & iOS — with push notifications, auto-updates & one-click installs.`
-                                    : "Desktop app · Mobile for Android & iOS — Windows build today, Linux & macOS coming soon."}
+                                Desktop for Windows, macOS & Linux · Mobile for Android & iOS — with push notifications, auto-updates & one-click installs.
                             </p>
                         </div>
                     </div>
@@ -121,10 +101,10 @@ export default function DownloadBanner() {
 
                 <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:gap-3">
                     <div className="flex-1 flex flex-col gap-2">
-                        {desktopAvailable ? (
+                        {desktopReady ? (
                             <>
                                 <a
-                                    href={winUrl}
+                                    href={desktopUrl}
                                     download
                                     className="flex items-center justify-center gap-2 bg-white text-indigo-700 hover:bg-indigo-50 text-sm font-bold px-4 py-2.5 rounded-xl transition-colors"
                                 >
@@ -140,10 +120,10 @@ export default function DownloadBanner() {
                         ) : (
                             <>
                                 <div className="flex items-center justify-center gap-2 bg-white/10 border border-dashed border-white/30 text-sm font-bold px-4 py-2.5 rounded-xl text-blue-100/90">
-                                    {platformLabel} app coming soon
+                                    {platformLabel} build coming soon
                                 </div>
                                 <p className="text-[11px] text-blue-100/80 text-center sm:text-left">
-                                    The Windows installer is ready today — grab it on any Windows machine.
+                                    Windows, macOS & Linux installers ship automatically once CI publishes them.
                                 </p>
                             </>
                         )}
