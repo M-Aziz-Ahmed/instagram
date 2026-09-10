@@ -51,7 +51,11 @@ function isStaticPath(pathname) {
         pathname.endsWith(".woff2") ||
         pathname.endsWith(".json") ||
         pathname === "/manifest.json" ||
-        pathname === "/site.webmanifest"
+        pathname === "/site.webmanifest" ||
+        pathname.startsWith("/downloads") ||
+        pathname.endsWith(".exe") ||
+        pathname.endsWith(".msi") ||
+        pathname.endsWith(".sig")
     );
 }
 
@@ -91,5 +95,5 @@ export async function middleware(request) {
 }
 
 export const config = {
-    matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+    matcher: ["/((?!_next/static|_next/image|favicon.ico|downloads).*)"],
 };
