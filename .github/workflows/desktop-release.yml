@@ -43,7 +43,7 @@ jobs:
             args: --bundles deb,rpm,appimage
             bundle-dir: desktop/src-tauri/target/release/bundle
           - label: macos-x86_64
-            runner: macos-13
+            runner: macos-14
             args: --target x86_64-apple-darwin --bundles app,dmg
             bundle-dir: desktop/src-tauri/target/x86_64-apple-darwin/release/bundle
           - label: macos-aarch64
