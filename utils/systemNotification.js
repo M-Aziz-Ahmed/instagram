@@ -1,10 +1,14 @@
 // Shows OS-level notifications from the running app (no Web Push / VAPID needed).
-// Works while the page/tab is open in the background. Web Push additionally
-// covers a fully closed app, but this is the VAPID-free fallback.
 //
-// On the Tauri desktop app, notifications go through the native plugin
-// (tauri-plugin-notification) — proper desktop tray notifications that need no
-// browser permission. In a plain browser they use the web Notification API.
+// On the Tauri desktop app:
+//   1. Primary: the native notification plugin (tauri-plugin-notification) → real
+//      OS tray/action-center toasts (works even while the window is in the tray).
+//   2. Fallback: a guaranteed-visible always-on-top toast window (Rust `show_toast`)
+//      — shown whenever the native path throws or permission is denied. This always
+//      appears because the app process is running even when hidden in the system tray.
+//
+// In a plain browser it uses the web Notification API and only fires when the page
+// is in the background.
 
 export function isTauri() {
     return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
@@ -16,13 +20,12 @@ export function isNotificationSupported() {
 }
 
 export function canNotify() {
-    if (isTauri()) return true; // native desktop notifications are always available
+    if (isTauri()) return true;
     return isNotificationSupported() && Notification.permission === "granted";
 }
 
 export function requestNotificationsPermission() {
     if (isTauri()) {
-        // Tauri native notifications are always available on desktop
         return Promise.resolve("granted");
     }
     if (typeof window !== "undefined" && "Notification" in window) {
@@ -31,41 +34,69 @@ export function requestNotificationsPermission() {
     return Promise.resolve("unsupported");
 }
 
-// Show an OS notification. In Tauri this uses the native plugin so it
-// appears as a proper desktop tray notification even when the window is hidden
-// to the system tray. In a browser it uses the web Notification API and only
-// fires when the page is in the background.
+// --- Desktop notification diagnostics (visible in the desktop-only debug pill) ---
+
+const desktopNotificationLog = [];
+
+export function getDesktopNotificationLog() {
+    return [...desktopNotificationLog];
+}
+
+function logDesktopNotification(status, method, error) {
+    desktopNotificationLog.push({
+        status,
+        method,
+        error: error ? String(error?.message || error) : undefined,
+        time: new Date().toISOString(),
+    });
+    if (desktopNotificationLog.length > 50) desktopNotificationLog.shift();
+}
+
+async function showCustomToast(title, body, url) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const absoluteUrl = url && !/^https?:\/\//i.test(url)
+        ? new URL(url, window.location.href).href
+        : url || "";
+    await invoke("show_toast", { title, body, url: absoluteUrl });
+}
+
+// Show an OS notification.
 export async function showBackgroundNotification(title, { body = "", url = "/", icon = "/icon-192.svg", tag = "" } = {}) {
     if (!canNotify()) return false;
 
     if (isTauri()) {
+        // 1) Try the real native plugin notification.
         try {
-            // Use the Tauri notification plugin (tauri-plugin-notification).
-            // Its sendNotification() shows native OS tray notifications that
-            // work even when the app is minimized to the system tray.
-            const { isPermissionGranted, requestPermission, sendNotification } = await import(
-                "@tauri-apps/plugin-notification"
-            );
-            let granted = await isPermissionGranted();
+            const plugin = await import("@tauri-apps/plugin-notification");
+            let granted = await plugin.isPermissionGranted();
             if (!granted) {
-                granted = (await requestPermission()) === "granted";
+                granted = (await plugin.requestPermission()) === "granted";
             }
-            if (!granted) return false;
-
-            const iconUrl = icon.replace(/\.svg$/i, ".png").startsWith("http")
-                ? icon.replace(/\.svg$/i, ".png")
-                : new URL(icon.replace(/\.svg$/i, ".png"), window.location.href).href;
-
-            sendNotification({ title, body, icon: iconUrl, tag });
-            return true;
+            if (granted) {
+                // Windows toasts use the installed app's own icon; passing a URL
+                // icon can make notify-rust fail silently.
+                plugin.sendNotification({ title, body, tag });
+                logDesktopNotification("ok", "native");
+                return true;
+            }
+            logDesktopNotification("denied", "native");
         } catch (e) {
-            // Native notification failed - surface the real reason.
-            console.error("Tauri native notification failed:", e);
+            console.error("[notify] native notification failed, using in-app toast:", e);
+        }
+
+        // 2) Fallback: guaranteed-visible always-on-top toast window.
+        try {
+            await showCustomToast(title, body, url);
+            logDesktopNotification("ok", "toast-window");
+            return true;
+        } catch (e2) {
+            console.error("[notify] in-app toast also failed:", e2);
+            logDesktopNotification("failed", "toast-window", e2);
             return false;
         }
     }
 
-    // Browser fallback: only show if the page/tab is visible/in background
+    // Browser fallback: only show if the page/tab is in the background.
     if (typeof document !== "undefined" && !document.hidden) return false;
 
     try {

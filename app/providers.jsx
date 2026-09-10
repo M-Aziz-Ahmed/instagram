@@ -11,6 +11,7 @@ import OnlineStatusTracker from "@/components/OnlineStatusTracker";
 import PushNotificationManager from "@/components/PushNotificationManager";
 import FcmPushBridge from "@/components/FcmPushBridge";
 import AutoUpdater from "@/components/Updates/AutoUpdater";
+import TauriDesktopDiagnostics from "@/components/Tauri/TauriDesktopDiagnostics";
 import { useEffect } from "react";
 import { installLogInterceptor } from "@/utils/logInterceptor";
 
@@ -72,6 +73,7 @@ export default function Providers({ children }) {
                                 <PushNotificationManager />
                                 <FcmPushBridge />
                                 <AutoUpdater />
+                                <TauriDesktopDiagnostics />
                             </ErrorBoundary>
                         </ToastProvider>
                     </VoiceChatProvider>
