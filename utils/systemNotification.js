@@ -60,15 +60,44 @@ async function showCustomToast(title, body, url) {
     await invoke("show_toast", { title, body, url: absoluteUrl });
 }
 
+// The clickable toast-window asset (toast.html) only ships embedded in the
+// binary from v0.1.13 onward. On older builds the window is created but renders
+// blank, so a "successful" show_toast would swallow the notification. Those
+// installs should lead with the native Notification plugin instead.
+let tauriVersionPromise = null;
+function getTauriVersion() {
+    if (!tauriVersionPromise) {
+        tauriVersionPromise = import("@tauri-apps/api/app")
+            .then(({ getVersion }) => getVersion())
+            .catch(() => "");
+    }
+    return tauriVersionPromise;
+}
+
+function versionAtLeast(version, min) {
+    const p = String(version || "").split(".").map((n) => parseInt(n, 10) || 0);
+    const m = String(min).split(".").map((n) => parseInt(n, 10) || 0);
+    for (let i = 0; i < 3; i++) {
+        const a = p[i] || 0;
+        const b = m[i] || 0;
+        if (a !== b) return a > b;
+    }
+    return true;
+}
+
 // Show an OS notification.
 export async function showBackgroundNotification(title, { body = "", url = "/", icon = "/icon-192.svg", tag = "" } = {}) {
     if (!canNotify()) return false;
 
     if (isTauri()) {
-        // 1) When a target URL is attached, lead with the always-on-top toast
-        //    window: it is the only desktop notification that supports
-        //    click-to-navigate (native OS toasts only foreground the app).
-        if (url) {
+        // 1) When a target URL is attached AND the toast asset is available
+        //    (v0.1.13+), lead with the always-on-top toast window: it is the
+        //    only desktop notification that supports click-to-navigate (native
+        //    OS toasts only foreground the app).
+        let toastSupported = false;
+        const version = await getTauriVersion();
+        toastSupported = !version || versionAtLeast(version, "0.1.13");
+        if (url && toastSupported) {
             try {
                 await showCustomToast(title, body, url);
                 logDesktopNotification("ok", "toast-window");
@@ -97,8 +126,10 @@ export async function showBackgroundNotification(title, { body = "", url = "/", 
             console.error("[notify] native notification failed:", e);
         }
 
-        // 3) Fallback: guaranteed-visible always-on-top toast window.
+        // 3) Fallback: guaranteed-visible always-on-top toast window (only a
+        //    real fallback on v0.1.13+ where the toast asset exists).
         try {
+            if (!toastSupported) throw new Error("toast window unavailable on this version");
             await showCustomToast(title, body, url);
             logDesktopNotification("ok", "toast-window");
             return true;

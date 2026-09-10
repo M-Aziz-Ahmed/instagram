@@ -1,11 +1,11 @@
 {
     "platforms":  {
                       "windows-x86_64":  {
-                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmhJYzY0VDREUHNPYXJsS0UxMTd2Tm1MRlluUThPK0VEKzUyUS92MGltbDB6QlpyY0pIUlJ4QnlFSE0xMkljM2NwMGVoRno0MnBFODVMRzJGZnlXZjQvS09ZNE9HUHdrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MDEzNjI2CWZpbGU6QW5vblR3ZWV0XzAuMS4xMl94NjQtc2V0dXAuZXhlCnVNVDlpVEh6RUxmbXdRRGZzMFpLeTkyQTlya2hNeXQ4eDlGdmJuMXRGU0NXNUoxeW5hNlRSNkF5U1NqaHpkVjNaQjVubXNkbUhaK3NadXpja0M2a0FRPT0K",
-                                             "url":  "https://anontweet.vercel.app/downloads/desktop/AnonTweet_0.1.12_x64-setup.exe"
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmhJYzY0VDREUGpEWFVGNzRCTEFFTUt2UEs3d0xPaTJmbUdESWZPRG9na0pCUWw2NlhuNzRBSjRUWG5ybUlpVENtblF0czlsNGZjS3B2SDhNcHRzZUNGa3d4TUtGUUFnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MDIyOTcyCWZpbGU6QW5vblR3ZWV0XzAuMS4xM194NjQtc2V0dXAuZXhlCkRORVU4U1pqVVFIOSsvdDdwK2tTNmV2TU8wRHlHYmtLYlMrV05ndHc4MnBWaC9PRkJBdHNJMlhVVG5WMy8wdXp1a21OcnZldlFTNHQxVUg0RWloeUJRPT0K",
+                                             "url":  "https://anontweet.vercel.app/downloads/desktop/AnonTweet_0.1.13_x64-setup.exe"
                                          }
                   },
-    "pub_date":  "2026-09-10T04:13:46Z",
-    "version":  "0.1.12",
-    "notes":  "Notifications now use the in-app toast window when a target URL is attached so clicking one navigates you to the page; the desktop debug panel is now opt-in (hidden by default, enable with ?debug=1)."
+    "pub_date":  "2026-09-10T06:49:33Z",
+    "version":  "0.1.13",
+    "notes":  "Fix desktop notifications: embed the missing toast-window asset (toast.html) and make all versions fall back to native OS notifications when the toast window isn\u0027t available."
 }

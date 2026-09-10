@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AnonTweet Notification</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent;
+            user-select: none;
+            cursor: pointer;
+            font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+        }
+
+        .toast {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #171a23 0%, #232734 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+            transition: transform 0.12s ease;
+            -webkit-user-select: none;
+        }
+
+        .toast:active {
+            transform: scale(0.99);
+        }
+
+        .toast .logo {
+            flex-shrink: 0;
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: #fff;
+            font-size: 20px;
+            font-weight: 800;
+        }
+
+        .toast .content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .toast .title {
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.25;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .toast .body {
+            color: rgba(255, 255, 255, 0.72);
+            font-size: 11.5px;
+            font-weight: 500;
+            line-height: 1.35;
+            margin-top: 2px;
+            /* 2 lines max */
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .toast .close {
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            background: rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.6);
+            cursor: pointer;
+            transition: background 0.12s ease, color 0.12s ease;
+        }
+
+        .toast .close:hover {
+            background: rgba(255, 255, 255, 0.16);
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="toast" id="toast">
+        <div class="logo">A</div>
+        <div class="content">
+            <div class="title" id="title">AnonTweet</div>
+            <div class="body" id="body"></div>
+        </div>
+        <button class="close" id="close" aria-label="Dismiss">✕</button>
+    </div>
+
+    <script>
+        // Data is injected before this script runs by Rust's initialization_script.
+        const data = window.__TOAST_DATA__ || {};
+
+        (function () {
+            var id = data.id || 0;
+            if (data.title) document.getElementById("title").textContent = data.title;
+            if (data.body) document.getElementById("body").textContent = data.body;
+
+            function invoke(cmd, args) {
+                var core = window.__TAURI__ && window.__TAURI__.core;
+                if (!core || !core.invoke) return Promise.reject(new Error("tauri IPC unavailable"));
+                return core.invoke(cmd, args);
+            }
+
+            function dismiss() {
+                invoke("close_toast", { id: id }).catch(function () {});
+            }
+
+            function openToast() {
+                invoke("handle_toast_click", { id: id }).catch(function () {
+                    dismiss();
+                });
+            }
+
+            document.getElementById("toast").addEventListener("click", openToast);
+            document.getElementById("close").addEventListener("click", function (e) {
+                e.stopPropagation();
+                dismiss();
+            });
+
+            // Safety net in case the Rust-side auto-close was skipped.
+            setTimeout(function () {
+                invoke("close_toast", { id: id }).catch(function () {
+                    window.close();
+                });
+            }, 9000);
+        })();
+    </script>
+</body>
+</html>
