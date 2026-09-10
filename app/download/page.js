@@ -21,10 +21,6 @@ export default function DownloadPage() {
     const [release, setRelease] = useState(null);
     const [dismissed, setDismissed] = useState(false);
 
-    // Don't show download page in Tauri desktop app - it has its own update mechanism
-    const inTauri = typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
-    if (inTauri) return null;
-
     useEffect(() => {
         const t = setTimeout(() => {
             setPlatform(detectPlatform());
@@ -51,6 +47,11 @@ export default function DownloadPage() {
         } catch {}
     };
 
+    // Don't render at all inside the Tauri desktop app - it has its own update
+    // mechanism. Must come after the hooks so they always run in the same order.
+    const inTauri = typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
+    if (inTauri) return null;
+
     if (dismissed) return null;
 
     const platformLabel =
@@ -61,6 +62,10 @@ export default function DownloadPage() {
               : platform === "linux"
                 ? "Linux"
                 : "Windows 10/11";
+
+    // Only Windows installers are published today; don't offer a broken
+    // download link to Linux/macOS visitors.
+    const desktopAvailable = platform === "windows" || platform === "unknown";
 
     const winUrl = "/api/downloads/desktop";
 
@@ -78,20 +83,27 @@ export default function DownloadPage() {
                     </h1>
                     <p className="text-lg text-indigo-600 dark:text-indigo-400 mb-8">
                         Get the desktop app for push notifications, sticky headers, and
-                        Discord-style auto-updates.
+                        Discord-style auto-updates. Windows installer available today —
+                        Linux & macOS coming soon.
                     </p>
 
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                        <a
-                            href={winUrl}
-                            download
-                            className="flex items-center justify-center gap-2 bg-white text-indigo-700 hover:bg-indigo-50 text-sm font-bold px-6 py-3 rounded-xl transition-colors shadow-lg"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                                <path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" />
-                            </svg>
-                            Download for {platformLabel}
-                        </a>
+                        {desktopAvailable ? (
+                            <a
+                                href={winUrl}
+                                download
+                                className="flex items-center justify-center gap-2 bg-white text-indigo-700 hover:bg-indigo-50 text-sm font-bold px-6 py-3 rounded-xl transition-colors shadow-lg"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                                    <path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" />
+                                </svg>
+                                Download for {platformLabel}
+                            </a>
+                        ) : (
+                            <div className="flex items-center justify-center gap-2 bg-white/15 border border-dashed border-indigo-300 text-sm font-bold px-6 py-3 rounded-xl text-indigo-700 shadow-lg">
+                                {platformLabel} app coming soon
+                            </div>
+                        )}
 
                         <a
                             href="https://anontweet.vercel.app"

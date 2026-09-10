@@ -75,6 +75,10 @@ export default function DownloadBanner() {
                 ? "Linux"
                 : "Windows 10/11";
 
+    // Only Windows installers are published today; Linux/macOS builds get shipped
+    // by CI but don't exist yet, so don't offer a broken download link.
+    const desktopAvailable = platform === "windows" || platform === "unknown";
+
     const installPWA = async () => {
         if (installPrompt) {
             installPrompt.prompt();
@@ -98,7 +102,9 @@ export default function DownloadBanner() {
                                 Download the AnonTweet app{version ? ` v${version}` : ""}
                             </h2>
                             <p className="text-xs text-blue-100/90 leading-snug">
-                                Desktop for {platformLabel} · Mobile for Android & iOS — with push notifications, one-click installs & automatic updates.
+                                {desktopAvailable
+                                    ? `Desktop for ${platformLabel} · Mobile for Android & iOS — with push notifications, auto-updates & one-click installs.`
+                                    : "Desktop app · Mobile for Android & iOS — Windows build today, Linux & macOS coming soon."}
                             </p>
                         </div>
                     </div>
@@ -115,19 +121,32 @@ export default function DownloadBanner() {
 
                 <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:gap-3">
                     <div className="flex-1 flex flex-col gap-2">
-                        <a
-                            href={winUrl}
-                            download
-                            className="flex items-center justify-center gap-2 bg-white text-indigo-700 hover:bg-indigo-50 text-sm font-bold px-4 py-2.5 rounded-xl transition-colors"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                                <path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" />
-                            </svg>
-                            Download for {platformLabel}
-                        </a>
-                        <p className="text-[11px] text-blue-100/80 text-center sm:text-left">
-                            Auto-updates like Discord — install once, stay current.
-                        </p>
+                        {desktopAvailable ? (
+                            <>
+                                <a
+                                    href={winUrl}
+                                    download
+                                    className="flex items-center justify-center gap-2 bg-white text-indigo-700 hover:bg-indigo-50 text-sm font-bold px-4 py-2.5 rounded-xl transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                                        <path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" />
+                                    </svg>
+                                    Download for {platformLabel}
+                                </a>
+                                <p className="text-[11px] text-blue-100/80 text-center sm:text-left">
+                                    Auto-updates like Discord — install once, stay current.
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <div className="flex items-center justify-center gap-2 bg-white/10 border border-dashed border-white/30 text-sm font-bold px-4 py-2.5 rounded-xl text-blue-100/90">
+                                    {platformLabel} app coming soon
+                                </div>
+                                <p className="text-[11px] text-blue-100/80 text-center sm:text-left">
+                                    The Windows installer is ready today — grab it on any Windows machine.
+                                </p>
+                            </>
+                        )}
                     </div>
 
                     <div className="flex-1 flex flex-col gap-2">

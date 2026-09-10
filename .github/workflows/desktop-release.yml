@@ -1,0 +1,109 @@
+name: desktop-release-linux-macos
+
+# Builds signed Linux (deb/rpm/AppImage) and macOS (x64 + arm64) Tauri bundles
+# after each desktop change, then merges their updater manifests into
+# public/downloads/desktop/latest.json (Windows bundles are built locally).
+#
+# Signing keys come from repository secrets:
+#   TAURI_SIGNING_PRIVATE_KEY         (contents of ~/.tauri/anontweet.key)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+# If they are not set, bundles build unsigned and are NOT advertised to the
+# updater (the merge step skips signature-less platform entries).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop-release.yml"
+      - "tools/merge-updater-manifest.py"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: "build ${{ matrix.label }}"
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x86_64
+            runner: ubuntu-22.04
+            args: --bundles deb,rpm,appimage
+          - label: macos-x86_64
+            runner: macos-13
+            args: --target x86_64-apple-darwin --bundles app,dmg
+          - label: macos-aarch64
+            runner: macos-14
+            args: --target aarch64-apple-darwin --bundles app,dmg
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: startsWith(matrix.runner, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential curl wget file libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf rpm \
+            libwebkit2gtk-4.1-dev libgtk-3-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install desktop JS tooling
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build Tauri bundles
+        working-directory: desktop
+        run: npx tauri build ${{ matrix.args }}
+
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundles-${{ matrix.label }}
+          path: desktop/src-tauri/target/release/bundle
+          if-no-files-found: error
+
+  merge-and-publish:
+    name: Merge updater manifests & publish
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download bundle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: _artifacts
+
+      - name: Merge per-platform manifests into latest.json
+        run: |
+          mapfile -t MANIFESTS < <(find _artifacts -name latest.json)
+          python3 tools/merge-updater-manifest.py \
+            --search _artifacts \
+            public/downloads/desktop "${MANIFESTS[@]}"
+
+      - name: Show merged manifest
+        run: cat public/downloads/desktop/latest.json
+
+      - name: Commit linux/macOS updater artifacts
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(desktop): publish linux/macOS updater artifacts"

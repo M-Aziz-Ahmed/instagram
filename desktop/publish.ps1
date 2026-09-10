@@ -37,8 +37,11 @@ if (-not (Test-Path $sig)) { throw "Missing signature file: $sig" }
 $msi = Get-ChildItem (Join-Path $releaseDir "msi") -Filter "*.msi" |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
-# Remove stale artifacts from previous versions so only the current one is served.
-Get-ChildItem $outDir -Filter "AnonTweet_*" -ErrorAction SilentlyContinue | Remove-Item -Force
+# Remove stale artifacts from *other* versions, keeping any of the current
+# version (Linux/macOS bundles published by CI for this version stay intact).
+Get-ChildItem $outDir -Filter "AnonTweet_*" -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -notmatch [regex]::Escape($version) } |
+    Remove-Item -Force
 
 Copy-Item $setup.FullName (Join-Path $outDir $setup.Name) -Force
 Copy-Item $sig (Join-Path $outDir "$($setup.Name).sig") -Force
@@ -52,16 +55,26 @@ if ($msi) {
 $signature = (Get-Content $sig -Raw).Trim()
 $pubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
+# Merge into the existing manifest instead of overwriting it, so platform
+# entries published by CI for this version (linux-x86_64, darwin-*) survive.
+$existing = $null
+try { $existing = Get-Content $manifestPath -Raw | ConvertFrom-Json } catch {}
+$platforms = @{}
+if ($existing -and $existing.platforms) {
+    foreach ($p in $existing.platforms.PSObject.Properties) {
+        if ($p.Name -ne "windows-x86_64") { $platforms[$p.Name] = $p.Value }
+    }
+}
+$platforms["windows-x86_64"] = @{
+    signature = $signature
+    url       = "https://anontweet.vercel.app/downloads/desktop/$($setup.Name)"
+}
+
 $manifest = @{
     version   = $version
     notes     = $Notes
     pub_date  = $pubDate
-    platforms = @{
-        "windows-x86_64" = @{
-            signature = $signature
-            url       = "https://anontweet.vercel.app/downloads/desktop/$($setup.Name)"
-        }
-    }
+    platforms = $platforms
 }
 
 $manifestPath = Join-Path $outDir "latest.json"
