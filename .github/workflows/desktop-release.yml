@@ -41,12 +41,15 @@ jobs:
           - label: linux-x86_64
             runner: ubuntu-22.04
             args: --bundles deb,rpm,appimage
+            bundle-dir: desktop/src-tauri/target/release/bundle
           - label: macos-x86_64
             runner: macos-13
             args: --target x86_64-apple-darwin --bundles app,dmg
+            bundle-dir: desktop/src-tauri/target/x86_64-apple-darwin/release/bundle
           - label: macos-aarch64
             runner: macos-14
             args: --target aarch64-apple-darwin --bundles app,dmg
+            bundle-dir: desktop/src-tauri/target/aarch64-apple-darwin/release/bundle
     env:
       # GitHub omits the TAURI_SIGNING_* vars entirely when the secrets are
       # unset, so tauri only ever signs when keys are actually configured.
@@ -94,7 +97,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bundles-${{ matrix.label }}
-          path: desktop/src-tauri/target/release/bundle
+          path: ${{ matrix.bundle-dir }}
           if-no-files-found: error
 
   merge-and-publish:
