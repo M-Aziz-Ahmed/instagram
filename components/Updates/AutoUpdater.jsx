@@ -20,8 +20,10 @@ export default function AutoUpdater() {
             const { check } = await import("@tauri-apps/plugin-updater");
             const found = await check();
             setUpdate(found);
-        } catch {
-            // not running inside Tauri (web browser) — no-op
+        } catch (e) {
+            if (inTauri) {
+                console.error("[AutoUpdater] update check failed:", e);
+            }
         } finally {
             checking.current = false;
         }

@@ -40,13 +40,26 @@ export async function showBackgroundNotification(title, { body = "", url = "/", 
 
     if (isTauri()) {
         try {
-            // Use Tauri native notification plugin - this works even when
-            // the app is minimized to the system tray or fully closed
-            const { notify } = await import("@tauri-apps/api/notification");
-            await notify({ title, body, icon, tag });
+            // Use the Tauri notification plugin (tauri-plugin-notification).
+            // Its sendNotification() shows native OS tray notifications that
+            // work even when the app is minimized to the system tray.
+            const { isPermissionGranted, requestPermission, sendNotification } = await import(
+                "@tauri-apps/plugin-notification"
+            );
+            let granted = await isPermissionGranted();
+            if (!granted) {
+                granted = (await requestPermission()) === "granted";
+            }
+            if (!granted) return false;
+
+            const iconUrl = icon.replace(/\.svg$/i, ".png").startsWith("http")
+                ? icon.replace(/\.svg$/i, ".png")
+                : new URL(icon.replace(/\.svg$/i, ".png"), window.location.href).href;
+
+            sendNotification({ title, body, icon: iconUrl, tag });
             return true;
         } catch (e) {
-            // Native notification failed - fall back to showing an error
+            // Native notification failed - surface the real reason.
             console.error("Tauri native notification failed:", e);
             return false;
         }

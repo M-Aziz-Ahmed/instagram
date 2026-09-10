@@ -10,25 +10,20 @@ export default function TauriNotificationHandler() {
 
         const handleFocus = async () => {
             try {
-                const { invoke } = await import("@tauri-apps/api/core");
-                await invoke("handle_notification_click");
+                // Showing the window to the foreground lets the user act on a
+                // clicked notification when the app was hidden in the system tray.
+                const { getCurrentWindow } = await import("@tauri-apps/api/window");
+                await getCurrentWindow().show();
+                await getCurrentWindow().setFocus();
             } catch (e) {
-                console.warn("[Tauri] handle_notification_click failed:", e);
-            }
-        };
-
-        const handleVisibilityChange = () => {
-            if (!document.hidden) {
-                handleFocus();
+                console.warn("[Tauri] focus window failed:", e);
             }
         };
 
         window.addEventListener("focus", handleFocus);
-        document.addEventListener("visibilitychange", handleVisibilityChange);
 
         return () => {
             window.removeEventListener("focus", handleFocus);
-            document.removeEventListener("visibilitychange", handleVisibilityChange);
         };
     }, [inTauri]);
 

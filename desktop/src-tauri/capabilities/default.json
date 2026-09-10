@@ -11,6 +11,7 @@
     "core:window:allow-create",
     "core:webview:allow-create-webview-window",
     "updater:default",
-    "process:default"
+    "process:default",
+    "notification:default"
   ]
 }
