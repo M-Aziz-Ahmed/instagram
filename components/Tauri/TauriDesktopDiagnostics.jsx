@@ -3,6 +3,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { showBackgroundNotification, getDesktopNotificationLog } from "@/utils/systemNotification";
 
+const DEBUG_FLAG = "tauri-debug-panel";
+
+function debugEnabled() {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("debug") === "1") {
+        try { window.localStorage.setItem(DEBUG_FLAG, "1"); } catch {}
+        return true;
+    }
+    try { return window.localStorage.getItem(DEBUG_FLAG) === "1"; } catch { return false; }
+}
+
 export default function TauriDesktopDiagnostics() {
     const inTauri = typeof window !== "undefined" &&
         (typeof window.__TAURI_INTERNALS__ !== "undefined" || "__TAURI_INTERNALS__" in window);
@@ -35,6 +47,7 @@ export default function TauriDesktopDiagnostics() {
     }, [refresh]);
 
     if (!inTauri) return null;
+    if (!debugEnabled()) return null;
 
     const testNative = async () => {
         setStatus({ kind: "pending", text: "Sending native notification…" });

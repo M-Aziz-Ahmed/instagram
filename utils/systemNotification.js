@@ -65,7 +65,22 @@ export async function showBackgroundNotification(title, { body = "", url = "/", 
     if (!canNotify()) return false;
 
     if (isTauri()) {
-        // 1) Try the real native plugin notification.
+        // 1) When a target URL is attached, lead with the always-on-top toast
+        //    window: it is the only desktop notification that supports
+        //    click-to-navigate (native OS toasts only foreground the app).
+        if (url) {
+            try {
+                await showCustomToast(title, body, url);
+                logDesktopNotification("ok", "toast-window");
+                return true;
+            } catch (e1) {
+                logDesktopNotification("failed", "toast-window", e1);
+            }
+        }
+
+        // 2) Native OS notification (Action Center). Windows toasts use the
+        //    installed app's own icon; passing a URL icon can make notify-rust
+        //    fail silently. Clicking one only brings the app forward.
         try {
             const plugin = await import("@tauri-apps/plugin-notification");
             let granted = await plugin.isPermissionGranted();
@@ -73,18 +88,16 @@ export async function showBackgroundNotification(title, { body = "", url = "/", 
                 granted = (await plugin.requestPermission()) === "granted";
             }
             if (granted) {
-                // Windows toasts use the installed app's own icon; passing a URL
-                // icon can make notify-rust fail silently.
                 plugin.sendNotification({ title, body, tag });
                 logDesktopNotification("ok", "native");
                 return true;
             }
             logDesktopNotification("denied", "native");
         } catch (e) {
-            console.error("[notify] native notification failed, using in-app toast:", e);
+            console.error("[notify] native notification failed:", e);
         }
 
-        // 2) Fallback: guaranteed-visible always-on-top toast window.
+        // 3) Fallback: guaranteed-visible always-on-top toast window.
         try {
             await showCustomToast(title, body, url);
             logDesktopNotification("ok", "toast-window");
