@@ -11,6 +11,9 @@ param(
 #   2. Build signed Tauri bundles + latest.json via publish.ps1.
 #   3. Commit all changes (web UI + desktop artifacts) and push to origin/master,
 #      which triggers the Vercel redeploy that serves the new update.
+#      If the CI workflow already auto-committed Linux/macOS bundles to remote
+#      (non-fast-forward), the push is retried after merging remote with
+#      "-X ours" so this (newer) release wins latest.json/available.json.
 #
 # Usage (from repo root or desktop/):
 #   ./release.ps1                  # full pipeline
@@ -111,8 +114,23 @@ $gitNotes = $gitNotes.Trim()
 git -C $RepoRoot commit -m $gitNotes
 if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
 
-git -C $RepoRoot push origin master
-if ($LASTEXITCODE -ne 0) { throw "git push failed" }
+# The desktop CI workflow auto-commits the Linux/macOS bundles to origin/master
+# right after our previous push, so a fast-forward push routinely races it.
+# Instead of failing, integrate the remote commit (preferring OUR side of any
+# latest.json/available.json conflict — this release is newer) and retry.
+$pushed = $false
+for ($attempt = 1; $attempt -le 3 -and -not $pushed; $attempt++) {
+    git -C $RepoRoot push origin master 2>&1 | Write-Host
+    if ($LASTEXITCODE -eq 0) { $pushed = $true; break }
+
+    Write-Host "Push rejected (CI commit landed on remote). Integrating remote then retrying..." -ForegroundColor Yellow
+    git -C $RepoRoot fetch origin
+    if ($LASTEXITCODE -ne 0) { throw "git fetch failed" }
+
+    git -C $RepoRoot merge --no-edit -X ours origin/master
+    if ($LASTEXITCODE -ne 0) { throw "Could not integrate origin/master (merge failed)" }
+}
+if (-not $pushed) { throw "git push failed after integrating remote 3 times" }
 
 Write-Host ""
 Write-Host "Released $gitNotes . Vercel will rebuild and serve the update." -ForegroundColor Green
