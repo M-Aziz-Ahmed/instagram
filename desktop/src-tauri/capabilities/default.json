@@ -23,13 +23,16 @@
     "core:webview:allow-set-webview-focus",
     "core:webview:allow-webview-hide",
     "core:webview:allow-webview-show",
-    "core:webview:allow-set-webview-zoom",
     "updater:default",
     "process:default",
     "notification:default",
     "allow-show-toast",
     "allow-close-toast",
     "allow-handle-toast-click",
-    "allow-get-window-inner-pos"
+    "allow-get-window-inner-pos",
+    "allow-browser-open",
+    "allow-browser-navigate",
+    "allow-browser-set-bounds",
+    "allow-browser-close"
   ]
 }

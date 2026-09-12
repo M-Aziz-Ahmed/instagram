@@ -185,83 +185,63 @@ const SpinnerIcon = () => (
 
 // ═════════════════════════════════════════════════════════════════════════════
 // NATIVE BROWSER — Tauri desktop
-// Uses a real Webview embedded inline, with pop-out to a separate window
+// Webview is managed via Rust browser_open/navigate/set_bounds/close commands.
+// We use a frameless overlay window positioned at the exact screen coordinates
+// of the content placeholder div.
 // ═════════════════════════════════════════════════════════════════════════════
 
-// Tracks the single inline webview instance (only one active at a time)
-const inlineState = {
-  webview: null,    // Webview instance
-  label: null,      // string label
-  counter: 0,
-};
+let _inlineActive = false;
 
-async function getScaleFactor() {
+async function rustInvoke(cmd, args = {}) {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke(cmd, args);
+}
+
+/** Convert a DOMRect (logical CSS px relative to viewport) to physical screen px */
+async function rectToPhysical(rect) {
+  // get_window_inner_pos returns the physical position of the window's inner
+  // top-left corner on screen, plus the scale factor.
+  const { x: winX, y: winY, scaleFactor } = await rustInvoke("get_window_inner_pos");
+  const dpr = scaleFactor || window.devicePixelRatio || 1;
+  return {
+    screen_x: Math.round(winX + rect.left * dpr),
+    screen_y: Math.round(winY + rect.top * dpr),
+    width:    Math.max(1, Math.round(rect.width * dpr)),
+    height:   Math.max(1, Math.round(rect.height * dpr)),
+  };
+}
+
+async function browserOpen(url, rect) {
+  const phys = await rectToPhysical(rect);
+  await rustInvoke("browser_open", { url, ...phys });
+  _inlineActive = true;
+}
+
+async function browserNavigate(url) {
+  await rustInvoke("browser_navigate", { url });
+}
+
+async function browserSetBounds(rect) {
+  if (!_inlineActive) return;
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const result = await invoke("get_window_inner_pos");
-    return result.scaleFactor ?? window.devicePixelRatio ?? 1;
-  } catch {
-    return window.devicePixelRatio ?? 1;
-  }
-}
-
-async function createInlineWebview(url, rect, scaleFactor) {
-  const { Webview } = await import("@tauri-apps/api/webview");
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-
-  const label = `browser-inline-${++inlineState.counter}`;
-  const win = getCurrentWindow();
-
-  const x = Math.round(rect.left * scaleFactor);
-  const y = Math.round(rect.top * scaleFactor);
-  const width = Math.round(rect.width * scaleFactor);
-  const height = Math.round(rect.height * scaleFactor);
-
-  const wv = new Webview(win, label, { url, x, y, width, height });
-
-  await new Promise((resolve, reject) => {
-    wv.once("tauri://created", resolve);
-    wv.once("tauri://error", reject);
-    // Timeout safety
-    setTimeout(resolve, 3000);
-  });
-
-  inlineState.webview = wv;
-  inlineState.label = label;
-  return wv;
-}
-
-async function destroyInlineWebview() {
-  if (!inlineState.webview) return;
-  try { await inlineState.webview.close(); } catch {}
-  inlineState.webview = null;
-  inlineState.label = null;
-}
-
-async function repositionInlineWebview(rect, scaleFactor) {
-  if (!inlineState.webview) return;
-  try {
-    const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi");
-    // Webview.setPosition/setSize take logical pixels (pre-scale)
-    await inlineState.webview.setPosition(new LogicalPosition(rect.left, rect.top));
-    await inlineState.webview.setSize(new LogicalSize(rect.width, rect.height));
+    const phys = await rectToPhysical(rect);
+    await rustInvoke("browser_set_bounds", phys);
   } catch {}
+}
+
+async function browserClose() {
+  if (!_inlineActive) return;
+  _inlineActive = false;
+  await rustInvoke("browser_close").catch(() => {});
 }
 
 async function openPopOutWindow(url) {
   const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
   const label = `browser-popup-${Date.now()}`;
   const win = new WebviewWindow(label, {
-    url,
-    title: urlLabel(url),
-    width: 1280,
-    height: 800,
-    minWidth: 400,
-    minHeight: 400,
-    resizable: true,
-    center: true,
-    decorations: true,
-    focus: true,
+    url, title: urlLabel(url),
+    width: 1280, height: 800, minWidth: 400, minHeight: 400,
+    resizable: true, center: true, decorations: true, focus: true,
   });
   win.once("tauri://error", () => {});
   return win;
@@ -280,56 +260,49 @@ function NativeBrowserClient() {
   const inputRef = useRef(null);
   const contentRef = useRef(null);   // the placeholder div the webview covers
   const activeIdRef = useRef(activeId);
-  const scaleRef = useRef(1);
   const rafRef = useRef(null);
   const lastRectRef = useRef(null);
   const poppedOutWinRef = useRef(null);
+  // track whether we've created a webview for the current URL
+  const webviewCreatedRef = useRef(false);
 
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? tabs[0];
   const hasUrl = Boolean(activeTab?.url);
 
-  // ── Scale factor (cached, refreshed on mount) ──────────────────────────────
-  useEffect(() => {
-    getScaleFactor().then((sf) => { scaleRef.current = sf; });
-  }, []);
+  // ── Sync bounds via rAF ────────────────────────────────────────────────────
 
-  // ── Core: create / update / destroy the inline webview ────────────────────
-
-  const syncWebviewBounds = useCallback(async () => {
+  const syncBounds = useCallback(() => {
     const el = contentRef.current;
-    if (!el || !inlineState.webview) return;
+    if (!el || !webviewCreatedRef.current) return;
     const rect = el.getBoundingClientRect();
     const last = lastRectRef.current;
     if (
       last &&
-      Math.abs(last.left - rect.left) < 0.5 &&
-      Math.abs(last.top - rect.top) < 0.5 &&
-      Math.abs(last.width - rect.width) < 0.5 &&
-      Math.abs(last.height - rect.height) < 0.5
-    ) return; // nothing changed
+      Math.abs(last.left - rect.left) < 1 &&
+      Math.abs(last.top - rect.top) < 1 &&
+      Math.abs(last.width - rect.width) < 1 &&
+      Math.abs(last.height - rect.height) < 1
+    ) return;
     lastRectRef.current = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
-    await repositionInlineWebview(rect, scaleRef.current);
+    browserSetBounds(rect);
   }, []);
 
-  // rAF loop to keep webview glued to the div (handles sidebar open/close, etc.)
   useEffect(() => {
-    if (!hasUrl || isPoppedOut) return;
+    if (!hasUrl || isPoppedOut || !webviewReady) return;
     let running = true;
     const loop = () => {
       if (!running) return;
-      syncWebviewBounds();
+      syncBounds();
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
-    return () => {
-      running = false;
-      cancelAnimationFrame(rafRef.current);
-    };
-  }, [hasUrl, isPoppedOut, syncWebviewBounds]);
+    return () => { running = false; cancelAnimationFrame(rafRef.current); };
+  }, [hasUrl, isPoppedOut, webviewReady, syncBounds]);
 
-  // Create inline webview when URL is set (or changes) and not popped out
+  // ── Create inline webview when active tab URL changes ────────────────────
+
   useEffect(() => {
     if (!hasUrl || isPoppedOut) return;
     const el = contentRef.current;
@@ -338,23 +311,25 @@ function NativeBrowserClient() {
     let cancelled = false;
     setWebviewReady(false);
     setWebviewError(null);
+    webviewCreatedRef.current = false;
 
     (async () => {
-      // Destroy any existing inline webview first
-      await destroyInlineWebview();
+      // Always close any existing webview before opening a new one
+      await browserClose();
       if (cancelled) return;
 
       const rect = el.getBoundingClientRect();
       lastRectRef.current = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
 
       try {
-        await createInlineWebview(activeTab.url, rect, scaleRef.current);
-        if (cancelled) { await destroyInlineWebview(); return; }
+        await browserOpen(activeTab.url, rect);
+        if (cancelled) { await browserClose(); return; }
+        webviewCreatedRef.current = true;
         setWebviewReady(true);
         setTabs((prev) => prev.map((t) => t.id === activeIdRef.current ? { ...t, loading: false } : t));
       } catch (err) {
         if (!cancelled) {
-          setWebviewError(err?.message || "Failed to create webview");
+          setWebviewError(String(err?.message || err || "Failed to create webview"));
           setTabs((prev) => prev.map((t) => t.id === activeIdRef.current ? { ...t, loading: false, error: true } : t));
         }
       }
@@ -364,11 +339,12 @@ function NativeBrowserClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab?.url, isPoppedOut]);
 
-  // Destroy inline webview on unmount
+  // ── Destroy on unmount ──────────────────────────────────────────────────
+
   useEffect(() => {
     return () => {
       cancelAnimationFrame(rafRef.current);
-      destroyInlineWebview();
+      browserClose();
     };
   }, []);
 
@@ -396,14 +372,13 @@ function NativeBrowserClient() {
       return;
     }
 
-    // If inline webview exists, navigate it directly (no recreate needed)
-    if (inlineState.webview) {
-      inlineState.webview.navigate(url)
+    // If webview already exists, navigate it in-place (no recreate needed)
+    if (webviewCreatedRef.current) {
+      browserNavigate(url)
         .then(() => setTabs((prev) => prev.map((t) => t.id === id ? { ...t, loading: false } : t)))
         .catch(() => {});
-      return;
     }
-    // Otherwise the useEffect above will create it
+    // Otherwise the useEffect above will create it when url state updates
   }, [isPoppedOut]);
 
   const goBack = useCallback(() => {
@@ -413,7 +388,7 @@ function NativeBrowserClient() {
     const url = t.history[histIndex];
     setInput(url);
     setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, histIndex, url, display: url, loading: true, error: false } : x));
-    if (inlineState.webview) inlineState.webview.navigate(url).catch(() => {});
+    if (webviewCreatedRef.current) browserNavigate(url).catch(() => {});
   }, [tabs, activeId]);
 
   const goForward = useCallback(() => {
@@ -423,13 +398,13 @@ function NativeBrowserClient() {
     const url = t.history[histIndex];
     setInput(url);
     setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, histIndex, url, display: url, loading: true, error: false } : x));
-    if (inlineState.webview) inlineState.webview.navigate(url).catch(() => {});
+    if (webviewCreatedRef.current) browserNavigate(url).catch(() => {});
   }, [tabs, activeId]);
 
   const reload = useCallback(() => {
     const t = tabs.find((x) => x.id === activeId);
     if (!t?.url) return;
-    if (inlineState.webview) inlineState.webview.navigate(t.url).catch(() => {});
+    if (webviewCreatedRef.current) browserNavigate(t.url).catch(() => {});
     else navigate(t.url);
   }, [activeId, tabs, navigate]);
 
@@ -437,7 +412,8 @@ function NativeBrowserClient() {
     setInput("");
     setWebviewReady(false);
     setWebviewError(null);
-    await destroyInlineWebview();
+    webviewCreatedRef.current = false;
+    await browserClose();
     setTabs((prev) => prev.map((t) => t.id === activeId ? { ...t, url: "", display: "", title: "", loading: false, error: false } : t));
   }, [activeId]);
 
@@ -446,7 +422,8 @@ function NativeBrowserClient() {
   const handlePopOut = useCallback(async () => {
     const url = activeTab?.url;
     if (!url) return;
-    await destroyInlineWebview();
+    webviewCreatedRef.current = false;
+    await browserClose();
     setIsPoppedOut(true);
     const win = await openPopOutWindow(url);
     poppedOutWinRef.current = win;
@@ -457,19 +434,18 @@ function NativeBrowserClient() {
   }, [activeTab]);
 
   const handlePopIn = useCallback(async () => {
-    // Close the external window
     if (poppedOutWinRef.current) {
       try { await poppedOutWinRef.current.close(); } catch {}
       poppedOutWinRef.current = null;
     }
     setIsPoppedOut(false);
-    // useEffect will recreate the inline webview because isPoppedOut flipped to false
   }, []);
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
 
   const addTab = useCallback(async () => {
-    await destroyInlineWebview();
+    webviewCreatedRef.current = false;
+    await browserClose();
     setWebviewReady(false);
     setIsPoppedOut(false);
     const t = makeTab();
@@ -482,7 +458,8 @@ function NativeBrowserClient() {
   const closeTab = useCallback(async (id, e) => {
     e?.stopPropagation();
     if (id === activeIdRef.current) {
-      await destroyInlineWebview();
+      webviewCreatedRef.current = false;
+      await browserClose();
       setWebviewReady(false);
       setIsPoppedOut(false);
     }
@@ -506,8 +483,8 @@ function NativeBrowserClient() {
 
   const selectTab = useCallback(async (id) => {
     if (id === activeIdRef.current) return;
-    // Destroy current inline webview before switching
-    await destroyInlineWebview();
+    webviewCreatedRef.current = false;
+    await browserClose();
     setWebviewReady(false);
     setIsPoppedOut(false);
     setActiveId(id);
@@ -531,7 +508,6 @@ function NativeBrowserClient() {
     return () => window.removeEventListener("keydown", onKey);
   }, [addTab, closeTab, reload, goBack, goForward, inputFocused]);
 
-  // Sync address bar when switching tabs
   useEffect(() => {
     const t = tabs.find((x) => x.id === activeId);
     if (t) setInput(t.display || "");

@@ -7,6 +7,10 @@ permissions = [
   "allow-close-toast",
   "allow-handle-toast-click",
   "allow-get-window-inner-pos",
+  "allow-browser-open",
+  "allow-browser-navigate",
+  "allow-browser-set-bounds",
+  "allow-browser-close",
 ]
 
 [[permission]]
@@ -28,3 +32,23 @@ commands.allow = ["handle_toast_click"]
 identifier = "allow-get-window-inner-pos"
 description = "Enables the get_window_inner_pos command which returns the main window's inner position and scale factor for inline webview placement."
 commands.allow = ["get_window_inner_pos"]
+
+[[permission]]
+identifier = "allow-browser-open"
+description = "Opens an inline browser webview inside the main window."
+commands.allow = ["browser_open"]
+
+[[permission]]
+identifier = "allow-browser-navigate"
+description = "Navigates the active inline browser webview to a new URL."
+commands.allow = ["browser_navigate"]
+
+[[permission]]
+identifier = "allow-browser-set-bounds"
+description = "Repositions/resizes the active inline browser webview."
+commands.allow = ["browser_set_bounds"]
+
+[[permission]]
+identifier = "allow-browser-close"
+description = "Closes the active inline browser webview."
+commands.allow = ["browser_close"]
