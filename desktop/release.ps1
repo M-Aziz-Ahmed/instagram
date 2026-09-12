@@ -116,8 +116,12 @@ if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
 
 # The desktop CI workflow auto-commits the Linux/macOS bundles to origin/master
 # right after our previous push, so a fast-forward push routinely races it.
-# Instead of failing, integrate the remote commit (preferring OUR side of any
-# latest.json/available.json conflict — this release is newer) and retry.
+# Instead of failing, integrate the remote commit and retry. CI only ever adds
+# bundles for the PREVIOUS version, so when the incoming commits are just those
+# autopublish commits we take OUR release tree wholesale (-s ours) — old bundles
+# are stale and CI re-publishes the new version right after our push lands.
+# A real remote change (e.g. a hand-written commit) falls through to -X ours and
+# surfaces its conflicts instead of silently discarding work.
 $pushed = $false
 for ($attempt = 1; $attempt -le 3 -and -not $pushed; $attempt++) {
     git -C $RepoRoot push origin master
@@ -127,8 +131,14 @@ for ($attempt = 1; $attempt -le 3 -and -not $pushed; $attempt++) {
     git -C $RepoRoot fetch origin
     if ($LASTEXITCODE -ne 0) { throw "git fetch failed" }
 
-    git -C $RepoRoot merge --no-edit -X ours origin/master
-    if ($LASTEXITCODE -ne 0) { throw "Could not integrate origin/master (merge failed)" }
+    $incoming = @(git -C $RepoRoot log --oneline "HEAD..origin/master")
+    $ciOnly   = $incoming.Count -gt 0 -and (($incoming -join "`n") -match "publish linux/macOS updater artifacts")
+    if ($ciOnly) {
+        git -C $RepoRoot merge --no-edit -s ours origin/master
+    } else {
+        git -C $RepoRoot merge --no-edit -X ours origin/master
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Could not integrate origin/master (merge failed). Resolve conflicts and re-run this script." }
 }
 if (-not $pushed) { throw "git push failed after integrating remote 3 times" }
 
