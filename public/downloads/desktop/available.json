@@ -2,7 +2,15 @@
   "version": "0.2.0",
   "files": {
     "linux-x86_64": [
-      "AnonTweet-0.1.19-1.x86_64.rpm"
+      "AnonTweet-0.2.0-1.x86_64.rpm",
+      "AnonTweet_0.2.0_amd64.AppImage",
+      "AnonTweet_0.2.0_amd64.deb"
+    ],
+    "darwin-aarch64": [
+      "AnonTweet_0.2.0_aarch64.dmg"
+    ],
+    "darwin-x86_64": [
+      "AnonTweet_0.2.0_x64.dmg"
     ],
     "windows-x86_64": [
       "AnonTweet_0.2.0_x64-setup.exe",
