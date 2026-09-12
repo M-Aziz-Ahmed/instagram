@@ -45,13 +45,41 @@ function baseTagHref(target) {
 function injectScript(html, baseHref, proxyBase) {
     if (html.includes("__ANONTWEET_BROWSER__")) return html;
 
-    const script = `(function(){var PROXY=${JSON.stringify(proxyBase)};function abs(h){try{return new URL(h,document.baseURI).href}catch(e){return null}}\n` +
-        `document.addEventListener('click',function(e){var a=e.target&&e.target.closest?e.target.closest('a[href]'):null;if(!a)return;var href=abs(a.getAttribute('href'));if(!href)return;if(/^https?:$/.test(href.split(':')[0])===false)return;e.preventDefault();window.location.href=PROXY+encodeURIComponent(href);},true);\n` +
-        `document.addEventListener('submit',function(e){var f=e.target;if(!f||f.tagName!=='FORM')return;var action=f.getAttribute('action');var url=new URL(action||window.location.href,document.baseURI);var fd=new FormData(f);e.preventDefault();var method=(f.getAttribute('method')||'get').toLowerCase();var p=new URLSearchParams();fd.forEach(function(v,k){p.append(k,v)});if(method==='post'){var form=document.createElement('form');form.method='post';form.action=PROXY+encodeURIComponent(url.href);p.forEach(function(v,k){var i=document.createElement('input');i.type='hidden';i.name=k;i.value=v;form.appendChild(i)});document.body.appendChild(form);form.submit()}else{url.search=p.toString();window.location.href=PROXY+encodeURIComponent(url.href)}},true);\n` +
-        `var _open=window.open;window.open=function(u){try{if(u&&wrapped(u)){window.parent.postMessage({__browser:{newTab:u}},'*')}}catch(e){}return null};function wrapped(u){return /^https?:$/.test(String(u).split(':')[0])};document.__ANONTWEET_BROWSER__=1;})();`;
+    const script = `(function(){
+var PROXY=${JSON.stringify(proxyBase)};
+function anyUrl(s){return typeof s==='string'||typeof s!=='undefined'}
+function isHttp(s){try{return /^https?:/.test(String(s))}catch(e){return false}}
+function proxied(s){try{var t=String(s);return t.indexOf('/api/browser?url=')!==-1||t.indexOf(PROXY)===0}catch(e){return false}}
+function wrap(u){try{var s=String(u);if(isHttp(s)){if(proxied(s))return s;return PROXY+encodeURIComponent(s)}return null}catch(e){return null}}
+function goTo(u){var w=wrap(u);if(w===null)return false;try{window.location.href=w;return true}catch(e){try{window.location.replace(w);return true}catch(e2){return false}}}
+var loc;
+try{loc=window.location}catch(e){}
+function curHref(){try{return loc?loc.href:window.location.href}catch(e){return ''}}
+try{
+  var fake={
+    assign:function(u){var w=wrap(u);if(w)loc.replace(w)},
+    replace:function(u){var w=wrap(u);if(w)loc.replace(w)},
+    reload:function(){try{var w=wrap(curHref());loc.replace(w||PROXY+encodeURIComponent(curHref()))}catch(e){}},
+    toString:function(){return loc.href},
+    valueOf:function(){return loc.href}
+  };
+  Object.defineProperty(fake,'href',{get:function(){return loc.href},set:function(v){var w=wrap(v);if(w)loc.replace(w)},configurable:true});
+  ['origin','protocol','host','hostname','port','pathname','search','hash'].forEach(function(p){
+    try{Object.defineProperty(fake,p,{get:function(){return loc[p]},configurable:true})}catch(e){}
+  });
+  Object.defineProperty(window,'location',{configurable:true,get:function(){return fake},set:function(v){var w=wrap(v);if(w)loc.replace(w)}});
+}catch(e){}
+function abs(h){try{return new URL(h,document.baseURI).href}catch(err){return null}}
+document.addEventListener('click',function(e){var a=e.target&&e.target.closest?e.target.closest('a[href]'):null;if(!a)return;var href=abs(a.getAttribute('href'));if(!href)return;if(!isHttp(href)||proxied(href)){if(proxied(href)){e.preventDefault();window.location.replace(href)}return}e.preventDefault();goTo(href);},true);
+document.addEventListener('submit',function(e){var f=e.target;if(!f||f.tagName!=='FORM')return;var action=f.getAttribute('action');var url=new URL(action||window.location.href,document.baseURI);var fd=new FormData(f);e.preventDefault();var method=(f.getAttribute('method')||'get').toLowerCase();if(method==='post'){var form=document.createElement('form');form.method='post';form.action=PROXY+encodeURIComponent(url.href);fd.forEach(function(v,k){var i=document.createElement('input');i.type='hidden';i.name=k;i.value=v;form.appendChild(i)});document.body.appendChild(form);form.submit()}else{var url2=new URL(action||curHref(),document.baseURI);var p=new URLSearchParams();fd.forEach(function(v,k){p.append(k,v)});url2.search=p.toString();goTo(url2.href)}},true);
+try{window.open=function(u){try{if(isHttp(u)&&!proxied(u)){window.parent.postMessage({__browser:{newTab:String(u)}},'*')}}catch(e){}return null}}catch(e){}
+try{setInterval(function(){try{var h=curHref();if(h&&isHttp(h)&&!proxied(h)){window.location.replace(PROXY+encodeURIComponent(h))}}catch(e){}},250)}catch(e){}
+document.__ANONTWEET_BROWSER__=1;
+})();`;
 
     const baseTag = `<base href="${baseHref.replace(/"/g, "&quot;")}">`;
     html = html.replace(/<base\b[^>]*>/gi, "");
+    html = html.replace(/<meta[^>]*\bhttp-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, "");
     const marker = "</head>";
     const injection = `${baseTag}<script>${script}</script>`;
     if (html.toLowerCase().includes(marker)) {
@@ -59,7 +87,7 @@ function injectScript(html, baseHref, proxyBase) {
     } else {
         html = injection + html;
     }
-    return html;
+return html;
 }
 
 async function fetchPage(target, method, bodyParams) {
