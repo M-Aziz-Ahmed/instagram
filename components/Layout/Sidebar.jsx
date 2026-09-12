@@ -103,69 +103,6 @@ function CommunityIcon() {
     );
 }
 
-function ChessIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-            <path d="M12 2L9 5H5v3l-2 2 2 2v3h4l3 3 3-3h4v-3l2-2-2-2V5h-4L12 2z" />
-            <circle cx="12" cy="12" r="3" />
-        </svg>
-    );
-}
-
-function AnimeIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 0v.375" />
-        </svg>
-    );
-}
-
-function MangaIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
-        </svg>
-    );
-}
-
-function KDramaIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6M9 12h6M9 15h6" strokeWidth={1.5} />
-        </svg>
-    );
-}
-
-function SeasonsIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6M9 12h6M9 15h6" strokeWidth={1.5} />
-        </svg>
-    );
-}
-
-function CDramaIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6M9 12h6M9 15h6" strokeWidth={1.5} />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12M6 12h12" strokeWidth={1} strokeDasharray="4 4" />
-        </svg>
-    );
-}
-
-function CartoonsIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6M9 12h6M9 15h6" strokeWidth={1.5} />
-            <circle cx="12" cy="12" r="2" strokeWidth={1.5} />
-        </svg>
-    );
-}
-
 function SunIcon() {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
@@ -207,31 +144,7 @@ function EntertainmentIcon() {
     );
 }
 
-function TrophyIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 0 1 3 3h-15a3 3 0 0 1 3-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 0 1-.982-3.172M9.497 14.25a7.454 7.454 0 0 0 .981-3.172M5.25 4.236c-.996.176-1.887.744-2.25 1.632M18.75 4.236c-.996.176-1.887.744-2.25 1.632M12 2.25a2.625 2.625 0 1 0 0 5.25 2.625 2.625 0 0 0 0-5.25ZM12 2.25a2.625 2.625 0 1 1 0 5.25 2.625 2.625 0 0 1 0-5.25Z" />
-        </svg>
-    );
-}
-
 function TrendingIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5m.75-9 3-3 2.148 2.148A12.061 12.061 0 0 1 16.5 7.605" />
-        </svg>
-    );
-}
-
-function MoviesIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 0v.375" />
-        </svg>
-    );
-}
-
-function ChannelsIcon() {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5m.75-9 3-3 2.148 2.148A12.061 12.061 0 0 1 16.5 7.605" />
@@ -460,76 +373,6 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                                 icon={<TrendingIcon />}
                                 label="What&apos;s Happening"
                                 active={isActive("/trending")}
-                                onClick={handleNavClick}
-                            />
-                            <NavItem
-                                href="/games"
-                                icon={<ChessIcon />}
-                                label="Games"
-                                active={["/games", "/chess", "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman", "/reactionduel", "/game2048", "/minesweeper", "/sudoku"].some((p) => isActive(p))}
-                                onClick={handleNavClick}
-                            />
-                            <NavItem
-                                href="/leaderboard"
-                                icon={<TrophyIcon />}
-                                label="Leaderboard"
-                                active={isActive("/leaderboard")}
-                                onClick={handleNavClick}
-                            />
-                            <NavItem
-                                href="/movies"
-                                icon={<MoviesIcon />}
-                                label="Movies"
-                                active={isActive("/movies")}
-                                onClick={handleNavClick}
-                            />
-                            <NavItem
-                                href="/kdramas"
-                                icon={<KDramaIcon />}
-                                label="K-Dramas"
-                                active={isActive("/kdramas")}
-                                onClick={handleNavClick}
-                            />
-                            <NavItem
-                                href="/seasons"
-                                icon={<SeasonsIcon />}
-                                label="Seasons"
-                                active={isActive("/seasons")}
-                                onClick={handleNavClick}
-                            />
-                            <NavItem
-                                href="/cdramas"
-                                icon={<CDramaIcon />}
-                                label="Chinese Dramas"
-                                active={isActive("/cdramas")}
-                                onClick={handleNavClick}
-                            />
-                            <NavItem
-                                href="/cartoons"
-                                icon={<CartoonsIcon />}
-                                label="Cartoons"
-                                active={isActive("/cartoons")}
-                                onClick={handleNavClick}
-                            />
-                            <NavItem
-                                href="/anime"
-                                icon={<AnimeIcon />}
-                                label="Anime"
-                                active={isActive("/anime")}
-                                onClick={handleNavClick}
-                            />
-                            <NavItem
-                                href="/manga"
-                                icon={<MangaIcon />}
-                                label="Manga"
-                                active={isActive("/manga")}
-                                onClick={handleNavClick}
-                            />
-                            <NavItem
-                                href="/channels"
-                                icon={<ChannelsIcon />}
-                                label="Channels"
-                                active={isActive("/channels")}
                                 onClick={handleNavClick}
                             />
                         </div>

@@ -15,8 +15,6 @@ const SHORTCUTS = [
     { name: "Stack Overflow", emoji: "📚", url: "https://stackoverflow.com", gradient: "from-amber-500 to-orange-700" },
     { name: "BBC News", emoji: "📰", url: "https://www.bbc.com", gradient: "from-red-600 to-rose-700" },
     { name: "Hacker News", emoji: "🎓", url: "https://news.ycombinator.com", gradient: "from-orange-600 to-red-700" },
-    { name: "Anime", emoji: "🍥", url: "/anime", gradient: "from-pink-500 to-fuchsia-700" },
-    { name: "Movies", emoji: "🎬", url: "/movies", gradient: "from-violet-500 to-purple-700" },
 ];
 
 function normalizeInput(raw) {
@@ -89,7 +87,17 @@ export default function BrowserClient() {
     };
 
     const reload = () => {
-        iframeRef.current?.contentWindow?.location.reload();
+        if (!activeTab?.url) return;
+        const iframe = iframeRef.current;
+        if (iframe?.contentWindow) {
+            try {
+                iframe.contentWindow.location.reload();
+                return;
+            } catch {
+                // cross-origin or un-injected error page — fall through to a proxied reload
+            }
+        }
+        navigate(activeTab.url);
     };
 
     const goHome = () => {
