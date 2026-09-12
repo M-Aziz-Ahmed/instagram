@@ -6,7 +6,7 @@
   "remote": {
     "urls": ["https://anontweet.vercel.app"]
   },
-  "windows": ["main", "toast-*", "browser-*"],
+  "windows": ["main", "toast-*"],
   "permissions": [
     "core:default",
     "core:window:allow-hide",

@@ -138,23 +138,21 @@ fn browser_open(
     };
 
     // Build a decoration-less window at the exact position of the content area.
-    // We use PhysicalPosition/PhysicalSize so the window lands at the right spot
-    // regardless of DPI.
     let win = tauri::WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(target_url))
         .title("AnonTweet Browser")
         .decorations(false)
         .resizable(false)
         .skip_taskbar(true)
         .shadow(false)
-        // position and size are in physical pixels
-        .position(screen_x as f64, screen_y as f64)
-        .inner_size(width as f64, height as f64)
+        .focused(true)
+        .inner_size(800.0, 600.0) // temporary size — repositioned immediately after
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("browser window build failed: {}", e))?;
 
-    // Move using PhysicalPosition to ensure pixel-perfect placement.
+    // Position precisely using physical pixels (accounts for DPI scaling).
     let _ = win.set_position(tauri::PhysicalPosition::new(screen_x, screen_y));
     let _ = win.set_size(tauri::PhysicalSize::new(width, height));
+    let _ = win.set_focus();
 
     let bs: tauri::State<'_, Arc<BrowserState>> = app.state();
     *bs.active_label.lock().unwrap() = Some(label.clone());
