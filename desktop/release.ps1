@@ -118,7 +118,7 @@ if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
 # right after our previous push, so a fast-forward push routinely races it.
 # Instead of failing, integrate the remote commit and retry. CI only ever adds
 # bundles for the PREVIOUS version, so when the incoming commits are just those
-# autopublish commits we take OUR release tree wholesale (-s ours) — old bundles
+# autopublish commits we take OUR release tree wholesale (-s ours) - old bundles
 # are stale and CI re-publishes the new version right after our push lands.
 # A real remote change (e.g. a hand-written commit) falls through to -X ours and
 # surfaces its conflicts instead of silently discarding work.
