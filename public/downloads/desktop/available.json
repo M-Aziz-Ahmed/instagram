@@ -1,20 +1,20 @@
 {
-  "version": "0.1.19",
+  "version": "0.1.20",
   "files": {
+    "darwin-x86_64": [
+      "AnonTweet_0.1.20_x64.dmg"
+    ],
     "linux-x86_64": [
-      "AnonTweet-0.1.19-1.x86_64.rpm",
-      "AnonTweet_0.1.19_amd64.AppImage",
-      "AnonTweet_0.1.19_amd64.deb"
+      "AnonTweet-0.1.20-1.x86_64.rpm",
+      "AnonTweet_0.1.20_amd64.AppImage",
+      "AnonTweet_0.1.20_amd64.deb"
     ],
     "windows-x86_64": [
-      "AnonTweet_0.1.19_x64-setup.exe",
-      "AnonTweet_0.1.19_x64_en-US.msi"
-    ],
-    "darwin-x86_64": [
-      "AnonTweet_0.1.19_x64.dmg"
+      "AnonTweet_0.1.20_x64-setup.exe",
+      "AnonTweet_0.1.20_x64_en-US.msi"
     ],
     "darwin-aarch64": [
-      "AnonTweet_0.1.19_aarch64.dmg"
+      "AnonTweet_0.1.20_aarch64.dmg"
     ]
   }
 }
