@@ -10,7 +10,6 @@ function isTauri() {
 
 // ─── Shortcuts ────────────────────────────────────────────────────────────────
 
-// Web proxy shortcuts — only sites that don't aggressively block datacenter IPs
 const WEB_SHORTCUTS = [
   { name: "Wikipedia",      emoji: "🌐", url: "https://www.wikipedia.org",        gradient: "from-gray-500 to-slate-700" },
   { name: "DuckDuckGo",     emoji: "🦆", url: "https://duckduckgo.com",           gradient: "from-red-500 to-orange-600" },
@@ -26,7 +25,6 @@ const WEB_SHORTCUTS = [
   { name: "Crates.io",      emoji: "🦀", url: "https://crates.io",               gradient: "from-orange-600 to-amber-700" },
 ];
 
-// Native desktop shortcuts — all sites work since it's a real browser
 const NATIVE_SHORTCUTS = [
   { name: "Google",         emoji: "🔍", url: "https://www.google.com",           gradient: "from-blue-500 to-indigo-600" },
   { name: "YouTube",        emoji: "▶️",  url: "https://www.youtube.com",          gradient: "from-red-500 to-rose-600" },
@@ -42,7 +40,7 @@ const NATIVE_SHORTCUTS = [
   { name: "Twitch",         emoji: "🎮", url: "https://www.twitch.tv",             gradient: "from-purple-600 to-violet-700" },
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function normalizeInput(raw) {
   const s = (raw || "").trim();
@@ -55,94 +53,25 @@ function normalizeInput(raw) {
 
 function extractRealUrl(proxyHref) {
   try {
-    const param = new URL(proxyHref).searchParams.get("url");
-    return param || null;
-  } catch {
-    return null;
-  }
+    return new URL(proxyHref).searchParams.get("url") || null;
+  } catch { return null; }
 }
 
 function urlLabel(url) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
+  try { return new URL(url).hostname.replace(/^www\./, ""); }
+  catch { return url; }
 }
 
-// ─── Tab model ────────────────────────────────────────────────────────────────
+// ─── Proxy tab model ──────────────────────────────────────────────────────────
 
 let _tabCounter = 0;
 const newTabId = () => `tab-${++_tabCounter}`;
 
 function makeTab(overrides = {}) {
   return {
-    id: newTabId(),
-    url: "",
-    display: "",
-    title: "",
-    history: [],
-    histIndex: -1,
-    loading: false,
-    error: false,
-    ...overrides,
+    id: newTabId(), url: "", display: "", title: "",
+    history: [], histIndex: -1, loading: false, error: false, ...overrides,
   };
-}
-
-// ─── Tauri native window manager ──────────────────────────────────────────────
-
-// Tracks open native browser windows: windowLabel → { webview, url }
-const nativeWindows = new Map();
-let nativeWinCounter = 0;
-
-async function openNativeWindow(url, onNav) {
-  const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-
-  const label = `browser-${++nativeWinCounter}`;
-
-  const win = new WebviewWindow(label, {
-    url,
-    title: urlLabel(url),
-    width: 1280,
-    height: 800,
-    minWidth: 400,
-    minHeight: 400,
-    resizable: true,
-    center: true,
-    decorations: true,
-    focus: true,
-  });
-
-  // Listen for navigation events (title bar sync)
-  const unlisten = await win.listen("tauri://navigation", (event) => {
-    onNav?.(label, event.payload?.url || url);
-  });
-
-  // Listen for title changes
-  const unlistenTitle = await win.listen("tauri://title-changed", (event) => {
-    onNav?.(label, null, event.payload?.title || "");
-  });
-
-  // Clean up on close
-  win.once("tauri://destroyed", () => {
-    nativeWindows.delete(label);
-    unlisten();
-    unlistenTitle();
-  });
-
-  nativeWindows.set(label, { win, url, label });
-  return { win, label };
-}
-
-async function focusNativeWindow(label) {
-  try {
-    const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-    const win = await WebviewWindow.getByLabel(label);
-    if (win) {
-      await win.show();
-      await win.setFocus();
-    }
-  } catch {}
 }
 
 // ─── Loading bar ──────────────────────────────────────────────────────────────
@@ -171,10 +100,7 @@ function LoadingBar({ active }) {
       doneRef.current = true;
       clearTimeout(timerRef.current);
       setWidth(100);
-      timerRef.current = setTimeout(() => {
-        setVisible(false);
-        setWidth(0);
-      }, 300);
+      timerRef.current = setTimeout(() => { setVisible(false); setWidth(0); }, 300);
     }
     return () => clearTimeout(timerRef.current);
   }, [active]);
@@ -192,361 +118,269 @@ function LoadingBar({ active }) {
   );
 }
 
-// ─── Favicon fallback ─────────────────────────────────────────────────────────
-
-function SiteDot({ loading }) {
-  if (loading) {
-    return (
-      <svg className="w-3 h-3 shrink-0 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-      </svg>
-    );
-  }
-  return <span className="w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />;
-}
-
 // ─── NavButton ────────────────────────────────────────────────────────────────
 
 function NavButton({ children, disabled, title, onClick }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className="p-1.5 rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-30 disabled:pointer-events-none shrink-0"
-    >
+    <button onClick={onClick} disabled={disabled} title={title}
+      className="p-1.5 rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-30 disabled:pointer-events-none shrink-0">
       {children}
     </button>
   );
 }
 
-// ─── Native Tab item (Tauri) ─────────────────────────────────────────────────
+// ─── Icon helpers ─────────────────────────────────────────────────────────────
 
-function NativeTabItem({ tab, isActive, onSelect, onClose }) {
-  return (
-    <div
-      role="tab"
-      aria-selected={isActive}
-      onClick={onSelect}
-      className={`
-        group flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-t-lg text-xs
-        max-w-[180px] min-w-[100px] cursor-pointer border border-b-0 shrink-0 transition-colors
-        ${isActive
-          ? "bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 border-gray-200 dark:border-gray-700 shadow-sm"
-          : "bg-transparent text-gray-500 dark:text-gray-400 border-transparent hover:bg-gray-200/60 dark:hover:bg-gray-800/60"
-        }
-      `}
-    >
-      {tab.loading
-        ? <svg className="w-3 h-3 shrink-0 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
-          </svg>
-        : <span className="w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
-      }
-      <span className="truncate flex-1 font-medium">{tab.title || (tab.url ? urlLabel(tab.url) : "New Tab")}</span>
-      <button
-        aria-label="Close tab"
-        onClick={(e) => { e.stopPropagation(); onClose(); }}
-        className="w-4 h-4 flex items-center justify-center rounded-full text-[10px] opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-gray-200 dark:hover:bg-gray-700 transition-opacity shrink-0"
-      >✕</button>
-    </div>
-  );
+const IconBack = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+  </svg>
+);
+const IconForward = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+  </svg>
+);
+const IconReload = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+  </svg>
+);
+const IconStop = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
+const IconHome = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75" />
+  </svg>
+);
+const IconPopOut = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+  </svg>
+);
+const IconPopIn = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25" />
+  </svg>
+);
+const IconLock = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 text-green-500 shrink-0">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25z" />
+  </svg>
+);
+const IconSearch = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 text-gray-400 shrink-0">
+    <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+  </svg>
+);
+const SpinnerIcon = () => (
+  <svg className="w-3 h-3 shrink-0 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+  </svg>
+);
+
+// ═════════════════════════════════════════════════════════════════════════════
+// NATIVE BROWSER — Tauri desktop
+// Uses a real Webview embedded inline, with pop-out to a separate window
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Tracks the single inline webview instance (only one active at a time)
+const inlineState = {
+  webview: null,    // Webview instance
+  label: null,      // string label
+  counter: 0,
+};
+
+async function getScaleFactor() {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const result = await invoke("get_window_inner_pos");
+    return result.scaleFactor ?? window.devicePixelRatio ?? 1;
+  } catch {
+    return window.devicePixelRatio ?? 1;
+  }
 }
 
-// ─── NATIVE BROWSER (Tauri desktop) ──────────────────────────────────────────
+async function createInlineWebview(url, rect, scaleFactor) {
+  const { Webview } = await import("@tauri-apps/api/webview");
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+
+  const label = `browser-inline-${++inlineState.counter}`;
+  const win = getCurrentWindow();
+
+  const x = Math.round(rect.left * scaleFactor);
+  const y = Math.round(rect.top * scaleFactor);
+  const width = Math.round(rect.width * scaleFactor);
+  const height = Math.round(rect.height * scaleFactor);
+
+  const wv = new Webview(win, label, { url, x, y, width, height });
+
+  await new Promise((resolve, reject) => {
+    wv.once("tauri://created", resolve);
+    wv.once("tauri://error", reject);
+    // Timeout safety
+    setTimeout(resolve, 3000);
+  });
+
+  inlineState.webview = wv;
+  inlineState.label = label;
+  return wv;
+}
+
+async function destroyInlineWebview() {
+  if (!inlineState.webview) return;
+  try { await inlineState.webview.close(); } catch {}
+  inlineState.webview = null;
+  inlineState.label = null;
+}
+
+async function repositionInlineWebview(rect, scaleFactor) {
+  if (!inlineState.webview) return;
+  try {
+    const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi");
+    // Webview.setPosition/setSize take logical pixels (pre-scale)
+    await inlineState.webview.setPosition(new LogicalPosition(rect.left, rect.top));
+    await inlineState.webview.setSize(new LogicalSize(rect.width, rect.height));
+  } catch {}
+}
+
+async function openPopOutWindow(url) {
+  const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+  const label = `browser-popup-${Date.now()}`;
+  const win = new WebviewWindow(label, {
+    url,
+    title: urlLabel(url),
+    width: 1280,
+    height: 800,
+    minWidth: 400,
+    minHeight: 400,
+    resizable: true,
+    center: true,
+    decorations: true,
+    focus: true,
+  });
+  win.once("tauri://error", () => {});
+  return win;
+}
 
 function NativeBrowserClient() {
-  // Virtual tab list — each tab corresponds to a real native WebviewWindow
-  const [tabs, setTabs] = useState([{ id: "native-1", url: "", title: "New Tab", loading: false }]);
-  const [activeId, setActiveId] = useState("native-1");
-  const [input, setInput] = useState("");
-  const [inputFocused, setInputFocused] = useState(false);
-  const inputRef = useRef(null);
-  const activeIdRef = useRef(activeId);
-  const tabWindowMap = useRef(new Map()); // tabId → windowLabel
-
-  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
-
-  const activeTab = tabs.find((t) => t.id === activeId) ?? tabs[0];
-
-  const updateTab = useCallback((id, patch) => {
-    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-  }, []);
-
-  // Open/focus a native window for the given tab
-  const launchWindow = useCallback(async (tabId, url) => {
-    const existingLabel = tabWindowMap.current.get(tabId);
-    if (existingLabel && nativeWindows.has(existingLabel)) {
-      // Window already open — navigate it
-      try {
-        const entry = nativeWindows.get(existingLabel);
-        await entry.win.navigate(url);
-        await focusNativeWindow(existingLabel);
-        updateTab(tabId, { url, display: url, title: urlLabel(url), loading: true });
-        setInput(url);
-      } catch {}
-      return;
-    }
-
-    updateTab(tabId, { url, display: url, title: urlLabel(url), loading: true });
-    setInput(url);
-
-    try {
-      const { label } = await openNativeWindow(url, (lbl, navUrl, navTitle) => {
-        // Find which tab owns this window
-        for (const [tid, wlabel] of tabWindowMap.current.entries()) {
-          if (wlabel === lbl) {
-            const patch = {};
-            if (navUrl) { patch.url = navUrl; patch.display = navUrl; }
-            if (navTitle) patch.title = navTitle;
-            patch.loading = false;
-            setTabs((prev) => prev.map((t) => (t.id === tid ? { ...t, ...patch } : t)));
-            if (tid === activeIdRef.current && navUrl) setInput(navUrl);
-            break;
-          }
-        }
-      });
-      tabWindowMap.current.set(tabId, label);
-      updateTab(tabId, { loading: false });
-    } catch (err) {
-      updateTab(tabId, { loading: false, error: true });
-    }
-  }, [updateTab]);
-
-  const navigate = useCallback((raw) => {
-    const url = normalizeInput(raw);
-    if (!url) return;
-    launchWindow(activeIdRef.current, url);
-  }, [launchWindow]);
-
-  const addTab = useCallback(() => {
-    const id = `native-${Date.now()}`;
-    setTabs((prev) => [...prev, { id, url: "", title: "New Tab", loading: false }]);
-    setActiveId(id);
-    setInput("");
-    setTimeout(() => inputRef.current?.focus(), 50);
-  }, []);
-
-  const closeTab = useCallback((id, e) => {
-    e?.stopPropagation();
-    // Close native window if open
-    const label = tabWindowMap.current.get(id);
-    if (label) {
-      focusNativeWindow(label).then(async () => {
-        try {
-          const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-          const win = await WebviewWindow.getByLabel(label);
-          await win?.close();
-        } catch {}
-      }).catch(() => {});
-      tabWindowMap.current.delete(id);
-    }
-    setTabs((prev) => {
-      const idx = prev.findIndex((t) => t.id === id);
-      const next = prev.filter((t) => t.id !== id);
-      if (next.length === 0) {
-        const fresh = { id: `native-${Date.now()}`, url: "", title: "New Tab", loading: false };
-        setActiveId(fresh.id);
-        setInput("");
-        return [fresh];
-      }
-      if (id === activeIdRef.current) {
-        const neighbor = next[Math.min(idx, next.length - 1)];
-        setActiveId(neighbor.id);
-        setInput(neighbor.url || "");
-      }
-      return next;
-    });
-  }, []);
-
-  const selectTab = useCallback((id) => {
-    setActiveId(id);
-    const t = tabs.find((x) => x.id === id);
-    setInput(t?.url || "");
-    // Focus the native window for this tab
-    const label = tabWindowMap.current.get(id);
-    if (label) focusNativeWindow(label).catch(() => {});
-  }, [tabs]);
-
-  const focusCurrentWindow = useCallback(() => {
-    const label = tabWindowMap.current.get(activeIdRef.current);
-    if (label) focusNativeWindow(label).catch(() => {});
-  }, []);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const onKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "l") { e.preventDefault(); inputRef.current?.focus(); inputRef.current?.select(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "t") { e.preventDefault(); addTab(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "w") { e.preventDefault(); closeTab(activeIdRef.current); }
-      else if (e.key === "Escape" && inputFocused) inputRef.current?.blur();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [addTab, closeTab, inputFocused]);
-
-  const showingHomePage = !activeTab?.url;
-
-  return (
-    <div className="h-dvh flex flex-col bg-white dark:bg-gray-950 overflow-hidden">
-
-      {/* ── Tab strip ── */}
-      <div className="flex items-center gap-0.5 px-1.5 pt-1.5 border-b border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-900 overflow-x-auto scrollbar-hide shrink-0 select-none">
-        {tabs.map((t) => (
-          <NativeTabItem
-            key={t.id}
-            tab={t}
-            isActive={t.id === activeId}
-            onSelect={() => selectTab(t.id)}
-            onClose={() => closeTab(t.id)}
-          />
-        ))}
-        <button
-          onClick={addTab}
-          title="New tab (Ctrl+T)"
-          className="ml-0.5 p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors shrink-0"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-        </button>
-      </div>
-
-      {/* ── Address bar ── */}
-      <div className="relative flex items-center gap-1 px-2 py-1.5 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0">
-        <form
-          className="flex-1 min-w-0"
-          onSubmit={(e) => { e.preventDefault(); navigate(input); inputRef.current?.blur(); }}
-        >
-          <div className={`
-            flex items-center gap-2 rounded-full px-3 h-9 transition-all
-            ${inputFocused
-              ? "bg-white dark:bg-gray-900 ring-2 ring-blue-500 shadow-sm"
-              : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200/70 dark:hover:bg-gray-700/70"
-            }
-          `}>
-            {/* Native indicator */}
-            <span title="Native browser window — no proxy" className="shrink-0">
-              {activeTab?.url ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 text-green-500">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25z" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 text-gray-400">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                </svg>
-              )}
-            </span>
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onFocus={() => { setInputFocused(true); requestAnimationFrame(() => inputRef.current?.select()); }}
-              onBlur={() => setInputFocused(false)}
-              placeholder="Search or enter URL — opens a native window"
-              spellCheck={false}
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              enterKeyHint="go"
-              className="flex-1 min-w-0 bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
-            />
-            {input && inputFocused && (
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => { setInput(""); inputRef.current?.focus(); }}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0 text-xs"
-              >✕</button>
-            )}
-          </div>
-        </form>
-
-        {/* Focus current window button — only show when a window is open */}
-        {activeTab?.url && (
-          <button
-            onClick={focusCurrentWindow}
-            title="Bring browser window to front"
-            className="p-1.5 rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors shrink-0"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-            </svg>
-          </button>
-        )}
-      </div>
-
-      {/* ── Content ── */}
-      <div className="flex-1 min-h-0 overflow-y-auto bg-white dark:bg-gray-950">
-        {showingHomePage ? (
-          <NativeHomePage navigate={navigate} input={input} setInput={setInput} inputRef={inputRef} />
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-6">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-              <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-white">
-                <path d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                Native window opened
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-xs">
-                <span className="font-medium text-blue-500">{urlLabel(activeTab.url)}</span> is loading in a native Chromium window — no proxy, no restrictions.
-              </p>
-            </div>
-            <button
-              onClick={focusCurrentWindow}
-              className="mt-1 px-4 py-2 rounded-full bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors shadow"
-            >
-              Bring to front
-            </button>
-            <button
-              onClick={() => navigate(activeTab.url)}
-              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline transition-colors"
-            >
-              Reload in new window
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── PROXY BROWSER (web) ──────────────────────────────────────────────────────
-
-function ProxyBrowserClient() {
+  // Tab model — each tab = a URL + history stack. Only active tab has a live webview.
   const [tabs, setTabs] = useState(() => [makeTab()]);
   const [activeId, setActiveId] = useState(() => tabs[0].id);
   const [input, setInput] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
+  const [isPoppedOut, setIsPoppedOut] = useState(false);
+  const [webviewReady, setWebviewReady] = useState(false);
+  const [webviewError, setWebviewError] = useState(null);
 
-  const iframeRef = useRef(null);
   const inputRef = useRef(null);
+  const contentRef = useRef(null);   // the placeholder div the webview covers
   const activeIdRef = useRef(activeId);
+  const scaleRef = useRef(1);
+  const rafRef = useRef(null);
+  const lastRectRef = useRef(null);
+  const poppedOutWinRef = useRef(null);
 
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? tabs[0];
-  const iframeSrc = activeTab?.url
-    ? `/api/browser?url=${encodeURIComponent(activeTab.url)}`
-    : null;
+  const hasUrl = Boolean(activeTab?.url);
 
-  const updateTab = useCallback((id, patch) => {
-    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  // ── Scale factor (cached, refreshed on mount) ──────────────────────────────
+  useEffect(() => {
+    getScaleFactor().then((sf) => { scaleRef.current = sf; });
   }, []);
 
-  // ── Navigation ──────────────────────────────────────────────────────────
+  // ── Core: create / update / destroy the inline webview ────────────────────
+
+  const syncWebviewBounds = useCallback(async () => {
+    const el = contentRef.current;
+    if (!el || !inlineState.webview) return;
+    const rect = el.getBoundingClientRect();
+    const last = lastRectRef.current;
+    if (
+      last &&
+      Math.abs(last.left - rect.left) < 0.5 &&
+      Math.abs(last.top - rect.top) < 0.5 &&
+      Math.abs(last.width - rect.width) < 0.5 &&
+      Math.abs(last.height - rect.height) < 0.5
+    ) return; // nothing changed
+    lastRectRef.current = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    await repositionInlineWebview(rect, scaleRef.current);
+  }, []);
+
+  // rAF loop to keep webview glued to the div (handles sidebar open/close, etc.)
+  useEffect(() => {
+    if (!hasUrl || isPoppedOut) return;
+    let running = true;
+    const loop = () => {
+      if (!running) return;
+      syncWebviewBounds();
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => {
+      running = false;
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, [hasUrl, isPoppedOut, syncWebviewBounds]);
+
+  // Create inline webview when URL is set (or changes) and not popped out
+  useEffect(() => {
+    if (!hasUrl || isPoppedOut) return;
+    const el = contentRef.current;
+    if (!el) return;
+
+    let cancelled = false;
+    setWebviewReady(false);
+    setWebviewError(null);
+
+    (async () => {
+      // Destroy any existing inline webview first
+      await destroyInlineWebview();
+      if (cancelled) return;
+
+      const rect = el.getBoundingClientRect();
+      lastRectRef.current = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+
+      try {
+        await createInlineWebview(activeTab.url, rect, scaleRef.current);
+        if (cancelled) { await destroyInlineWebview(); return; }
+        setWebviewReady(true);
+        setTabs((prev) => prev.map((t) => t.id === activeIdRef.current ? { ...t, loading: false } : t));
+      } catch (err) {
+        if (!cancelled) {
+          setWebviewError(err?.message || "Failed to create webview");
+          setTabs((prev) => prev.map((t) => t.id === activeIdRef.current ? { ...t, loading: false, error: true } : t));
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab?.url, isPoppedOut]);
+
+  // Destroy inline webview on unmount
+  useEffect(() => {
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      destroyInlineWebview();
+    };
+  }, []);
+
+  // ── Navigation ─────────────────────────────────────────────────────────────
 
   const navigate = useCallback((raw, tabId) => {
     const url = normalizeInput(raw);
     if (!url) return;
     const id = tabId ?? activeIdRef.current;
     setInput(url);
+    setWebviewReady(false);
+    setWebviewError(null);
     setTabs((prev) =>
       prev.map((t) => {
         if (t.id !== id) return t;
@@ -555,7 +389,22 @@ function ProxyBrowserClient() {
         return { ...t, url, display: url, title: urlLabel(url), loading: true, error: false, history: hist, histIndex: hist.length - 1 };
       })
     );
-  }, []);
+
+    // If popped out, navigate the popup window
+    if (isPoppedOut && poppedOutWinRef.current) {
+      try { poppedOutWinRef.current.navigate(url); } catch {}
+      return;
+    }
+
+    // If inline webview exists, navigate it directly (no recreate needed)
+    if (inlineState.webview) {
+      inlineState.webview.navigate(url)
+        .then(() => setTabs((prev) => prev.map((t) => t.id === id ? { ...t, loading: false } : t)))
+        .catch(() => {});
+      return;
+    }
+    // Otherwise the useEffect above will create it
+  }, [isPoppedOut]);
 
   const goBack = useCallback(() => {
     const t = tabs.find((x) => x.id === activeId);
@@ -564,6 +413,7 @@ function ProxyBrowserClient() {
     const url = t.history[histIndex];
     setInput(url);
     setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, histIndex, url, display: url, loading: true, error: false } : x));
+    if (inlineState.webview) inlineState.webview.navigate(url).catch(() => {});
   }, [tabs, activeId]);
 
   const goForward = useCallback(() => {
@@ -573,22 +423,55 @@ function ProxyBrowserClient() {
     const url = t.history[histIndex];
     setInput(url);
     setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, histIndex, url, display: url, loading: true, error: false } : x));
+    if (inlineState.webview) inlineState.webview.navigate(url).catch(() => {});
   }, [tabs, activeId]);
 
   const reload = useCallback(() => {
     const t = tabs.find((x) => x.id === activeId);
     if (!t?.url) return;
-    setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, loading: true, error: false, _reloadKey: (x._reloadKey || 0) + 1 } : x));
-  }, [activeId]);
+    if (inlineState.webview) inlineState.webview.navigate(t.url).catch(() => {});
+    else navigate(t.url);
+  }, [activeId, tabs, navigate]);
 
-  const goHome = useCallback(() => {
+  const goHome = useCallback(async () => {
     setInput("");
+    setWebviewReady(false);
+    setWebviewError(null);
+    await destroyInlineWebview();
     setTabs((prev) => prev.map((t) => t.id === activeId ? { ...t, url: "", display: "", title: "", loading: false, error: false } : t));
   }, [activeId]);
 
-  // ── Tabs ────────────────────────────────────────────────────────────────
+  // ── Pop out / pop in ───────────────────────────────────────────────────────
 
-  const addTab = useCallback(() => {
+  const handlePopOut = useCallback(async () => {
+    const url = activeTab?.url;
+    if (!url) return;
+    await destroyInlineWebview();
+    setIsPoppedOut(true);
+    const win = await openPopOutWindow(url);
+    poppedOutWinRef.current = win;
+    win.once("tauri://destroyed", () => {
+      poppedOutWinRef.current = null;
+      setIsPoppedOut(false);
+    });
+  }, [activeTab]);
+
+  const handlePopIn = useCallback(async () => {
+    // Close the external window
+    if (poppedOutWinRef.current) {
+      try { await poppedOutWinRef.current.close(); } catch {}
+      poppedOutWinRef.current = null;
+    }
+    setIsPoppedOut(false);
+    // useEffect will recreate the inline webview because isPoppedOut flipped to false
+  }, []);
+
+  // ── Tabs ───────────────────────────────────────────────────────────────────
+
+  const addTab = useCallback(async () => {
+    await destroyInlineWebview();
+    setWebviewReady(false);
+    setIsPoppedOut(false);
     const t = makeTab();
     setTabs((prev) => [...prev, t]);
     setActiveId(t.id);
@@ -596,8 +479,13 @@ function ProxyBrowserClient() {
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
-  const closeTab = useCallback((id, e) => {
+  const closeTab = useCallback(async (id, e) => {
     e?.stopPropagation();
+    if (id === activeIdRef.current) {
+      await destroyInlineWebview();
+      setWebviewReady(false);
+      setIsPoppedOut(false);
+    }
     setTabs((prev) => {
       const idx = prev.findIndex((t) => t.id === id);
       const next = prev.filter((t) => t.id !== id);
@@ -610,86 +498,24 @@ function ProxyBrowserClient() {
       if (id === activeIdRef.current) {
         const neighbor = next[Math.min(idx, next.length - 1)];
         setActiveId(neighbor.id);
-        setInput(neighbor.display);
+        setInput(neighbor.display || "");
       }
       return next;
     });
   }, []);
 
-  const selectTab = useCallback((id) => {
+  const selectTab = useCallback(async (id) => {
+    if (id === activeIdRef.current) return;
+    // Destroy current inline webview before switching
+    await destroyInlineWebview();
+    setWebviewReady(false);
+    setIsPoppedOut(false);
     setActiveId(id);
     const t = tabs.find((x) => x.id === id);
-    if (t) setInput(t.display);
+    setInput(t?.display || "");
   }, [tabs]);
 
-  // ── iframe events ───────────────────────────────────────────────────────
-
-  const handleLoad = useCallback(() => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
-    let realUrl = null, title = "";
-    try {
-      realUrl = extractRealUrl(iframe.contentWindow?.location?.href);
-      title = iframe.contentDocument?.title || "";
-    } catch {}
-    const id = activeIdRef.current;
-    setTabs((prev) =>
-      prev.map((t) => {
-        if (t.id !== id) return t;
-        const display = realUrl || t.display;
-        const hist = t.history.slice(0, t.histIndex + 1);
-        if (realUrl && hist[hist.length - 1] !== realUrl) {
-          hist.push(realUrl);
-          return { ...t, url: realUrl, display, title: title || urlLabel(display), loading: false, error: false, history: hist, histIndex: hist.length - 1 };
-        }
-        return { ...t, display, title: title || urlLabel(display), loading: false, error: false };
-      })
-    );
-    if (realUrl) setInput(realUrl);
-  }, []);
-
-  const handleError = useCallback(() => {
-    updateTab(activeIdRef.current, { loading: false, error: true });
-  }, [updateTab]);
-
-  // ── postMessage from injected script ────────────────────────────────────
-
-  useEffect(() => {
-    const onMessage = (e) => {
-      const data = e.data?.__browser;
-      if (!data) return;
-      if (data.type === "newTab" && data.url) {
-        const t = makeTab({ url: data.url, display: data.url, loading: true });
-        setTabs((prev) => [...prev, t]);
-        setActiveId(t.id);
-        setInput(data.url);
-        return;
-      }
-      if (data.type === "nav") {
-        const id = activeIdRef.current;
-        setTabs((prev) =>
-          prev.map((t) => {
-            if (t.id !== id) return t;
-            const newUrl = data.url || t.url;
-            const newTitle = data.title || t.title || urlLabel(newUrl);
-            if (data.url && data.url !== t.display) {
-              setInput(data.url);
-              const hist = t.history.slice(0, t.histIndex + 1);
-              if (hist[hist.length - 1] !== newUrl) {
-                hist.push(newUrl);
-                return { ...t, url: newUrl, display: newUrl, title: newTitle, loading: false, history: hist, histIndex: hist.length - 1 };
-              }
-            }
-            return { ...t, title: newTitle, loading: false };
-          })
-        );
-      }
-    };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, []);
-
-  // ── Keyboard shortcuts ──────────────────────────────────────────────────
+  // ── Keyboard shortcuts ─────────────────────────────────────────────────────
 
   useEffect(() => {
     const onKey = (e) => {
@@ -705,15 +531,15 @@ function ProxyBrowserClient() {
     return () => window.removeEventListener("keydown", onKey);
   }, [addTab, closeTab, reload, goBack, goForward, inputFocused]);
 
-  // Sync address bar on tab switch
+  // Sync address bar when switching tabs
   useEffect(() => {
     const t = tabs.find((x) => x.id === activeId);
-    if (t) setInput(t.display);
-  }, [activeId]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (t) setInput(t.display || "");
+  }, [activeId]); // eslint-disable-line
 
   const canBack = activeTab && activeTab.histIndex > 0;
   const canForward = activeTab && activeTab.histIndex < activeTab.history.length - 1;
-  const isLoading = activeTab?.loading ?? false;
+  const isLoading = activeTab?.loading && !webviewReady;
 
   return (
     <div className="h-dvh flex flex-col bg-white dark:bg-gray-950 overflow-hidden">
@@ -737,7 +563,7 @@ function ProxyBrowserClient() {
                 }
               `}
             >
-              <SiteDot loading={t.loading} />
+              {t.loading && !webviewReady ? <SpinnerIcon /> : <span className="w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />}
               <span className="truncate flex-1 font-medium">
                 {t.title || (t.display ? urlLabel(t.display) : "New Tab")}
               </span>
@@ -750,11 +576,8 @@ function ProxyBrowserClient() {
             </div>
           );
         })}
-        <button
-          onClick={addTab}
-          title="New tab (Ctrl+T)"
-          className="ml-0.5 p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors shrink-0"
-        >
+        <button onClick={addTab} title="New tab (Ctrl+T)"
+          className="ml-0.5 p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors shrink-0">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
@@ -766,44 +589,19 @@ function ProxyBrowserClient() {
         <LoadingBar active={isLoading} />
 
         <div className="flex items-center gap-0 shrink-0">
-          <NavButton onClick={goBack} disabled={!canBack} title="Back (Alt+←)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
+          <NavButton onClick={goBack}    disabled={!canBack}    title="Back (Alt+←)"><IconBack /></NavButton>
+          <NavButton onClick={goForward} disabled={!canForward} title="Forward (Alt+→)"><IconForward /></NavButton>
+          <NavButton onClick={isLoading ? () => {} : reload} title={isLoading ? "Loading…" : "Reload (Ctrl+R)"}>
+            {isLoading ? <IconStop /> : <IconReload />}
           </NavButton>
-          <NavButton onClick={goForward} disabled={!canForward} title="Forward (Alt+→)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </NavButton>
-          <NavButton onClick={isLoading ? () => updateTab(activeId, { loading: false }) : reload} title={isLoading ? "Stop" : "Reload (Ctrl+R)"}>
-            {isLoading
-              ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
-            }
-          </NavButton>
-          <NavButton onClick={goHome} title="Home">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75" />
-            </svg>
-          </NavButton>
+          <NavButton onClick={goHome} title="Home"><IconHome /></NavButton>
         </div>
 
-        <form
-          className="flex-1 min-w-0"
-          onSubmit={(e) => { e.preventDefault(); navigate(input); inputRef.current?.blur(); }}
-        >
-          <div className={`
-            flex items-center gap-2 rounded-full px-3 h-9 transition-all
-            ${inputFocused
-              ? "bg-white dark:bg-gray-900 ring-2 ring-blue-500 shadow-sm"
-              : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200/70 dark:hover:bg-gray-700/70"
-            }
-          `}>
-            {!inputFocused && activeTab?.url
-              ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 text-green-500 shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25z" /></svg>
-              : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 text-gray-400 shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
-            }
+        <form className="flex-1 min-w-0"
+          onSubmit={(e) => { e.preventDefault(); navigate(input); inputRef.current?.blur(); }}>
+          <div className={`flex items-center gap-2 rounded-full px-3 h-9 transition-all
+            ${inputFocused ? "bg-white dark:bg-gray-900 ring-2 ring-blue-500 shadow-sm" : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200/70 dark:hover:bg-gray-700/70"}`}>
+            {!inputFocused && activeTab?.url ? <IconLock /> : <IconSearch />}
             <input
               ref={inputRef}
               type="text"
@@ -811,27 +609,316 @@ function ProxyBrowserClient() {
               onChange={(e) => setInput(e.target.value)}
               onFocus={() => { setInputFocused(true); requestAnimationFrame(() => inputRef.current?.select()); }}
               onBlur={() => setInputFocused(false)}
-              placeholder="Search or enter URL   (Ctrl+L)"
-              spellCheck={false}
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              enterKeyHint="go"
+              placeholder="Search or type a URL…"
+              spellCheck={false} autoComplete="off" autoCorrect="off" autoCapitalize="off" enterKeyHint="go"
               className="flex-1 min-w-0 bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
             />
             {input && inputFocused && (
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
+              <button type="button" onMouseDown={(e) => e.preventDefault()}
                 onClick={() => { setInput(""); inputRef.current?.focus(); }}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0 text-xs"
-              >✕</button>
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0 text-xs">✕</button>
+            )}
+          </div>
+        </form>
+
+        {/* Pop-out / pop-in button — only when a page is loaded */}
+        {hasUrl && (
+          <NavButton
+            onClick={isPoppedOut ? handlePopIn : handlePopOut}
+            title={isPoppedOut ? "Pop back in" : "Open in separate window"}
+          >
+            {isPoppedOut ? <IconPopIn /> : <IconPopOut />}
+          </NavButton>
+        )}
+      </div>
+
+      {/* ── Content area ── */}
+      <div className="flex-1 min-h-0 relative overflow-hidden bg-white dark:bg-gray-950">
+        {!hasUrl ? (
+          /* New tab / home page */
+          <NativeHomePage navigate={navigate} input={input} setInput={setInput} inputRef={inputRef} />
+        ) : isPoppedOut ? (
+          /* Popped-out state */
+          <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-6">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-lg">
+              <IconPopOut />
+            </div>
+            <div>
+              <p className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                Opened in a separate window
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-xs">
+                <span className="font-medium text-blue-500">{urlLabel(activeTab.url)}</span> is open in its own window.
+              </p>
+            </div>
+            <button onClick={handlePopIn}
+              className="px-4 py-2 rounded-full bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors shadow flex items-center gap-2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25" />
+              </svg>
+              Pop back in
+            </button>
+          </div>
+        ) : webviewError ? (
+          /* Error state */
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
+            <div className="text-4xl">🌐</div>
+            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">Unable to load page</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">{webviewError}</p>
+            <button onClick={() => navigate(activeTab.url)}
+              className="px-4 py-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm font-medium transition-colors">
+              Try again
+            </button>
+          </div>
+        ) : (
+          /* Inline webview placeholder — the Tauri Webview renders on top of this */
+          <div
+            ref={contentRef}
+            className="absolute inset-0 bg-gray-50 dark:bg-gray-900"
+          >
+            {/* Shown only while webview is initialising */}
+            {!webviewReady && (
+              <div className="flex items-center justify-center h-full">
+                <div className="flex flex-col items-center gap-3 text-gray-400 dark:text-gray-500">
+                  <svg className="w-8 h-8 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  <span className="text-sm">Loading {urlLabel(activeTab.url)}…</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PROXY BROWSER — web fallback
+// ═════════════════════════════════════════════════════════════════════════════
+
+function ProxyBrowserClient() {
+  const [tabs, setTabs] = useState(() => [makeTab()]);
+  const [activeId, setActiveId] = useState(() => tabs[0].id);
+  const [input, setInput] = useState("");
+  const [inputFocused, setInputFocused] = useState(false);
+
+  const iframeRef = useRef(null);
+  const inputRef = useRef(null);
+  const activeIdRef = useRef(activeId);
+
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+
+  const activeTab = tabs.find((t) => t.id === activeId) ?? tabs[0];
+  const iframeSrc = activeTab?.url ? `/api/browser?url=${encodeURIComponent(activeTab.url)}` : null;
+
+  const updateTab = useCallback((id, patch) => {
+    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  }, []);
+
+  const navigate = useCallback((raw, tabId) => {
+    const url = normalizeInput(raw);
+    if (!url) return;
+    const id = tabId ?? activeIdRef.current;
+    setInput(url);
+    setTabs((prev) => prev.map((t) => {
+      if (t.id !== id) return t;
+      const hist = t.history.slice(0, t.histIndex + 1);
+      if (hist[hist.length - 1] !== url) hist.push(url);
+      return { ...t, url, display: url, title: urlLabel(url), loading: true, error: false, history: hist, histIndex: hist.length - 1 };
+    }));
+  }, []);
+
+  const goBack = useCallback(() => {
+    const t = tabs.find((x) => x.id === activeId);
+    if (!t || t.histIndex <= 0) return;
+    const histIndex = t.histIndex - 1;
+    const url = t.history[histIndex];
+    setInput(url);
+    setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, histIndex, url, display: url, loading: true, error: false } : x));
+  }, [tabs, activeId]);
+
+  const goForward = useCallback(() => {
+    const t = tabs.find((x) => x.id === activeId);
+    if (!t || t.histIndex >= t.history.length - 1) return;
+    const histIndex = t.histIndex + 1;
+    const url = t.history[histIndex];
+    setInput(url);
+    setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, histIndex, url, display: url, loading: true, error: false } : x));
+  }, [tabs, activeId]);
+
+  const reload = useCallback(() => {
+    setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, loading: true, error: false, _reloadKey: (x._reloadKey || 0) + 1 } : x));
+  }, [activeId]);
+
+  const goHome = useCallback(() => {
+    setInput("");
+    setTabs((prev) => prev.map((t) => t.id === activeId ? { ...t, url: "", display: "", title: "", loading: false, error: false } : t));
+  }, [activeId]);
+
+  const addTab = useCallback(() => {
+    const t = makeTab();
+    setTabs((prev) => [...prev, t]);
+    setActiveId(t.id);
+    setInput("");
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
+  const closeTab = useCallback((id, e) => {
+    e?.stopPropagation();
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.id === id);
+      const next = prev.filter((t) => t.id !== id);
+      if (next.length === 0) { const fresh = makeTab(); setActiveId(fresh.id); setInput(""); return [fresh]; }
+      if (id === activeIdRef.current) { const n = next[Math.min(idx, next.length - 1)]; setActiveId(n.id); setInput(n.display); }
+      return next;
+    });
+  }, []);
+
+  const selectTab = useCallback((id) => {
+    setActiveId(id);
+    const t = tabs.find((x) => x.id === id);
+    if (t) setInput(t.display);
+  }, [tabs]);
+
+  const handleLoad = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    let realUrl = null, title = "";
+    try { realUrl = extractRealUrl(iframe.contentWindow?.location?.href); title = iframe.contentDocument?.title || ""; } catch {}
+    const id = activeIdRef.current;
+    setTabs((prev) => prev.map((t) => {
+      if (t.id !== id) return t;
+      const display = realUrl || t.display;
+      const hist = t.history.slice(0, t.histIndex + 1);
+      if (realUrl && hist[hist.length - 1] !== realUrl) {
+        hist.push(realUrl);
+        return { ...t, url: realUrl, display, title: title || urlLabel(display), loading: false, error: false, history: hist, histIndex: hist.length - 1 };
+      }
+      return { ...t, display, title: title || urlLabel(display), loading: false, error: false };
+    }));
+    if (realUrl) setInput(realUrl);
+  }, []);
+
+  const handleError = useCallback(() => {
+    updateTab(activeIdRef.current, { loading: false, error: true });
+  }, [updateTab]);
+
+  useEffect(() => {
+    const onMessage = (e) => {
+      const data = e.data?.__browser;
+      if (!data) return;
+      if (data.type === "newTab" && data.url) {
+        const t = makeTab({ url: data.url, display: data.url, loading: true });
+        setTabs((prev) => [...prev, t]); setActiveId(t.id); setInput(data.url);
+        return;
+      }
+      if (data.type === "nav") {
+        const id = activeIdRef.current;
+        setTabs((prev) => prev.map((t) => {
+          if (t.id !== id) return t;
+          const newUrl = data.url || t.url;
+          const newTitle = data.title || t.title || urlLabel(newUrl);
+          if (data.url && data.url !== t.display) {
+            setInput(data.url);
+            const hist = t.history.slice(0, t.histIndex + 1);
+            if (hist[hist.length - 1] !== newUrl) {
+              hist.push(newUrl);
+              return { ...t, url: newUrl, display: newUrl, title: newTitle, loading: false, history: hist, histIndex: hist.length - 1 };
+            }
+          }
+          return { ...t, title: newTitle, loading: false };
+        }));
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "l") { e.preventDefault(); inputRef.current?.focus(); inputRef.current?.select(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "t") { e.preventDefault(); addTab(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "w") { e.preventDefault(); closeTab(activeIdRef.current); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "r") { e.preventDefault(); reload(); }
+      else if (e.altKey && e.key === "ArrowLeft") { e.preventDefault(); goBack(); }
+      else if (e.altKey && e.key === "ArrowRight") { e.preventDefault(); goForward(); }
+      else if (e.key === "Escape" && inputFocused) inputRef.current?.blur();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [addTab, closeTab, reload, goBack, goForward, inputFocused]);
+
+  useEffect(() => {
+    const t = tabs.find((x) => x.id === activeId);
+    if (t) setInput(t.display);
+  }, [activeId]); // eslint-disable-line
+
+  const canBack = activeTab && activeTab.histIndex > 0;
+  const canForward = activeTab && activeTab.histIndex < activeTab.history.length - 1;
+  const isLoading = activeTab?.loading ?? false;
+
+  return (
+    <div className="h-dvh flex flex-col bg-white dark:bg-gray-950 overflow-hidden">
+      {/* Tab strip */}
+      <div className="flex items-center gap-0.5 px-1.5 pt-1.5 border-b border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-900 overflow-x-auto scrollbar-hide shrink-0 select-none">
+        {tabs.map((t) => {
+          const isActive = t.id === activeId;
+          return (
+            <div key={t.id} role="tab" aria-selected={isActive} onClick={() => selectTab(t.id)}
+              className={`group flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-t-lg text-xs max-w-[180px] min-w-[100px] cursor-pointer border border-b-0 shrink-0 transition-colors
+                ${isActive ? "bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 border-gray-200 dark:border-gray-700 shadow-sm" : "bg-transparent text-gray-500 dark:text-gray-400 border-transparent hover:bg-gray-200/60 dark:hover:bg-gray-800/60"}`}>
+              {t.loading ? <SpinnerIcon /> : <span className="w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />}
+              <span className="truncate flex-1 font-medium">{t.title || (t.display ? urlLabel(t.display) : "New Tab")}</span>
+              <button aria-label="Close tab" onClick={(e) => closeTab(t.id, e)}
+                className={`w-4 h-4 flex items-center justify-center rounded-full text-[10px] transition-opacity shrink-0
+                  ${isActive ? "opacity-50 hover:opacity-100 hover:bg-gray-200 dark:hover:bg-gray-700" : "opacity-0 group-hover:opacity-50 hover:!opacity-100 hover:bg-gray-200 dark:hover:bg-gray-700"}`}>✕</button>
+            </div>
+          );
+        })}
+        <button onClick={addTab} title="New tab (Ctrl+T)"
+          className="ml-0.5 p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Address bar */}
+      <div className="relative flex items-center gap-1 px-2 py-1.5 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0">
+        <LoadingBar active={isLoading} />
+        <div className="flex items-center gap-0 shrink-0">
+          <NavButton onClick={goBack}    disabled={!canBack}    title="Back (Alt+←)"><IconBack /></NavButton>
+          <NavButton onClick={goForward} disabled={!canForward} title="Forward (Alt+→)"><IconForward /></NavButton>
+          <NavButton onClick={isLoading ? () => updateTab(activeId, { loading: false }) : reload} title={isLoading ? "Stop" : "Reload (Ctrl+R)"}>
+            {isLoading ? <IconStop /> : <IconReload />}
+          </NavButton>
+          <NavButton onClick={goHome} title="Home"><IconHome /></NavButton>
+        </div>
+        <form className="flex-1 min-w-0" onSubmit={(e) => { e.preventDefault(); navigate(input); inputRef.current?.blur(); }}>
+          <div className={`flex items-center gap-2 rounded-full px-3 h-9 transition-all
+            ${inputFocused ? "bg-white dark:bg-gray-900 ring-2 ring-blue-500 shadow-sm" : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200/70 dark:hover:bg-gray-700/70"}`}>
+            {!inputFocused && activeTab?.url ? <IconLock /> : <IconSearch />}
+            <input ref={inputRef} type="text"
+              value={inputFocused ? input : (activeTab?.display || input)}
+              onChange={(e) => setInput(e.target.value)}
+              onFocus={() => { setInputFocused(true); requestAnimationFrame(() => inputRef.current?.select()); }}
+              onBlur={() => setInputFocused(false)}
+              placeholder="Search or enter URL   (Ctrl+L)"
+              spellCheck={false} autoComplete="off" autoCorrect="off" autoCapitalize="off" enterKeyHint="go"
+              className="flex-1 min-w-0 bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" />
+            {input && inputFocused && (
+              <button type="button" onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { setInput(""); inputRef.current?.focus(); }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0 text-xs">✕</button>
             )}
           </div>
         </form>
       </div>
 
-      {/* ── Content ── */}
+      {/* Content */}
       <div className="flex-1 min-h-0 relative bg-white dark:bg-gray-950">
         {iframeSrc ? (
           <iframe
@@ -839,8 +926,7 @@ function ProxyBrowserClient() {
             key={`${activeTab.id}-${activeTab._reloadKey ?? 0}`}
             src={iframeSrc}
             title={activeTab.title || "Browser"}
-            onLoad={handleLoad}
-            onError={handleError}
+            onLoad={handleLoad} onError={handleError}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-presentation allow-pointer-lock"
             allow="autoplay; fullscreen; clipboard-read; clipboard-write"
             className="absolute inset-0 w-full h-full border-0"
@@ -853,15 +939,11 @@ function ProxyBrowserClient() {
   );
 }
 
-// ─── Root export — picks the right implementation ─────────────────────────────
+// ─── Root export ──────────────────────────────────────────────────────────────
 
 export default function BrowserClient() {
   const [inTauri, setInTauri] = useState(false);
-
-  useEffect(() => {
-    setInTauri(isTauri());
-  }, []);
-
+  useEffect(() => { setInTauri(isTauri()); }, []);
   return inTauri ? <NativeBrowserClient /> : <ProxyBrowserClient />;
 }
 
@@ -877,49 +959,34 @@ function NativeHomePage({ navigate, input, setInput, inputRef }) {
               <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM6.262 6.072a8.25 8.25 0 1 0 10.562-.766 4.5 4.5 0 0 1-1.318 1.357L14.25 7.5l.165.33a.809.809 0 0 1-1.086 1.085l-.604-.302a1.125 1.125 0 0 0-1.298.21l-.132.131c-.439.44-.439 1.152 0 1.591l.296.296c.256.257.622.374.98.314l1.17-.195c.323-.054.654.036.905.245l1.33 1.108c.32.267.46.694.358 1.1a8.7 8.7 0 0 1-2.288 4.04l-.723.724a1.125 1.125 0 0 1-1.298.21l-.153-.076a1.125 1.125 0 0 1-.622-1.006v-1.089c0-.298-.119-.585-.33-.796l-1.347-1.347a1.125 1.125 0 0 1 1.591-1.591L8 14.25v.093c0 .498.198.975.55 1.327l.15.15c.282.283.664.443 1.063.443h.465a.375.375 0 0 0 .375-.375v-.405a.375.375 0 0 0-.215-.343l-.62-.31a.75.75 0 0 1-.41-.65V8.57a.75.75 0 0 1 .298-.599l2.048-1.536z" clipRule="evenodd" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">AnonTweet Browser</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">AnonTweet Browser</h1>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
             Native Chromium · No proxy · All sites work
           </div>
         </div>
-
         <form onSubmit={(e) => { e.preventDefault(); navigate(input); }} className="mb-8">
           <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-2xl px-4 h-12 ring-1 ring-transparent focus-within:ring-blue-500 focus-within:bg-white dark:focus-within:bg-gray-900 transition-all shadow-sm">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5 text-gray-400 shrink-0">
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
             </svg>
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Search Google or type a URL…"
-              spellCheck={false}
-              autoComplete="off"
-              className="flex-1 bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
-            />
-            {input && (
-              <button type="button" onClick={() => setInput("")} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
-            )}
+            <input ref={inputRef} type="text" value={input} onChange={(e) => setInput(e.target.value)}
+              placeholder="Search Google or type a URL…" spellCheck={false} autoComplete="off"
+              className="flex-1 bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" />
+            {input && <button type="button" onClick={() => setInput("")} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>}
           </div>
         </form>
-
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
           {NATIVE_SHORTCUTS.map((s) => (
-            <button
-              key={s.name}
-              onClick={() => navigate(s.url)}
-              className={`rounded-2xl p-4 flex flex-col items-center gap-2 bg-gradient-to-br ${s.gradient} text-white hover:scale-[1.04] active:scale-[0.98] transition-transform shadow-md`}
-            >
+            <button key={s.name} onClick={() => navigate(s.url)}
+              className={`rounded-2xl p-4 flex flex-col items-center gap-2 bg-gradient-to-br ${s.gradient} text-white hover:scale-[1.04] active:scale-[0.98] transition-transform shadow-md`}>
               <span className="text-2xl leading-none">{s.emoji}</span>
               <span className="text-xs font-semibold tracking-wide">{s.name}</span>
             </button>
           ))}
         </div>
-
         <div className="mt-8 flex flex-wrap justify-center gap-x-5 gap-y-1.5">
-          {[["Ctrl+L","Focus URL"],["Ctrl+T","New tab"],["Ctrl+W","Close tab"]].map(([k,d]) => (
+          {[["Ctrl+L","Focus URL"],["Ctrl+T","New tab"],["Ctrl+W","Close tab"],["Ctrl+R","Reload"],["Alt+←/→","Back/Fwd"]].map(([k,d]) => (
             <div key={k} className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
               <kbd className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-mono text-[10px] border border-gray-200 dark:border-gray-700">{k}</kbd>
               <span>{d}</span>
@@ -941,53 +1008,37 @@ function WebHomePage({ navigate, input, setInput, inputRef }) {
               <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM6.262 6.072a8.25 8.25 0 1 0 10.562-.766 4.5 4.5 0 0 1-1.318 1.357L14.25 7.5l.165.33a.809.809 0 0 1-1.086 1.085l-.604-.302a1.125 1.125 0 0 0-1.298.21l-.132.131c-.439.44-.439 1.152 0 1.591l.296.296c.256.257.622.374.98.314l1.17-.195c.323-.054.654.036.905.245l1.33 1.108c.32.267.46.694.358 1.1a8.7 8.7 0 0 1-2.288 4.04l-.723.724a1.125 1.125 0 0 1-1.298.21l-.153-.076a1.125 1.125 0 0 1-.622-1.006v-1.089c0-.298-.119-.585-.33-.796l-1.347-1.347a1.125 1.125 0 0 1 1.591-1.591L8 14.25v.093c0 .498.198.975.55 1.327l.15.15c.282.283.664.443 1.063.443h.465a.375.375 0 0 0 .375-.375v-.405a.375.375 0 0 0-.215-.343l-.62-.31a.75.75 0 0 1-.41-.65V8.57a.75.75 0 0 1 .298-.599l2.048-1.536z" clipRule="evenodd" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">AnonTweet Browser</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">AnonTweet Browser</h1>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
             Web proxy mode · Some sites may be restricted
           </div>
         </div>
-
         <form onSubmit={(e) => { e.preventDefault(); navigate(input); }} className="mb-8">
           <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-2xl px-4 h-12 ring-1 ring-transparent focus-within:ring-blue-500 focus-within:bg-white dark:focus-within:bg-gray-900 transition-all shadow-sm">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5 text-gray-400 shrink-0">
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
             </svg>
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Search or enter URL…"
-              spellCheck={false}
-              autoComplete="off"
-              className="flex-1 bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
-            />
-            {input && (
-              <button type="button" onClick={() => setInput("")} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
-            )}
+            <input ref={inputRef} type="text" value={input} onChange={(e) => setInput(e.target.value)}
+              placeholder="Search or enter URL…" spellCheck={false} autoComplete="off"
+              className="flex-1 bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" />
+            {input && <button type="button" onClick={() => setInput("")} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>}
           </div>
         </form>
-
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
           {WEB_SHORTCUTS.map((s) => (
-            <button
-              key={s.name}
-              onClick={() => navigate(s.url)}
-              className={`rounded-2xl p-4 flex flex-col items-center gap-2 bg-gradient-to-br ${s.gradient} text-white hover:scale-[1.04] active:scale-[0.98] transition-transform shadow-md`}
-            >
+            <button key={s.name} onClick={() => navigate(s.url)}
+              className={`rounded-2xl p-4 flex flex-col items-center gap-2 bg-gradient-to-br ${s.gradient} text-white hover:scale-[1.04] active:scale-[0.98] transition-transform shadow-md`}>
               <span className="text-2xl leading-none">{s.emoji}</span>
               <span className="text-xs font-semibold tracking-wide">{s.name}</span>
             </button>
           ))}
         </div>
-
         <p className="mt-6 text-center text-xs text-gray-400 dark:text-gray-500">
-          Download the <span className="font-medium text-gray-600 dark:text-gray-300">AnonTweet desktop app</span> for a native browser that works on all sites.
+          Download the <span className="font-medium text-gray-600 dark:text-gray-300">AnonTweet desktop app</span> for a native browser with no restrictions.
         </p>
-
-        <div className="mt-6 flex flex-wrap justify-center gap-x-5 gap-y-1.5">
-          {[["Ctrl+L","Focus URL"],["Ctrl+T","New tab"],["Ctrl+W","Close tab"],["Ctrl+R","Reload"],["Alt+←/→","Back/Forward"]].map(([k,d]) => (
+        <div className="mt-5 flex flex-wrap justify-center gap-x-5 gap-y-1.5">
+          {[["Ctrl+L","Focus URL"],["Ctrl+T","New tab"],["Ctrl+W","Close tab"],["Ctrl+R","Reload"],["Alt+←/→","Back/Fwd"]].map(([k,d]) => (
             <div key={k} className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
               <kbd className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-mono text-[10px] border border-gray-200 dark:border-gray-700">{k}</kbd>
               <span>{d}</span>

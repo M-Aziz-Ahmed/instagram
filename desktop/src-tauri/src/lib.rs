@@ -112,6 +112,27 @@ fn close_toast(app: tauri::AppHandle, id: u32) {
     toasts.retain(|t| t.id != id);
 }
 
+/// Returns the physical (x, y) of the main window's inner (client) area top-left corner
+/// and the current scale factor.  The JS side uses these to convert logical CSS-pixel
+/// positions from getBoundingClientRect into physical pixels for the Webview constructor.
+#[tauri::command]
+fn get_window_inner_pos(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let win = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+
+    // inner_position() = top-left of the client area (excluding OS title bar / borders)
+    // in physical pixels.
+    let pos = win.inner_position().map_err(|e| e.to_string())?;
+    let scale = win.scale_factor().map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({
+        "x": pos.x,
+        "y": pos.y,
+        "scaleFactor": scale
+    }))
+}
+
 #[tauri::command]
 fn handle_toast_click(app: tauri::AppHandle, id: u32) {
     let url = {
@@ -180,7 +201,7 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![show_toast, close_toast, handle_toast_click])
+        .invoke_handler(tauri::generate_handler![show_toast, close_toast, handle_toast_click, get_window_inner_pos])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

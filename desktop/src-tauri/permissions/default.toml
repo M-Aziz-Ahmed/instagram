@@ -6,6 +6,7 @@ permissions = [
   "allow-show-toast",
   "allow-close-toast",
   "allow-handle-toast-click",
+  "allow-get-window-inner-pos",
 ]
 
 [[permission]]
@@ -22,3 +23,8 @@ commands.allow = ["close_toast"]
 identifier = "allow-handle-toast-click"
 description = "Enables the handle_toast_click command which opens the toast's target URL in the main window."
 commands.allow = ["handle_toast_click"]
+
+[[permission]]
+identifier = "allow-get-window-inner-pos"
+description = "Enables the get_window_inner_pos command which returns the main window's inner position and scale factor for inline webview placement."
+commands.allow = ["get_window_inner_pos"]

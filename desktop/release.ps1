@@ -120,7 +120,7 @@ if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
 # latest.json/available.json conflict — this release is newer) and retry.
 $pushed = $false
 for ($attempt = 1; $attempt -le 3 -and -not $pushed; $attempt++) {
-    git -C $RepoRoot push origin master 2>&1 | Write-Host
+    git -C $RepoRoot push origin master
     if ($LASTEXITCODE -eq 0) { $pushed = $true; break }
 
     Write-Host "Push rejected (CI commit landed on remote). Integrating remote then retrying..." -ForegroundColor Yellow

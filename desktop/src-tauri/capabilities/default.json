@@ -6,19 +6,30 @@
   "remote": {
     "urls": ["https://anontweet.vercel.app"]
   },
-  "windows": ["main", "toast-*"],
+  "windows": ["main", "toast-*", "browser-*"],
   "permissions": [
     "core:default",
     "core:window:allow-hide",
     "core:window:allow-show",
     "core:window:allow-set-focus",
     "core:window:allow-create",
+    "core:window:allow-inner-position",
+    "core:window:allow-scale-factor",
     "core:webview:allow-create-webview-window",
+    "core:webview:allow-create-webview",
+    "core:webview:allow-webview-close",
+    "core:webview:allow-set-webview-position",
+    "core:webview:allow-set-webview-size",
+    "core:webview:allow-set-webview-focus",
+    "core:webview:allow-webview-hide",
+    "core:webview:allow-webview-show",
+    "core:webview:allow-set-webview-zoom",
     "updater:default",
     "process:default",
     "notification:default",
     "allow-show-toast",
     "allow-close-toast",
-    "allow-handle-toast-click"
+    "allow-handle-toast-click",
+    "allow-get-window-inner-pos"
   ]
 }
