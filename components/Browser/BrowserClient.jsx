@@ -476,7 +476,7 @@ function NativeBrowserClient() {
                 }
               `}
             >
-              {t.loading && !webviewReady ? <SpinnerIcon /> : <span className="w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />}
+              {t.loading ? <SpinnerIcon /> : <span className="w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />}
               <span className="truncate flex-1 font-medium">
                 {t.title || (t.display ? urlLabel(t.display) : "New Tab")}
               </span>
