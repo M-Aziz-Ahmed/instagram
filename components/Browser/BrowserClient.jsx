@@ -1,346 +1,759 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+// ─── Shortcuts ────────────────────────────────────────────────────────────────
 
 const SHORTCUTS = [
-    { name: "Google", emoji: "🔍", url: "https://www.google.com", gradient: "from-blue-500 to-indigo-600" },
-    { name: "YouTube", emoji: "▶️", url: "https://www.youtube.com", gradient: "from-red-500 to-rose-600" },
-    { name: "Wikipedia", emoji: "🌐", url: "https://www.wikipedia.org", gradient: "from-gray-500 to-slate-700" },
-    { name: "GitHub", emoji: "🐙", url: "https://github.com", gradient: "from-slate-700 to-slate-900" },
-    { name: "Reddit", emoji: "👽", url: "https://www.reddit.com", gradient: "from-orange-500 to-amber-600" },
-    { name: "X", emoji: "𝕏", url: "https://x.com", gradient: "from-gray-900 to-gray-700" },
-    { name: "Bing", emoji: "🎯", url: "https://www.bing.com", gradient: "from-teal-500 to-cyan-600" },
-    { name: "DuckDuckGo", emoji: "🦆", url: "https://duckduckgo.com", gradient: "from-red-500 to-orange-600" },
-    { name: "ChatGPT", emoji: "💬", url: "https://chatgpt.com", gradient: "from-emerald-500 to-teal-700" },
-    { name: "Stack Overflow", emoji: "📚", url: "https://stackoverflow.com", gradient: "from-amber-500 to-orange-700" },
-    { name: "BBC News", emoji: "📰", url: "https://www.bbc.com", gradient: "from-red-600 to-rose-700" },
-    { name: "Hacker News", emoji: "🎓", url: "https://news.ycombinator.com", gradient: "from-orange-600 to-red-700" },
+  { name: "Google",        emoji: "🔍", url: "https://www.google.com",          gradient: "from-blue-500 to-indigo-600" },
+  { name: "YouTube",       emoji: "▶️",  url: "https://www.youtube.com",         gradient: "from-red-500 to-rose-600" },
+  { name: "Wikipedia",     emoji: "🌐", url: "https://www.wikipedia.org",        gradient: "from-gray-500 to-slate-700" },
+  { name: "GitHub",        emoji: "🐙", url: "https://github.com",               gradient: "from-slate-700 to-slate-900" },
+  { name: "Reddit",        emoji: "👽", url: "https://www.reddit.com",           gradient: "from-orange-500 to-amber-600" },
+  { name: "X",             emoji: "𝕏",  url: "https://x.com",                   gradient: "from-gray-900 to-gray-700" },
+  { name: "Bing",          emoji: "🎯", url: "https://www.bing.com",             gradient: "from-teal-500 to-cyan-600" },
+  { name: "DuckDuckGo",    emoji: "🦆", url: "https://duckduckgo.com",           gradient: "from-red-500 to-orange-600" },
+  { name: "ChatGPT",       emoji: "💬", url: "https://chatgpt.com",              gradient: "from-emerald-500 to-teal-700" },
+  { name: "Stack Overflow",emoji: "📚", url: "https://stackoverflow.com",        gradient: "from-amber-500 to-orange-700" },
+  { name: "BBC News",      emoji: "📰", url: "https://www.bbc.com",              gradient: "from-red-600 to-rose-700" },
+  { name: "Hacker News",   emoji: "🎓", url: "https://news.ycombinator.com",     gradient: "from-orange-600 to-red-700" },
 ];
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function normalizeInput(raw) {
-    let s = (raw || "").trim();
-    if (!s) return null;
-    if (/^https?:\/\//i.test(s)) return s;
-    if (s.includes(".") && !s.includes(" ")) return "https://" + s;
-    return "https://www.google.com/search?q=" + encodeURIComponent(s);
+  const s = (raw || "").trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/^[a-z0-9-]+:\/\//i.test(s)) return null; // unsupported protocol
+  // Looks like a domain (has a dot, no spaces)
+  if (s.includes(".") && !s.includes(" ")) return "https://" + s;
+  return "https://www.google.com/search?q=" + encodeURIComponent(s);
 }
 
-let tabCounter = 0;
-const newTabId = () => `tab-${++tabCounter}`;
-
-function makeTab() {
-    return { id: newTabId(), url: "", display: "", title: "", history: [], index: -1 };
+/** Extract the real proxied URL from an iframe's current proxy URL */
+function extractRealUrl(proxyHref) {
+  try {
+    const u = new URL(proxyHref);
+    const param = u.searchParams.get("url");
+    if (param) return param;
+  } catch {}
+  return null;
 }
+
+/** Get a short display label for a URL (origin only) */
+function urlLabel(url) {
+  try {
+    const u = new URL(url);
+    return u.hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+// ─── Tab model ───────────────────────────────────────────────────────────────
+
+let _tabCounter = 0;
+const newTabId = () => `tab-${++_tabCounter}`;
+
+function makeTab(overrides = {}) {
+  return {
+    id: newTabId(),
+    url: "",      // real URL being proxied
+    display: "",  // shown in address bar
+    title: "",    // page title
+    favicon: "",  // favicon URL
+    history: [],  // real URL stack
+    histIndex: -1,
+    loading: false,
+    error: false,
+    ...overrides,
+  };
+}
+
+// ─── Loading bar component ────────────────────────────────────────────────────
+
+function LoadingBar({ active }) {
+  const [width, setWidth] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const timerRef = useRef(null);
+  const doneRef = useRef(false);
+
+  useEffect(() => {
+    if (active) {
+      doneRef.current = false;
+      setVisible(true);
+      setWidth(0);
+
+      // Ramp up quickly to ~80% then slow down
+      let w = 0;
+      const tick = () => {
+        if (doneRef.current) return;
+        w = w < 70 ? w + Math.random() * 12 : w < 85 ? w + Math.random() * 2 : w + 0.3;
+        if (w > 90) w = 90;
+        setWidth(w);
+        timerRef.current = setTimeout(tick, w < 70 ? 120 : 300);
+      };
+      timerRef.current = setTimeout(tick, 60);
+    } else {
+      // Complete the bar
+      doneRef.current = true;
+      clearTimeout(timerRef.current);
+      setWidth(100);
+      timerRef.current = setTimeout(() => {
+        setVisible(false);
+        setWidth(0);
+      }, 350);
+    }
+    return () => clearTimeout(timerRef.current);
+  }, [active]);
+
+  if (!visible) return null;
+
+  return (
+    <div
+      className="absolute top-0 left-0 h-[3px] bg-blue-500 transition-all duration-200 z-50 rounded-r-full"
+      style={{
+        width: `${width}%`,
+        transitionTimingFunction: width === 100 ? "ease-out" : "linear",
+        transitionDuration: width === 100 ? "200ms" : "150ms",
+        boxShadow: "0 0 8px rgba(59,130,246,0.8)",
+      }}
+    />
+  );
+}
+
+// ─── Favicon component ────────────────────────────────────────────────────────
+
+function Favicon({ url, className }) {
+  const [errored, setErrored] = useState(false);
+  if (!url || errored) {
+    return (
+      <span className={`flex items-center justify-center ${className}`}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3 text-gray-400">
+          <path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm-1 17.93V18a1 1 0 0 0-1-1H8a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1h2a3 3 0 0 0 3-3V9a1 1 0 0 1 1-1h1.93A8.01 8.01 0 0 1 11 19.93z" />
+        </svg>
+      </span>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt=""
+      className={className}
+      onError={() => setErrored(true)}
+    />
+  );
+}
+
+// ─── Main BrowserClient ───────────────────────────────────────────────────────
 
 export default function BrowserClient() {
-    const [tabs, setTabs] = useState(() => [makeTab()]);
-    const [activeId, setActiveId] = useState(tabs[0] ? tabs[0].id : "tab-0");
-    const [input, setInput] = useState("");
-    const iframeRef = useRef(null);
+  const [tabs, setTabs] = useState(() => [makeTab()]);
+  const [activeId, setActiveId] = useState(() => {
+    const t = makeTab();
+    return t.id;
+  });
+  const [input, setInput] = useState("");
+  const [inputFocused, setInputFocused] = useState(false);
 
-    const activeTab = tabs.find((t) => t.id === activeId) || tabs[0];
+  const iframeRef = useRef(null);
+  const inputRef = useRef(null);
+  const activeIdRef = useRef(activeId);
 
-    useEffect(() => {
-        const onMessage = (e) => {
-            const target = e.data?.__browser?.newTab;
-            if (!target || /^https?:$/.test(String(target).split(":")[0]) === false) return;
-            const t = { ...makeTab(), url: target, display: target };
-            setTabs((prev) => [...prev, t]);
-            setActiveId(t.id);
+  // Keep ref in sync for use inside event handlers
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+
+  // ── Derived ───────────────────────────────────────────────────────────────
+
+  const activeTab = tabs.find((t) => t.id === activeId) ?? tabs[0];
+
+  const iframeSrc = activeTab?.url
+    ? `/api/browser?url=${encodeURIComponent(activeTab.url)}`
+    : null;
+
+  // ── Tab mutations ─────────────────────────────────────────────────────────
+
+  const updateTab = useCallback((id, patch) => {
+    setTabs((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, ...patch } : t))
+    );
+  }, []);
+
+  // ── Navigation ────────────────────────────────────────────────────────────
+
+  const navigate = useCallback((raw, tabId) => {
+    const url = normalizeInput(raw);
+    if (!url) return;
+    const id = tabId ?? activeIdRef.current;
+    setInput(url);
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.id !== id) return t;
+        const hist = t.history.slice(0, t.histIndex + 1);
+        // Avoid pushing duplicate consecutive entry
+        if (hist[hist.length - 1] !== url) hist.push(url);
+        return {
+          ...t,
+          url,
+          display: url,
+          title: urlLabel(url),
+          loading: true,
+          error: false,
+          history: hist,
+          histIndex: hist.length - 1,
         };
-        window.addEventListener("message", onMessage);
-        return () => window.removeEventListener("message", onMessage);
-    }, []);
+      })
+    );
+  }, []);
 
-    const navigate = (raw) => {
-        const url = normalizeInput(raw);
-        if (!url) return;
-        setInput(url);
-        setTabs((prev) =>
-            prev.map((t) => {
-                if (t.id !== activeId) return t;
-                const history = t.history.slice(0, t.index + 1);
-                history.push(url);
-                return { ...t, url, display: url, title: "", history, index: history.length - 1 };
-            })
-        );
-    };
+  const goBack = useCallback(() => {
+    const t = tabs.find((x) => x.id === activeId);
+    if (!t || t.histIndex <= 0) return;
+    const histIndex = t.histIndex - 1;
+    const url = t.history[histIndex];
+    setInput(url);
+    setTabs((prev) =>
+      prev.map((x) =>
+        x.id === activeId
+          ? { ...x, histIndex, url, display: url, loading: true, error: false }
+          : x
+      )
+    );
+  }, [tabs, activeId]);
 
-    const goBack = () => {
-        if (activeTab.index <= 0) return;
-        const index = activeTab.index - 1;
-        const url = activeTab.history[index];
-        setInput(url);
-        setTabs((prev) =>
-            prev.map((t) => (t.id === activeId ? { ...t, index, url, display: url } : t))
-        );
-    };
+  const goForward = useCallback(() => {
+    const t = tabs.find((x) => x.id === activeId);
+    if (!t || t.histIndex >= t.history.length - 1) return;
+    const histIndex = t.histIndex + 1;
+    const url = t.history[histIndex];
+    setInput(url);
+    setTabs((prev) =>
+      prev.map((x) =>
+        x.id === activeId
+          ? { ...x, histIndex, url, display: url, loading: true, error: false }
+          : x
+      )
+    );
+  }, [tabs, activeId]);
 
-    const goForward = () => {
-        if (activeTab.index >= activeTab.history.length - 1) return;
-        const index = activeTab.index + 1;
-        const url = activeTab.history[index];
-        setInput(url);
-        setTabs((prev) =>
-            prev.map((t) => (t.id === activeId ? { ...t, index, url, display: url } : t))
-        );
-    };
+  const reload = useCallback(() => {
+    const t = tabs.find((x) => x.id === activeId);
+    if (!t?.url) return;
+    // Force iframe reload by briefly clearing url then restoring
+    setTabs((prev) =>
+      prev.map((x) =>
+        x.id === activeId ? { ...x, loading: true, error: false } : x
+      )
+    );
+    // Bump key by appending reload token to force React to remount iframe
+    setTabs((prev) =>
+      prev.map((x) =>
+        x.id === activeId
+          ? { ...x, _reloadKey: (x._reloadKey || 0) + 1 }
+          : x
+      )
+    );
+  }, [activeId]);
 
-    const reload = () => {
-        if (!activeTab?.url) return;
-        const iframe = iframeRef.current;
-        if (iframe?.contentWindow) {
-            try {
-                iframe.contentWindow.location.reload();
-                return;
-            } catch {
-                // cross-origin or un-injected error page — fall through to a proxied reload
-            }
-        }
-        navigate(activeTab.url);
-    };
+  const goHome = useCallback(() => {
+    setInput("");
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.id === activeId
+          ? { ...t, url: "", display: "", title: "", loading: false, error: false }
+          : t
+      )
+    );
+  }, [activeId]);
 
-    const goHome = () => {
+  // ── Tab management ────────────────────────────────────────────────────────
+
+  const addTab = useCallback(() => {
+    const t = makeTab();
+    setTabs((prev) => [...prev, t]);
+    setActiveId(t.id);
+    setInput("");
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
+  const closeTab = useCallback((id, e) => {
+    e?.stopPropagation();
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.id === id);
+      const next = prev.filter((t) => t.id !== id);
+      if (next.length === 0) {
+        const fresh = makeTab();
+        setActiveId(fresh.id);
         setInput("");
-        setTabs((prev) => prev.map((t) => (t.id === activeId ? { ...t, url: "", display: "", title: "" } : t)));
-    };
+        return [fresh];
+      }
+      if (id === activeIdRef.current) {
+        const neighbor = next[Math.min(idx, next.length - 1)];
+        setActiveId(neighbor.id);
+        setInput(neighbor.display);
+      }
+      return next;
+    });
+  }, []);
 
-    const addTab = () => {
-        const t = makeTab();
+  const selectTab = useCallback((id) => {
+    setActiveId(id);
+    const t = tabs.find((x) => x.id === id);
+    if (t) setInput(t.display);
+  }, [tabs]);
+
+  // ── iframe event handlers ─────────────────────────────────────────────────
+
+  const handleLoad = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    let realUrl = null;
+    let title = "";
+
+    try {
+      // iframe src is /api/browser?url=<encoded>  — same origin, readable
+      const proxyHref = iframe.contentWindow?.location?.href;
+      realUrl = extractRealUrl(proxyHref);
+      title = iframe.contentDocument?.title || "";
+    } catch {
+      // cross-origin read blocked (shouldn't happen since we're same-origin, but guard anyway)
+    }
+
+    const id = activeIdRef.current;
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.id !== id) return t;
+        const display = realUrl || t.display;
+        const hist = t.history.slice(0, t.histIndex + 1);
+        // Only push to history if it's a new URL (SPA navigation)
+        if (realUrl && hist[hist.length - 1] !== realUrl) {
+          hist.push(realUrl);
+          return {
+            ...t,
+            url: realUrl,
+            display,
+            title: title || urlLabel(display),
+            loading: false,
+            error: false,
+            history: hist,
+            histIndex: hist.length - 1,
+          };
+        }
+        return {
+          ...t,
+          display,
+          title: title || urlLabel(display),
+          loading: false,
+          error: false,
+        };
+      })
+    );
+
+    if (realUrl) setInput(realUrl);
+  }, []);
+
+  const handleError = useCallback(() => {
+    const id = activeIdRef.current;
+    updateTab(id, { loading: false, error: true });
+  }, [updateTab]);
+
+  // ── postMessage from injected script ─────────────────────────────────────
+
+  useEffect(() => {
+    const onMessage = (e) => {
+      const data = e.data?.__browser;
+      if (!data) return;
+
+      // New tab request (window.open)
+      if (data.type === "newTab" && data.url) {
+        const t = makeTab({ url: data.url, display: data.url, loading: true });
         setTabs((prev) => [...prev, t]);
         setActiveId(t.id);
-        setInput("");
-    };
+        setInput(data.url);
+        return;
+      }
 
-    const closeTab = (id) => {
-        setTabs((prev) => {
-            const idx = prev.findIndex((t) => t.id === id);
-            const next = prev.filter((t) => t.id !== id);
-            if (next.length === 0) {
-                const fresh = makeTab();
-                setActiveId(fresh.id);
-                setInput("");
-                return [fresh];
-            }
-            if (id === activeId) {
-                const neighbor = next[Math.min(idx, next.length - 1)];
-                setActiveId(neighbor.id);
-                setInput(neighbor.display);
-            }
-            return next;
-        });
-    };
-
-    const selectTab = (id) => {
-        setActiveId(id);
-        const tab = tabs.find((t) => t.id === id);
-        if (tab) setInput(tab.display);
-    };
-
-    const handleLoad = (e) => {
-        const iframe = e.target;
-        let realUrl = null;
-        let title = "";
-        try {
-            const loc = new URL(iframe.contentWindow.location.href);
-            realUrl = loc.searchParams.get("url");
-            title = iframe.contentDocument.title || "";
-        } catch {
-            return;
-        }
-        if (!realUrl) return;
+      // SPA navigation / title update from injected script
+      if (data.type === "nav") {
+        const id = activeIdRef.current;
         setTabs((prev) =>
-            prev.map((t) => {
-                if (t.id !== activeId) return t;
-                const history = t.history.slice(0, t.index + 1);
-                if (history[t.index] === realUrl) {
-                    return { ...t, display: realUrl, title };
-                }
-                history.push(realUrl);
-                return { ...t, url: realUrl, display: realUrl, title, history, index: history.length - 1 };
-            })
+          prev.map((t) => {
+            if (t.id !== id) return t;
+            const newUrl = data.url || t.url;
+            const newTitle = data.title || t.title || urlLabel(newUrl);
+
+            // Update address bar if URL changed
+            if (data.url && data.url !== t.display) {
+              setInput(data.url);
+              // Push to history if new URL
+              const hist = t.history.slice(0, t.histIndex + 1);
+              if (hist[hist.length - 1] !== newUrl) {
+                hist.push(newUrl);
+                return {
+                  ...t,
+                  url: newUrl,
+                  display: newUrl,
+                  title: newTitle,
+                  loading: false,
+                  history: hist,
+                  histIndex: hist.length - 1,
+                };
+              }
+            }
+            return { ...t, title: newTitle, loading: false };
+          })
         );
-        setInput(realUrl);
+      }
     };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
-    const iframeSrc = activeTab?.url ? `/api/browser?url=${encodeURIComponent(activeTab.url)}` : null;
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
 
-    return (
-        <div className="h-dvh flex flex-col bg-white dark:bg-gray-950 safe-top">
-            {/* ── Tab strip ─────────────────────────────────────────── */}
-            <div className="flex items-center gap-1 px-2 pt-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 overflow-x-auto scrollbar-hide shrink-0">
-                {tabs.map((t) => (
-                    <div
-                        key={t.id}
-                        className={`group flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-t-lg text-sm max-w-[160px] min-w-[90px] cursor-pointer border border-b-0 transition-colors ${
-                            t.id === activeId
-                                ? "bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 border-gray-200 dark:border-gray-700"
-                                : "bg-transparent text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-gray-300"
-                        }`}
-                        onClick={() => selectTab(t.id)}
-                    >
-                        <span className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600 truncate shrink-0" />
-                        <span className="truncate flex-1">
-                            {t.title || t.display || "New Tab"}
-                        </span>
-                        <span
-                            role="button"
-                            tabIndex={0}
-                            aria-label="Close tab"
-                            onClick={(ev) => {
-                                ev.stopPropagation();
-                                closeTab(t.id);
-                            }}
-                            className="hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full w-4 h-4 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                        >
-                            ✕
-                        </span>
-                    </div>
-                ))}
-                <button
-                    onClick={addTab}
-                    aria-label="New tab"
-                    className="ml-1 p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors shrink-0"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                </button>
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      // Ctrl/Cmd + L → focus address bar
+      if ((e.ctrlKey || e.metaKey) && e.key === "l") {
+        e.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+        return;
+      }
+      // Ctrl/Cmd + T → new tab
+      if ((e.ctrlKey || e.metaKey) && e.key === "t") {
+        e.preventDefault();
+        addTab();
+        return;
+      }
+      // Ctrl/Cmd + W → close current tab
+      if ((e.ctrlKey || e.metaKey) && e.key === "w") {
+        e.preventDefault();
+        closeTab(activeIdRef.current);
+        return;
+      }
+      // Ctrl/Cmd + R → reload
+      if ((e.ctrlKey || e.metaKey) && e.key === "r") {
+        e.preventDefault();
+        reload();
+        return;
+      }
+      // Alt + Left → back
+      if (e.altKey && e.key === "ArrowLeft") {
+        e.preventDefault();
+        goBack();
+        return;
+      }
+      // Alt + Right → forward
+      if (e.altKey && e.key === "ArrowRight") {
+        e.preventDefault();
+        goForward();
+        return;
+      }
+      // Escape → blur address bar
+      if (e.key === "Escape" && inputFocused) {
+        inputRef.current?.blur();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [addTab, closeTab, reload, goBack, goForward, inputFocused]);
+
+  // ── Sync address bar when switching tabs ─────────────────────────────────
+
+  useEffect(() => {
+    const t = tabs.find((x) => x.id === activeId);
+    if (t) setInput(t.display);
+  }, [activeId]); // intentionally only on activeId change
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const canBack = activeTab && activeTab.histIndex > 0;
+  const canForward = activeTab && activeTab.histIndex < activeTab.history.length - 1;
+  const isLoading = activeTab?.loading ?? false;
+
+  return (
+    <div className="h-dvh flex flex-col bg-white dark:bg-gray-950 overflow-hidden">
+
+      {/* ── Tab strip ─────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-0.5 px-1.5 pt-1.5 border-b border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-900 overflow-x-auto scrollbar-hide shrink-0 select-none">
+        {tabs.map((t) => {
+          const isActive = t.id === activeId;
+          return (
+            <div
+              key={t.id}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => selectTab(t.id)}
+              className={`
+                group relative flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5
+                rounded-t-lg text-xs max-w-[180px] min-w-[100px] cursor-pointer
+                border border-b-0 transition-all duration-100 shrink-0
+                ${isActive
+                  ? "bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 border-gray-200 dark:border-gray-700 shadow-sm"
+                  : "bg-transparent text-gray-500 dark:text-gray-400 border-transparent hover:bg-gray-200/60 dark:hover:bg-gray-800/60"
+                }
+              `}
+            >
+              {/* Loading spinner or favicon */}
+              {t.loading ? (
+                <svg className="w-3 h-3 shrink-0 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                </svg>
+              ) : (
+                <Favicon url={t.favicon} className="w-3 h-3 rounded-sm shrink-0" />
+              )}
+
+              <span className="truncate flex-1 font-medium">
+                {t.title || (t.display ? urlLabel(t.display) : "New Tab")}
+              </span>
+
+              <button
+                aria-label="Close tab"
+                onClick={(e) => closeTab(t.id, e)}
+                className={`
+                  w-4 h-4 flex items-center justify-center rounded-full text-[10px]
+                  transition-all duration-100 shrink-0
+                  ${isActive
+                    ? "opacity-60 hover:opacity-100 hover:bg-gray-200 dark:hover:bg-gray-700"
+                    : "opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-gray-200 dark:hover:bg-gray-700"
+                  }
+                `}
+              >
+                ✕
+              </button>
             </div>
+          );
+        })}
 
-            {/* ── Address bar ───────────────────────────────────────── */}
-            <div className="flex items-center gap-1 px-2 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0">
-                <div className="flex items-center gap-0.5 shrink-0">
-                        <button
-                            onClick={goBack}
-                            disabled={!activeTab || activeTab.index <= 0}
-                            aria-label="Back"
-                            className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
-                            </svg>
-                        </button>
-                        <button
-                            onClick={goForward}
-                            disabled={!activeTab || activeTab.index >= activeTab.history.length - 1}
-                            aria-label="Forward"
-                            className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 9l6 6m0 0-6 6m6-6H9a6 6 0 0 0 0 12h3" />
-                            </svg>
-                        </button>
-                        <button
-                            onClick={reload}
-                            aria-label="Reload"
-                            className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                            </svg>
-                        </button>
-                        <button
-                            onClick={goHome}
-                            aria-label="Home"
-                            className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75" />
-                            </svg>
-                        </button>
-                    </div>
+        <button
+          onClick={addTab}
+          aria-label="New tab (Ctrl+T)"
+          title="New tab (Ctrl+T)"
+          className="ml-0.5 p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors shrink-0"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+        </button>
+      </div>
 
-                <form
-                    onSubmit={(e) => {
-                        e.preventDefault();
-                        navigate(input);
-                    }}
-                    className="flex-1 flex items-center gap-2 min-w-0"
-                >
-                    <div className="flex-1 flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-full px-4 h-10 min-w-0">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                        </svg>
-                        <input
-                            type="text"
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            placeholder="Search Google or type a URL"
-                            enterKeyHint="go"
-                            className="flex-1 bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 min-w-0"
-                        />
-                        {input && (
-                            <button
-                                type="button"
-                                onClick={() => setInput("")}
-                                aria-label="Clear"
-                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0"
-                            >
-                                ✕
-                            </button>
-                        )}
-                    </div>
-                </form>
-            </div>
+      {/* ── Address bar ───────────────────────────────────────────────── */}
+      <div className="relative flex items-center gap-1 px-2 py-1.5 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0">
+        {/* Loading bar */}
+        <LoadingBar active={isLoading} />
 
-            {/* ── Content ───────────────────────────────────────────── */}
-            <div className="flex-1 min-h-0 bg-white dark:bg-gray-950">
-                {iframeSrc ? (
-                    <iframe
-                        ref={iframeRef}
-                        key={activeTab.id}
-                        src={iframeSrc}
-                        title={activeTab.title || "Browser"}
-                        onLoad={handleLoad}
-                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-presentation"
-                        className="w-full h-full border-0"
-                    />
-                ) : (
-                    <div className="h-full overflow-y-auto">
-                        <div className="max-w-2xl mx-auto px-4 py-8">
-                            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">AnonTweet Browser</h1>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                                A real in-app web browser. Tabs, back/forward history and an unframed-web proxy included.
-                            </p>
-
-                            <form
-                                onSubmit={(e) => {
-                                    e.preventDefault();
-                                    navigate(input);
-                                }}
-                                className="mb-8"
-                            >
-                                <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-full px-4 h-12">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-gray-400 dark:text-gray-500 shrink-0">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                                    </svg>
-                                    <input
-                                        type="text"
-                                        value={input}
-                                        onChange={(e) => setInput(e.target.value)}
-                                        placeholder="Search Google or type a URL"
-                                        className="flex-1 bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 min-w-0"
-                                    />
-                                </div>
-                            </form>
-
-                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                                {SHORTCUTS.map((s) => (
-                                    <button
-                                        key={s.name}
-                                        onClick={() => navigate(s.url)}
-                                        className={`rounded-2xl p-4 flex flex-col items-center gap-2 bg-gradient-to-br ${s.gradient} text-white hover:scale-[1.03] transition-transform shadow`}
-                                    >
-                                        <span className="text-2xl">{s.emoji}</span>
-                                        <span className="text-xs font-semibold">{s.name}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
+        {/* Nav buttons */}
+        <div className="flex items-center gap-0 shrink-0">
+          <NavButton onClick={goBack} disabled={!canBack} aria-label="Back (Alt+Left)" title="Back (Alt+Left)">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </NavButton>
+          <NavButton onClick={goForward} disabled={!canForward} aria-label="Forward (Alt+Right)" title="Forward (Alt+Right)">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </NavButton>
+          <NavButton
+            onClick={isLoading ? () => updateTab(activeId, { loading: false }) : reload}
+            aria-label={isLoading ? "Stop" : "Reload (Ctrl+R)"}
+            title={isLoading ? "Stop loading" : "Reload (Ctrl+R)"}
+          >
+            {isLoading ? (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
+            )}
+          </NavButton>
+          <NavButton onClick={goHome} aria-label="Home" title="Home">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75" />
+            </svg>
+          </NavButton>
         </div>
-    );
+
+        {/* Address input */}
+        <form
+          className="flex-1 min-w-0"
+          onSubmit={(e) => {
+            e.preventDefault();
+            navigate(input);
+            inputRef.current?.blur();
+          }}
+        >
+          <div className={`
+            flex items-center gap-2 rounded-full px-3 h-9
+            transition-all duration-150
+            ${inputFocused
+              ? "bg-white dark:bg-gray-900 ring-2 ring-blue-500 shadow-sm"
+              : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200/70 dark:hover:bg-gray-700/70"
+            }
+          `}>
+            {/* Lock or search icon */}
+            {!inputFocused && activeTab?.url ? (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 text-green-500 shrink-0">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25z" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 text-gray-400 shrink-0">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+            )}
+
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputFocused ? input : (activeTab?.display || input)}
+              onChange={(e) => setInput(e.target.value)}
+              onFocus={() => {
+                setInputFocused(true);
+                // Select all on focus for quick replacement
+                requestAnimationFrame(() => inputRef.current?.select());
+              }}
+              onBlur={() => setInputFocused(false)}
+              placeholder="Search or enter URL   (Ctrl+L to focus)"
+              enterKeyHint="go"
+              spellCheck={false}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              className="flex-1 min-w-0 bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+            />
+
+            {input && inputFocused && (
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()} // prevent blur before click
+                onClick={() => { setInput(""); inputRef.current?.focus(); }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0 text-xs"
+                aria-label="Clear"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </form>
+      </div>
+
+      {/* ── Content area ──────────────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 relative bg-white dark:bg-gray-950">
+        {iframeSrc ? (
+          <iframe
+            ref={iframeRef}
+            key={`${activeTab.id}-${activeTab._reloadKey ?? 0}`}
+            src={iframeSrc}
+            title={activeTab.title || "Browser"}
+            onLoad={handleLoad}
+            onError={handleError}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-presentation allow-pointer-lock"
+            allow="autoplay; fullscreen; clipboard-read; clipboard-write"
+            className="absolute inset-0 w-full h-full border-0"
+            style={{ display: "block" }}
+          />
+        ) : (
+          <NewTabPage navigate={navigate} input={input} setInput={setInput} inputRef={inputRef} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── NavButton helper ─────────────────────────────────────────────────────────
+
+function NavButton({ children, disabled, onClick, ...rest }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="p-1.5 rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-30 disabled:pointer-events-none shrink-0"
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ─── New tab page ─────────────────────────────────────────────────────────────
+
+function NewTabPage({ navigate, input, setInput, inputRef }) {
+  return (
+    <div className="h-full overflow-y-auto bg-white dark:bg-gray-950">
+      <div className="max-w-2xl mx-auto px-4 py-10">
+        {/* Hero search */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 mb-4 shadow-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7 text-white">
+              <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM6.262 6.072a8.25 8.25 0 1 0 10.562-.766 4.5 4.5 0 0 1-1.318 1.357L14.25 7.5l.165.33a.809.809 0 0 1-1.086 1.085l-.604-.302a1.125 1.125 0 0 0-1.298.21l-.132.131c-.439.44-.439 1.152 0 1.591l.296.296c.256.257.622.374.98.314l1.17-.195c.323-.054.654.036.905.245l1.33 1.108c.32.267.46.694.358 1.1a8.7 8.7 0 0 1-2.288 4.04l-.723.724a1.125 1.125 0 0 1-1.298.21l-.153-.076a1.125 1.125 0 0 1-.622-1.006v-1.089c0-.298-.119-.585-.33-.796l-1.347-1.347a1.125 1.125 0 0 1 1.591-1.591L8 14.25v.093c0 .498.198.975.55 1.327l.15.15c.282.283.664.443 1.063.443h.465a.375.375 0 0 0 .375-.375v-.405a.375.375 0 0 0-.215-.343l-.62-.31a.75.75 0 0 1-.41-.65V8.57a.75.75 0 0 1 .298-.599l2.048-1.536z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">AnonTweet Browser</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Tabs · History · Proxy · Privacy</p>
+        </div>
+
+        <form
+          onSubmit={(e) => { e.preventDefault(); navigate(input); }}
+          className="mb-8"
+        >
+          <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-2xl px-4 h-12 ring-1 ring-transparent focus-within:ring-blue-500 focus-within:bg-white dark:focus-within:bg-gray-900 transition-all shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5 text-gray-400 shrink-0">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+            </svg>
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Search Google or type a URL…"
+              spellCheck={false}
+              autoComplete="off"
+              className="flex-1 bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+            />
+            {input && (
+              <button type="button" onClick={() => setInput("")} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs">✕</button>
+            )}
+          </div>
+        </form>
+
+        {/* Shortcut grid */}
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+          {SHORTCUTS.map((s) => (
+            <button
+              key={s.name}
+              onClick={() => navigate(s.url)}
+              className={`rounded-2xl p-4 flex flex-col items-center gap-2 bg-gradient-to-br ${s.gradient} text-white hover:scale-[1.04] active:scale-[0.98] transition-transform shadow-md`}
+            >
+              <span className="text-2xl leading-none">{s.emoji}</span>
+              <span className="text-xs font-semibold tracking-wide">{s.name}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Keyboard hints */}
+        <div className="mt-8 flex flex-wrap justify-center gap-x-5 gap-y-1.5">
+          {[
+            ["Ctrl+L", "Focus URL bar"],
+            ["Ctrl+T", "New tab"],
+            ["Ctrl+W", "Close tab"],
+            ["Ctrl+R", "Reload"],
+            ["Alt+←/→", "Back / Forward"],
+          ].map(([key, desc]) => (
+            <div key={key} className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+              <kbd className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-mono text-[10px] border border-gray-200 dark:border-gray-700">{key}</kbd>
+              <span>{desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
