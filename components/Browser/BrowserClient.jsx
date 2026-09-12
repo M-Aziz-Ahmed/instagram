@@ -199,15 +199,13 @@ async function rustInvoke(cmd, args = {}) {
 
 /** Convert a DOMRect (logical CSS px relative to viewport) to physical screen px */
 async function rectToPhysical(rect) {
-  // get_window_inner_pos returns the physical position of the window's inner
-  // top-left corner on screen, plus the scale factor.
   const { x: winX, y: winY, scaleFactor } = await rustInvoke("get_window_inner_pos");
   const dpr = scaleFactor || window.devicePixelRatio || 1;
   return {
-    screen_x: Math.round(winX + rect.left * dpr),
-    screen_y: Math.round(winY + rect.top * dpr),
-    width:    Math.max(1, Math.round(rect.width * dpr)),
-    height:   Math.max(1, Math.round(rect.height * dpr)),
+    x:      Math.round(winX + rect.left * dpr),
+    y:      Math.round(winY + rect.top  * dpr),
+    width:  Math.max(1, Math.round(rect.width  * dpr)),
+    height: Math.max(1, Math.round(rect.height * dpr)),
   };
 }
 

@@ -107,17 +107,18 @@ fn handle_toast_click(app: tauri::AppHandle, id: u32) {
 // ─── Browser commands ─────────────────────────────────────────────────────────
 
 /// Create (or replace) an overlay browser window positioned at absolute screen
-/// coordinates (physical pixels).  The JS side converts logical CSS rect values
-/// to physical pixels using window.devicePixelRatio before calling this.
+/// coordinates (physical pixels).
 #[tauri::command]
 fn browser_open(
     app: tauri::AppHandle,
     url: String,
-    screen_x: i32,
-    screen_y: i32,
+    x: i32,
+    y: i32,
     width: u32,
     height: u32,
 ) -> Result<String, String> {
+    let screen_x = x;
+    let screen_y = y;
     // Close any existing browser overlay first.
     {
         let bs: tauri::State<'_, Arc<BrowserState>> = app.state();
@@ -174,15 +175,15 @@ fn browser_navigate(app: tauri::AppHandle, url: String) -> Result<(), String> {
 #[tauri::command]
 fn browser_set_bounds(
     app: tauri::AppHandle,
-    screen_x: i32,
-    screen_y: i32,
+    x: i32,
+    y: i32,
     width: u32,
     height: u32,
 ) -> Result<(), String> {
     let bs: tauri::State<'_, Arc<BrowserState>> = app.state();
     let label = match bs.active_label.lock().unwrap().clone() { Some(l) => l, None => return Ok(()) };
     let win = match app.get_webview_window(&label) { Some(w) => w, None => return Ok(()) };
-    let _ = win.set_position(tauri::PhysicalPosition::new(screen_x, screen_y));
+    let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
     let _ = win.set_size(tauri::PhysicalSize::new(width, height));
     Ok(())
 }
