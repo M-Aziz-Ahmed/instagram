@@ -8,6 +8,10 @@ const SECRET = new TextEncoder().encode(
 const PUBLIC_PATHS = [
     "/",
     "/login",
+    "/social",
+    "/browser",
+    "/entertainment",
+    "/me",
     "/search",
     "/tag",
     "/anime",
@@ -26,6 +30,7 @@ const PUBLIC_PATHS = [
     "/api/trending",
     "/api/hashtags",
     "/api/anime-proxy",
+    "/api/browser",
 ];
 
 function isPublicPath(pathname) {

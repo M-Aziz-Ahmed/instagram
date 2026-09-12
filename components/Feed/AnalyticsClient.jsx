@@ -84,7 +84,7 @@ export default function AnalyticsClient() {
             <div className="min-h-dvh bg-gray-50">
                 <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-200">
                     <div className="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3">
-                        <Link href="/" className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors">
+                        <Link href="/social" className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
                             </svg>
@@ -104,7 +104,7 @@ export default function AnalyticsClient() {
             <div className="min-h-dvh bg-gray-50">
                 <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-200">
                     <div className="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3">
-                        <Link href="/" className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors">
+                        <Link href="/social" className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
                             </svg>
@@ -125,7 +125,7 @@ export default function AnalyticsClient() {
         <div className="min-h-dvh bg-gray-50">
             <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-200">
                 <div className="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3">
-                    <Link href="/" className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors">
+                    <Link href="/social" className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
                         </svg>

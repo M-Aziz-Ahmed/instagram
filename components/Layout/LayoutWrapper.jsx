@@ -71,7 +71,7 @@ export default function LayoutWrapper({ children }) {
             <Sidebar open={sidebarOpen} onClose={closeSidebar} unreadCount={unreadCount} />
 
             <div className={`transition-all duration-300 ${
-                isMobile ? "pb-14" : 
+                isMobile ? "pb-16" : 
                 isTablet ? "pb-0 pl-20" : 
                 collapsed ? "lg:pl-20" : "lg:pl-72"
             } ${voiceOpen && !isMobile ? "lg:pr-80" : ""}`}>

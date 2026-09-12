@@ -1,11 +1,11 @@
 {
-  "version": "0.1.13",
-  "notes": "Fix desktop notifications: embed the missing toast-window asset (toast.html) and make all versions fall back to native OS notifications when the toast window isn't available.",
-  "pub_date": "2026-09-10T06:49:33Z",
-  "platforms": {
-    "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmhJYzY0VDREUGpEWFVGNzRCTEFFTUt2UEs3d0xPaTJmbUdESWZPRG9na0pCUWw2NlhuNzRBSjRUWG5ybUlpVENtblF0czlsNGZjS3B2SDhNcHRzZUNGa3d4TUtGUUFnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MDIyOTcyCWZpbGU6QW5vblR3ZWV0XzAuMS4xM194NjQtc2V0dXAuZXhlCkRORVU4U1pqVVFIOSsvdDdwK2tTNmV2TU8wRHlHYmtLYlMrV05ndHc4MnBWaC9PRkJBdHNJMlhVVG5WMy8wdXp1a21OcnZldlFTNHQxVUg0RWloeUJRPT0K",
-      "url": "https://anontweet.vercel.app/downloads/desktop/AnonTweet_0.1.13_x64-setup.exe"
-    }
-  }
+    "platforms":  {
+                      "windows-x86_64":  {
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmhJYzY0VDREUGhZbmc5eDhKbitXaTZ0TFpuTzZ3T0Q4RFVIUDdnZTlzNXRnckJsY09OMjY0cFlRTjFMb1dwbHpxUG03aTZEbWlyRkFlbUNPU0ZDY0huaU12djRWUEFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MjI2MjUxCWZpbGU6QW5vblR3ZWV0XzAuMS4xNF94NjQtc2V0dXAuZXhlCmVQYTZ6a3B1SVF1cHNDUjVPNHIwSXJiTmNyaklaMnhZZ09ySS9rZ1g4NUQwNWZqYnJMQUNKbW85SFlGZFgrR0lMUWxIdlAzVnFKa1pJL0NheGJJS0J3PT0K",
+                                             "url":  "https://anontweet.vercel.app/downloads/desktop/AnonTweet_0.1.14_x64-setup.exe"
+                                         }
+                  },
+    "pub_date":  "2026-09-12T15:17:31Z",
+    "version":  "0.1.14",
+    "notes":  "Automatic update with bug fixes and improvements."
 }

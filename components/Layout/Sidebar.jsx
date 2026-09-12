@@ -239,11 +239,29 @@ function ChannelsIcon() {
     );
 }
 
-function ChevronIcon({ open }) {
+function BrowserIcon() {
     return (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={`w-4 h-4 transition-transform duration-200 ${open ? "rotate-90" : ""}`}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m6.429 9.75 5.571-3.42v13.34m0 0-4.75-2.867a2.25 2.25 0 0 0-2.287-.08L2.25 17.75V6.75a2.25 2.25 0 0 1 1.665-2.16l5.226-1.307a2.25 2.25 0 0 1 1.76.183l5.11 2.806a2.25 2.25 0 0 0 2.393-.035l.016-.009a2.25 2.25 0 0 1 3.42 1.91v11.13a2.25 2.25 0 0 1-1.954 2.232l-5.226 1.307a2.25 2.25 0 0 1-1.76-.183l-5.109-2.806Z" />
         </svg>
+    );
+}
+
+function SearchIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+        </svg>
+    );
+}
+
+function SectionHeader({ label }) {
+    const { collapsed } = useSidebar();
+    if (collapsed) return <div className="h-4" />;
+    return (
+        <p className="px-4 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+            {label}
+        </p>
     );
 }
 
@@ -257,15 +275,12 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
     const [showSettings, setShowSettings]   = useState(false);
     const [showCloseFriends, setShowCloseFriends] = useState(false);
     const [showMutedWords, setShowMutedWords] = useState(false);
-    const [entertainmentOpen, setEntertainmentOpen] = useState(false);
 
     const isActive = (path) => {
-        if (path === "/") return pathname === "/";
         return pathname.startsWith(path);
     };
 
-    const entertainmentRoutes = ["/anime", "/manga", "/movies", "/kdramas", "/seasons", "/cdramas", "/cartoons", "/channels"];
-    const isEntertainmentActive = entertainmentRoutes.some((r) => isActive(r));
+    const entertainmentRoutes = ["/games", "/chess", "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman", "/reactionduel", "/game2048", "/minesweeper", "/sudoku", "/movies", "/anime", "/manga", "/kdramas", "/seasons", "/cdramas", "/cartoons", "/channels", "/leaderboard"];
 
     const handleLogout = async () => {
         if (onClose) onClose();
@@ -371,137 +386,192 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                     </div>
 
                     {/* Navigation */}
-                    <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
-                        <NavItem
-                            href="/"
-                            icon={<HomeIcon />}
-                            label="Home"
-                            active={isActive("/")}
-                            onClick={handleNavClick}
-                        />
-                        <NavItem
-                            href={`/profile/${encodeURIComponent(user?.username || "")}`}
-                            icon={<ProfileIcon />}
-                            label="Profile"
-                            active={isActive("/profile")}
-                            onClick={handleNavClick}
-                        />
-                        <NavItem
-                            href="/bookmarks"
-                            icon={<BookmarkIcon />}
-                            label="Bookmarks"
-                            active={isActive("/bookmarks")}
-                            onClick={handleNavClick}
-                        />
-                        <NavItem
-                            href="/library"
-                            icon={
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
-                                </svg>
-                            }
-                            label="Library"
-                            active={isActive("/library")}
-                            onClick={handleNavClick}
-                        />
-                        <NavItem
-                            href="/inbox"
-                            icon={<InboxIcon />}
-                            label="Inbox"
-                            active={isActive("/inbox")}
-                            onClick={handleNavClick}
-                            badge={unreadCount}
-                        />
-                        <NavItem
-                            icon={<VoiceChatIcon />}
-                            label="Voice Chat"
-                            active={voiceOpen}
-                            onClick={() => {
-                                if (voiceOpen) {
-                                    closeVoiceChat();
-                                } else {
-                                    openVoiceChat();
-                                }
-                            }}
-                        />
-                        <NavItem
-                            href="/communities"
-                            icon={<CommunityIcon />}
-                            label="Communities"
-                            active={isActive("/communities")}
-                            onClick={handleNavClick}
-                        />
-                        <NavItem
-                            href="/games"
-                            icon={<ChessIcon />}
-                            label="Games"
-                            active={["/games", "/chess", "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman", "/reactionduel", "/game2048", "/minesweeper", "/sudoku"].some((p) => isActive(p))}
-                            onClick={handleNavClick}
-                        />
-                        <NavItem
-                            href="/leaderboard"
-                            icon={<TrophyIcon />}
-                            label="Leaderboard"
-                            active={isActive("/leaderboard")}
-                            onClick={handleNavClick}
-                        />
-                        <NavItem
-                            href="/trending"
-                            icon={<TrendingIcon />}
-                            label="What&apos;s Happening"
-                            active={isActive("/trending")}
-                            onClick={handleNavClick}
-                        />
-
-                        {/* Entertainment Dropdown */}
-                        <div>
-                            <button
-                                onClick={() => setEntertainmentOpen(!entertainmentOpen)}
-                                className={`flex items-center ${collapsed ? "justify-center gap-0 px-2" : "gap-3 px-4"} py-3 rounded-xl text-sm font-medium transition-colors min-h-[48px] w-full ${collapsed ? "" : "text-left"} ${
-                                    isEntertainmentActive && !entertainmentOpen
-                                        ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                                        : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/60 hover:text-gray-900 dark:hover:text-gray-100"
-                                }`}
-                            >
-                                <EntertainmentIcon />
-                                <span className={collapsed ? "sr-only" : "flex-1"}>Entertainment</span>
-                                {!collapsed && <ChevronIcon open={entertainmentOpen} />}
-                            </button>
-
-                            {entertainmentOpen && !collapsed && (
-                                <div className="ml-4 mt-0.5 space-y-0.5 border-l-2 border-gray-200 dark:border-gray-700 pl-3">
-                                    {[
-                                        { href: "/movies", icon: <MoviesIcon />, label: "Movies" },
-                                        { href: "/kdramas", icon: <KDramaIcon />, label: "K-Dramas" },
-                                        { href: "/channels", icon: <ChannelsIcon />, label: "Channels" },
-                                        { href: "/seasons", icon: <SeasonsIcon />, label: "Seasons" },
-                                        { href: "/cdramas", icon: <CDramaIcon />, label: "Chinese Dramas" },
-                                        { href: "/cartoons", icon: <CartoonsIcon />, label: "Cartoons" },
-                                        { href: "/anime", icon: <AnimeIcon />, label: "Anime" },
-                                        { href: "/manga", icon: <MangaIcon />, label: "Manga" },
-                                    ].map((item) => (
-                                        <NavItem
-                                            key={item.href}
-                                            href={item.href}
-                                            icon={item.icon}
-                                            label={item.label}
-                                            active={isActive(item.href)}
-                                            onClick={handleNavClick}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {user?.isAdmin && (
+                    <nav className="flex-1 px-3 py-2 overflow-y-auto">
+                        {/* CHATS — the primary app */}
+                        <SectionHeader label="Chats" />
+                        <div className="space-y-1">
                             <NavItem
-                                href="/admin"
-                                icon={<AdminIcon />}
-                                label="Admin"
-                                active={isActive("/admin")}
+                                href="/inbox"
+                                icon={<InboxIcon />}
+                                label="Messages"
+                                active={isActive("/inbox")}
+                                onClick={handleNavClick}
+                                badge={unreadCount}
+                            />
+                            <NavItem
+                                icon={<VoiceChatIcon />}
+                                label="Voice Chat"
+                                active={voiceOpen}
+                                onClick={() => {
+                                    if (voiceOpen) {
+                                        closeVoiceChat();
+                                    } else {
+                                        openVoiceChat();
+                                    }
+                                }}
+                            />
+                            <NavItem
+                                href="/communities"
+                                icon={<CommunityIcon />}
+                                label="Communities"
+                                active={isActive("/communities")}
                                 onClick={handleNavClick}
                             />
-                        )}
+                        </div>
+
+                        {/* SUB-APPS */}
+                        <SectionHeader label="Sub-Apps" />
+                        <div className="space-y-1">
+                            <NavItem
+                                href="/social"
+                                icon={<HomeIcon />}
+                                label="Social"
+                                active={isActive("/social")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/browser"
+                                icon={<BrowserIcon />}
+                                label="Browser"
+                                active={isActive("/browser")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/entertainment"
+                                icon={<EntertainmentIcon />}
+                                label="Entertainment"
+                                active={entertainmentRoutes.some((r) => isActive(r))}
+                                onClick={handleNavClick}
+                            />
+                        </div>
+
+                        {/* DISCOVER */}
+                        <SectionHeader label="Discover" />
+                        <div className="space-y-1">
+                            <NavItem
+                                href="/search"
+                                icon={<SearchIcon />}
+                                label="Search"
+                                active={isActive("/search")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/trending"
+                                icon={<TrendingIcon />}
+                                label="What&apos;s Happening"
+                                active={isActive("/trending")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/games"
+                                icon={<ChessIcon />}
+                                label="Games"
+                                active={["/games", "/chess", "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman", "/reactionduel", "/game2048", "/minesweeper", "/sudoku"].some((p) => isActive(p))}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/leaderboard"
+                                icon={<TrophyIcon />}
+                                label="Leaderboard"
+                                active={isActive("/leaderboard")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/movies"
+                                icon={<MoviesIcon />}
+                                label="Movies"
+                                active={isActive("/movies")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/kdramas"
+                                icon={<KDramaIcon />}
+                                label="K-Dramas"
+                                active={isActive("/kdramas")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/seasons"
+                                icon={<SeasonsIcon />}
+                                label="Seasons"
+                                active={isActive("/seasons")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/cdramas"
+                                icon={<CDramaIcon />}
+                                label="Chinese Dramas"
+                                active={isActive("/cdramas")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/cartoons"
+                                icon={<CartoonsIcon />}
+                                label="Cartoons"
+                                active={isActive("/cartoons")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/anime"
+                                icon={<AnimeIcon />}
+                                label="Anime"
+                                active={isActive("/anime")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/manga"
+                                icon={<MangaIcon />}
+                                label="Manga"
+                                active={isActive("/manga")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/channels"
+                                icon={<ChannelsIcon />}
+                                label="Channels"
+                                active={isActive("/channels")}
+                                onClick={handleNavClick}
+                            />
+                        </div>
+
+                        {/* ME */}
+                        <SectionHeader label="Me" />
+                        <div className="space-y-1">
+                            <NavItem
+                                href={`/profile/${encodeURIComponent(user?.username || "")}`}
+                                icon={<ProfileIcon />}
+                                label="Profile"
+                                active={isActive("/profile")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/bookmarks"
+                                icon={<BookmarkIcon />}
+                                label="Bookmarks"
+                                active={isActive("/bookmarks")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/library"
+                                icon={
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                                    </svg>
+                                }
+                                label="Library"
+                                active={isActive("/library")}
+                                onClick={handleNavClick}
+                            />
+                            {user?.isAdmin && (
+                                <NavItem
+                                    href="/admin"
+                                    icon={<AdminIcon />}
+                                    label="Admin"
+                                    active={isActive("/admin")}
+                                    onClick={handleNavClick}
+                                />
+                            )}
+                        </div>
                     </nav>
 
                     {/* Settings section */}

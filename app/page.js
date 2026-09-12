@@ -1,14 +1,12 @@
-import FeedClient from "@/components/Feed/FeedClient";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 export const metadata = {
-  title: 'Home Feed',
-  description: 'Discover anonymous posts, stories, and content from users around the world. Share your thoughts freely without revealing your identity.',
-  openGraph: {
-    title: 'AnonTweet - Anonymous Social Media',
-    description: 'Discover anonymous posts and stories from users worldwide',
-  },
+  title: 'AnonTweet Messaging',
+  description: 'Chat with friends, groups and communities on AnonTweet. Your super-app hub for messaging, social, browser and entertainment.',
 };
 
-export default function Home() {
-    return <FeedClient />;
+export default async function Home() {
+  const cookieStore = await cookies();
+  redirect(cookieStore.has("af_session") ? "/inbox" : "/login");
 }

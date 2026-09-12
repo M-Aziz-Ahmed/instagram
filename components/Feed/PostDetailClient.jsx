@@ -55,7 +55,7 @@ export default function PostDetailClient({ postId }) {
             <div className="min-h-dvh bg-white dark:bg-gray-950 flex flex-col items-center justify-center gap-4 p-6">
                 <p className="text-gray-500 dark:text-gray-400 text-sm">{error || "Post not found"}</p>
                 <button
-                    onClick={() => router.push("/")}
+                    onClick={() => router.push("/social")}
                     className="text-sm font-semibold text-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
                 >
                     Go to feed
