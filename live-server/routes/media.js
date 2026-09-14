@@ -14,8 +14,6 @@ const {
     getMediaSource,
 } = require("../utils/mediaSources");
 
-const Iptv = require("../utils/iptv");
-
 const PLURAL_TO_SINGULAR = {
     movies: "movie",
     kdramas: "kdrama",
@@ -605,7 +603,37 @@ router.get("/types", (req, res) => {
 // ──────── IPTV ────────
 router.get("/iptv/playlist", async (req, res) => {
     try {
-        const channels = await Iptv.fetchPlaylist();
+        const res2 = await fetch("https://iptv-org.github.io/iptv/index.m3u", { redirect: "follow", timeout: 15000 });
+        if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
+        const text = await res2.text();
+        // Parse EXTINF lines
+        const channels = [];
+        const lines = text.split(/\r?\n/);
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (line.startsWith("#EXTINF")) {
+                const meta = {};
+                const pairs = line.substring(9).split(/[&;]/);
+                for (const pair of pairs) {
+                    const eq = pair.indexOf("=");
+                    if (eq > 0) {
+                        const key = pair.substring(0, eq).trim();
+                        const val = pair.substring(eq + 1).trim().replace(/"/g, "");
+                        meta[key] = val;
+                    }
+                }
+                i++;
+                const url = lines[i] ? lines[i].trim() : "";
+                if (url) {
+                    channels.push({
+                        name: meta.tvg_name || meta.name || "Unknown",
+                        logo: meta.tvg_logo || meta.tvg_logo || "",
+                        group: meta.group_title || meta.group || "Unknown",
+                        url: url,
+                    });
+                }
+            }
+        }
         res.json({ type: "iptv", channels });
     } catch (err) {
         console.error("IPTV error:", err.message);
