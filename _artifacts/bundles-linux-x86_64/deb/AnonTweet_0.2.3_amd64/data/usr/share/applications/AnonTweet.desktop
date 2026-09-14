@@ -1,0 +1,9 @@
+[Desktop Entry]
+Categories=
+Comment=AnonTweet desktop companion
+Exec=anontweet
+StartupWMClass=anontweet
+Icon=anontweet
+Name=AnonTweet
+Terminal=false
+Type=Application
