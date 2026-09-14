@@ -69,9 +69,24 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
         setLoading(true);
         setError("");
 
+        const cleanup = () => {
+            if (hlsRef.current) {
+                hlsRef.current.destroy();
+                hlsRef.current = null;
+            }
+        };
+
         if (playerSrc.endsWith(".m3u8") || playerSrc.includes(".m3u8")) {
             if (Hls.isSupported()) {
-                const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+                const hls = new Hls({ 
+                    enableWorker: true, 
+                    lowLatencyMode: true,
+                    retryDelay: 1000,
+                    maxRetryDelay: 5000,
+                    maxMaxRetryDelay: 10000,
+                    maxLoadTimeout: 20000,
+                    maxRetry: 3,
+                });
                 hlsRef.current = hls;
                 hls.loadSource(playerSrc);
                 hls.attachMedia(video);
@@ -81,11 +96,17 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
                 });
                 hls.on(Hls.Events.ERROR, (_e, data) => {
                     if (data.fatal) {
-                        setError("Playback error");
-                        setLoading(false);
+                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                            hls.startLoad();
+                        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                            hls.recoverMediaError();
+                        } else {
+                            setError("Playback error - try another source");
+                            setLoading(false);
+                        }
                     }
                 });
-                return () => { hls.destroy(); hlsRef.current = null; };
+                return cleanup;
             } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
                 video.src = playerSrc;
                 const onMeta = () => {
@@ -101,8 +122,16 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
                 setLoading(false);
                 if (autoPlay) video.play().catch(() => {});
             };
+            const onError = () => {
+                setError("Failed to load video - try another source");
+                setLoading(false);
+            };
             video.addEventListener("loadeddata", onData);
-            return () => video.removeEventListener("loadeddata", onData);
+            video.addEventListener("error", onError);
+            return () => {
+                video.removeEventListener("loadeddata", onData);
+                video.removeEventListener("error", onError);
+            };
         }
     }, [playerSrc, autoPlay]);
 

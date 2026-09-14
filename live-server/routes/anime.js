@@ -8,14 +8,18 @@ dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
 
 const ANILIST = "https://graphql.anilist.co";
 const GOGO_BASE = "https://gogoanimehd.to";
+const GOGO_API_BASE = "https://api.gogoanimehd.to";
 
 const animeUnity = new ANIME.AnimeUnity();
+const hianime = new ANIME.HiAnime();
 
 // Caches: anilistId -> streaming provider ID
 const gogoIdCache = new Map();
 const gogoEpisodeCache = new Map();
 const unityIdCache = new Map();
 const unityEpisodeCache = new Map();
+const hianimeIdCache = new Map();
+const hianimeEpisodeCache = new Map();
 
 async function gql(query, variables = {}, retries = 2) {
     for (let i = 0; i <= retries; i++) {
@@ -120,17 +124,23 @@ router.get("/info/:id", async (req, res) => {
         let hasDub = true;
         let source = "none";
 
-        const [gogoResult, unityResult] = await Promise.allSettled([
+        const [gogoResult, unityResult, hianimeResult] = await Promise.allSettled([
             fetchGogoEpisodes(id, title),
             fetchUnityEpisodes(id, title),
+            fetchHianimeEpisodes(id, title),
         ]);
 
         const gogoEps = gogoResult.status === "fulfilled" ? gogoResult.value : [];
         const unityEps = unityResult.status === "fulfilled" ? unityResult.value : [];
+        const hianimeEps = hianimeResult.status === "fulfilled" ? hianimeResult.value : [];
 
         if (gogoEps.length > 0) {
             episodes = gogoEps;
             source = "gogoanime";
+        } else if (hianimeEps.length > 0) {
+            episodes = hianimeEps;
+            source = "hianime";
+            hasDub = false;
         } else if (unityEps.length > 0) {
             episodes = unityEps;
             source = "animeunity";
@@ -167,13 +177,17 @@ router.get("/episodes/:id", async (req, res) => {
         if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
         const title = req.query.title || "";
 
-        const [gogoResult, unityResult] = await Promise.allSettled([
+        const [gogoResult, unityResult, hianimeResult] = await Promise.allSettled([
             fetchGogoEpisodes(id, title),
             fetchUnityEpisodes(id, title),
+            fetchHianimeEpisodes(id, title),
         ]);
 
         const gogoEps = gogoResult.status === "fulfilled" ? gogoResult.value : [];
         if (gogoEps.length > 0) return res.json({ episodes: gogoEps, source: "gogoanime" });
+
+        const hianimeEps = hianimeResult.status === "fulfilled" ? hianimeResult.value : [];
+        if (hianimeEps.length > 0) return res.json({ episodes: hianimeEps, source: "hianime" });
 
         const unityEps = unityResult.status === "fulfilled" ? unityResult.value : [];
         if (unityEps.length > 0) return res.json({ episodes: unityEps, source: "animeunity" });
@@ -196,27 +210,48 @@ router.get("/watch/:episodeId", async (req, res) => {
                 const parts = episodeId.split(":");
                 const slug = parts[1];
                 const epNum = parts[2];
-                const quality = subOrDub === "dub" ? "DUB" : "SUB";
-                const data = await withTimeout(gogoFetchJson(`/api/episode/${slug}/${epNum}`), 10000);
-                const qualities = data?.server?.qualities || [];
-                const qualityBlock = qualities.find(q => q.title === quality) || qualities.find(q => q.title === "SUB") || qualities[0];
-                const servers = qualityBlock?.serverList || [];
+                const quality = subOrDub === "dub" ? "dub" : "sub";
+
+                // New gogoanime API structure
+                const data = await withTimeout(gogoFetchJson(`/episode/${slug}-episode-${epNum}`), 10000);
                 const sources = [];
 
-                if (servers.length) {
-                    const primaryServer = servers[0];
-                    try {
-                        const srvData = await withTimeout(gogoFetchJson(`/api/server?id=${encodeURIComponent(primaryServer.serverId)}`), 8000);
-                        if (srvData?.url) {
-                            const fullUrl = srvData.url.startsWith("http") ? srvData.url : `${GOGO_BASE}${srvData.url}`;
-                            sources.push({ url: fullUrl, quality: quality, isM3U8: true });
+                // Try to get streaming links from the new API response
+                if (data?.data?.streamingLinks) {
+                    for (const link of data.data.streamingLinks) {
+                        if (link?.url) {
+                            const fullUrl = link.url.startsWith("http") ? link.url : `${GOGO_BASE}${link.url}`;
+                            sources.push({ url: fullUrl, quality: link.quality || "auto", isM3U8: true, server: link.name || "gogoanime" });
                         }
-                    } catch { /* server resolve failed */ }
+                    }
                 }
 
-                if (!sources.length && data?.defaultStreamingUrl) {
-                    const fullUrl = data.defaultStreamingUrl.startsWith("http") ? data.defaultStreamingUrl : `${GOGO_BASE}${data.defaultStreamingUrl}`;
-                    sources.push({ url: fullUrl, quality: quality, isM3U8: true });
+                // Fallback: try to get from episode servers
+                if (!sources.length) {
+                    try {
+                        const serversData = await withTimeout(gogoFetchJson(`/episode/${slug}-episode-${epNum}/servers`), 8000);
+                        if (serversData?.data?.servers) {
+                            for (const server of serversData.data.servers) {
+                                if (server?.embed || server?.iframe) {
+                                    sources.push({ url: server.embed || server.iframe, quality: "auto", isM3U8: false, server: server.name || "embed" });
+                                }
+                            }
+                        }
+                    } catch { /* server fetch failed */ }
+                }
+
+                // Try hiAnime API as additional fallback
+                if (!sources.length) {
+                    try {
+                        const hianimeData = await withTimeout(hianime.fetchEpisodeSources(`${slug}-episode-${epNum}`), 10000);
+                        if (hianimeData?.sources?.length > 0) {
+                            for (const src of hianimeData.sources) {
+                                if (src?.url) {
+                                    sources.push({ url: src.url, quality: src.quality || "auto", isM3U8: src.isM3U8 || false, server: "hianime" });
+                                }
+                            }
+                        }
+                    } catch { /* hianime failed */ }
                 }
 
                 if (sources.length) {
@@ -235,6 +270,14 @@ router.get("/watch/:episodeId", async (req, res) => {
             }
         } catch { /* both failed */ }
 
+        // HiAnime fallback for non-gogo IDs
+        try {
+            const sources = await withTimeout(hianime.fetchEpisodeSources(episodeId), 12000);
+            if (sources?.sources?.length > 0) {
+                return res.json({ ...sources, source: "hianime" });
+            }
+        } catch { /* failed */ }
+
         res.status(502).json({ error: "Streaming unavailable" });
     } catch (err) {
         console.error("Anime watch error:", err.message);
@@ -248,13 +291,15 @@ router.get("/servers/:episodeId", async (req, res) => {
     if (episodeId.startsWith("gogo:")) {
         try {
             const parts = episodeId.split(":");
-            const data = await gogoFetchJson(`/api/episode/${parts[1]}/${parts[2]}`);
-            const qualities = data?.server?.qualities || [];
-            res.json({ qualities });
+            const slug = parts[1];
+            const epNum = parts[2];
+            const data = await gogoFetchJson(`/episode/${slug}-episode-${epNum}/servers`);
+            const servers = data?.data?.servers || [];
+            res.json({ servers });
             return;
         } catch { /* fallback */ }
     }
-    res.json({ qualities: [] });
+    res.json({ servers: [] });
 });
 
 // ── Get anime genres ──────────────────────────────────────────
@@ -302,7 +347,7 @@ function withTimeout(promise, ms) {
 // ── Gogoanime helpers (gogoanimehd.to JSON API) ─────────────
 
 async function gogoFetch(path) {
-    const res = await fetch(`${GOGO_BASE}${path}`, {
+    const res = await fetch(`${GOGO_API_BASE}${path}`, {
         headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" },
         timeout: 12000,
         redirect: "follow",
@@ -320,19 +365,19 @@ async function findGogoId(anilistId, title) {
     if (gogoIdCache.has(anilistId)) return gogoIdCache.get(anilistId);
     if (!title) return null;
     try {
-        const data = await withTimeout(gogoFetchJson(`/api/search?q=${encodeURIComponent(title)}`), 10000);
-        const items = data?.items || [];
+        const data = await withTimeout(gogoFetchJson(`/search?q=${encodeURIComponent(title)}`), 10000);
+        const items = data?.data || data?.items || [];
         if (!items.length) return null;
 
         const norm = title.toLowerCase().replace(/[^a-z0-9]/g, "");
         let match = items.find(i => {
             const t = (i.title || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-            const te = (i.title_english || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const te = (i.title_english || i.english_title || "").toLowerCase().replace(/[^a-z0-9]/g, "");
             return t === norm || te === norm;
         });
         if (!match) match = items.find(i => i.type === "TV" && (
             (i.title || "").toLowerCase().includes(title.toLowerCase()) ||
-            (i.title_english || "").toLowerCase().includes(title.toLowerCase()) ||
+            (i.title_english || i.english_title || "").toLowerCase().includes(title.toLowerCase()) ||
             title.toLowerCase().includes((i.title || "").toLowerCase())
         ));
         if (!match) match = items.find(i =>
@@ -340,9 +385,9 @@ async function findGogoId(anilistId, title) {
             title.toLowerCase().includes((i.title || "").toLowerCase())
         );
         if (!match) match = items[0];
-        if (!match?.slug) return null;
+        if (!match?.slug || !match?.anime_id) return null;
 
-        const result = { slug: match.slug, episodeCount: match.latest_episode || match.actual_episodes_count || 0 };
+        const result = { slug: match.slug, animeId: match.anime_id, episodeCount: match.latest_episode || match.actual_episodes_count || match.total_episodes || 0 };
         gogoIdCache.set(anilistId, result);
         return result;
     } catch { return null; }
@@ -362,6 +407,51 @@ async function fetchGogoEpisodes(anilistId, title) {
         gogoEpisodeCache.set(slug, episodes);
         return episodes;
     } catch { return []; }
+}
+
+// ── HiAnime helpers ───────────────────────────────────────────
+
+async function findHianimeId(anilistId, title) {
+    if (hianimeIdCache.has(anilistId)) return hianimeIdCache.get(anilistId);
+    if (!title) return null;
+
+    try {
+        const results = await withTimeout(hianime.search(title), 10000);
+        if (!results?.results?.length) return null;
+
+        const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9]/g, "");
+        let match = results.results.find(r =>
+            r.title?.toLowerCase().replace(/[^a-z0-9]/g, "") === normalizedTitle
+        );
+        if (!match) match = results.results[0];
+        if (!match?.id) return null;
+
+        hianimeIdCache.set(anilistId, match.id);
+        return match.id;
+    } catch {
+        return null;
+    }
+}
+
+async function fetchHianimeEpisodes(anilistId, title) {
+    const hianimeId = await findHianimeId(anilistId, title);
+    if (!hianimeId) return [];
+
+    if (hianimeEpisodeCache.has(hianimeId)) return hianimeEpisodeCache.get(hianimeId);
+
+    try {
+        const info = await withTimeout(hianime.fetchAnimeInfo(hianimeId), 10000);
+        const episodes = (info.episodes || []).map(ep => ({
+            id: ep.id,
+            number: ep.number,
+            title: ep.title || "",
+            url: ep.url || "",
+        }));
+        hianimeEpisodeCache.set(hianimeId, episodes);
+        return episodes;
+    } catch {
+        return [];
+    }
 }
 
 // ── AnimeUnity helpers ──────────────────────────────────────
