@@ -56,8 +56,8 @@ export default function MediaPage({ mediaType, config }) {
 
     const fetchTrending = useCallback(async () => {
         try {
-            const routePath = mediaType === "movie" 
-                ? `/api/movies?trending=true&time_window=week`
+            const routePath = mediaType === "movie"
+                ? `/api/media/movies/trending?time_window=week`
                 : `${apiRoute}/${route}/trending?time_window=week`;
             const res = await fetch(routePath);
             if (!res.ok) {
@@ -81,10 +81,10 @@ export default function MediaPage({ mediaType, config }) {
         (async () => {
             try {
                 const detailPath = mediaType === "movie"
-                    ? `/api/movies?id=${initialId}`
+                    ? null
                     : `${apiRoute}/${mediaType}/${initialId}`;
-                const res = await fetch(detailPath);
-                if (!res.ok) {
+                const res = detailPath ? await fetch(detailPath) : null;
+                if (res && !res.ok) {
                     if (res.status === 404) {
                         console.warn(`Media ${initialId} not found`);
                         return;
@@ -92,7 +92,7 @@ export default function MediaPage({ mediaType, config }) {
                     console.warn(`API error: ${res.status}`);
                     return;
                 }
-                const data = await res.json();
+                const data = res ? await res.json() : null;
                 if (data) {
                     setSelected(data);
                     probeDrama(data.title || data.name);
@@ -115,8 +115,8 @@ export default function MediaPage({ mediaType, config }) {
         setLoading(true);
         setTrending([]);
         try {
-            const searchPath = mediaType === "movie" 
-                ? `/api/movies?q=${encodeURIComponent(q)}&page=${page}`
+            const searchPath = mediaType === "movie"
+                ? `/api/media/movies/search?q=${encodeURIComponent(q)}&page=${page}`
                 : `${apiRoute}/${mediaType}/search?q=${encodeURIComponent(q)}&page=${page}`;
             const res = await fetch(searchPath);
             const data = await res.json();
@@ -151,10 +151,10 @@ export default function MediaPage({ mediaType, config }) {
         window.history.pushState({}, "", `/${route}?id=${item.id}`);
         try {
             const detailPath = mediaType === "movie"
-                ? `/api/movies?id=${item.id}`
+                ? null
                 : `${apiRoute}/${mediaType}/${item.id}?title=${encodeURIComponent(item.title || "")}`;
-            const res = await fetch(detailPath);
-            if (res.ok) {
+            const res = detailPath ? await fetch(detailPath) : null;
+            if (res && res.ok) {
                 const data = await res.json();
                 if (data) {
                     setDetails(data);
@@ -193,12 +193,14 @@ export default function MediaPage({ mediaType, config }) {
         };
 
         let viaDirect = false;
+        const directTimeout = 12000;
+        const fetchDirect = (url) => fetch(url, { signal: AbortSignal.timeout(directTimeout) });
         if (isDrama && drama?.episodes?.length > 0) {
             const candidates = (drama.episodes || []).filter((d) => d.number === ep.episode_number);
             const match = candidates.find((d) => d.subtype === subOrDub) || candidates[0];
             if (match?.id) {
                 try {
-                    const res = await fetch(`/api/streaming/dramas/watch?episodeId=${encodeURIComponent(match.id)}&subOrDub=${subOrDub}`);
+                    const res = await fetchDirect(`/api/streaming/dramas/watch?episodeId=${encodeURIComponent(match.id)}&subOrDub=${subOrDub}`);
                     if (res.ok) {
                         const data = await res.json();
                         if (data.sources?.length > 0 || data.url) {
@@ -219,7 +221,7 @@ export default function MediaPage({ mediaType, config }) {
             const myear = details?.releaseDate || selected?.releaseDate || "";
             if (mtitle) {
                 try {
-                    const res = await fetch(`/api/streaming/movies/resolve?q=${encodeURIComponent(mtitle)}&year=${encodeURIComponent(myear)}`);
+                    const res = await fetchDirect(`/api/streaming/movies/resolve?q=${encodeURIComponent(mtitle)}&year=${encodeURIComponent(myear)}`);
                     if (res.ok) {
                         const data = await res.json();
                         if (data.sources?.length > 0 || data.url) {
@@ -246,7 +248,8 @@ export default function MediaPage({ mediaType, config }) {
             const streamQuery = mediaType === "movie"
                 ? ""
                 : `?season=1&episode=${ep.episode_number}` + (imdbId ? `&imdb=${imdbId}` : "");
-            const res = await fetch(`${apiRoute}/${mediaType}/${ep.id}/stream${streamQuery}`);
+            const streamId = selected?.id || ep.id;
+            const res = await fetch(`${apiRoute}/${mediaType}/${streamId}/stream${streamQuery}`);
             if (!res.ok) {
                 if (res.status >= 400) {
                     console.warn(`Stream API error: ${res.status}`);
@@ -280,11 +283,15 @@ export default function MediaPage({ mediaType, config }) {
 
     const view = hasStream ? "player" : selected ? "detail" : "grid";
 
-    const displayEpisodes = isDrama && drama?.episodes?.length > 0
-        ? drama.episodes
-            .filter((e) => (drama.hasDub ? e.subtype === subOrDub : true))
-            .map((e) => ({ id: e.id, episode_number: e.number, name: e.title }))
-        : episodes;
+    const displayEpisodes = (() => {
+        if (isDrama && drama?.episodes?.length > 0) {
+            const filtered = drama.episodes
+                .filter((e) => (drama.hasDub ? e.subtype === subOrDub : true))
+                .map((e) => ({ id: e.id, episode_number: e.number, name: e.title }));
+            if (filtered.length > 0) return filtered;
+        }
+        return episodes;
+    })();
 
     return (
         <div className="min-h-dvh bg-white dark:bg-gray-950">
@@ -351,8 +358,11 @@ export default function MediaPage({ mediaType, config }) {
                                 onClick={() => {
                                     if (mediaType === "movie") {
                                         handlePlayEpisode({ id: selected.id, episode_number: 1, name: selected.title });
-                                    } else if (displayEpisodes.length > 0) {
-                                        handlePlayEpisode(displayEpisodes[0]);
+                                    } else {
+                                        const ep = displayEpisodes.length > 0
+                                            ? displayEpisodes[0]
+                                            : { id: selected.id, episode_number: 1, name: selected.title };
+                                        handlePlayEpisode(ep);
                                     }
                                 }}
                                 className="w-full mt-4 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors text-sm"
@@ -360,7 +370,7 @@ export default function MediaPage({ mediaType, config }) {
                                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                                     <path d="M8 5v14l11-7z" />
                                 </svg>
-                                {mediaType === "movie" ? "Play Movie" : displayEpisodes.length > 0 ? "Play S1 E1" : "Loading episodes..."}
+                                {mediaType === "movie" ? "Play Movie" : displayEpisodes.length > 0 ? "Play S1 E1" : "Play"}
                             </button>
                         </div>
                         <div className="flex-1 min-w-0 space-y-3">

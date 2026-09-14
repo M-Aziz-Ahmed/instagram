@@ -5,6 +5,8 @@ const router = express.Router();
 
 dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
 
+dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
+
 const TVMAZE_BASE = "https://api.tvmaze.com";
 
 const {
@@ -380,7 +382,8 @@ router.get("/:type/:id", async (req, res) => {
         // Try direct ID lookup first
         let show;
         try {
-            const data = await fetchTVMaze(`/shows/${id}?embed=episodes,cast,images`);
+            // TVMaze only supports ONE embed per request (comma-joined embeds return 400)
+            const data = await fetchTVMaze(`/shows/${id}?embed=episodes`);
             if (data && !Array.isArray(data)) show = data;
         } catch {}
         if (!show) {
@@ -394,6 +397,15 @@ router.get("/:type/:id", async (req, res) => {
             }
         }
         if (!show) return res.status(404).json({ error: "Show not found in TVMaze" });
+
+        // The title-search fallback returns show objects without _embedded.episodes.
+        // Re-fetch with the single supported embed so episodes/season info is present.
+        if (!show._embedded?.episodes) {
+            try {
+                const full = await fetchTVMaze(`/shows/${show.id}?embed=episodes`);
+                if (full && !Array.isArray(full) && full.id) show = full;
+            } catch {}
+        }
 
         const formatted = formatTVMazeShow(show, type);
         res.json({ type, ...formatted });
