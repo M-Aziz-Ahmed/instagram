@@ -212,7 +212,7 @@ export default function InboxClient() {
         : groups;
 
     return (
-        <div className="flex h-dvh bg-white dark:bg-gray-950 overflow-hidden">
+        <div className="flex h-[calc(100dvh-4rem)] lg:h-dvh bg-white dark:bg-gray-950 overflow-hidden">
             <aside className={`
                 flex flex-col shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950
                 w-full md:w-80

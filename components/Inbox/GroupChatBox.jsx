@@ -343,7 +343,7 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
             )}
 
             {/* Input */}
-            <div className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-3">
+            <div className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-3 shrink-0">
                 {replyTo && (
                     <div className="flex items-center justify-between mb-2 px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs">
                         <span className="text-gray-500 dark:text-gray-400 truncate">

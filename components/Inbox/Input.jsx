@@ -351,7 +351,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
             )}
 
             {/* Input row */}
-            <div className="flex items-end gap-1.5 sm:gap-2 w-full max-w-full overflow-hidden">
+            <div className="flex items-end gap-1.5 sm:gap-2 w-full max-w-full">
                 {/* Attach button - hidden on very small screens */}
                 <button
                     onClick={() => fileRef.current?.click()}
