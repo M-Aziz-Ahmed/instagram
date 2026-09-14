@@ -39,6 +39,8 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
     const [sourceIndex, setSourceIndex] = useState(0);
     const [subIndex, setSubIndex] = useState(0);
     const [showSettings, setShowSettings] = useState(false);
+    const [iframeIndex, setIframeIndex] = useState(0);
+    const [iframeFailed, setIframeFailed] = useState(false);
 
     const sourceList = useMemo(() => {
         if (Array.isArray(sources) && sources.length > 0) return [...sources].sort(sortQuality);

@@ -9,6 +9,23 @@ import MediaBookmarkButton from "@/components/shared/MediaBookmarkButton";
 
 const fmtNum = (n) => (n == null ? "?" : n.toLocaleString());
 
+const EMBED_HOSTS = ["vidsrc.to", "vidsrc.in", "vidsrc.su", "vidsrc.me", "2embed.cc", "vidsrc.xyz"];
+
+function buildEmbedList(url, urls) {
+    const list = [];
+    const push = (u) => { if (u && !list.includes(u)) list.push(u); };
+    (Array.isArray(urls) ? urls : []).forEach(push);
+    push(url);
+    if (url) {
+        try {
+            const u = new URL(url);
+            const path = u.pathname + u.search;
+            for (const host of EMBED_HOSTS) push(`https://${host}${path}`);
+        } catch {}
+    }
+    return list;
+}
+
 export default function MediaPage({ mediaType, config }) {
     const { label, emoji, apiRoute, streamSource } = config;
     const [query, setQuery] = useState("");
@@ -25,6 +42,7 @@ export default function MediaPage({ mediaType, config }) {
     const [streamSources, setStreamSources] = useState([]);
     const [streamSubtitles, setStreamSubtitles] = useState([]);
     const [streamHeaders, setStreamHeaders] = useState(null);
+    const [streamEmbedUrls, setStreamEmbedUrls] = useState([]);
     const [drama, setDrama] = useState(null);
     const searchTimer = useRef(null);
     const searchParams = useSearchParams();
@@ -145,6 +163,7 @@ export default function MediaPage({ mediaType, config }) {
         setStreamSources([]);
         setStreamSubtitles([]);
         setStreamHeaders(null);
+        setStreamEmbedUrls([]);
         setDrama(null);
         const routeMap = { movie: "movies", kdrama: "kdramas", season: "seasons", cdrama: "cdramas", cartoon: "cartoons" };
         const route = routeMap[mediaType] || mediaType;
@@ -175,6 +194,7 @@ export default function MediaPage({ mediaType, config }) {
         setStreamSources([]);
         setStreamSubtitles([]);
         setStreamHeaders(null);
+        setStreamEmbedUrls([]);
         setStreamTitle(mediaType === "movie" ? details?.title || selected?.title : `Episode ${ep.episode_number}${ep.name ? " - " + ep.name : ""}`);
         if (selected?.id) {
             const routeMap = { movie: "movies", kdrama: "kdramas", season: "seasons", cdrama: "cdramas", cartoon: "cartoons" };
@@ -257,7 +277,10 @@ export default function MediaPage({ mediaType, config }) {
                 }
             }
             const data = await res.json();
-            if (data?.url) setStreamUrl(data.url);
+            if (data?.url) {
+                setStreamUrl(data.url);
+                setStreamEmbedUrls(buildEmbedList(data.url, data.urls));
+            }
         } catch {}
         bookmark();
     };
@@ -270,6 +293,7 @@ export default function MediaPage({ mediaType, config }) {
             setStreamSources([]);
             setStreamSubtitles([]);
             setStreamHeaders(null);
+            setStreamEmbedUrls([]);
             setCurrentEp(null);
             if (selected?.id) window.history.pushState({}, "", `/${route}?id=${selected.id}`);
         } else if (selected) {
@@ -334,6 +358,7 @@ export default function MediaPage({ mediaType, config }) {
                             sources={streamSources.length > 0 ? streamSources : undefined}
                             subtitles={streamSubtitles.length > 0 ? streamSubtitles : undefined}
                             headers={streamHeaders || undefined}
+                            embedUrls={streamEmbedUrls.length > 0 ? streamEmbedUrls : undefined}
                         />
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{streamTitle}</p>

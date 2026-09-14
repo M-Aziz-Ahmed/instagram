@@ -168,15 +168,14 @@ function getTypeQueries(type) {
     return queries[type] || [];
 }
 
+const EMBED_HOSTS = ["vidsrc.to", "vidsrc.in", "vidsrc.su", "vidsrc.me", "2embed.cc"];
+
 function getStreamUrl(mediaType, id, season, episode) {
-    if (mediaType === "movie") {
-        return `https://vidsrc.xyz/embed/movie/${id}`;
-    } else {
-        if (season && episode) {
-            return `https://vidsrc.xyz/embed/tv/${id}/${season}/${episode}`;
-        }
-        return `https://vidsrc.xyz/embed/tv/${id}`;
-    }
+    const path = mediaType === "movie"
+        ? `/embed/movie/${id}`
+        : (season && episode) ? `/embed/tv/${id}/${season}/${episode}` : `/embed/tv/${id}`;
+    const urls = EMBED_HOSTS.map((host) => `https://${host}${path}`);
+    return { url: urls[0], urls };
 }
 
 async function resolveImdbId(type, id) {
@@ -476,9 +475,9 @@ router.get("/:type/:id/stream", async (req, res) => {
         if (!source) return res.status(400).json({ error: "Invalid media type" });
 
         const resolvedId = imdb || await resolveImdbId(type, id);
-        const streamUrl = getStreamUrl(type, resolvedId, season ? parseInt(season) : null, episode ? parseInt(episode) : null);
+        const { url, urls } = getStreamUrl(type, resolvedId, season ? parseInt(season) : null, episode ? parseInt(episode) : null);
 
-        res.json({ url: streamUrl, type, id, season: season ? parseInt(season) : null, episode: episode ? parseInt(episode) : null });
+        res.json({ url, urls, type, id, season: season ? parseInt(season) : null, episode: episode ? parseInt(episode) : null });
     } catch (err) {
         console.error(`${req.params.type} stream error:`, err.message);
         res.status(502).json({ error: "Stream unavailable" });
