@@ -14,6 +14,8 @@ const {
     getMediaSource,
 } = require("../utils/mediaSources");
 
+const Iptv = require("../utils/iptv");
+
 const PLURAL_TO_SINGULAR = {
     movies: "movie",
     kdramas: "kdrama",
@@ -591,6 +593,24 @@ router.get("/types", (req, res) => {
         .filter(s => s.type !== "anime")
         .map(s => ({ type: s.type, label: s.label, emoji: s.emoji, searchType: s.searchType }));
     res.json({ types });
+});
+
+router.get("/types", (req, res) => {
+    const types = Object.values(MediaSource)
+        .filter(s => s.type !== "anime")
+        .map(s => ({ type: s.type, label: s.label, emoji: s.emoji, searchType: s.searchType }));
+    res.json({ types });
+});
+
+// ──────── IPTV ────────
+router.get("/iptv/playlist", async (req, res) => {
+    try {
+        const channels = await Iptv.fetchPlaylist();
+        res.json({ type: "iptv", channels });
+    } catch (err) {
+        console.error("IPTV error:", err.message);
+        res.status(502).json({ error: "IPTV unavailable" });
+    }
 });
 
 module.exports = router;

@@ -98,9 +98,11 @@ export default function MediaPage({ mediaType, config }) {
         didInit.current = true;
         (async () => {
             try {
-                const detailPath = mediaType === "movie"
+                const detailPath = mediaType === "live-tv"
                     ? null
-                    : `${apiRoute}/${mediaType}/${initialId}`;
+                    : mediaType === "movie"
+                        ? null
+                        : `${apiRoute}/${mediaType}/${initialId}`;
                 const res = detailPath ? await fetch(detailPath) : null;
                 if (res && !res.ok) {
                     if (res.status === 404) {
@@ -169,9 +171,11 @@ export default function MediaPage({ mediaType, config }) {
         const route = routeMap[mediaType] || mediaType;
         window.history.pushState({}, "", `/${route}?id=${item.id}`);
         try {
-            const detailPath = mediaType === "movie"
+            const detailPath = mediaType === "live-tv"
                 ? null
-                : `${apiRoute}/${mediaType}/${item.id}?title=${encodeURIComponent(item.title || "")}`;
+                : mediaType === "movie"
+                    ? null
+                    : `${apiRoute}/${mediaType}/${item.id}?title=${encodeURIComponent(item.title || "")}`;
             const res = detailPath ? await fetch(detailPath) : null;
             if (res && res.ok) {
                 const data = await res.json();
@@ -383,6 +387,10 @@ export default function MediaPage({ mediaType, config }) {
                                 onClick={() => {
                                     if (mediaType === "movie") {
                                         handlePlayEpisode({ id: selected.id, episode_number: 1, name: selected.title });
+                                    } else if (mediaType === "live-tv") {
+                                        setStreamUrl(selected.url);
+                                        setStreamTitle(selected.name);
+                                        setStreamEmbedUrls([]);
                                     } else {
                                         const ep = displayEpisodes.length > 0
                                             ? displayEpisodes[0]
@@ -395,7 +403,7 @@ export default function MediaPage({ mediaType, config }) {
                                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                                     <path d="M8 5v14l11-7z" />
                                 </svg>
-                                {mediaType === "movie" ? "Play Movie" : displayEpisodes.length > 0 ? "Play S1 E1" : "Play"}
+                                {mediaType === "movie" ? "Play Movie" : mediaType === "live-tv" ? "Watch Live" : displayEpisodes.length > 0 ? "Play S1 E1" : "Play"}
                             </button>
                         </div>
                         <div className="flex-1 min-w-0 space-y-3">
