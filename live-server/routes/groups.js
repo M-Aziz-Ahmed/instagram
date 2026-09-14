@@ -3,6 +3,7 @@ const GroupChat = require("../models/groupChat");
 const GroupMessage = require("../models/groupMessage");
 const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
+const { resolveLinkPreview } = require("../utils/linkPreview");
 
 const router = express.Router();
 
@@ -282,7 +283,7 @@ router.get("/:id/messages", verifyToken, async (req, res) => {
 router.post("/:id/messages", verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
-        const { text, imageUrl, audioUrl, replyTo } = req.body;
+        const { text, imageUrl, audioUrl, replyTo, linkPreview } = req.body;
         const senderDoc = await User.findById(req.userId).select("username avatarColor").lean();
         const sender = senderDoc?.username;
         if (!sender) return res.status(400).json({ error: "sender required" });
@@ -298,6 +299,8 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
             return res.status(403).json({ error: "Only admins can send messages" });
         }
 
+        const resolvedPreview = await resolveLinkPreview(text, linkPreview);
+
         const msg = await GroupMessage.create({
             groupId: id,
             sender,
@@ -306,6 +309,7 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
             audioUrl: audioUrl || "",
             color: senderDoc?.avatarColor || "#3b82f6",
             replyTo: replyTo || { sender: null, text: "", messageId: null },
+            linkPreview: resolvedPreview,
         });
 
         group.lastMessage = {

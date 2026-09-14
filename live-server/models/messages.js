@@ -16,6 +16,18 @@ const messagesSchema = new mongoose.Schema({
         sad:   { type: [String], default: [] },
         angry: { type: [String], default: [] },
     },
+    linkPreview: {
+        type: {
+            title:       { type: String, default: "" },
+            description: { type: String, default: "" },
+            image:       { type: String, default: "" },
+            url:         { type: String, default: "" },
+            domain:      { type: String, default: "" },
+            siteName:    { type: String, default: "" },
+            favicon:     { type: String, default: "" },
+        },
+        default: null,
+    },
     editedAt: { type: Date, default: null },
     deleted:  { type: Boolean, default: false },
     timeStamp: { type: Date, default: Date.now },

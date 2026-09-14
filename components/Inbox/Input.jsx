@@ -5,9 +5,18 @@ import { useUser } from "@/context/UserContext";
 import VoiceRecorder from "@/components/shared/VoiceRecorder";
 import EmojiPicker from "@/components/shared/EmojiPicker";
 import GifPicker from "@/components/shared/GifPicker";
+import LinkPreviewCard from "@/components/shared/LinkPreviewCard";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+
+const URL_RE = /https?:\/\/[^\s<>"'\u2026]+/i;
+
+function extractFirstUrl(str) {
+    const m = (str || "").match(URL_RE);
+    if (!m) return null;
+    return m[0].replace(/[),.;:!?]+$/, "") || null;
+}
 
 export default function Input({ onMessageSent, recipient, replyingTo, setReplyingTo }) {
     const { user } = useUser();
@@ -24,6 +33,8 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
     const [showMentionDropdown, setShowMentionDropdown] = useState(false);
     const [mentionMode, setMentionMode] = useState(null); // "user" or "hashtag"
     const [hashtagResults, setHashtagResults] = useState([]);
+    const [linkPreview, setLinkPreview] = useState(null);
+    const linkUrlRef = useRef(null);
     const fileRef                   = useRef(null);
     const inputRef                  = useRef(null);
     const typingTimeoutRef          = useRef(null);
@@ -118,6 +129,31 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
 
     useEffect(() => { setMentionHighlight(0); }, [mentionResults, hashtagResults, mentionMode]);
 
+    // Debounced link preview fetch while typing
+    useEffect(() => {
+        const url = extractFirstUrl(text);
+        const t = setTimeout(() => {
+            if (!url) {
+                setLinkPreview(null);
+                linkUrlRef.current = null;
+                return;
+            }
+            if (linkUrlRef.current === url) return;
+            linkUrlRef.current = url;
+            (async () => {
+                try {
+                    const res = await fetch(`/api/link-preview?url=${encodeURIComponent(url)}`);
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (data?.preview && linkUrlRef.current === url) {
+                        setLinkPreview(data.preview);
+                    }
+                } catch {}
+            })();
+        }, 600);
+        return () => clearTimeout(t);
+    }, [text]);
+
     const uploadToCloudinary = (file) =>
         new Promise((resolve, reject) => {
             const fd = new FormData();
@@ -157,12 +193,14 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
         const snapshotText = text.trim();
         const snapshotImage = imagePreview;
         const snapshotAudio = audioUrl;
+        const snapshotLink = linkPreview;
         const snapshotReply = replyingTo
             ? { sender: replyingTo.sender, text: replyingTo.text }
             : null;
         setText("");
         setImagePreview(null);
         setAudioUrl("");
+        setLinkPreview(null);
         setReplyingTo(null);
         setSending(true);
 
@@ -192,6 +230,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                 recipient,
                 color: user.color,
                 replyTo: snapshotReply,
+                linkPreview: snapshotLink,
                 timeStamp: new Date().toISOString(),
                 isRead: false,
                 delivered: false,
@@ -211,6 +250,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                     recipient,
                     color: user.color,
                     replyTo: snapshotReply,
+                    linkPreview: snapshotLink,
                 }),
             });
             if (!res.ok) throw new Error("Send failed");
@@ -222,6 +262,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
             setImagePreview(snapshotImage);
             setAudioUrl(snapshotAudio);
             if (snapshotReply) setReplyingTo({ sender: snapshotReply.sender, text: snapshotReply.text });
+            linkUrlRef.current = null;
             if (onMessageSent) onMessageSent({ _tempId: tempId, _remove: true });
         } finally {
             setSending(false);
@@ -346,6 +387,20 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                         </svg>
+                    </button>
+                </div>
+            )}
+
+            {/* Link preview */}
+            {linkPreview && (
+                <div className="relative self-start w-full max-w-xs sm:max-w-sm">
+                    <LinkPreviewCard preview={linkPreview} />
+                    <button
+                        onClick={() => { setLinkPreview(null); linkUrlRef.current = null; }}
+                        className="absolute -top-2 -right-2 bg-gray-800 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-gray-700 transition-colors shadow"
+                        aria-label="Remove link preview"
+                    >
+                        &#x2715;
                     </button>
                 </div>
             )}

@@ -5,6 +5,7 @@ const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
 const { logChat } = require("../logService");
 const { sendPushNotification } = require("../push");
+const { resolveLinkPreview } = require("../utils/linkPreview");
 
 const router = express.Router();
 
@@ -90,7 +91,7 @@ router.get("/", verifyToken, async (req, res) => {
 // POST /
 router.post("/", verifyToken, async (req, res) => {
     try {
-        const { text, imageUrl, audioUrl, recipient, color, replyTo } = req.body;
+        const { text, imageUrl, audioUrl, recipient, color, replyTo, linkPreview } = req.body;
         const senderDoc = await User.findById(req.userId).select("username avatarColor").lean();
         const sender = senderDoc?.username;
         if (!sender) return res.status(400).json({ error: "Sender not found" });
@@ -98,6 +99,8 @@ router.post("/", verifyToken, async (req, res) => {
         if (!text?.trim() && !imageUrl && !audioUrl) {
             return res.status(400).json({ error: "Message text, image, or audio is required" });
         }
+
+        const resolvedPreview = await resolveLinkPreview(text, linkPreview);
 
         const message = await Message.create({
             text:      text?.trim() || "",
@@ -107,6 +110,7 @@ router.post("/", verifyToken, async (req, res) => {
             recipient: recipient.trim(),
             color:     color || senderDoc?.avatarColor || "#3b82f6",
             replyTo:   (replyTo && replyTo.sender && replyTo.text) ? { sender: replyTo.sender, text: String(replyTo.text).slice(0, 500) } : null,
+            linkPreview: resolvedPreview,
         });
 
         const preview = text?.trim() ? text.trim().slice(0, 120) : audioUrl ? "\uD83C\uDFA4 Voice message" : "\uD83D\uDCF7 Image";

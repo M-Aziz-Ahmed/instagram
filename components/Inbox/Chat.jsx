@@ -8,6 +8,7 @@ import ImageLightbox from "@/components/shared/ImageLightbox";
 import UserBadges from "@/components/shared/UserBadges";
 import AudioPlayer from "@/components/shared/AudioPlayer";
 import RichText from "@/components/Feed/RichText";
+import LinkPreviewCard from "@/components/shared/LinkPreviewCard";
 
 const RECALL_WINDOW_MS = 60 * 1000;
 
@@ -742,6 +743,11 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                     ) : (
                                         <div className={`px-4 py-2.5 text-sm leading-snug wrap-break-word ${msg.imageUrl ? "border-t border-white/20" : ""}`}>
                                             <RichText text={msg.text} className="text-inherit" />
+                                        </div>
+                                    )}
+                                    {msg.linkPreview && !msg.deleted && (
+                                        <div className={`p-1.5 ${msg.text ? "border-t" : ""} ${isMine ? "border-white/20" : "border-gray-200 dark:border-gray-700"}`}>
+                                            <LinkPreviewCard preview={msg.linkPreview} small />
                                         </div>
                                     )}
                                 </div>

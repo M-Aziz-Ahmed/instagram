@@ -21,6 +21,18 @@ const groupMessageSchema = new mongoose.Schema({
         angry: { type: [String], default: [] },
     },
     readBy:    { type: [String], default: [] },
+    linkPreview: {
+        type: {
+            title:       { type: String, default: "" },
+            description: { type: String, default: "" },
+            image:       { type: String, default: "" },
+            url:         { type: String, default: "" },
+            domain:      { type: String, default: "" },
+            siteName:    { type: String, default: "" },
+            favicon:     { type: String, default: "" },
+        },
+        default: null,
+    },
     timeStamp: { type: Date, default: Date.now },
 });
 

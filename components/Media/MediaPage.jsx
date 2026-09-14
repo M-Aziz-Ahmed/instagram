@@ -22,6 +22,10 @@ export default function MediaPage({ mediaType, config }) {
     const [streamUrl, setStreamUrl] = useState("");
     const [streamTitle, setStreamTitle] = useState("");
     const [subOrDub, setSubOrDub] = useState("sub");
+    const [streamSources, setStreamSources] = useState([]);
+    const [streamSubtitles, setStreamSubtitles] = useState([]);
+    const [streamHeaders, setStreamHeaders] = useState(null);
+    const [drama, setDrama] = useState(null);
     const searchTimer = useRef(null);
     const searchParams = useSearchParams();
     const initialId = searchParams.get("id");
@@ -30,6 +34,25 @@ export default function MediaPage({ mediaType, config }) {
 
     const routeMap = { movie: "movies", kdrama: "kdramas", season: "seasons", cdrama: "cdramas", cartoon: "cartoons", anime: "anime" };
     const route = routeMap[mediaType] || mediaType;
+    const isDrama = mediaType === "kdrama" || mediaType === "cdrama";
+
+    const probeDrama = useCallback(async (title) => {
+        if (!isDrama || !title) return;
+        try {
+            const sres = await fetch(`/api/streaming/dramas/search?q=${encodeURIComponent(title)}`);
+            if (!sres.ok) return;
+            const sdata = await sres.json();
+            const lowered = title.trim().toLowerCase();
+            const found = (sdata.results || []).find(r => r.title?.trim().toLowerCase() === lowered) || sdata.results?.[0];
+            if (!found?.id) return;
+            const ires = await fetch(`/api/streaming/dramas/info?id=${encodeURIComponent(found.id)}`);
+            if (!ires.ok) return;
+            const d = await ires.json();
+            if (d && Array.isArray(d.episodes) && d.episodes.length > 0) {
+                setDrama(d);
+            }
+        } catch {}
+    }, [isDrama]);
 
     const fetchTrending = useCallback(async () => {
         try {
@@ -72,6 +95,7 @@ export default function MediaPage({ mediaType, config }) {
                 const data = await res.json();
                 if (data) {
                     setSelected(data);
+                    probeDrama(data.title || data.name);
                     if (data.episodes?.length > 0) {
                         setEpisodes(data.episodes);
                         if (initialEp) {
@@ -84,7 +108,7 @@ export default function MediaPage({ mediaType, config }) {
                 console.error("Failed to load media:", err);
             }
         })();
-    }, [initialId, initialEp, apiRoute, mediaType]);
+    }, [initialId, initialEp, apiRoute, mediaType, probeDrama]);
 
     const doSearch = useCallback(async (q, page = 1, append = false) => {
         if (!q.trim()) return;
@@ -118,6 +142,10 @@ export default function MediaPage({ mediaType, config }) {
         setEpisodes(item.episodes || []);
         setCurrentEp(null);
         setStreamUrl("");
+        setStreamSources([]);
+        setStreamSubtitles([]);
+        setStreamHeaders(null);
+        setDrama(null);
         const routeMap = { movie: "movies", kdrama: "kdramas", season: "seasons", cdrama: "cdramas", cartoon: "cartoons" };
         const route = routeMap[mediaType] || mediaType;
         window.history.pushState({}, "", `/${route}?id=${item.id}`);
@@ -138,17 +166,81 @@ export default function MediaPage({ mediaType, config }) {
         } catch (err) {
             console.warn("Detail fetch failed, using search data:", err.message);
         }
+        probeDrama(item.title || item.name || details?.title);
     };
 
     const handlePlayEpisode = async (ep) => {
         setCurrentEp(ep);
         setStreamUrl("");
-        setStreamTitle(mediaType === "movie" ? selected?.title : `Episode ${ep.episode_number}${ep.name ? " - " + ep.name : ""}`);
+        setStreamSources([]);
+        setStreamSubtitles([]);
+        setStreamHeaders(null);
+        setStreamTitle(mediaType === "movie" ? details?.title || selected?.title : `Episode ${ep.episode_number}${ep.name ? " - " + ep.name : ""}`);
         if (selected?.id) {
             const routeMap = { movie: "movies", kdrama: "kdramas", season: "seasons", cdrama: "cdramas", cartoon: "cartoons" };
             const route = routeMap[mediaType] || mediaType;
             window.history.pushState({}, "", `/${route}?id=${selected.id}&ep=${ep.episode_number}`);
         }
+        const bookmark = () => {
+            if (selected?.id) {
+                fetch(`/api/media-bookmarks/${mediaType}/${selected.id}/history`, {
+                    method: "PATCH",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ episodeNum: ep.episode_number, title: selected.title, coverUrl: selected.posterPath }),
+                }).catch(() => {});
+            }
+        };
+
+        let viaDirect = false;
+        if (isDrama && drama?.episodes?.length > 0) {
+            const candidates = (drama.episodes || []).filter((d) => d.number === ep.episode_number);
+            const match = candidates.find((d) => d.subtype === subOrDub) || candidates[0];
+            if (match?.id) {
+                try {
+                    const res = await fetch(`/api/streaming/dramas/watch?episodeId=${encodeURIComponent(match.id)}&subOrDub=${subOrDub}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.sources?.length > 0 || data.url) {
+                            viaDirect = true;
+                            if (data.sources?.length > 0) {
+                                setStreamSources(data.sources);
+                                setStreamSubtitles(data.subtitles || []);
+                                setStreamHeaders(data.headers || null);
+                            } else if (data.url) {
+                                setStreamUrl(data.url);
+                            }
+                        }
+                    }
+                } catch {}
+            }
+        } else if (mediaType === "movie") {
+            const mtitle = details?.title || selected?.title;
+            const myear = details?.releaseDate || selected?.releaseDate || "";
+            if (mtitle) {
+                try {
+                    const res = await fetch(`/api/streaming/movies/resolve?q=${encodeURIComponent(mtitle)}&year=${encodeURIComponent(myear)}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.sources?.length > 0 || data.url) {
+                            viaDirect = true;
+                            if (data.sources?.length > 0) {
+                                setStreamSources(data.sources);
+                                setStreamSubtitles(data.subtitles || []);
+                                setStreamHeaders(data.headers || null);
+                            } else if (data.url) {
+                                setStreamUrl(data.url);
+                            }
+                        }
+                    }
+                } catch {}
+            }
+        }
+        if (viaDirect) {
+            bookmark();
+            return;
+        }
+
         try {
             const imdbId = selected?.externals?.imdb || details?.imdbId;
             const streamQuery = mediaType === "movie"
@@ -164,30 +256,35 @@ export default function MediaPage({ mediaType, config }) {
             const data = await res.json();
             if (data?.url) setStreamUrl(data.url);
         } catch {}
-        if (selected?.id) {
-            fetch(`/api/media-bookmarks/${mediaType}/${selected.id}/history`, {
-                method: "PATCH",
-                credentials: "include",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ episodeNum: ep.episode_number, title: selected.title, coverUrl: selected.posterPath }),
-            }).catch(() => {});
-        }
+        bookmark();
     };
 
+    const hasStream = Boolean(streamUrl) || (streamSources && streamSources.length > 0);
+
     const handleBack = () => {
-        if (streamUrl) {
+        if (hasStream) {
             setStreamUrl("");
+            setStreamSources([]);
+            setStreamSubtitles([]);
+            setStreamHeaders(null);
             setCurrentEp(null);
             if (selected?.id) window.history.pushState({}, "", `/${route}?id=${selected.id}`);
         } else if (selected) {
             setSelected(null);
             setDetails(null);
             setEpisodes([]);
+            setDrama(null);
             window.history.pushState({}, "", `/${route}`);
         }
     };
 
-    const view = streamUrl ? "player" : selected ? "detail" : "grid";
+    const view = hasStream ? "player" : selected ? "detail" : "grid";
+
+    const displayEpisodes = isDrama && drama?.episodes?.length > 0
+        ? drama.episodes
+            .filter((e) => (drama.hasDub ? e.subtype === subOrDub : true))
+            .map((e) => ({ id: e.id, episode_number: e.number, name: e.title }))
+        : episodes;
 
     return (
         <div className="min-h-dvh bg-white dark:bg-gray-950">
@@ -227,9 +324,17 @@ export default function MediaPage({ mediaType, config }) {
                             title={streamTitle}
                             poster={details?.posterPath || selected?.posterPath}
                             onBack={handleBack}
+                            sources={streamSources.length > 0 ? streamSources : undefined}
+                            subtitles={streamSubtitles.length > 0 ? streamSubtitles : undefined}
+                            headers={streamHeaders || undefined}
                         />
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{streamTitle}</p>
-                        <EpisodeList episodes={episodes} currentId={currentEp?.episode_number} onSelect={handlePlayEpisode} />
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{streamTitle}</p>
+                            {isDrama && drama?.hasDub && (
+                                <SubDubToggle value={subOrDub} onChange={setSubOrDub} disabled={!hasStream} />
+                            )}
+                        </div>
+                        <EpisodeList episodes={displayEpisodes} currentId={currentEp?.episode_number} onSelect={handlePlayEpisode} />
                     </div>
                 )}
 
@@ -246,8 +351,8 @@ export default function MediaPage({ mediaType, config }) {
                                 onClick={() => {
                                     if (mediaType === "movie") {
                                         handlePlayEpisode({ id: selected.id, episode_number: 1, name: selected.title });
-                                    } else if (episodes.length > 0) {
-                                        handlePlayEpisode(episodes[0]);
+                                    } else if (displayEpisodes.length > 0) {
+                                        handlePlayEpisode(displayEpisodes[0]);
                                     }
                                 }}
                                 className="w-full mt-4 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors text-sm"
@@ -255,7 +360,7 @@ export default function MediaPage({ mediaType, config }) {
                                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                                     <path d="M8 5v14l11-7z" />
                                 </svg>
-                                {mediaType === "movie" ? "Play Movie" : episodes.length > 0 ? "Play S1 E1" : "Loading episodes..."}
+                                {mediaType === "movie" ? "Play Movie" : displayEpisodes.length > 0 ? "Play S1 E1" : "Loading episodes..."}
                             </button>
                         </div>
                         <div className="flex-1 min-w-0 space-y-3">
@@ -297,10 +402,15 @@ export default function MediaPage({ mediaType, config }) {
                                 <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-line line-clamp-6">{details.overview}</p>
                             )}
                         </div>
-                        {mediaType !== "movie" && episodes.length > 0 && (
+                        {mediaType !== "movie" && displayEpisodes.length > 0 && (
                             <div className="lg:w-72 shrink-0">
-                                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">Episodes ({episodes.length})</h3>
-                                <EpisodeList episodes={episodes} currentId={currentEp?.episode_number} onSelect={handlePlayEpisode} />
+                                <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                                    <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Episodes ({displayEpisodes.length})</h3>
+                                    {isDrama && drama?.hasDub && (
+                                        <SubDubToggle value={subOrDub} onChange={setSubOrDub} />
+                                    )}
+                                </div>
+                                <EpisodeList episodes={displayEpisodes} currentId={currentEp?.episode_number} onSelect={handlePlayEpisode} />
                             </div>
                         )}
                     </div>
@@ -355,6 +465,22 @@ export default function MediaPage({ mediaType, config }) {
                     <a href="https://www.netflix.com" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Watch official releases</a>
                 </p>
             </div>
+        </div>
+    );
+}
+
+function SubDubToggle({ value, onChange, disabled }) {
+    return (
+        <div className={`flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-full p-1 w-fit ${disabled ? "opacity-50 pointer-events-none" : ""}`}>
+            {["sub", "dub"].map((mode) => (
+                <button
+                    key={mode}
+                    onClick={() => onChange(mode)}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors ${value === mode ? "bg-blue-600 text-white shadow" : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"}`}
+                >
+                    {mode === "sub" ? "Sub" : "Dub"}
+                </button>
+            ))}
         </div>
     );
 }

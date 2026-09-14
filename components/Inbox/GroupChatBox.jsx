@@ -8,6 +8,7 @@ import UserBadges from "@/components/shared/UserBadges";
 import AudioPlayer from "@/components/shared/AudioPlayer";
 import ImageLightbox from "@/components/shared/ImageLightbox";
 import EmojiPicker from "@/components/shared/EmojiPicker";
+import LinkPreviewCard from "@/components/shared/LinkPreviewCard";
 import VoiceRecorder from "@/components/shared/VoiceRecorder";
 import GroupSettings from "./GroupSettings";
 import { timeAgo } from "@/utils/timeAgo";
@@ -87,6 +88,11 @@ function GroupMessageBubble({ msg, user, onReact, onDelete, onReply, onHashtag }
                             <AudioPlayer src={msg.audioUrl} />
                         </div>
                     )}
+                    {msg.linkPreview && (
+                        <div className={`mt-1.5 ${msg.text ? "border-t pt-1.5" : ""} ${isOwn ? "border-white/20" : "border-gray-200 dark:border-gray-700"}`}>
+                            <LinkPreviewCard preview={msg.linkPreview} small />
+                        </div>
+                    )}
                 </div>
                 {msg.imageUrl && (
                     <div className="mt-1 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 max-w-[80vw] sm:max-w-xs cursor-pointer" onClick={() => setLightbox(true)}>
@@ -138,6 +144,8 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
     const [audioUrl, setAudioUrl] = useState("");
     const [replyTo, setReplyTo] = useState(null);
     const [showEmoji, setShowEmoji] = useState(false);
+    const [linkPreview, setLinkPreview] = useState(null);
+    const linkUrlRef = useRef(null);
     const [scrollAtBottom, setScrollAtBottom] = useState(true);
     const [showSettings, setShowSettings] = useState(false);
     const fileRef = useRef(null);
@@ -183,6 +191,32 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
         }).catch(() => {});
     }, [groupId, user?.username, messages.length]);
 
+    // Debounced link preview fetch while typing
+    useEffect(() => {
+        const m = (text || "").match(/https?:\/\/[^\s<>"'\u2026]+/i);
+        const url = m ? m[0].replace(/[),.;:!?]+$/, "") : null;
+        const t = setTimeout(() => {
+            if (!url) {
+                setLinkPreview(null);
+                linkUrlRef.current = null;
+                return;
+            }
+            if (linkUrlRef.current === url) return;
+            linkUrlRef.current = url;
+            (async () => {
+                try {
+                    const res = await fetch(`/api/link-preview?url=${encodeURIComponent(url)}`);
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (data?.preview && linkUrlRef.current === url) {
+                        setLinkPreview(data.preview);
+                    }
+                } catch {}
+            })();
+        }, 600);
+        return () => clearTimeout(t);
+    }, [text]);
+
     const handleSend = async () => {
         const trimmed = text.trim();
         if ((!trimmed && !imageUrl && !audioUrl) || sending) return;
@@ -198,12 +232,14 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
                     audioUrl,
                     color: user.color,
                     replyTo: replyTo ? { sender: replyTo.sender, text: replyTo.text, messageId: replyTo._id } : { sender: null, text: "", messageId: null },
+                    linkPreview,
                 }),
             });
             if (res.ok) {
                 const msg = await res.json();
                 setMessages(prev => [...prev, msg]);
                 setText(""); setImageUrl(""); setAudioUrl(""); setReplyTo(null);
+                setLinkPreview(null); linkUrlRef.current = null;
                 setScrollAtBottom(true);
             }
         } catch {
@@ -356,6 +392,12 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
                     <div className="relative inline-block mb-2">
                         <img src={imageUrl} alt="" className="h-16 rounded-lg object-cover border border-gray-200 dark:border-gray-700" />
                         <button onClick={() => setImageUrl("")} className="absolute -top-1.5 -right-1.5 bg-black/60 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">&#x2715;</button>
+                    </div>
+                )}
+                {linkPreview && (
+                    <div className="relative mb-2 max-w-xs sm:max-w-sm">
+                        <LinkPreviewCard preview={linkPreview} small />
+                        <button onClick={() => { setLinkPreview(null); linkUrlRef.current = null; }} className="absolute -top-1.5 -right-1.5 bg-black/60 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">&#x2715;</button>
                     </div>
                 )}
                 <div className="flex items-center gap-2">
