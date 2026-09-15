@@ -9,6 +9,9 @@ const router = express.Router();
 
 const dramaCool = new MOVIES.DramaCool();
 const flixhq = new MOVIES.FlixHQ();
+const sflix = new MOVIES.SFlix();
+const hiMovies = new MOVIES.HiMovies();
+const goku = new MOVIES.Goku();
 
 const SUPPORTED_DRAMA_SERVERS = new Set([
     StreamingServers.AsianLoad,
@@ -254,20 +257,36 @@ router.get("/movies/search", async (req, res) => {
     try {
         const { q, page = 1 } = req.query;
         if (!q) return res.status(400).json({ error: "Query required" });
-        const data = await withTimeout(flixhq.search(String(q), Math.max(1, Number(page) || 1)), 15000);
-        res.json({
-            results: (data.results || []).map((r) => ({
-                id: r.id,
-                title: r.title,
-                image: r.image,
-                type: r.type,
-                quality: r.quality,
-                episodeNumber: r.episodeNumber,
-                duration: r.duration,
-            })),
-            totalResults: data.totalResults,
-            hasNextPage: data.hasNextPage,
-        });
+
+        const providers = [flixhq, sflix, hiMovies, goku];
+        let lastError = null;
+
+        for (const provider of providers) {
+            try {
+                const data = await withTimeout(provider.search(String(q), Math.max(1, Number(page) || 1)), 15000);
+                if (data?.results?.length) {
+                    return res.json({
+                        results: (data.results || []).map((r) => ({
+                            id: r.id,
+                            title: r.title,
+                            image: r.image,
+                            type: r.type,
+                            quality: r.quality,
+                            episodeNumber: r.episodeNumber,
+                            duration: r.duration,
+                        })),
+                        totalResults: data.totalResults,
+                        hasNextPage: data.hasNextPage,
+                    });
+                }
+            } catch (err) {
+                lastError = err;
+                continue;
+            }
+        }
+
+        console.error("Movie search failed on all providers:", lastError?.message);
+        res.status(502).json({ error: "Movie search unavailable" });
     } catch (err) {
         console.error("Movie search error:", err.message);
         res.status(502).json({ error: "Movie search unavailable" });
@@ -283,18 +302,24 @@ router.get("/movies/resolve", async (req, res) => {
         let epId = String(episodeId || "").trim();
         let matched = null;
 
-        if (!mediaId) {
-            if (!q) return res.status(400).json({ error: "q or movieId required" });
-            const data = await withTimeout(flixhq.search(String(q), 1), 15000);
+        const providers = [
+            { name: "flixhq", instance: flixhq },
+            { name: "sflix", instance: sflix },
+            { name: "himovies", instance: hiMovies },
+            { name: "goku", instance: goku },
+        ];
+
+        const findMediaId = async (provider, query) => {
+            const data = await withTimeout(provider.search(String(query), 1), 15000);
             const results = data.results || [];
-            if (!results.length) return res.status(404).json({ error: "Movie not found" });
+            if (!results.length) return null;
 
             const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
             const wantedYear = year ? String(year).match(/\d{4}/)?.[0] : null;
             let candidates = results.filter((r) => r.type === "Movie");
             if (candidates.length === 0) candidates = results;
 
-            const qNorm = norm(q);
+            const qNorm = norm(query);
             let match = candidates.find((r) => norm(r.title) === qNorm);
             if (!match && wantedYear) {
                 match = candidates.find((r) => String(r.title).includes(wantedYear));
@@ -302,56 +327,78 @@ router.get("/movies/resolve", async (req, res) => {
             if (!match) match = candidates.find((r) => norm(r.title).includes(qNorm.slice(0, Math.max(6, Math.floor(qNorm.length / 2)))));
             if (!match) match = candidates[0];
 
-            mediaId = match.id;
-            matched = {
-                id: match.id,
-                title: match.title,
-                image: match.image,
-                type: match.type,
-            };
+            return match;
+        };
 
+        const getEpisodeId = async (provider, id) => {
             try {
-                const info = await withTimeout(flixhq.fetchMediaInfo(mediaId), 15000);
-                const movieEp = info.episodes?.[0];
-                if (movieEp?.id) epId = movieEp.id;
-                if (!matched.image) matched.image = info.image || "";
-            } catch { /* keep search image */ }
-        } else if (!epId) {
+                const info = await withTimeout(provider.fetchMediaInfo(id), 15000);
+                return info.episodes?.[0]?.id || id;
+            } catch {
+                return id;
+            }
+        };
+
+        const tryProvider = async (provider) => {
+            let localMediaId = mediaId;
+            let localEpId = epId;
+            let localMatched = matched;
+
+            if (!localMediaId && q) {
+                const match = await findMediaId(provider.instance, q);
+                if (!match) return null;
+                localMediaId = match.id;
+                localMatched = {
+                    id: match.id,
+                    title: match.title,
+                    image: match.image,
+                    type: match.type,
+                };
+                localEpId = await getEpisodeId(provider.instance, localMediaId);
+            } else if (!localEpId && localMediaId) {
+                localEpId = await getEpisodeId(provider.instance, localMediaId);
+            }
+
+            if (!localEpId) localEpId = localMediaId;
+
+            const wantedServer = String(server || "").toLowerCase();
+            const order = [wantedServer, StreamingServers.UpCloud, StreamingServers.VidCloud, StreamingServers.MixDrop]
+                .filter(Boolean);
+
+            for (const candidate of order) {
+                try {
+                    const data = await withTimeout(provider.instance.fetchEpisodeSources(localEpId, localMediaId, candidate), 15000);
+                    const sources = normalizeSources(data.sources, candidate);
+                    if (sources.length > 0) {
+                        return {
+                            sources,
+                            subtitles: normalizeSubtitles(data.subtitles),
+                            headers: data.headers || {},
+                            embedUrl: "",
+                            serverUsed: candidate,
+                            matched: localMatched,
+                            provider: provider.name,
+                        };
+                    }
+                } catch (err) {
+                    // try next server
+                }
+            }
+            return null;
+        };
+
+        for (const provider of providers) {
             try {
-                const info = await withTimeout(flixhq.fetchMediaInfo(mediaId), 15000);
-                const movieEp = info.episodes?.[0];
-                if (movieEp?.id) epId = movieEp.id;
-            } catch { /* fall through */ }
-        }
-
-        if (!epId) epId = mediaId;
-
-        const wantedServer = String(server || "").toLowerCase();
-        const order = [wantedServer, StreamingServers.UpCloud, StreamingServers.VidCloud, StreamingServers.MixDrop]
-            .filter(Boolean);
-
-        let lastError = null;
-        for (const candidate of order) {
-            try {
-                const data = await withTimeout(flixhq.fetchEpisodeSources(epId, mediaId, candidate), 15000);
-                const sources = normalizeSources(data.sources, candidate);
-                if (sources.length > 0) {
-                    return res.json({
-                        sources,
-                        subtitles: normalizeSubtitles(data.subtitles),
-                        headers: data.headers || {},
-                        embedUrl: "",
-                        serverUsed: candidate,
-                        matched,
-                    });
+                const result = await tryProvider(provider);
+                if (result) {
+                    return res.json(result);
                 }
             } catch (err) {
-                lastError = err;
+                console.error(`${provider.name} resolve failed:`, err.message);
             }
         }
 
-        console.error("Movie resolve failed:", lastError?.message);
-        res.status(502).json({ error: "Movie streaming unavailable", detail: lastError?.message });
+        res.status(502).json({ error: "Movie streaming unavailable on all providers" });
     } catch (err) {
         console.error("Movie resolve error:", err.message);
         res.status(502).json({ error: "Movie streaming unavailable" });
@@ -362,18 +409,34 @@ router.get("/movies/resolve", async (req, res) => {
 router.get("/movies/recent", async (req, res) => {
     try {
         const { type = "movie" } = req.query;
-        const data = type === "tv"
-            ? await withTimeout(flixhq.fetchRecentTvShows(), 15000)
-            : await withTimeout(flixhq.fetchRecentMovies(), 15000);
-        res.json({
-            results: (data.results || []).map((r) => ({
-                id: r.id,
-                title: r.title,
-                image: r.image,
-                type: r.type,
-                quality: r.quality,
-            })),
-        });
+
+        const providers = [flixhq, sflix, hiMovies, goku];
+        let lastError = null;
+
+        for (const provider of providers) {
+            try {
+                const data = type === "tv"
+                    ? await withTimeout(provider.fetchRecentTvShows(), 15000)
+                    : await withTimeout(provider.fetchRecentMovies(), 15000);
+                if (data?.results?.length) {
+                    return res.json({
+                        results: (data.results || []).map((r) => ({
+                            id: r.id,
+                            title: r.title,
+                            image: r.image,
+                            type: r.type,
+                            quality: r.quality,
+                        })),
+                    });
+                }
+            } catch (err) {
+                lastError = err;
+                continue;
+            }
+        }
+
+        console.error("Movie recent failed on all providers:", lastError?.message);
+        res.status(502).json({ error: "Recent movies unavailable" });
     } catch (err) {
         console.error("Movie recent error:", err.message);
         res.status(502).json({ error: "Recent movies unavailable" });

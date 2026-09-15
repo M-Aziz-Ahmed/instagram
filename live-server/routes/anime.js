@@ -12,6 +12,10 @@ const GOGO_API_BASE = "https://api.gogoanimehd.to";
 
 const animeUnity = new ANIME.AnimeUnity();
 const hianime = new ANIME.Hianime();
+const animePahe = new ANIME.AnimePahe();
+const animeKai = new ANIME.AnimeKai();
+const kickAssAnime = new ANIME.KickAssAnime();
+const animeSaturn = new ANIME.AnimeSaturn();
 
 // Caches: anilistId -> streaming provider ID
 const gogoIdCache = new Map();
@@ -20,6 +24,14 @@ const unityIdCache = new Map();
 const unityEpisodeCache = new Map();
 const hianimeIdCache = new Map();
 const hianimeEpisodeCache = new Map();
+const paheIdCache = new Map();
+const paheEpisodeCache = new Map();
+const kaiIdCache = new Map();
+const kaiEpisodeCache = new Map();
+const kickassIdCache = new Map();
+const kickassEpisodeCache = new Map();
+const saturnIdCache = new Map();
+const saturnEpisodeCache = new Map();
 
 async function gql(query, variables = {}, retries = 2) {
     for (let i = 0; i <= retries; i++) {
@@ -124,15 +136,23 @@ router.get("/info/:id", async (req, res) => {
         let hasDub = true;
         let source = "none";
 
-        const [gogoResult, unityResult, hianimeResult] = await Promise.allSettled([
+        const [gogoResult, unityResult, hianimeResult, paheResult, kaiResult, kickassResult, saturnResult] = await Promise.allSettled([
             fetchGogoEpisodes(id, title),
             fetchUnityEpisodes(id, title),
             fetchHianimeEpisodes(id, title),
+            fetchPaheEpisodes(id, title),
+            fetchKaiEpisodes(id, title),
+            fetchKickassEpisodes(id, title),
+            fetchSaturnEpisodes(id, title),
         ]);
 
         const gogoEps = gogoResult.status === "fulfilled" ? gogoResult.value : [];
         const unityEps = unityResult.status === "fulfilled" ? unityResult.value : [];
         const hianimeEps = hianimeResult.status === "fulfilled" ? hianimeResult.value : [];
+        const paheEps = paheResult.status === "fulfilled" ? paheResult.value : [];
+        const kaiEps = kaiResult.status === "fulfilled" ? kaiResult.value : [];
+        const kickassEps = kickassResult.status === "fulfilled" ? kickassResult.value : [];
+        const saturnEps = saturnResult.status === "fulfilled" ? saturnResult.value : [];
 
         if (gogoEps.length > 0) {
             episodes = gogoEps;
@@ -140,11 +160,21 @@ router.get("/info/:id", async (req, res) => {
         } else if (hianimeEps.length > 0) {
             episodes = hianimeEps;
             source = "hianime";
-            hasDub = false;
+        } else if (paheEps.length > 0) {
+            episodes = paheEps;
+            source = "animepahe";
+        } else if (kaiEps.length > 0) {
+            episodes = kaiEps;
+            source = "animekai";
+        } else if (kickassEps.length > 0) {
+            episodes = kickassEps;
+            source = "kickassanime";
+        } else if (saturnEps.length > 0) {
+            episodes = saturnEps;
+            source = "animesaturn";
         } else if (unityEps.length > 0) {
             episodes = unityEps;
             source = "animeunity";
-            hasDub = false;
         }
 
         res.json({
@@ -177,10 +207,14 @@ router.get("/episodes/:id", async (req, res) => {
         if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
         const title = req.query.title || "";
 
-        const [gogoResult, unityResult, hianimeResult] = await Promise.allSettled([
+        const [gogoResult, unityResult, hianimeResult, paheResult, kaiResult, kickassResult, saturnResult] = await Promise.allSettled([
             fetchGogoEpisodes(id, title),
             fetchUnityEpisodes(id, title),
             fetchHianimeEpisodes(id, title),
+            fetchPaheEpisodes(id, title),
+            fetchKaiEpisodes(id, title),
+            fetchKickassEpisodes(id, title),
+            fetchSaturnEpisodes(id, title),
         ]);
 
         const gogoEps = gogoResult.status === "fulfilled" ? gogoResult.value : [];
@@ -188,6 +222,18 @@ router.get("/episodes/:id", async (req, res) => {
 
         const hianimeEps = hianimeResult.status === "fulfilled" ? hianimeResult.value : [];
         if (hianimeEps.length > 0) return res.json({ episodes: hianimeEps, source: "hianime" });
+
+        const paheEps = paheResult.status === "fulfilled" ? paheResult.value : [];
+        if (paheEps.length > 0) return res.json({ episodes: paheEps, source: "animepahe" });
+
+        const kaiEps = kaiResult.status === "fulfilled" ? kaiResult.value : [];
+        if (kaiEps.length > 0) return res.json({ episodes: kaiEps, source: "animekai" });
+
+        const kickassEps = kickassResult.status === "fulfilled" ? kickassResult.value : [];
+        if (kickassEps.length > 0) return res.json({ episodes: kickassEps, source: "kickassanime" });
+
+        const saturnEps = saturnResult.status === "fulfilled" ? saturnResult.value : [];
+        if (saturnEps.length > 0) return res.json({ episodes: saturnEps, source: "animesaturn" });
 
         const unityEps = unityResult.status === "fulfilled" ? unityResult.value : [];
         if (unityEps.length > 0) return res.json({ episodes: unityEps, source: "animeunity" });
@@ -275,6 +321,38 @@ router.get("/watch/:episodeId", async (req, res) => {
             const sources = await withTimeout(hianime.fetchEpisodeSources(episodeId), 12000);
             if (sources?.sources?.length > 0) {
                 return res.json({ ...sources, source: "hianime" });
+            }
+        } catch { /* failed */ }
+
+        // AnimePahe fallback
+        try {
+            const sources = await withTimeout(animePahe.fetchEpisodeSources(episodeId), 12000);
+            if (sources?.sources?.length > 0) {
+                return res.json({ ...sources, source: "animepahe" });
+            }
+        } catch { /* failed */ }
+
+        // AnimeKai fallback
+        try {
+            const sources = await withTimeout(animeKai.fetchEpisodeSources(episodeId), 12000);
+            if (sources?.sources?.length > 0) {
+                return res.json({ ...sources, source: "animekai" });
+            }
+        } catch { /* failed */ }
+
+        // KickAssAnime fallback
+        try {
+            const sources = await withTimeout(kickAssAnime.fetchEpisodeSources(episodeId), 12000);
+            if (sources?.sources?.length > 0) {
+                return res.json({ ...sources, source: "kickassanime" });
+            }
+        } catch { /* failed */ }
+
+        // AnimeSaturn fallback
+        try {
+            const sources = await withTimeout(animeSaturn.fetchEpisodeSources(episodeId), 12000);
+            if (sources?.sources?.length > 0) {
+                return res.json({ ...sources, source: "animesaturn" });
             }
         } catch { /* failed */ }
 
@@ -493,6 +571,186 @@ async function fetchUnityEpisodes(anilistId, title) {
             url: ep.url || "",
         }));
         unityEpisodeCache.set(unityId, episodes);
+        return episodes;
+    } catch {
+        return [];
+    }
+}
+
+// ── AnimePahe helpers ─────────────────────────────────────────
+
+async function findPaheId(anilistId, title) {
+    if (paheIdCache.has(anilistId)) return paheIdCache.get(anilistId);
+    if (!title) return null;
+
+    try {
+        const results = await withTimeout(animePahe.search(title), 10000);
+        if (!results?.results?.length) return null;
+
+        const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9]/g, "");
+        let match = results.results.find(r =>
+            r.title?.toLowerCase().replace(/[^a-z0-9]/g, "") === normalizedTitle
+        );
+        if (!match) match = results.results[0];
+        if (!match?.id) return null;
+
+        paheIdCache.set(anilistId, match.id);
+        return match.id;
+    } catch {
+        return null;
+    }
+}
+
+async function fetchPaheEpisodes(anilistId, title) {
+    const paheId = await findPaheId(anilistId, title);
+    if (!paheId) return [];
+
+    if (paheEpisodeCache.has(paheId)) return paheEpisodeCache.get(paheId);
+
+    try {
+        const info = await withTimeout(animePahe.fetchAnimeInfo(paheId), 10000);
+        const episodes = (info.episodes || []).map(ep => ({
+            id: ep.id,
+            number: ep.number,
+            title: ep.title || "",
+            url: ep.url || "",
+        }));
+        paheEpisodeCache.set(paheId, episodes);
+        return episodes;
+    } catch {
+        return [];
+    }
+}
+
+// ── AnimeKai helpers ──────────────────────────────────────────
+
+async function findKaiId(anilistId, title) {
+    if (kaiIdCache.has(anilistId)) return kaiIdCache.get(anilistId);
+    if (!title) return null;
+
+    try {
+        const results = await withTimeout(animeKai.search(title), 10000);
+        if (!results?.results?.length) return null;
+
+        const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9]/g, "");
+        let match = results.results.find(r =>
+            r.title?.toLowerCase().replace(/[^a-z0-9]/g, "") === normalizedTitle
+        );
+        if (!match) match = results.results[0];
+        if (!match?.id) return null;
+
+        kaiIdCache.set(anilistId, match.id);
+        return match.id;
+    } catch {
+        return null;
+    }
+}
+
+async function fetchKaiEpisodes(anilistId, title) {
+    const kaiId = await findKaiId(anilistId, title);
+    if (!kaiId) return [];
+
+    if (kaiEpisodeCache.has(kaiId)) return kaiEpisodeCache.get(kaiId);
+
+    try {
+        const info = await withTimeout(animeKai.fetchAnimeInfo(kaiId), 10000);
+        const episodes = (info.episodes || []).map(ep => ({
+            id: ep.id,
+            number: ep.number,
+            title: ep.title || "",
+            url: ep.url || "",
+        }));
+        kaiEpisodeCache.set(kaiId, episodes);
+        return episodes;
+    } catch {
+        return [];
+    }
+}
+
+// ── KickAssAnime helpers ──────────────────────────────────────
+
+async function findKickassId(anilistId, title) {
+    if (kickassIdCache.has(anilistId)) return kickassIdCache.get(anilistId);
+    if (!title) return null;
+
+    try {
+        const results = await withTimeout(kickAssAnime.search(title), 10000);
+        if (!results?.results?.length) return null;
+
+        const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9]/g, "");
+        let match = results.results.find(r =>
+            r.title?.toLowerCase().replace(/[^a-z0-9]/g, "") === normalizedTitle
+        );
+        if (!match) match = results.results[0];
+        if (!match?.id) return null;
+
+        kickassIdCache.set(anilistId, match.id);
+        return match.id;
+    } catch {
+        return null;
+    }
+}
+
+async function fetchKickassEpisodes(anilistId, title) {
+    const kickassId = await findKickassId(anilistId, title);
+    if (!kickassId) return [];
+
+    if (kickassEpisodeCache.has(kickassId)) return kickassEpisodeCache.get(kickassId);
+
+    try {
+        const info = await withTimeout(kickAssAnime.fetchAnimeInfo(kickassId), 10000);
+        const episodes = (info.episodes || []).map(ep => ({
+            id: ep.id,
+            number: ep.number,
+            title: ep.title || "",
+            url: ep.url || "",
+        }));
+        kickassEpisodeCache.set(kickassId, episodes);
+        return episodes;
+    } catch {
+        return [];
+    }
+}
+
+// ── AnimeSaturn helpers ──────────────────────────────────────
+
+async function findSaturnId(anilistId, title) {
+    if (saturnIdCache.has(anilistId)) return saturnIdCache.get(anilistId);
+    if (!title) return null;
+
+    try {
+        const results = await withTimeout(animeSaturn.search(title), 10000);
+        if (!results?.results?.length) return null;
+
+        const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9]/g, "");
+        let match = results.results.find(r =>
+            r.title?.toLowerCase().replace(/[^a-z0-9]/g, "") === normalizedTitle
+        );
+        if (!match) match = results.results[0];
+        if (!match?.id) return null;
+
+        saturnIdCache.set(anilistId, match.id);
+        return match.id;
+    } catch {
+        return null;
+    }
+}
+
+async function fetchSaturnEpisodes(anilistId, title) {
+    const saturnId = await findSaturnId(anilistId, title);
+    if (!saturnId) return [];
+
+    if (saturnEpisodeCache.has(saturnId)) return saturnEpisodeCache.get(saturnId);
+
+    try {
+        const info = await withTimeout(animeSaturn.fetchAnimeInfo(saturnId), 10000);
+        const episodes = (info.episodes || []).map(ep => ({
+            id: ep.id,
+            number: ep.number,
+            title: ep.title || "",
+            url: ep.url || "",
+        }));
+        saturnEpisodeCache.set(saturnId, episodes);
         return episodes;
     } catch {
         return [];

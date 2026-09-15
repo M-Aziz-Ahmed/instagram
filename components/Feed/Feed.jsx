@@ -253,7 +253,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
 
     // Fetch ads once on mount
     useEffect(() => {
-        fetch("/api/ads", { cache: "no-store" })
+        fetch("/api/ads?limit=5", { cache: "no-store" })
             .then((r) => r.ok ? r.json() : [])
             .then((data) => { if (Array.isArray(data)) setAds(data); })
             .catch(() => {});
