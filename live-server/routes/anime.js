@@ -11,7 +11,7 @@ const GOGO_BASE = "https://gogoanimehd.to";
 const GOGO_API_BASE = "https://api.gogoanimehd.to";
 
 const animeUnity = new ANIME.AnimeUnity();
-const hianime = new ANIME.HiAnime();
+const hianime = new ANIME.Hianime();
 
 // Caches: anilistId -> streaming provider ID
 const gogoIdCache = new Map();
