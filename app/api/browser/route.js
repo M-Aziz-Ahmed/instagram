@@ -138,41 +138,67 @@ function __anb_w__(u){
 
 /**
  * Walk the HTML string and rewrite resource-loading attributes.
- * Uses a simple tag-by-tag scan instead of fragile multi-attribute regexes.
+ * Only rewrites attributes that browsers load before JS runs (img src, script src,
+ * link href for CSS/favicon). Navigation links (<a href>) are handled at runtime
+ * by the injected script — rewriting them statically causes double-encoding.
  */
 function rewriteHtmlAttributes(html, base, proxyBase) {
-  // Process one attribute value at a time using a safe per-attr regex
-  // Attributes that load external resources
-  const RESOURCE_ATTRS = /\b(src|href|action|data-src|data-href|poster)\s*=\s*(['"])(.*?)\2/gi;
+  // Only rewrite passive sub-resource loads — NOT anchor hrefs (handled by runtime script)
+  // Use a fresh regex each call to avoid lastIndex carry-over with the `g` flag.
 
-  // Replace resource-loading attrs in resource tags
+  // <img src>, <video src>, <audio src>, <source src>, <track src>, <embed src>, <input src>
   html = html.replace(
-    /<(script|img|source|input|track|embed|object|video|audio|link|iframe|form|a)(\s[^>]*)?>/gi,
+    /<(img|video|audio|source|track|embed|input|object)(\s[^>]*)?>/gi,
     (tagMatch) => {
-      return tagMatch.replace(RESOURCE_ATTRS, (attrMatch, attr, q, val) => {
-        // Don't rewrite <a> href if it looks like an anchor or non-http
-        if (
-          attr.toLowerCase() === "href" &&
-          (val.startsWith("#") ||
-            val.startsWith("mailto:") ||
-            val.startsWith("tel:") ||
-            val.startsWith("javascript:"))
-        )
-          return attrMatch;
-        const rewritten = proxifyUrl(val, base, proxyBase);
-        return `${attr}=${q}${rewritten}${q}`;
+      return tagMatch.replace(/\bsrc\s*=\s*(['"])(.*?)\1/gi, (_, q, val) => {
+        return `src=${q}${proxifyUrl(val, base, proxyBase)}${q}`;
+      }).replace(/\bposter\s*=\s*(['"])(.*?)\1/gi, (_, q, val) => {
+        return `poster=${q}${proxifyUrl(val, base, proxyBase)}${q}`;
+      }).replace(/\bdata-src\s*=\s*(['"])(.*?)\1/gi, (_, q, val) => {
+        return `data-src=${q}${proxifyUrl(val, base, proxyBase)}${q}`;
       });
     }
   );
 
-  // Rewrite srcset values
+  // <script src> — load before JS runs
+  html = html.replace(
+    /<script(\s[^>]*)?>/gi,
+    (tagMatch) => {
+      return tagMatch.replace(/\bsrc\s*=\s*(['"])(.*?)\1/gi, (_, q, val) => {
+        return `src=${q}${proxifyUrl(val, base, proxyBase)}${q}`;
+      });
+    }
+  );
+
+  // <link href> for CSS and favicons only (rel=stylesheet, rel=icon, rel=preload)
+  html = html.replace(
+    /<link(\s[^>]*)?>/gi,
+    (tagMatch) => {
+      const rel = (tagMatch.match(/\brel\s*=\s*['"]([^'"]*)['"]/i) || [])[1] || "";
+      const isResource = /stylesheet|icon|preload|prefetch|modulepreload/i.test(rel);
+      if (!isResource) return tagMatch;
+      return tagMatch.replace(/\bhref\s*=\s*(['"])(.*?)\1/gi, (_, q, val) => {
+        return `href=${q}${proxifyUrl(val, base, proxyBase)}${q}`;
+      });
+    }
+  );
+
+  // <iframe src> (embedded frames)
+  html = html.replace(
+    /<iframe(\s[^>]*)?>/gi,
+    (tagMatch) => {
+      return tagMatch.replace(/\bsrc\s*=\s*(['"])(.*?)\1/gi, (_, q, val) => {
+        return `src=${q}${proxifyUrl(val, base, proxyBase)}${q}`;
+      });
+    }
+  );
+
+  // srcset attributes (img srcset, source srcset)
   html = html.replace(/\bsrcset\s*=\s*(['"])(.*?)\1/gi, (_, q, value) => {
     const parts = value.split(",").map((part) => {
       const trimmed = part.trim();
       const spaceIdx = trimmed.search(/\s/);
-      if (spaceIdx === -1) {
-        return proxifyUrl(trimmed, base, proxyBase);
-      }
+      if (spaceIdx === -1) return proxifyUrl(trimmed, base, proxyBase);
       const url = trimmed.slice(0, spaceIdx);
       const descriptor = trimmed.slice(spaceIdx);
       return proxifyUrl(url, base, proxyBase) + descriptor;
@@ -180,12 +206,12 @@ function rewriteHtmlAttributes(html, base, proxyBase) {
     return `srcset=${q}${parts.join(", ")}${q}`;
   });
 
-  // Rewrite inline style attributes
+  // Inline style url() references
   html = html.replace(/\bstyle\s*=\s*(['"])(.*?)\1/gi, (_, q, val) => {
     return `style=${q}${rewriteCss(val, base, proxyBase)}${q}`;
   });
 
-  // Rewrite <style> blocks
+  // <style> blocks
   html = html.replace(
     /(<style[^>]*>)([\s\S]*?)(<\/style>)/gi,
     (_, open, content, close) => open + rewriteCss(content, base, proxyBase) + close
