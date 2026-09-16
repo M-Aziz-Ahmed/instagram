@@ -387,6 +387,7 @@ export default function InboxClient() {
                     />
                 ) : (
                     <ChatBox
+                        key={selectedConvo?.username || "none"}
                         onBack={handleBack}
                         recipient={selectedConvo?.username}
                         recipientUser={selectedConvo?.user}

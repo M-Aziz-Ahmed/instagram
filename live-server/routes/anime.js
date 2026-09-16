@@ -267,7 +267,8 @@ router.get("/watch/:episodeId", async (req, res) => {
                     for (const link of data.data.streamingLinks) {
                         if (link?.url) {
                             const fullUrl = link.url.startsWith("http") ? link.url : `${GOGO_BASE}${link.url}`;
-                            sources.push({ url: fullUrl, quality: link.quality || "auto", isM3U8: true, server: link.name || "gogoanime" });
+                            const isM3U8 = /\.(m3u8|m3u)(\?.*)?$/i.test(new URL(fullUrl).pathname);
+                            sources.push({ url: fullUrl, quality: link.quality || "auto", isM3U8, server: link.name || "gogoanime" });
                         }
                     }
                 }

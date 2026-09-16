@@ -70,6 +70,12 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
         return () => clearInterval(id);
     }, [recipient]);
 
+    // Reset per-conversation state when switching chats
+    useEffect(() => {
+        setPendingMessage(null);
+        setReplyingTo(null);
+    }, [recipient]);
+
     if (!ready) {
         return (
             <div className="flex items-center justify-center h-full">
@@ -193,7 +199,7 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
 
             {/* ── Input ───────────────────────────────────────────────────── */}
             <div className="px-3 md:px-4 py-2.5 md:py-3 border-t border-gray-200 dark:border-gray-800 shrink-0">
-                <Input onMessageSent={(msg) => setPendingMessage(msg)} recipient={recipient} replyingTo={replyingTo} setReplyingTo={setReplyingTo} />
+                <Input key={recipient} onMessageSent={(msg) => setPendingMessage(msg)} recipient={recipient} replyingTo={replyingTo} setReplyingTo={setReplyingTo} />
             </div>
         </div>
     );

@@ -1080,6 +1080,88 @@ function broadcastChannelParticipants(channelId) {
     }
 }
 
+// ── Heartbeat reaper: removes ghost users from voice/live ──────
+// Cleans up users who closed the app without pressing "leave".
+const VOICE_HEARTBEAT_INTERVAL_MS = 10000;
+const VOICE_HEARTBEAT_TIMEOUT_MS  = 25000;
+
+async function reapStaleVoiceParticipants() {
+    const now = Date.now();
+    let changed = false;
+    for (const [channelId, ch] of voiceChannels) {
+        if (!ch?.participants) continue;
+        for (const [socketId, p] of ch.participants) {
+            if (!p.lastHeartbeat) {
+                p.lastHeartbeat = Date.now();
+                continue;
+            }
+            if (now - p.lastHeartbeat <= VOICE_HEARTBEAT_TIMEOUT_MS) continue;
+
+            ch.participants.delete(socketId);
+            const sock = io.sockets.sockets.get(socketId);
+            if (sock) {
+                sock.leave(`voice:${channelId}`);
+                if (sock.data?.voiceChannel === channelId) sock.data.voiceChannel = null;
+            }
+            io.to(`voice:${channelId}`).emit("voice:user-left", { username: p.username });
+            changed = true;
+            console.log(`[VOICE] Removed stale participant ${p.username} from ${channelId} (no heartbeat)`);
+            logServer("voice_stale_removed", { username: p.username, message: `${p.username} removed - missed heartbeat`, room: channelId });
+        }
+
+        if (ch.communityId && ch.participants.size === 0) {
+            voiceChannels.delete(channelId);
+            if (io._voiceMusic) io._voiceMusic.delete(channelId);
+            channelMutedUsers.delete(channelId);
+            changed = true;
+        } else if (ch.participants.size > 0) {
+            broadcastChannelParticipants(channelId);
+        }
+    }
+    if (changed) broadcastChannelList();
+}
+setInterval(reapStaleVoiceParticipants, VOICE_HEARTBEAT_INTERVAL_MS);
+
+const STREAM_HEARTBEAT_INTERVAL_MS = 10000;
+const STREAM_HEARTBEAT_TIMEOUT_MS  = 25000;
+
+async function reapStaleStreamConnections() {
+    const now = Date.now();
+    for (const sock of io.sockets.sockets.values()) {
+        const streamId = sock.data?.streamId;
+        if (!streamId) continue;
+        const last = sock.data.streamLastHeartbeat || 0;
+        if (now - last <= STREAM_HEARTBEAT_TIMEOUT_MS) continue;
+
+        const username = sock.data.username;
+        try {
+            const stream = await LiveStream.findById(streamId);
+            if (stream) {
+                const isHost = stream.host === username;
+                if (isHost) {
+                    // Host went stale -> end the stream entirely
+                    if (stream.status === "live") {
+                        stream.status = "ended";
+                        stream.endedAt = new Date();
+                        await stream.save();
+                        io.to(`stream:${streamId}`).emit("host-ended");
+                    }
+                } else {
+                    stream.viewers = stream.viewers.filter((v) => v !== username);
+                    await stream.save();
+                    io.to(`stream:${streamId}`).emit("viewer-count", { count: stream.viewers.length });
+                }
+            }
+        } catch (err) {
+            console.error("[WS] stale stream cleanup error:", err.message);
+        }
+        sock.leave(`stream:${streamId}`);
+        if (sock.data?.streamId === streamId) sock.data.streamId = null;
+        console.log(`[WS] Removed stale stream connection ${username || sock.id}`);
+    }
+}
+setInterval(reapStaleStreamConnections, STREAM_HEARTBEAT_INTERVAL_MS);
+
 async function isUserAdmin(username) {
     try {
         const usersCol = mongoose.connection.db.collection("users");
@@ -1124,7 +1206,7 @@ io.on("connection", async (socket) => {
 
     socket.on("join-stream", async ({ streamId, username }) => {
         socket.join(`stream:${streamId}`);
-        socket.data = { streamId, username };
+        socket.data = { ...socket.data, streamId, username, streamLastHeartbeat: Date.now() };
 
         try {
             const stream = await LiveStream.findById(streamId);
@@ -1161,6 +1243,10 @@ io.on("connection", async (socket) => {
         } catch (err) {
             console.error("[WS] leave-stream error:", err.message);
         }
+    });
+
+    socket.on("stream:heartbeat", ({ streamId } = {}) => {
+        socket.data.streamLastHeartbeat = Date.now();
     });
 
     socket.on("signal", ({ streamId, to, type, data, from }) => {
@@ -1311,6 +1397,7 @@ io.on("connection", async (socket) => {
             speaking: false,
             socketId: socket.id,
             isAdmin: socket.data.isAdmin || false,
+            lastHeartbeat: Date.now(),
         });
 
         socket.data.voiceChannel = channelId;
@@ -1380,6 +1467,14 @@ io.on("connection", async (socket) => {
             io.to(`voice:${channelId}`).emit("voice:user-left", { username: participant.username });
             logServer("voice_leave", { username: participant.username, message: `${participant.username} left voice channel ${channelId}`, room: channelId });
         }
+    });
+
+    socket.on("voice:heartbeat", ({ channelId } = {}) => {
+        if (!channelId) return;
+        const ch = voiceChannels.get(channelId);
+        if (!ch) return;
+        const p = ch.participants.get(socket.id);
+        if (p) p.lastHeartbeat = Date.now();
     });
 
     socket.on("voice:toggle-mute", ({ channelId, muted }) => {

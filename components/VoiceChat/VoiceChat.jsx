@@ -788,6 +788,17 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
         }
     }, [participants, activeChannel, createPeerConnections]);
 
+    // Voice heartbeat: emit every 10s to keep presence alive (prevents ghost participants)
+    useEffect(() => {
+        if (!activeChannel) return;
+        const interval = setInterval(() => {
+            if (socketRef.current?.connected) {
+                socketRef.current.emit("voice:heartbeat", { channelId: activeChannelRef.current });
+            }
+        }, 10000);
+        return () => clearInterval(interval);
+    }, [activeChannel]);
+
     const leaveChannel = useCallback(() => {
         const s = socketRef.current;
         if (s && activeChannel) {

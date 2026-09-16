@@ -45,7 +45,7 @@ const TABS = [
         label: "Entertainment",
         href: "/entertainment",
         routes: [
-            "/entertainment", "/movies", "/anime", "/manga", "/kdramas", "/seasons", "/cdramas", "/cartoons", "/channels",
+            "/entertainment", "/movies", "/anime", "/manga", "/kdramas", "/seasons", "/cdramas", "/cartoons", "/channels", "/live-tv",
             "/games", "/chess", "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman",
             "/reactionduel", "/game2048", "/minesweeper", "/sudoku", "/leaderboard",
         ],

@@ -653,6 +653,17 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
 
     useEffect(() => () => stopAll(), [stopAll]);
 
+    // Presence heartbeat: keeps viewer/host socket alive server-side (prevents ghost viewers)
+    useEffect(() => {
+        if (!started) return;
+        const interval = setInterval(() => {
+            if (socketRef.current?.connected) {
+                socketRef.current.emit("stream:heartbeat", { streamId: stateRef.current.streamId });
+            }
+        }, 10000);
+        return () => clearInterval(interval);
+    }, [started]);
+
     useEffect(() => {
         const handler = () => setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement));
         document.addEventListener("fullscreenchange", handler);

@@ -8,6 +8,25 @@ import ImportDataButton from "@/components/common/ImportDataButton";
 
 const fmtNum = (n) => (n == null ? "?" : n.toLocaleString());
 
+const PROXIED_HOSTS = ["megacloud.tv", "embtaku.pro", "embtaku.com", "gayu-server.com", "cdnz.space", "radeon.top", "vstreamcdn.com", "fj-cdn.com", "f4-cdn.com", "gogoanimehd.to"];
+
+function proxyStreamUrl(url) {
+    if (!url) return url;
+    try {
+        const parsed = new URL(url);
+        const host = parsed.hostname;
+        const needsProxy = PROXIED_HOSTS.some((h) => host === h || host.endsWith("." + h));
+        const isMedia = /\.(m3u8|mp4|m4v|ts)(\?.*)?$/i.test(parsed.pathname);
+        if (needsProxy) {
+            return `/api/anime-proxy?url=${encodeURIComponent(url)}`;
+        }
+        if (!needsProxy && isMedia && !url.startsWith("/")) {
+            return `/api/anime-proxy?url=${encodeURIComponent(url)}`;
+        }
+    } catch {}
+    return url;
+}
+
 function StarIcon() {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-yellow-400">
@@ -35,6 +54,8 @@ function VideoPlayer({ src, title, poster, onBack }) {
         setLoading(true);
         setError("");
 
+        const proxiedSrc = proxyStreamUrl(src);
+
         const cleanup = () => {
             if (hlsRef.current) {
                 hlsRef.current.destroy();
@@ -42,7 +63,7 @@ function VideoPlayer({ src, title, poster, onBack }) {
             }
         };
 
-        if (src.endsWith(".m3u8") || src.includes(".m3u8")) {
+        if (proxiedSrc.endsWith(".m3u8") || proxiedSrc.includes(".m3u8")) {
             if (Hls.isSupported()) {
                 const hls = new Hls({ 
                     enableWorker: true, 
@@ -50,11 +71,11 @@ function VideoPlayer({ src, title, poster, onBack }) {
                     retryDelay: 1000,
                     maxRetryDelay: 5000,
                     maxMaxRetryDelay: 10000,
-                    maxLoadTimeout: 20000,
-                    maxRetry: 3,
+                    maxLoadTimeout: 30000,
+                    maxRetry: 5,
                 });
                 hlsRef.current = hls;
-                hls.loadSource(src);
+                hls.loadSource(proxiedSrc);
                 hls.attachMedia(video);
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
                     setLoading(false);
@@ -74,7 +95,7 @@ function VideoPlayer({ src, title, poster, onBack }) {
                 });
                 return cleanup;
             } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-                video.src = src;
+                video.src = proxiedSrc;
                 const onMeta = () => {
                     setLoading(false);
                     video.play().catch(() => {});
@@ -83,7 +104,7 @@ function VideoPlayer({ src, title, poster, onBack }) {
                 return () => video.removeEventListener("loadedmetadata", onMeta);
             }
         } else {
-            video.src = src;
+            video.src = proxiedSrc;
             const onData = () => {
                 setLoading(false);
                 video.play().catch(() => {});

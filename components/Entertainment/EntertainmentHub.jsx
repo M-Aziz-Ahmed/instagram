@@ -10,7 +10,7 @@ const APPS = [
             { href: "/cdramas", title: "Chinese Dramas", desc: "C-drama series", emoji: "🏮", gradient: "from-amber-500 to-orange-700" },
             { href: "/seasons", title: "Seasons", desc: "TV seasons catalog", emoji: "📺", gradient: "from-indigo-500 to-blue-700" },
             { href: "/cartoons", title: "Cartoons", desc: "Animated favorites", emoji: "🧸", gradient: "from-teal-500 to-cyan-700" },
-            { href: "/channels", title: "Channels", desc: "Live-ish stream channels", emoji: "📡", gradient: "from-sky-500 to-blue-700" },
+            { href: "/live-tv", title: "Live TV", desc: "IPTV live stream channels", emoji: "📡", gradient: "from-sky-500 to-blue-700" },
         ],
     },
     {

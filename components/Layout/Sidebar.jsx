@@ -193,7 +193,7 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
         return pathname.startsWith(path);
     };
 
-    const entertainmentRoutes = ["/games", "/chess", "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman", "/reactionduel", "/game2048", "/minesweeper", "/sudoku", "/movies", "/anime", "/manga", "/kdramas", "/seasons", "/cdramas", "/cartoons", "/channels", "/leaderboard"];
+    const entertainmentRoutes = ["/games", "/chess", "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman", "/reactionduel", "/game2048", "/minesweeper", "/sudoku", "/movies", "/anime", "/manga", "/kdramas", "/seasons", "/cdramas", "/cartoons", "/channels", "/live-tv", "/leaderboard"];
 
     const handleLogout = async () => {
         if (onClose) onClose();
