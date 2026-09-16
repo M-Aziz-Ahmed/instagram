@@ -14,6 +14,25 @@ function isRunningInTauriClient() {
     return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
 }
 
+// In-memory record of every OS-notification attempt made by
+// `showBackgroundNotification`. Consumed by the desktop diagnostics panel via
+// `getDesktopNotificationLog()` — never shipped to the OS, just this session.
+const desktopNotificationLog = [];
+
+function recordNotificationAttempt(status, method, error) {
+    desktopNotificationLog.push({
+        status, // "ok" | "fail"
+        method, // which code path attempted delivery
+        error: error ? String(error) : "",
+        time: Date.now(),
+    });
+    if (desktopNotificationLog.length > 200) desktopNotificationLog.shift();
+}
+
+export function getDesktopNotificationLog() {
+    return [...desktopNotificationLog];
+}
+
 export function isTauri() {
     return isRunningInTauriClient();
 }
@@ -78,7 +97,7 @@ export async function showBackgroundNotification(title, opts = {}) {
     }
 
     if (isRunningInTauriClient() && Notification.permission !== "granted") {
-        try { await Notification.requestPermission(); } catch { /* ignore */ }
+        try { await Notification.requestPermission(); } catch {}
     }
 
     if (Notification.permission !== "granted") return false;
@@ -90,7 +109,7 @@ export async function showBackgroundNotification(title, opts = {}) {
             catch { return url; }
         })();
 
-        // Click → bring the app forward + open the notification's target page.
+        // Click → focus + show, then navigate to the notification's target.
         n.onclick = () => {
             n.close();
             if (isRunningInTauriClient()) {
@@ -100,13 +119,14 @@ export async function showBackgroundNotification(title, opts = {}) {
                     .then((w) => Promise.all([w.show(), w.setFocus()]).catch(() => {}))
                     .catch(() => {});
             }
-            if (window && typeof window.location !== "undefined") {
+            if (typeof window !== "undefined" && typeof window.location !== "undefined") {
                 try { window.location.href = abs; } catch {}
             }
         };
+        recordNotificationAttempt("ok", "webview-native");
         return true;
     } catch (e) {
-        console.error("[systemNotification] native notification failed:", e);
+        recordNotificationAttempt("fail", "webview-native", e);
         return false;
     }
 }

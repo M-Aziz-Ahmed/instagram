@@ -554,7 +554,7 @@ function NativeBrowserClient() {
     try {
       const core = await import("@tauri-apps/api/core");
       if (firstOpen) {
-        await core.invoke("browser_open", args pw);
+        await core.invoke("browser_open", args);
       } else {
         try { await core.invoke("browser_set_bounds", { x: B.x, y: B.y, width: B.width, height: B.height }); } catch {}
         try { await core.invoke("browser_navigate", { url }); } catch {}
