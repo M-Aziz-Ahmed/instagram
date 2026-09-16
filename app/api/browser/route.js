@@ -290,6 +290,11 @@ function realUrl(){
   }catch(e){return null;}
 }
 function curReal(){return realUrl()||_rl.href;}
+function curRealNormalized(){
+  // Return the real URL, ensuring hostname-only URLs have a trailing slash
+  var r=curReal();
+  try{var u=new URL(r);if(u.pathname==='')u.pathname='/';return u.href;}catch(e){return r;}
+}
 
 /* ── window.location shim ── */
 var _ls={
@@ -325,15 +330,33 @@ function notify(url,title){
 try{
   var _hP=history.pushState.bind(history);
   var _hR=history.replaceState.bind(history);
+  function _wrapHistUrl(u){
+    if(u==null)return u;
+    var s=String(u);
+    if(!s||/^(data:|blob:|javascript:)/.test(s))return u;
+    // If already a full proxy URL, pass through
+    if(proxied(s))return s;
+    // If it's a full http URL, wrap it
+    if(isHttp(s))return PROXY+encodeURIComponent(s);
+    // Relative URL — resolve against the REAL current page URL (normalized)
+    try{
+      var realBase=curRealNormalized();
+      if(!realBase)return u;
+      var abs=new URL(s,realBase).href;
+      if(!isHttp(abs))return u;
+      return PROXY+encodeURIComponent(abs);
+    }catch(e){return u;}
+  }
   history.pushState=function(s,t,u){
-    if(u!=null){var w=wrap(String(u),curReal());if(w)u=w;}
-    _hP(s,t,u);
-    notify(realUrl());
+    var wu=_wrapHistUrl(u);
+    _hP(s,t,wu!=null?wu:u);
+    // Notify after a tick so realUrl() reflects the new state
+    setTimeout(function(){notify(realUrl());},0);
   };
   history.replaceState=function(s,t,u){
-    if(u!=null){var w=wrap(String(u),curReal());if(w)u=w;}
-    _hR(s,t,u);
-    notify(realUrl());
+    var wu=_wrapHistUrl(u);
+    _hR(s,t,wu!=null?wu:u);
+    setTimeout(function(){notify(realUrl());},0);
   };
   window.addEventListener('popstate',function(){notify(realUrl());});
 }catch(e){}

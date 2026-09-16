@@ -603,41 +603,55 @@ router.get("/types", (req, res) => {
 // ──────── IPTV ────────
 router.get("/iptv/playlist", async (req, res) => {
     try {
-        const res2 = await fetch("https://iptv-org.github.io/iptv/index.m3u", { redirect: "follow", timeout: 15000 });
+        const res2 = await fetch("https://iptv-org.github.io/iptv/index.m3u", { redirect: "follow", signal: AbortSignal.timeout(15000) });
         if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
         const text = await res2.text();
-        // Parse EXTINF lines
+
+        // Parse M3U8 — real format:
+        // #EXTINF:-1 tvg-id="..." tvg-name="..." tvg-logo="..." group-title="...",Channel Name
+        // http://stream.url
         const channels = [];
         const lines = text.split(/\r?\n/);
+
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
-            if (line.startsWith("#EXTINF")) {
-                const meta = {};
-                const pairs = line.substring(9).split(/[&;]/);
-                for (const pair of pairs) {
-                    const eq = pair.indexOf("=");
-                    if (eq > 0) {
-                        const key = pair.substring(0, eq).trim();
-                        const val = pair.substring(eq + 1).trim().replace(/"/g, "");
-                        meta[key] = val;
-                    }
-                }
-                i++;
-                const url = lines[i] ? lines[i].trim() : "";
-                if (url) {
-                    channels.push({
-                        name: meta.tvg_name || meta.name || "Unknown",
-                        logo: meta.tvg_logo || meta.tvg_logo || "",
-                        group: meta.group_title || meta.group || "Unknown",
-                        url: url,
-                    });
-                }
+            if (!line.startsWith("#EXTINF")) continue;
+
+            // Everything after the first comma is the display name
+            const commaIdx = line.indexOf(",");
+            const displayName = commaIdx >= 0 ? line.slice(commaIdx + 1).trim() : "";
+
+            // Parse key="value" pairs from the attribute section (before the comma)
+            const attrSection = commaIdx >= 0 ? line.slice(0, commaIdx) : line;
+            const meta = {};
+            const attrRe = /([\w-]+)\s*=\s*"([^"]*)"/g;
+            let m;
+            while ((m = attrRe.exec(attrSection)) !== null) {
+                meta[m[1].toLowerCase()] = m[2];
             }
+
+            // Advance to the URL line (skip blank lines)
+            let url = "";
+            while (i + 1 < lines.length) {
+                i++;
+                const next = lines[i].trim();
+                if (next && !next.startsWith("#")) { url = next; break; }
+            }
+
+            if (!url) continue;
+
+            const name = meta["tvg-name"] || displayName || meta["tvg-id"] || "Unknown";
+            const logo = meta["tvg-logo"] || "";
+            const group = meta["group-title"] || "Other";
+
+            channels.push({ name, logo, group, url });
         }
+
+        if (channels.length === 0) throw new Error("No channels parsed from playlist");
         res.json({ type: "iptv", channels });
     } catch (err) {
         console.error("IPTV error:", err.message);
-        res.status(502).json({ error: "IPTV unavailable" });
+        res.status(502).json({ error: "IPTV unavailable: " + err.message });
     }
 });
 

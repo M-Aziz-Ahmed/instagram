@@ -17,12 +17,8 @@ function proxyStreamUrl(url) {
         const host = parsed.hostname;
         const needsProxy = PROXIED_HOSTS.some((h) => host === h || host.endsWith("." + h));
         const isMedia = /\.(m3u8|mp4|m4v|ts)(\?.*)?$/i.test(parsed.pathname);
-        if (needsProxy) {
-            return `/api/anime-proxy?url=${encodeURIComponent(url)}`;
-        }
-        if (!needsProxy && isMedia && !url.startsWith("/")) {
-            return `/api/anime-proxy?url=${encodeURIComponent(url)}`;
-        }
+        if (needsProxy) return `/api/anime-proxy?url=${encodeURIComponent(url)}`;
+        if (!needsProxy && isMedia && !url.startsWith("/")) return `/api/anime-proxy?url=${encodeURIComponent(url)}`;
     } catch {}
     return url;
 }
@@ -35,7 +31,11 @@ function StarIcon() {
     );
 }
 
-function VideoPlayer({ src, title, poster, onBack }) {
+// ─── VideoPlayer ──────────────────────────────────────────────────────────────
+// Accepts a `sources` array. When a source fails it automatically tries the
+// next one. A source-switcher overlay lets the user pick manually.
+
+function VideoPlayer({ src, sources, title, poster, onBack }) {
     const videoRef = useRef(null);
     const containerRef = useRef(null);
     const hlsRef = useRef(null);
@@ -46,73 +46,81 @@ function VideoPlayer({ src, title, poster, onBack }) {
     const [fullscreen, setFullscreen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [showSources, setShowSources] = useState(false);
+    const [activeSrc, setActiveSrc] = useState(src);
 
+    // When parent gives a new src (new episode), reset
+    useEffect(() => {
+        setActiveSrc(src);
+        setError("");
+        setShowSources(false);
+    }, [src]);
+
+    const allSources = sources && sources.length > 0
+        ? sources
+        : (src ? [{ url: src, quality: "auto" }] : []);
+
+    const activeIdx = allSources.findIndex((s) => s.url === activeSrc);
+
+    const tryNextSource = useCallback(() => {
+        const next = activeIdx + 1;
+        if (next < allSources.length) {
+            setActiveSrc(allSources[next].url);
+            setError("");
+        } else {
+            setError("All sources failed. Please try another episode or go back.");
+        }
+    }, [activeIdx, allSources]);
+
+    // Load and play
     useEffect(() => {
         const video = videoRef.current;
-        if (!video || !src) return;
+        if (!video || !activeSrc) return;
 
         setLoading(true);
         setError("");
+        setProgress(0);
+        setDuration(0);
 
-        const proxiedSrc = proxyStreamUrl(src);
+        const proxiedSrc = proxyStreamUrl(activeSrc);
 
         const cleanup = () => {
-            if (hlsRef.current) {
-                hlsRef.current.destroy();
-                hlsRef.current = null;
-            }
+            if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
         };
 
-        if (proxiedSrc.endsWith(".m3u8") || proxiedSrc.includes(".m3u8")) {
+        if (proxiedSrc.includes(".m3u8")) {
             if (Hls.isSupported()) {
-                const hls = new Hls({ 
-                    enableWorker: true, 
+                const hls = new Hls({
+                    enableWorker: true,
                     lowLatencyMode: true,
                     retryDelay: 1000,
                     maxRetryDelay: 5000,
-                    maxMaxRetryDelay: 10000,
                     maxLoadTimeout: 30000,
-                    maxRetry: 5,
+                    maxRetry: 3,
                 });
                 hlsRef.current = hls;
                 hls.loadSource(proxiedSrc);
                 hls.attachMedia(video);
-                hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    setLoading(false);
-                    video.play().catch(() => {});
-                });
+                hls.on(Hls.Events.MANIFEST_PARSED, () => { setLoading(false); video.play().catch(() => {}); });
                 hls.on(Hls.Events.ERROR, (_e, data) => {
                     if (data.fatal) {
-                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                            hls.startLoad();
-                        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                            hls.recoverMediaError();
-                        } else {
-                            setError("Playback error - try another source");
-                            setLoading(false);
-                        }
+                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+                        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+                        else { setLoading(false); tryNextSource(); }
                     }
                 });
                 return cleanup;
             } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
                 video.src = proxiedSrc;
-                const onMeta = () => {
-                    setLoading(false);
-                    video.play().catch(() => {});
-                };
+                const onMeta = () => { setLoading(false); video.play().catch(() => {}); };
                 video.addEventListener("loadedmetadata", onMeta);
                 return () => video.removeEventListener("loadedmetadata", onMeta);
             }
         } else {
+            cleanup();
             video.src = proxiedSrc;
-            const onData = () => {
-                setLoading(false);
-                video.play().catch(() => {});
-            };
-            const onError = () => {
-                setError("Failed to load video - try another source");
-                setLoading(false);
-            };
+            const onData = () => { setLoading(false); video.play().catch(() => {}); };
+            const onError = () => { setLoading(false); tryNextSource(); };
             video.addEventListener("loadeddata", onData);
             video.addEventListener("error", onError);
             return () => {
@@ -120,117 +128,146 @@ function VideoPlayer({ src, title, poster, onBack }) {
                 video.removeEventListener("error", onError);
             };
         }
-    }, [src]);
+    }, [activeSrc, tryNextSource]);
 
+    // Playback event listeners
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
-        const onTime = () => {
-            if (video.duration) {
-                setProgress(video.currentTime);
-                setDuration(video.duration);
-            }
-        };
+        const onTime = () => { if (video.duration) { setProgress(video.currentTime); setDuration(video.duration); } };
         video.addEventListener("timeupdate", onTime);
         video.addEventListener("play", () => setPlaying(true));
         video.addEventListener("pause", () => setPlaying(false));
-        return () => {
-            video.removeEventListener("timeupdate", onTime);
-        };
+        return () => { video.removeEventListener("timeupdate", onTime); };
     }, []);
 
-    const togglePlay = () => {
-        const v = videoRef.current;
-        if (!v) return;
-        v.paused ? v.play() : v.pause();
-    };
-
+    const togglePlay = () => { const v = videoRef.current; if (!v) return; v.paused ? v.play() : v.pause(); };
     const toggleFs = () => {
         const el = containerRef.current;
         if (!el) return;
-        if (!document.fullscreenElement) {
-            el.requestFullscreen().then(() => setFullscreen(true)).catch(() => {});
-        } else {
-            document.exitFullscreen().then(() => setFullscreen(false)).catch(() => {});
-        }
+        if (!document.fullscreenElement) el.requestFullscreen().then(() => setFullscreen(true)).catch(() => {});
+        else document.exitFullscreen().then(() => setFullscreen(false)).catch(() => {});
     };
-
-    const formatTime = (s) => {
+    const fmt = (s) => {
         if (!s || !isFinite(s)) return "0:00";
-        const m = Math.floor(s / 60);
-        const sec = Math.floor(s % 60);
-        return `${m}:${sec.toString().padStart(2, "0")}`;
+        return `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
+    };
+    const srcLabel = (s) => {
+        if (!s) return "?";
+        if (s.quality && s.quality !== "auto") return s.quality;
+        if (s.server) return s.server;
+        return "Source";
     };
 
     return (
         <div ref={containerRef} className="relative bg-black rounded-xl overflow-hidden group">
+            {/* Spinner */}
             {loading && !error && (
-                <div className="absolute inset-0 flex items-center justify-center z-10">
-                    <div className="w-10 h-10 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center z-10 bg-black/60">
+                    <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin" />
                 </div>
             )}
+
+            {/* Error overlay */}
             {error && (
-                <div className="absolute inset-0 flex items-center justify-center z-10 bg-black/80">
-                    <div className="text-center">
-                        <p className="text-white text-sm mb-2">{error}</p>
-                        <button onClick={onBack} className="text-blue-400 text-sm hover:underline">Go back</button>
+                <div className="absolute inset-0 flex items-center justify-center z-10 bg-black/85">
+                    <div className="text-center px-6 space-y-3">
+                        <p className="text-red-400 text-sm font-medium">⚠ {error}</p>
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                            <button onClick={onBack} className="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded-full transition-colors">
+                                ← Go back
+                            </button>
+                            {allSources.length > 1 && (
+                                <button onClick={() => setShowSources(true)} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded-full transition-colors">
+                                    Switch source ({activeIdx + 1}/{allSources.length})
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
-            <video
-                ref={videoRef}
-                className="w-full aspect-video cursor-pointer"
-                onClick={togglePlay}
-                playsInline
-                poster={poster}
-            />
+
+            {/* Source picker overlay */}
+            {showSources && (
+                <div className="absolute inset-0 z-20 bg-black/92 flex items-center justify-center p-4">
+                    <div className="w-full max-w-xs bg-gray-900 rounded-2xl overflow-hidden shadow-2xl">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                            <span className="text-sm font-semibold text-white">Choose Source</span>
+                            <button onClick={() => setShowSources(false)} className="text-gray-400 hover:text-white transition-colors text-xl leading-none w-8 h-8 flex items-center justify-center">×</button>
+                        </div>
+                        <div className="max-h-72 overflow-y-auto p-2 space-y-1">
+                            {allSources.map((s, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => { setActiveSrc(s.url); setError(""); setShowSources(false); }}
+                                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm transition-colors ${
+                                        activeSrc === s.url
+                                            ? "bg-blue-600 text-white"
+                                            : "text-gray-200 hover:bg-white/10"
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        {activeSrc === s.url && <span className="text-[10px]">▶</span>}
+                                        <span className="font-medium">{srcLabel(s)}</span>
+                                    </div>
+                                    <span className="text-[10px] opacity-50 font-mono">{s.isM3U8 ? "HLS" : "MP4"}{s.server ? ` · ${s.server}` : ""}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <video ref={videoRef} className="w-full aspect-video cursor-pointer" onClick={togglePlay} playsInline poster={poster} />
+
+            {/* Controls bar */}
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 opacity-0 group-hover:opacity-100 transition-opacity">
                 <input
-                    type="range"
-                    min={0}
-                    max={duration || 0}
-                    value={progress}
-                    onChange={(e) => {
-                        const v = videoRef.current;
-                        if (v) v.currentTime = Number(e.target.value);
-                    }}
+                    type="range" min={0} max={duration || 0} value={progress}
+                    onChange={(e) => { const v = videoRef.current; if (v) v.currentTime = Number(e.target.value); }}
                     className="w-full h-1 mb-2 accent-blue-500 cursor-pointer"
                 />
                 <div className="flex items-center justify-between text-white text-xs">
                     <div className="flex items-center gap-3">
                         <button onClick={togglePlay} className="hover:text-blue-400 transition-colors">
                             {playing ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                                    <path fillRule="evenodd" d="M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H13v1.25a.75.75 0 0 1-1.5 0V18H9v1.25a.75.75 0 0 1-1.5 0V18H5.75A2.75 2.75 0 0 1 3 15.25v-8.5A2.75 2.75 0 0 1 5.75 4H6V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z" clipRule="evenodd" />
+                                <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                                    <path fillRule="evenodd" d="M6.75 5.25a.75.75 0 0 1 .75-.75H9a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H7.5a.75.75 0 0 1-.75-.75V5.25Zm7.5 0A.75.75 0 0 1 15 4.5h1.5a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H15a.75.75 0 0 1-.75-.75V5.25Z" clipRule="evenodd" />
                                 </svg>
                             ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                                <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                                     <path fillRule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z" clipRule="evenodd" />
                                 </svg>
                             )}
                         </button>
-                        <span>{formatTime(progress)} / {formatTime(duration)}</span>
+                        <span>{fmt(progress)} / {fmt(duration)}</span>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                        {/* Source switcher button */}
+                        {allSources.length > 1 && (
+                            <button
+                                onClick={() => setShowSources(true)}
+                                className="flex items-center gap-1 px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded text-[10px] font-medium transition-colors"
+                                title="Switch source"
+                            >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5 7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5" />
+                                </svg>
+                                {activeIdx + 1}/{allSources.length}
+                            </button>
+                        )}
                         <input
-                            type="range"
-                            min={0}
-                            max={1}
-                            step={0.05}
-                            value={volume}
-                            onChange={(e) => {
-                                const v = videoRef.current;
-                                if (v) { v.volume = Number(e.target.value); setVolume(Number(e.target.value)); }
-                            }}
+                            type="range" min={0} max={1} step={0.05} value={volume}
+                            onChange={(e) => { const v = videoRef.current; if (v) { v.volume = Number(e.target.value); setVolume(Number(e.target.value)); } }}
                             className="w-20 h-1 accent-white cursor-pointer"
                         />
                         <button onClick={toggleFs} className="hover:text-blue-400 transition-colors">
                             {fullscreen ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                                <svg fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25" />
                                 </svg>
                             ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                                <svg fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
                                 </svg>
                             )}
@@ -241,6 +278,8 @@ function VideoPlayer({ src, title, poster, onBack }) {
         </div>
     );
 }
+
+// ─── EpisodeList ──────────────────────────────────────────────────────────────
 
 function EpisodeList({ episodes, currentId, onSelect }) {
     const [search, setSearch] = useState("");
@@ -281,6 +320,8 @@ function EpisodeList({ episodes, currentId, onSelect }) {
     );
 }
 
+// ─── AnimePage ────────────────────────────────────────────────────────────────
+
 export default function AnimePage() {
     const searchParams = useSearchParams();
     const initialId = searchParams.get("id");
@@ -298,6 +339,7 @@ export default function AnimePage() {
     const [loadingEpisodes, setLoadingEpisodes] = useState(false);
     const [currentEp, setCurrentEp] = useState(null);
     const [streamUrl, setStreamUrl] = useState("");
+    const [streamSources, setStreamSources] = useState([]); // ← all sources from API
     const [streamTitle, setStreamTitle] = useState("");
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
@@ -342,8 +384,7 @@ export default function AnimePage() {
                 const infoRes = await fetch(`/api/anime/info/${initialId}`);
                 const infoData = await infoRes.json();
                 if (infoData?.id) {
-                    const full = { id: infoData.id, title: infoData.title, image: infoData.image, ...infoData };
-                    setSelected(full);
+                    setSelected({ id: infoData.id, title: infoData.title, image: infoData.image, ...infoData });
                     if (infoData.episodes?.length) {
                         setEpisodes(infoData.episodes);
                         if (initialEp) {
@@ -355,6 +396,7 @@ export default function AnimePage() {
                                     const watchRes = await fetch(`/api/anime/watch/${encodeURIComponent(ep.id)}?subOrDub=${subOrDub}`);
                                     const watchData = await watchRes.json();
                                     const sources = watchData?.sources || [];
+                                    setStreamSources(sources);
                                     const best = sources.find((s) => s.quality === "1080p") || sources.find((s) => s.quality === "720p") || sources[0];
                                     if (best?.url) setStreamUrl(best.url);
                                 } catch { /* silent */ }
@@ -368,7 +410,7 @@ export default function AnimePage() {
                 }
             } catch { /* silent */ }
         })();
-    }, [initialId, initialEp]);
+    }, [initialId, initialEp]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const doSearch = useCallback(async (q, p = 1, append = false) => {
         if (!q.trim()) return;
@@ -415,6 +457,7 @@ export default function AnimePage() {
         setEpisodes([]);
         setCurrentEp(null);
         setStreamUrl("");
+        setStreamSources([]);
         setLoadingEpisodes(true);
         window.history.pushState({}, "", `/anime?id=${item.id}`);
         try {
@@ -426,7 +469,6 @@ export default function AnimePage() {
             if (data?.episodes?.length) {
                 setEpisodes(data.episodes);
             } else {
-                // Fallback: try fetching episodes separately
                 const epRes = await fetch(`/api/anime/episodes/${encodeURIComponent(item.id)}?title=${encodeURIComponent(item.title)}`);
                 const epData = await epRes.json();
                 if (epData?.episodes) setEpisodes(epData.episodes);
@@ -438,14 +480,14 @@ export default function AnimePage() {
     const handlePlayEpisode = async (ep) => {
         setCurrentEp(ep);
         setStreamUrl("");
+        setStreamSources([]);
         setStreamTitle(`Episode ${ep.number}${ep.title ? " - " + ep.title : ""}`);
-        if (selected?.id) {
-            window.history.pushState({}, "", `/anime?id=${selected.id}&ep=${ep.id}`);
-        }
+        if (selected?.id) window.history.pushState({}, "", `/anime?id=${selected.id}&ep=${ep.id}`);
         try {
             const res = await fetch(`/api/anime/watch/${encodeURIComponent(ep.id)}?subOrDub=${subOrDub}`);
             const data = await res.json();
             const sources = data?.sources || [];
+            setStreamSources(sources); // ← store ALL sources
             const best = sources.find((s) => s.quality === "1080p") || sources.find((s) => s.quality === "720p") || sources[0];
             if (best?.url) setStreamUrl(best.url);
         } catch { /* silent */ }
@@ -459,24 +501,28 @@ export default function AnimePage() {
         }
     };
 
+    // Re-fetch sources when sub/dub toggles
     useEffect(() => {
-        if (!currentEp || !streamUrl) return;
+        if (!currentEp) return;
         let cancelled = false;
         (async () => {
             try {
                 const res = await fetch(`/api/anime/watch/${encodeURIComponent(currentEp.id)}?subOrDub=${subOrDub}`);
                 const data = await res.json();
                 const sources = data?.sources || [];
+                if (cancelled) return;
+                setStreamSources(sources);
                 const best = sources.find((s) => s.quality === "1080p") || sources.find((s) => s.quality === "720p") || sources[0];
-                if (!cancelled && best?.url) setStreamUrl(best.url);
+                if (best?.url) setStreamUrl(best.url);
             } catch { /* silent */ }
         })();
         return () => { cancelled = true; };
-    }, [subOrDub]);
+    }, [subOrDub]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleBack = () => {
         if (streamUrl) {
             setStreamUrl("");
+            setStreamSources([]);
             setCurrentEp(null);
             if (selected?.id) window.history.pushState({}, "", `/anime?id=${selected.id}`);
         } else if (selected) {
@@ -519,16 +565,22 @@ export default function AnimePage() {
             </header>
 
             <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4">
-                {/* Player View */}
+                {/* ── Player ── */}
                 {view === "player" && (
                     <div className="space-y-4">
-                        <VideoPlayer src={streamUrl} title={streamTitle} poster={selected?.image} onBack={handleBack} />
+                        <VideoPlayer
+                            src={streamUrl}
+                            sources={streamSources}
+                            title={streamTitle}
+                            poster={selected?.image}
+                            onBack={handleBack}
+                        />
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{streamTitle}</p>
                         <EpisodeList episodes={episodes} currentId={currentEp?.id} onSelect={handlePlayEpisode} />
                     </div>
                 )}
 
-                {/* Detail View */}
+                {/* ── Detail ── */}
                 {view === "detail" && selected && (
                     <div className="flex flex-col lg:flex-row gap-6">
                         <div className="lg:w-1/3 shrink-0">
@@ -537,13 +589,7 @@ export default function AnimePage() {
                         <div className="flex-1 min-w-0 space-y-3">
                             <div className="flex items-start gap-3">
                                 <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-gray-100 flex-1">{selected.title}</h2>
-                                <MediaBookmarkButton
-                                    mediaType="anime"
-                                    mediaId={String(selected.id)}
-                                    title={selected.title}
-                                    coverUrl={selected.image}
-                                    status={selected.status}
-                                />
+                                <MediaBookmarkButton mediaType="anime" mediaId={String(selected.id)} title={selected.title} coverUrl={selected.image} status={selected.status} />
                             </div>
                             {selected.otherNames?.length > 0 && (
                                 <p className="text-xs text-gray-400">{selected.otherNames.slice(0, 3).join(" / ")}</p>
@@ -553,7 +599,11 @@ export default function AnimePage() {
                                 {selected.status && <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-full text-xs">{selected.status}</span>}
                                 {selected.releaseDate && <span>{selected.releaseDate}</span>}
                                 {selected.totalEpisodes && <span>{selected.totalEpisodes} eps</span>}
-                                {selected.source && selected.source !== "none" && <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${selected.source === "animeunity" ? "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400" : "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"}`}>{selected.source === "gogoanime" ? "Gogoanime (EN)" : selected.source === "hianime" ? "HiAnime (EN)" : "AnimeUnity (IT)"}</span>}
+                                {selected.source && selected.source !== "none" && (
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${selected.source === "animeunity" ? "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400" : "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"}`}>
+                                        {selected.source === "gogoanime" ? "Gogoanime (EN)" : selected.source === "hianime" ? "HiAnime (EN)" : "AnimeUnity (IT)"}
+                                    </span>
+                                )}
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className="text-xs text-gray-400">Audio:</span>
@@ -570,7 +620,7 @@ export default function AnimePage() {
                                 </div>
                             )}
                             {selected.description && (
-                                <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-line line-clamp-6">{selected.description}</p>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed line-clamp-6">{selected.description}</p>
                             )}
                         </div>
                         <div className="lg:w-72 shrink-0">
@@ -597,31 +647,22 @@ export default function AnimePage() {
                     </div>
                 )}
 
-                {/* Grid View */}
+                {/* ── Grid / Browse ── */}
                 {view === "grid" && (
                     <>
-                        {/* Genre chips */}
                         {!query && genres.length > 0 && (
                             <div className="mb-4">
                                 <h3 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Browse by Genre</h3>
                                 <div className="flex flex-wrap gap-1.5">
                                     {genres.map((g) => (
-                                        <button
-                                            key={g}
-                                            onClick={() => handleGenreBrowse(g)}
-                                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                                                activeGenre === g
-                                                    ? "bg-blue-500 text-white"
-                                                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                                            }`}
-                                        >
+                                        <button key={g} onClick={() => handleGenreBrowse(g)}
+                                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${activeGenre === g ? "bg-blue-500 text-white" : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"}`}>
                                             {g}
                                         </button>
                                     ))}
                                 </div>
                             </div>
                         )}
-
                         {results.length === 0 && spotlight.length === 0 && !loading && (
                             <div className="text-center py-16">
                                 <span className="text-5xl mb-4 block">🎬</span>
@@ -670,7 +711,7 @@ export default function AnimePage() {
                         {results.length > 0 && (
                             <div>
                                 <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-3">
-                                    {query ? `Results for "${query}"` : activeGenre ? activeGenre : "Browse"}
+                                    {query ? `Results for "${query}"` : activeGenre || "Browse"}
                                 </h2>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                                     {results.map((item) => (
@@ -686,10 +727,7 @@ export default function AnimePage() {
                                 {hasMore && (
                                     <div className="flex justify-center mt-6">
                                         <button
-                                            onClick={() => {
-                                                if (activeGenre) handleGenreBrowse(activeGenre, page + 1, true);
-                                                else if (query) doSearch(query, page + 1, true);
-                                            }}
+                                            onClick={() => { if (activeGenre) handleGenreBrowse(activeGenre, page + 1, true); else if (query) doSearch(query, page + 1, true); }}
                                             disabled={loading}
                                             className="px-6 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-full transition-colors disabled:opacity-50"
                                         >

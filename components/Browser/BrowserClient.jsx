@@ -486,29 +486,10 @@ function BrowserToolbar({
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// NATIVE BROWSER — Tauri desktop
-// Inline iframe using the proxy (strips X-Frame-Options).
-// Pop-out opens a real WebviewWindow directly (no proxy, native Chromium).
-// ═════════════════════════════════════════════════════════════════════════════
-
-async function openPopOutWindow(url) {
-  const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-  const label = `browser-popup-${Date.now()}`;
-  const win = new WebviewWindow(label, {
-    url,
-    title: urlLabel(url),
-    width: 1280,
-    height: 800,
-    minWidth: 400,
-    minHeight: 400,
-    resizable: true,
-    center: true,
-    decorations: true,
-    focus: true,
-  });
-  win.once("tauri://error", () => {});
-  return win;
-}
+// NATIVE BROWSER — Tauri desktop (same-screen overlay)
+// A borderless native overlay owned by Rust, positioned exactly over the
+// content area of THIS window — same screen, no separate pop-out.
+// No proxy needed (native Chromium); VPN is virtualized via browser_open.
 
 function NativeBrowserClient() {
   const [tabs, setTabs] = useState(() => [makeTab()]);
@@ -520,150 +501,197 @@ function NativeBrowserClient() {
   const [history, setHistory] = useState([]); // { url, title, favicon, time }
   const [zoom, setZoom] = useState(100);
 
-  const iframeRef = useRef(null);
+  const contentRef = useRef(null);
   const inputRef = useRef(null);
   const activeIdRef = useRef(activeId);
 
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? tabs[0];
-  // Inline iframe src — uses proxy just like the web version
-  const iframeSrc = activeTab?.url
-    ? `/api/browser?url=${encodeURIComponent(activeTab.url)}`
-    : null;
-
-  const updateTab = useCallback((id, patch) => {
-    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-  }, []);
-
   const isBookmarked = bookmarks.some((b) => b.url === activeTab?.url);
   const isLoading = activeTab?.loading ?? false;
   const canBack = activeTab && activeTab.histIndex > 0;
   const canForward = activeTab && activeTab.histIndex < activeTab.history.length - 1;
 
+  // ── Native overlay bridge ────────────────────────────────────────────────
+  // The browser content is a borderless native overlay owned by the Rust
+  // backend, positioned exactly over the content area of THIS window — same
+  // screen, no separate pop-out window.
+
+  const measureContent = useCallback(async () => {
+    const el = contentRef.current;
+    if (!el) return null;
+    let inner = { x: 0, y: 0, scaleFactor: 1 };
+    try {
+      const core = await import("@tauri-apps/api/core");
+      inner = await core.invoke("get_window_inner_pos"); // { x, y, scaleFactor }
+    } catch {}
+    const s = inner?.scaleFactor > 0 ? inner.scaleFactor : 1;
+    const r = el.getBoundingClientRect();
+    return {
+      x: Math.round((inner?.x || 0) + r.left * s),
+      y: Math.round((inner?.y || 0) + r.top * s),
+      width: Math.round(r.width * s),
+      height: Math.round(r.height * s),
+      scale: s,
+    };
+  }, []);
+
+  const scaleForZoom = useCallback((box, z) => {
+    if (!box || z === 100) return box;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    const width = Math.round((box.width * z) / 100);
+    const height = Math.round((box.height * z) / 100);
+    return { ...box, width, height, x: Math.round(cx - width / 2), y: Math.round(cy - height / 2) };
+  }, []);
+
+  const openOverlay = useCallback(async (url, firstOpen) => {
+    const box = await measureContent();
+    if (!box || !url) return;
+    const B = scaleForZoom(box, zoom);
+    const args = { url, x: B.x, y: B.y, width: B.width, height: B.height };
+    try {
+      const core = await import("@tauri-apps/api/core");
+      if (firstOpen) {
+        await core.invoke("browser_open", args pw);
+      } else {
+        try { await core.invoke("browser_set_bounds", { x: B.x, y: B.y, width: B.width, height: B.height }); } catch {}
+        try { await core.invoke("browser_navigate", { url }); } catch {}
+      }
+    } catch {}
+  }, [measureContent, scaleForZoom, zoom]);
+
+  const closeOverlay = useCallback(async () => {
+    try {
+      const core = await import("@tauri-apps/api/core");
+      await core.invoke("browser_close");
+    } catch {}
+  }, []);
+
+  const refitOverlay = useCallback(async () => {
+    const box = await measureContent();
+    if (!box) return;
+    const B = scaleForZoom(box, zoom);
+    try {
+      const core = await import("@tauri-apps/api/core");
+      await core.invoke("browser_set_bounds", { x: B.x, y: B.y, width: B.width, height: B.height });
+    } catch {}
+  }, [measureContent, scaleForZoom, zoom]);
+
+  // Window resize / zoom → keep overlay glued to the content box on the SAME screen.
+  useEffect(() => {
+    const onResize = () => { requestAnimationFrame(() => refitOverlay()); };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [refitOverlay]);
+
+  // Close the native overlay when the component goes away.
+  useEffect(() => {
+    return () => { closeOverlay(); };
+  }, [closeOverlay]);
+
   // ── Navigation ──────────────────────────────────────────────────────────
 
-  const navigate = useCallback((raw, tabId) => {
+  const navigate = useCallback((raw) => {
     const url = normalizeInput(raw);
     if (!url) return;
-    const id = tabId ?? activeIdRef.current;
     setInput(url);
     setTabs((prev) =>
       prev.map((t) => {
-        if (t.id !== id) return t;
+        if (t.id !== activeId) return t;
         const hist = t.history.slice(0, t.histIndex + 1);
         if (hist[hist.length - 1] !== url) hist.push(url);
-        return { ...t, url, display: url, title: urlLabel(url), loading: true, error: false, favicon: getFavicon(url), history: hist, histIndex: hist.length - 1 };
+        const histIndex = hist.length - 1;
+        openOverlay(url, !t.url);
+        const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        setHistory((prevHist) => [{ url, title: urlLabel(url), favicon: getFavicon(url), time: timeStr }, ...prevHist.slice(0, 199)]);
+        return { ...t, url, display: url, title: urlLabel(url), loading: false, error: false, favicon: getFavicon(url), history: hist, histIndex, display, _reloadKey: (t._reloadKey || 0) + 1 };
       })
     );
-  }, []);
-
-  const goBack = useCallback(() => {
-    const t = tabs.find((x) => x.id === activeId);
-    if (!t || t.histIndex <= 0) return;
-    const histIndex = t.histIndex - 1;
-    const url = t.history[histIndex];
-    setInput(url);
-    setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, histIndex, url, display: url, loading: true, error: false } : x));
-  }, [tabs, activeId]);
-
-  const goForward = useCallback(() => {
-    const t = tabs.find((x) => x.id === activeId);
-    if (!t || t.histIndex >= t.history.length - 1) return;
-    const histIndex = t.histIndex + 1;
-    const url = t.history[histIndex];
-    setInput(url);
-    setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, histIndex, url, display: url, loading: true, error: false } : x));
-  }, [tabs, activeId]);
+  }, [activeId, openOverlay]);
 
   const reload = useCallback(() => {
     const t = tabs.find((x) => x.id === activeId);
     if (!t?.url) return;
+    openOverlay(t.url, false);
     setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, loading: true, error: false, _reloadKey: (x._reloadKey || 0) + 1 } : x));
-  }, [activeId]);
+  }, [tabs, activeId, openOverlay]);
 
   const goHome = useCallback(() => {
+    closeOverlay();
     setInput("");
-    setTabs((prev) => prev.map((t) => t.id === activeId ? { ...t, url: "", display: "", title: "", loading: false, error: false, favicon: null } : t));
-  }, [activeId]);
+    setTabs((prev) => prev.map((t) => t.id === activeId ? { ...t, url: "", display: "", title: "", loading: false, error: false, favicon: null, history: t.history, histIndex: t.histIndex } : t));
+  }, [activeId, closeOverlay]);
 
-  // ── iframe events ────────────────────────────────────────────────────────
+  const goBack = useCallback(() => {
+    const t = tabs.find((x) => x.id === activeId);
+    if (!t || !t.url || t.histIndex <= 0) return;
+    const histIndex = t.histIndex - 1;
+    const url = t.history[histIndex];
+    setInput(url);
+    openOverlay(url, false);
+    setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, histIndex, url, display: url, title: urlLabel(url), loading: false, error: false, favicon: getFavicon(url) } : x));
+  }, [tabs, activeId, openOverlay]);
 
-  const handleLoad = useCallback(() => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
-    let realUrl = null, title = "";
-    try {
-      realUrl = extractRealUrl(iframe.contentWindow?.location?.href);
-      title = iframe.contentDocument?.title || "";
-    } catch {}
+  const goForward = useCallback(() => {
+    const t = tabs.find((x) => x.id === activeId);
+    if (!t || !t.url || t.histIndex >= t.history.length - 1) return;
+    const histIndex = t.histIndex + 1;
+    const url = t.history[histIndex];
+    setInput(url);
+    openOverlay(url, false);
+    setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, histIndex, url, display: url, title: urlLabel(url), loading: false, error: false, favicon: getFavicon(url) } : x));
+  }, [tabs, activeId, openOverlay]);
 
-    const id = activeIdRef.current;
-    setTabs((prev) =>
-      prev.map((t) => {
-        if (t.id !== id) return t;
-        const display = realUrl || t.display;
-        const favicon = realUrl ? getFavicon(realUrl) : t.favicon;
-        const hist = t.history.slice(0, t.histIndex + 1);
-        if (realUrl && hist[hist.length - 1] !== realUrl) {
-          hist.push(realUrl);
-          // Add to browser history
-          const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-          setHistory((prev) => [{ url: realUrl, title: title || urlLabel(realUrl), favicon, time: timeStr }, ...prev.slice(0, 199)]);
-          return { ...t, url: realUrl, display, title: title || urlLabel(display), loading: false, error: false, favicon, history: hist, histIndex: hist.length - 1 };
-        }
-        if (title) {
-          const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-          setHistory((prev) => { if (prev[0]?.url === display) return prev; return [{ url: display, title: title || urlLabel(display), favicon, time: timeStr }, ...prev.slice(0, 199)]; });
-        }
-        return { ...t, display, title: title || urlLabel(display), loading: false, error: false, favicon };
-      })
-    );
-    if (realUrl) setInput(realUrl);
-  }, []);
-
-  const handleError = useCallback(() => {
-    updateTab(activeIdRef.current, { loading: false, error: true });
-  }, [updateTab]);
-
-  // ── postMessage from injected proxy script ────────────────────────────────
+  // Keyboard shortcuts
 
   useEffect(() => {
-    const onMessage = (e) => {
-      const data = e.data?.__browser;
-      if (!data) return;
-      if (data.type === "newTab" && data.url) {
-        const t = makeTab({ url: data.url, display: data.url, loading: true, favicon: getFavicon(data.url) });
-        setTabs((prev) => [...prev, t]);
-        setActiveId(t.id);
-        setInput(data.url);
-        return;
-      }
-      if (data.type === "nav") {
-        const id = activeIdRef.current;
-        setTabs((prev) =>
-          prev.map((t) => {
-            if (t.id !== id) return t;
-            const newUrl = data.url || t.url;
-            const newTitle = data.title || t.title || urlLabel(newUrl);
-            if (data.url && data.url !== t.display) {
-              setInput(data.url);
-              const hist = t.history.slice(0, t.histIndex + 1);
-              if (hist[hist.length - 1] !== newUrl) {
-                hist.push(newUrl);
-                return { ...t, url: newUrl, display: newUrl, title: newTitle, loading: false, history: hist, histIndex: hist.length - 1, favicon: getFavicon(newUrl) };
-              }
-            }
-            return { ...t, title: newTitle, loading: false };
-          })
-        );
-      }
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "l") { e.preventDefault(); inputRef.current?.focus(); inputRef.current?.select(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "t") { e.preventDefault(); addTab(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "w") { e.preventDefault(); closeTab(activeIdRef.current); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "r") { e.preventDefault(); reload(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "d") { e.preventDefault(); toggleBookmark(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "=") { e.preventDefault(); zoomIn(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); zoomOut(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); zoomReset(); }
+      else if (e.altKey && e.key === "ArrowLeft") { e.preventDefault(); goBack(); }
+      else if (e.altKey && e.key === "ArrowRight") { e.preventDefault(); goForward(); }
+      else if (e.key === "Escape" && inputFocused) inputRef.current?.blur();
     };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [addTab, closeTab, reload, goBack, goForward, inputFocused, toggleBookmark, zoomIn, zoomOut, zoomReset]);
+
+  // Tabs
+
+  const addTab = useCallback(() => {
+    const t = makeTab();
+    setTabs((prev) => [...prev, t]);
+    setActiveId(t.id);
+    setInput("");
+    setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
-  // ── Bookmarks ──────────────────────────────────────────────────────────
+  const closeTab = useCallback((id, e) => {
+    e?.stopPropagation();
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.id === id);
+      const next = prev.filter((t) => t.id !== id);
+      if (next.length === 0) { closeOverlay(); const fresh = makeTab(); setActiveId(fresh.id); setInput(""); return [fresh]; }
+      if (id === activeIdRef.current) { const n = next[Math.min(idx, next.length - 1)]; setActiveId(n.id); setInput(n.display || ""); if (n.url) openOverlay(n.url, false); else closeOverlay(); }
+      return next;
+    });
+  }, [closeOverlay, openOverlay]);
+
+  const selectTab = useCallback((id) => {
+    setActiveId(id);
+    const t = tabs.find((x) => x.id === id);
+    if (t) { setInput(t.display || ""); if (t.url) openOverlay(t.url, false); else closeOverlay(); }
+  }, [tabs, openOverlay, closeOverlay]);
+
+  // Bookmarks
 
   const toggleBookmark = useCallback(() => {
     const url = activeTab?.url;
@@ -684,72 +712,17 @@ function NativeBrowserClient() {
     setBookmarks((prev) => { const next = prev.filter((b) => b.id !== id); saveBookmarks(next); return next; });
   }, []);
 
-  // ── Pop-out ────────────────────────────────────────────────────────────
-
-  const handlePopOut = useCallback(async () => {
-    const url = activeTab?.url;
-    if (!url) return;
-    try { await openPopOutWindow(url); } catch {}
-  }, [activeTab]);
-
-  // ── Tabs ───────────────────────────────────────────────────────────────
-
-  const addTab = useCallback(() => {
-    const t = makeTab();
-    setTabs((prev) => [...prev, t]);
-    setActiveId(t.id);
-    setInput("");
-    setTimeout(() => inputRef.current?.focus(), 50);
-  }, []);
-
-  const closeTab = useCallback((id, e) => {
-    e?.stopPropagation();
-    setTabs((prev) => {
-      const idx = prev.findIndex((t) => t.id === id);
-      const next = prev.filter((t) => t.id !== id);
-      if (next.length === 0) { const fresh = makeTab(); setActiveId(fresh.id); setInput(""); return [fresh]; }
-      if (id === activeIdRef.current) { const n = next[Math.min(idx, next.length - 1)]; setActiveId(n.id); setInput(n.display || ""); }
-      return next;
-    });
-  }, []);
-
-  const selectTab = useCallback((id) => {
-    setActiveId(id);
-    const t = tabs.find((x) => x.id === id);
-    if (t) setInput(t.display || "");
-  }, [tabs]);
-
-  // ── Panel toggle ─────────────────────────────────────────────────────────
+  // Panels
 
   const togglePanel = useCallback((name) => {
     setPanel((prev) => (prev === name ? null : name));
   }, []);
 
-  // ── Zoom ──────────────────────────────────────────────────────────────────
+  // Zoom
 
   const zoomIn  = useCallback(() => setZoom((z) => Math.min(z + 10, 200)), []);
   const zoomOut = useCallback(() => setZoom((z) => Math.max(z - 10, 50)), []);
   const zoomReset = useCallback(() => setZoom(100), []);
-
-  // ── Keyboard shortcuts ───────────────────────────────────────────────────
-
-  useEffect(() => {
-    const onKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "l") { e.preventDefault(); inputRef.current?.focus(); inputRef.current?.select(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "t") { e.preventDefault(); addTab(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "w") { e.preventDefault(); closeTab(activeIdRef.current); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "r") { e.preventDefault(); reload(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "d") { e.preventDefault(); toggleBookmark(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "=") { e.preventDefault(); zoomIn(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); zoomOut(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); zoomReset(); }
-      else if (e.altKey && e.key === "ArrowLeft") { e.preventDefault(); goBack(); }
-      else if (e.altKey && e.key === "ArrowRight") { e.preventDefault(); goForward(); }
-      else if (e.key === "Escape" && inputFocused) inputRef.current?.blur();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [addTab, closeTab, reload, goBack, goForward, inputFocused, toggleBookmark, zoomIn, zoomOut, zoomReset]);
 
   useEffect(() => {
     const t = tabs.find((x) => x.id === activeId);
@@ -773,26 +746,17 @@ function NativeBrowserClient() {
         onAddTab={addTab} onCloseTab={closeTab} onSelectTab={selectTab}
         onToggleBookmark={toggleBookmark}
         onTogglePanel={togglePanel}
-        onPopOut={handlePopOut}
         onZoomIn={zoomIn} onZoomOut={zoomOut} onZoomReset={zoomReset}
         inputRef={inputRef}
       />
 
-      {/* Main area: iframe + optional side panel */}
+      {/* Main area: same-screen native overlay target + optional side panel */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
-        <div className="flex-1 min-w-0 relative">
-          {iframeSrc ? (
-            <iframe
-              ref={iframeRef}
-              key={`${activeTab.id}-${activeTab._reloadKey ?? 0}`}
-              src={iframeSrc}
-              title={activeTab.title || "Browser"}
-              onLoad={handleLoad}
-              onError={handleError}
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-presentation allow-pointer-lock"
-              allow="autoplay; fullscreen; clipboard-read; clipboard-write"
-              className="absolute inset-0 w-full h-full border-0"
-              style={{ zoom: zoom !== 100 ? `${zoom}%` : undefined }}
+        <div ref={contentRef} className="flex-1 min-w-0 relative">
+          {activeTab?.url ? (
+            <div
+              className="absolute inset-0 pointer-events-none"
+              aria-label="Native browser overlay renders here (same screen)"
             />
           ) : (
             <NativeHomePage navigate={navigate} input={input} setInput={setInput} inputRef={inputRef} />
