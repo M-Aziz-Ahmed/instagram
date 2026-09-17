@@ -1,11 +1,11 @@
 {
     "platforms":  {
                       "windows-x86_64":  {
-                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmhJYzY0VDREUHAyelV2RklEMm1OQ2h2M1pVTVhOQXlFMURIYzg2QjVwempDdGNyY3ZINXF3TmJnT0h5OXd0MitINDI3Nngzb1FoUVVWVmJpUnBlY2x6bjAvY3BVbWdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5Njc5NTcxCWZpbGU6QW5vblR3ZWV0XzAuMi4xNF94NjQtc2V0dXAuZXhlCmtLR0FmMGVKc0VlNW0vaHdHRXVUMnpWUTZTRHl3Nm1iVUhRR1FCMzBhUmVab1oyNWthaExBbkwyOGRRZk91MGxDcElpUkVSTEJ2YWpBQ1pVcEg2akJRPT0K",
-                                             "url":  "https://anontweet.vercel.app/downloads/desktop/AnonTweet_0.2.14_x64-setup.exe"
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmhJYzY0VDREUHJWRWhBNXo2NTNUWlBRMkVxTG1NMkIxZC9ZZDB3YkJ1OVBjL3VrVGVCeXhHZXdVaVJxcG4xM09UQ1A0K05ucDI4c1hvL2NBLzErRWp0Z2hHeVF6NXdrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5Njc5OTYyCWZpbGU6QW5vblR3ZWV0XzAuMi4xNV94NjQtc2V0dXAuZXhlCnU2QUxHV1NiSVJhTEtzUHVNQXpRS29zVW1TMWU2L1FETDExUVdSKytIeEdMWnM4VHp2VFBwYWhnV3FVcUZJbGFqUGRqVE5acnBlbnNOWjU5RTdPOERnPT0K",
+                                             "url":  "https://anontweet.vercel.app/downloads/desktop/AnonTweet_0.2.15_x64-setup.exe"
                                          }
                   },
-    "pub_date":  "2026-09-17T21:12:51Z",
-    "version":  "0.2.14",
+    "pub_date":  "2026-09-17T21:19:22Z",
+    "version":  "0.2.15",
     "notes":  "Automatic update with bug fixes and improvements."
 }
