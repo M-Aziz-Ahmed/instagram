@@ -606,7 +606,7 @@ function NativeBrowserClient() {
         openOverlay(url, !t.url);
         const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         setHistory((prevHist) => [{ url, title: urlLabel(url), favicon: getFavicon(url), time: timeStr }, ...prevHist.slice(0, 199)]);
-        return { ...t, url, display: url, title: urlLabel(url), loading: false, error: false, favicon: getFavicon(url), history: hist, histIndex, display, _reloadKey: (t._reloadKey || 0) + 1 };
+        return { ...t, url, display: url, title: urlLabel(url), loading: false, error: false, favicon: getFavicon(url), history: hist, histIndex, _reloadKey: (t._reloadKey || 0) + 1 };
       })
     );
   }, [activeId, openOverlay]);
