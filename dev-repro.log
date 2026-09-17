@@ -1,0 +1,92 @@
+
+> anontweet@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.10 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.100.50:3000
+- Environments: .env
+✓ Ready in 4.4s
+⚠ Slow filesystem detected. The benchmark took 448ms. If D:\Work\instagram-clone\.next/dev is a network drive, consider moving it to a local folder.
+See more: https://nextjs.org/docs/app/guides/local-development
+○ Compiling middleware ...
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+
+○ Compiling /movies ...
+ GET /movies 200 in 2.3min (next.js: 2.3min, proxy.ts: 1178ms, application-code: 1042ms)
+○ Compiling / ...
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+ GET / 307 in 5.1s (next.js: 4.4s, proxy.ts: 4ms, application-code: 684ms)
+○ Compiling /inbox ...
+⨯ upstream image response timed out for https://static.tvmaze.com/uploads/images/medium_portrait/568/1422181.jpg
+Error [TimeoutError]: The operation was aborted due to timeout
+    at ignore-listed frames {
+  code: 23,
+  INDEX_SIZE_ERR: 1,
+  DOMSTRING_SIZE_ERR: 2,
+  HIERARCHY_REQUEST_ERR: 3,
+  WRONG_DOCUMENT_ERR: 4,
+  INVALID_CHARACTER_ERR: 5,
+  NO_DATA_ALLOWED_ERR: 6,
+  NO_MODIFICATION_ALLOWED_ERR: 7,
+  NOT_FOUND_ERR: 8,
+  NOT_SUPPORTED_ERR: 9,
+  INUSE_ATTRIBUTE_ERR: 10,
+  INVALID_STATE_ERR: 11,
+  SYNTAX_ERR: 12,
+  INVALID_MODIFICATION_ERR: 13,
+  NAMESPACE_ERR: 14,
+  INVALID_ACCESS_ERR: 15,
+  VALIDATION_ERR: 16,
+  TYPE_MISMATCH_ERR: 17,
+  SECURITY_ERR: 18,
+  NETWORK_ERR: 19,
+  ABORT_ERR: 20,
+  URL_MISMATCH_ERR: 21,
+  QUOTA_EXCEEDED_ERR: 22,
+  TIMEOUT_ERR: 23,
+  INVALID_NODE_TYPE_ERR: 24,
+  DATA_CLONE_ERR: 25
+}
+⨯ upstream image response timed out for https://static.tvmaze.com/uploads/images/medium_portrait/127/319502.jpg
+✓ Finished writing to filesystem cache in 73s
+ GET /_next/image?url=https%3A%2F%2Fstatic.tvmaze.com%2Fuploads%2Fimages%2Fmedium_portrait%2F504%2F1261110.jpg&w=384&q=75 500 in 11.5s (next.js: 11.4s, application-code: 27ms)
+ GET /_next/image?url=https%3A%2F%2Fstatic.tvmaze.com%2Fuploads%2Fimages%2Fmedium_portrait%2F504%2F1261110.jpg&w=384&q=75 500 in 11.5s (next.js: 11.4s, application-code: 28ms)
+[browser] Image with src "https://static.tvmaze.com/uploads/images/medium_portrait/552/1381324.jpg" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading (utils/logInterceptor.js:45:14)
+ GET /inbox 200 in 29.0s (next.js: 28.9s, proxy.ts: 3ms, application-code: 68ms)
+✓ Finished filesystem cache database compaction in 24.8s
+✓ Finished writing to filesystem cache in 31.7s
+✓ Finished filesystem cache database compaction in 23.3s
+✓ Finished filesystem cache database compaction in 10.3s

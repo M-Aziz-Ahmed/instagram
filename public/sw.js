@@ -1,14 +1,16 @@
 // Service Worker for PWA
-const CACHE_NAME = 'anontweet-v1';
+// Bump this whenever the caching strategy changes so old caches get purged on activate.
+// NOTE: Do not cache HTML/RSC payloads or API responses — after a new deploy they can
+// reference a mixed set of hashed chunks, which breaks module init order (TDZ errors).
+const CACHE_NAME = 'anontweet-static-v2';
 const OFFLINE_URL = '/offline.html';
 
-// Install event - cache essential assets
+// Install event - cache essential offline assets only
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
         return Promise.allSettled([
-          cache.add('/'),
           cache.add('/offline.html'),
           cache.add('/manifest.json'),
         ]);
@@ -108,7 +110,7 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// Fetch event - network first, fallback to cache
+// Fetch event - network first, fallback to cache for immutable assets only
 self.addEventListener('fetch', (event) => {
   // Skip cross-origin requests
   if (!event.request.url.startsWith(self.location.origin)) {
@@ -120,14 +122,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  const { pathname } = new URL(event.request.url);
+  // Only content-addressed/immutable assets may be persisted. Everything else
+  // (HTML, RSC payloads, API data) must stay network-only to avoid stale graphs.
+  const isCacheable =
+    pathname.startsWith('/_next/static/') ||
+    pathname.startsWith('/icon-') ||
+    pathname === '/manifest.json' ||
+    pathname === OFFLINE_URL;
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Clone the response before caching (ignore failures, e.g. opaque/auth responses)
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME)
-          .then((cache) => cache.put(event.request, responseToCache))
-          .catch(() => {});
+        if (isCacheable && response && response.ok) {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME)
+            .then((cache) => cache.put(event.request, responseToCache))
+            .catch(() => {});
+        }
         return response;
       })
       .catch(() => {

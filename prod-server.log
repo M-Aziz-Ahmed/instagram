@@ -1,0 +1,16 @@
+
+> anontweet@0.1.0 start
+> next start -p 3100
+
+▲ Next.js 16.2.10
+- Local:         http://localhost:3100
+- Network:       http://192.168.100.50:3100
+✓ Ready in 6.7s
+Failed to proxy https://anontweet.duckdns.org/api/streaming/movies/resolve?q=Our%20Movie&year=2025-06-13 Error: socket hang up
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}
+Error: socket hang up
+    at ignore-listed frames {
+  code: 'ECONNRESET'
+}

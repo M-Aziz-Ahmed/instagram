@@ -1,0 +1,100 @@
+﻿
+> anontweet@0.1.0 build
+> next build
+
+Γû▓ Next.js 16.2.10 (Turbopack)
+- Environments: .env
+
+node.exe : ΓÜá The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: 
+https://nextjs.org/docs/messages/middleware-to-proxy
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (ΓÜá The "middle...leware-to-proxy:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  Creating an optimized production build ...
+Γ£ô Compiled successfully in 17.9s
+  Running TypeScript ...
+  Finished TypeScript in 111ms ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/46) ...
+  Generating static pages using 11 workers (11/46) 
+  Generating static pages using 11 workers (22/46) 
+  Generating static pages using 11 workers (34/46) 
+Γ£ô Generating static pages using 11 workers (46/46) in 802ms
+  Finalizing page optimization ...
+
+Route (app)
+Γöî ╞Æ /
+Γö£ Γùï /_not-found
+Γö£ ╞Æ /admin
+Γö£ Γùï /analytics
+Γö£ Γùï /anime
+Γö£ ╞Æ /api/[...path]
+Γö£ ╞Æ /api/admin/logs/client
+Γö£ ╞Æ /api/anime-proxy
+Γö£ ╞Æ /api/browser
+Γö£ ╞Æ /api/downloads/desktop
+Γö£ ╞Æ /api/movies
+Γö£ Γùï /battleship
+Γö£ ╞Æ /battleship/game/[id]
+Γö£ Γùï /bookmarks
+Γö£ Γùï /browser
+Γö£ ╞Æ /cartoons
+Γö£ ╞Æ /cdramas
+Γö£ Γùï /channels
+Γö£ Γùï /checkers
+Γö£ ╞Æ /checkers/game/[id]
+Γö£ Γùï /chess
+Γö£ ╞Æ /chess/game/[id]
+Γö£ Γùï /communities
+Γö£ ╞Æ /communities/[id]
+Γö£ ╞Æ /communities/[id]/channels/[channelId]
+Γö£ Γùï /communities/create
+Γö£ ╞Æ /communities/join/[code]
+Γö£ Γùï /connect4
+Γö£ ╞Æ /connect4/game/[id]
+Γö£ Γùï /download
+Γö£ Γùï /entertainment
+Γö£ Γùï /forgot-pin
+Γö£ Γùï /game2048
+Γö£ Γùï /games
+Γö£ Γùï /hangman
+Γö£ ╞Æ /hangman/game/[id]
+Γö£ Γùï /inbox
+Γö£ ╞Æ /invite/[code]
+Γö£ ╞Æ /kdramas
+Γö£ Γùï /leaderboard
+Γö£ Γùï /library
+Γö£ Γùï /live-tv
+Γö£ Γùï /login
+Γö£ Γùï /manga
+Γö£ Γùï /me
+Γö£ Γùï /minesweeper
+Γö£ Γùï /movies
+Γö£ Γùï /opengraph-image
+Γö£ ╞Æ /post/[id]
+Γö£ Γùï /profile
+Γö£ ╞Æ /profile/[username]
+Γö£ Γùï /reactionduel
+Γö£ ╞Æ /reactionduel/game/[id]
+Γö£ Γùï /referrals
+Γö£ Γùï /reversi
+Γö£ ╞Æ /reversi/game/[id]
+Γö£ Γùï /robots.txt
+Γö£ Γùï /search
+Γö£ ╞Æ /seasons
+Γö£ ╞Æ /sitemap.xml
+Γö£ Γùï /social
+Γö£ Γùï /sudoku
+Γö£ Γùï /tictactoe
+Γö£ ╞Æ /tictactoe/game/[id]
+Γöö Γùï /trending
+
+
+╞Æ Proxy (Middleware)
+
+Γùï  (Static)   prerendered as static content
+╞Æ  (Dynamic)  server-rendered on demand
+
