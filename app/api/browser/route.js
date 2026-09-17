@@ -547,9 +547,15 @@ function capJar(jar) {
 
 // ─── Upstream fetch ───────────────────────────────────────────────────────────
 
-async function upstream(url, method, body, cookies, referer) {
+async function upstream(url, method, body, cookies, referer, clientSignal) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  // Cancel the upstream request if the client disconnects, otherwise reading the
+  // body rejects with ECONNRESET and surfaces as an uncaught exception.
+  const signal =
+    clientSignal && typeof AbortSignal.any === "function"
+      ? AbortSignal.any([clientSignal, ctrl.signal])
+      : ctrl.signal;
 
   const headers = {
     "User-Agent": BROWSER_UA,
@@ -579,7 +585,7 @@ async function upstream(url, method, body, cookies, referer) {
       headers,
       body: method === "POST" ? body : undefined,
       redirect: "follow",
-      signal: ctrl.signal,
+      signal,
       // @ts-ignore — Node 18+ fetch option to skip decompression
       compress: false,
     });
@@ -610,6 +616,17 @@ function safeHeaders(contentType) {
       "media-src * data: blob:; " +
       "connect-src *; frame-src *; worker-src * blob:;",
   };
+}
+
+// Null-body statuses must not be constructed with a body, or the Response
+// constructor throws "Invalid response status code" (e.g. YouTube's generate_204).
+const NULL_BODY_STATUSES = new Set([101, 204, 205, 304]);
+
+function proxyResponse(body, status, contentType) {
+  return new NextResponse(NULL_BODY_STATUSES.has(status) ? null : body, {
+    status,
+    headers: safeHeaders(contentType),
+  });
 }
 
 // ─── Persist cookie jar ───────────────────────────────────────────────────────
@@ -690,8 +707,12 @@ async function handle(request, rawUrl, method, bodyText) {
 
   let res;
   try {
-    res = await upstream(target.href, method, bodyText, cookieStr, referer);
+    res = await upstream(target.href, method, bodyText, cookieStr, referer, request.signal);
   } catch (err) {
+    // Client went away (navigation/cancel) — nothing to respond to.
+    if (request.signal?.aborted) {
+      return new NextResponse(null, { status: 499 });
+    }
     const msg =
       err?.name === "AbortError"
         ? "Page took too long to load (timeout)"
@@ -715,39 +736,38 @@ async function handle(request, rawUrl, method, bodyText) {
   const isCss = ct.includes("text/css");
   const isJs = ct.includes("javascript") || ct.includes("ecmascript");
 
-  if (isHtml) {
-    const text = await res.text();
-    const processed = processHtml(text, target, proxyBase);
-    return withJar(
-      new NextResponse(processed, { status: res.status, headers: safeHeaders(contentType) }),
-      mergedJar
-    );
-  }
+  try {
+    if (isHtml) {
+      const text = await res.text();
+      const processed = processHtml(text, target, proxyBase);
+      return withJar(proxyResponse(processed, res.status, contentType), mergedJar);
+    }
 
-  if (isCss) {
-    const text = await res.text();
-    const processed = rewriteCss(text, target.href, proxyBase);
-    return withJar(
-      new NextResponse(processed, { status: res.status, headers: safeHeaders(contentType) }),
-      mergedJar
-    );
-  }
+    if (isCss) {
+      const text = await res.text();
+      const processed = rewriteCss(text, target.href, proxyBase);
+      return withJar(proxyResponse(processed, res.status, contentType), mergedJar);
+    }
 
-  if (isJs) {
-    const text = await res.text();
-    const processed = wrapJs(text, proxyBase);
-    return withJar(
-      new NextResponse(processed, { status: res.status, headers: safeHeaders(contentType) }),
-      mergedJar
-    );
-  }
+    if (isJs) {
+      const text = await res.text();
+      const processed = wrapJs(text, proxyBase);
+      return withJar(proxyResponse(processed, res.status, contentType), mergedJar);
+    }
 
-  // Binary / other
-  const buf = await res.arrayBuffer();
-  return withJar(
-    new NextResponse(new Uint8Array(buf), { status: res.status, headers: safeHeaders(contentType) }),
-    mergedJar
-  );
+    // Binary / other
+    if (NULL_BODY_STATUSES.has(res.status)) {
+      return withJar(proxyResponse(null, res.status, contentType), mergedJar);
+    }
+    const buf = await res.arrayBuffer();
+    return withJar(proxyResponse(new Uint8Array(buf), res.status, contentType), mergedJar);
+  } catch (err) {
+    // Upstream connection dropped or client aborted while reading the body.
+    if (request.signal?.aborted) {
+      return new NextResponse(null, { status: 499 });
+    }
+    return html502(renderError(`Upstream read failed: ${err?.message || "connection error"}`), 502);
+  }
 }
 
 function html502(body, status = 502) {
