@@ -50,5 +50,5 @@ export default (phase, { defaultConfig }) => {
         },
     };
 
-    return defaultConfig ? defaultConfig(nextConfig) : nextConfig;
+    return nextConfig;
 };
