@@ -27,13 +27,21 @@ async function handler(request, { params }) {
     }
 
     try {
-        const upstream = await fetch(target, {
-            method:  request.method,
-            headers,
-            body,
-            redirect: "manual",
-            cache:    "no-store",
-        });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        let upstream;
+        try {
+            upstream = await fetch(target, {
+                method:  request.method,
+                headers,
+                body,
+                redirect: "manual",
+                cache:    "no-store",
+                signal:   controller.signal,
+            });
+        } finally {
+            clearTimeout(timeout);
+        }
 
         // Build the response, forwarding status, headers (incl. set-cookie).
         const respHeaders = new Headers();

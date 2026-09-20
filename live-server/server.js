@@ -209,6 +209,13 @@ const io = new Server(server, {
 });
 app.locals.io = io;
 
+server.prependListener("request", (req, res) => {
+    const url = req.url || "";
+    if (url === "/sio" || url.startsWith("/sio?")) {
+        req.url = "/sio/" + url.slice(4);
+    }
+});
+
 // ── MongoDB ─────────────────────────────────────────────────────
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://azizahmed:I_hateyou2@localhost:27017/?authSource=admin";
 

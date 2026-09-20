@@ -17,19 +17,10 @@ export function getSocketConfig(opts = {}) {
 
     const sameOrigin = window.location.origin === new URL(LIVE_SERVER || "http://localhost:3001").origin;
 
-    if (sameOrigin) {
-        return {
-            url: LIVE_SERVER,
-            config: { ...base, path: "/sio", transports: ["polling", "websocket"], upgrade: true, rememberUpgrade: false },
-        };
-    }
-
     return {
-        url: window.location.origin,
-        config: {
-            ...base,
-            path: "/sio",
-            transports: ["polling"],
-        },
+        url: LIVE_SERVER || "http://localhost:3001",
+        config: sameOrigin
+            ? { ...base, path: "/sio", transports: ["polling", "websocket"], upgrade: true, rememberUpgrade: false }
+            : { ...base, path: "/sio", transports: ["polling"] },
     };
 }
