@@ -41,7 +41,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE3NjM5MjE3QTRERTE3RTMKUldUakY5NmtGNUpqcDBFVC9VZStQQ01lUWRkUk1yanMzVHErbU90RThoNmp0dHZJU0FoTXJlWHcK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNFMDMzRUUxM0E4Nzg0OUYKUldTZmhJYzY0VDREUHRTSHVCN1NLQnJlY1R6WSt4SHI1VGs4SklYeWV0RDM2RVhJOWN6TG92SFUK",
       "endpoints": [
         "https://anontweet.vercel.app/downloads/desktop/latest.json"
       ],
