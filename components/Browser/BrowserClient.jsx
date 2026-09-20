@@ -500,6 +500,10 @@ function NativeBrowserClient() {
   const [bookmarks, setBookmarks] = useState(() => loadBookmarks());
   const [history, setHistory] = useState([]); // { url, title, favicon, time }
   const [zoom, setZoom] = useState(100);
+  // Native Tauri overlay bridge is only trusted once browser_open resolves.
+  // Until then the content region falls back to the same-origin proxy iframe
+  // (identical mechanism to the Proxy path) so the desktop never goes black.
+  const [nativeOverlayOk, setNativeOverlayOk] = useState(false);
 
   const contentRef = useRef(null);
   const inputRef = useRef(null);
@@ -555,9 +559,11 @@ function NativeBrowserClient() {
       const core = await import("@tauri-apps/api/core");
       if (firstOpen) {
         await core.invoke("browser_open", args);
+        setNativeOverlayOk(true); // native overlay confirmed open → trust real overlay
       } else {
         try { await core.invoke("browser_set_bounds", { x: B.x, y: B.y, width: B.width, height: B.height }); } catch {}
         try { await core.invoke("browser_navigate", { url }); } catch {}
+        setNativeOverlayOk(true);
       }
     } catch {}
   }, [measureContent, scaleForZoom, zoom]);
@@ -754,10 +760,23 @@ function NativeBrowserClient() {
       <div className="flex-1 min-h-0 flex overflow-hidden">
         <div ref={contentRef} className="flex-1 min-w-0 relative">
           {activeTab?.url ? (
-            <div
-              className="absolute inset-0 pointer-events-none"
-              aria-label="Native browser overlay renders here (same screen)"
-            />
+            nativeOverlayOk ? (
+              <div
+                className="absolute inset-0 pointer-events-none"
+                aria-label="Native browser overlay renders here (same screen)"
+              />
+            ) : (
+              <iframe
+                key={`native-fallback-${activeTab.id}-${activeTab._reloadKey ?? 0}`}
+                src={`/api/browser?url=${encodeURIComponent(activeTab.url)}`}
+                title={activeTab.title || "Browser content"}
+                onLoad={() => setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, loading: false, error: false } : x))}
+                onError={() => setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, error: true, loading: false } : x))}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-presentation allow-pointer-lock"
+                allow="autoplay; fullscreen; clipboard-read; clipboard-write"
+                className="absolute inset-0 w-full h-full border-0 bg-white"
+              />
+            )
           ) : (
             <NativeHomePage navigate={navigate} input={input} setInput={setInput} inputRef={inputRef} />
           )}
