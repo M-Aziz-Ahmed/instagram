@@ -1,7 +1,7 @@
 export default (phase, { defaultConfig }) => {
     const liveTarget = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "https://anontweet.duckdns.org";
 
-    const nextConfig = {
+    return {
         images: {
             remotePatterns: [
                 {
