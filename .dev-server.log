@@ -68,3 +68,33 @@
 ✓ Finished filesystem cache database compaction in 22.9s
  GET /browser 200 in 114ms (next.js: 56ms, proxy.ts: 2ms, application-code: 56ms)
 ✓ Finished writing to filesystem cache in 58s
+ GET /browser 200 in 114ms (next.js: 27ms, proxy.ts: 3ms, application-code: 84ms)
+ GET / 307 in 224ms (next.js: 151ms, proxy.ts: 2ms, application-code: 71ms)
+ GET /inbox 200 in 73ms (next.js: 22ms, proxy.ts: 1916µs, application-code: 49ms)
+ GET /social 200 in 1113ms (next.js: 1081ms, proxy.ts: 1994µs, application-code: 30ms)
+ GET /browser 200 in 23ms (next.js: 2ms, proxy.ts: 1677µs, application-code: 19ms)
+○ Compiling /library ...
+ GET /library 200 in 7.5s (next.js: 7.5s, proxy.ts: 1720µs, application-code: 22ms)
+ GET /entertainment 200 in 3.0s (next.js: 2.7s, proxy.ts: 2ms, application-code: 347ms)
+○ Compiling /manga ...
+ GET /manga 200 in 27.9s (next.js: 27.5s, proxy.ts: 1804µs, application-code: 412ms)
+ GET /manga 200 in 110ms (next.js: 47ms, proxy.ts: 34ms, application-code: 28ms)
+✓ Finished writing to filesystem cache in 69s
+✓ Finished writing to filesystem cache in 45s
+✓ Finished filesystem cache database compaction in 19.2s
+✓ Finished filesystem cache database compaction in 13.4s
+ GET / 307 in 132ms (next.js: 32ms, proxy.ts: 2ms, application-code: 98ms)
+ GET /inbox 200 in 123ms (next.js: 52ms, proxy.ts: 3ms, application-code: 67ms)
+ GET / 307 in 60ms (next.js: 3ms, proxy.ts: 2ms, application-code: 55ms)
+ GET /inbox 200 in 44ms (next.js: 1972µs, proxy.ts: 3ms, application-code: 39ms)
+ GET / 307 in 244ms (next.js: 2ms, proxy.ts: 2ms, application-code: 239ms)
+ GET /login 200 in 182ms (next.js: 93ms, proxy.ts: 3ms, application-code: 86ms)
+ GET /login?redirect=%2Foffline.html 200 in 50ms (next.js: 3ms, proxy.ts: 1871µs, application-code: 45ms)
+ GET / 200 in 41ms (next.js: 7ms, proxy.ts: 4ms, application-code: 30ms)
+ GET /inbox 200 in 20ms (next.js: 3ms, proxy.ts: 2ms, application-code: 15ms)
+ GET /inbox 200 in 41ms (next.js: 19ms, proxy.ts: 3ms, application-code: 18ms)
+ GET / 200 in 62ms (next.js: 5ms, proxy.ts: 2ms, application-code: 55ms)
+ GET /inbox 200 in 36ms (next.js: 2ms, proxy.ts: 15ms, application-code: 19ms)
+ GET /inbox 200 in 21ms (next.js: 3ms, proxy.ts: 3ms, application-code: 16ms)
+ GET /social 200 in 69ms (next.js: 18ms, proxy.ts: 1613µs, application-code: 49ms)
+ GET /browser 200 in 91ms (next.js: 21ms, proxy.ts: 1564µs, application-code: 69ms)
