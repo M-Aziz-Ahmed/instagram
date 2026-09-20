@@ -644,26 +644,6 @@ function NativeBrowserClient() {
     setTabs((prev) => prev.map((x) => x.id === activeId ? { ...x, histIndex, url, display: url, title: urlLabel(url), loading: false, error: false, favicon: getFavicon(url) } : x));
   }, [tabs, activeId, openOverlay]);
 
-  // Keyboard shortcuts
-
-  useEffect(() => {
-    const onKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "l") { e.preventDefault(); inputRef.current?.focus(); inputRef.current?.select(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "t") { e.preventDefault(); addTab(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "w") { e.preventDefault(); closeTab(activeIdRef.current); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "r") { e.preventDefault(); reload(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "d") { e.preventDefault(); toggleBookmark(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "=") { e.preventDefault(); zoomIn(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); zoomOut(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); zoomReset(); }
-      else if (e.altKey && e.key === "ArrowLeft") { e.preventDefault(); goBack(); }
-      else if (e.altKey && e.key === "ArrowRight") { e.preventDefault(); goForward(); }
-      else if (e.key === "Escape" && inputFocused) inputRef.current?.blur();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [addTab, closeTab, reload, goBack, goForward, inputFocused, toggleBookmark, zoomIn, zoomOut, zoomReset]);
-
   // Tabs
 
   const addTab = useCallback(() => {
@@ -723,6 +703,26 @@ function NativeBrowserClient() {
   const zoomIn  = useCallback(() => setZoom((z) => Math.min(z + 10, 200)), []);
   const zoomOut = useCallback(() => setZoom((z) => Math.max(z - 10, 50)), []);
   const zoomReset = useCallback(() => setZoom(100), []);
+
+  // Keyboard shortcuts
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "l") { e.preventDefault(); inputRef.current?.focus(); inputRef.current?.select(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "t") { e.preventDefault(); addTab(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "w") { e.preventDefault(); closeTab(activeIdRef.current); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "r") { e.preventDefault(); reload(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "d") { e.preventDefault(); toggleBookmark(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "=") { e.preventDefault(); zoomIn(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "-") { e.preventDefault(); zoomOut(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); zoomReset(); }
+      else if (e.altKey && e.key === "ArrowLeft") { e.preventDefault(); goBack(); }
+      else if (e.altKey && e.key === "ArrowRight") { e.preventDefault(); goForward(); }
+      else if (e.key === "Escape" && inputFocused) inputRef.current?.blur();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [addTab, closeTab, reload, goBack, goForward, inputFocused, toggleBookmark, zoomIn, zoomOut, zoomReset]);
 
   useEffect(() => {
     const t = tabs.find((x) => x.id === activeId);

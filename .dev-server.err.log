@@ -1,0 +1,626 @@
+⚠ Slow filesystem detected. The benchmark took 469ms. If D:\Work\instagram-clone\.next/dev is a network drive, consider moving it to a local folder.
+See more: https://nextjs.org/docs/app/guides/local-development
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+[browser] [AutoUpdater] update check failed: Command plugin:updater|check not allowed by ACL 
+    at capture (utils/logInterceptor.js:45:14)
+    at console.error (utils/logInterceptor.js:61:34)
+    at checkForUpdate (components/Updates/AutoUpdater.jsx:25:25)
+  43 |
+  44 | function capture(level, original, args) {
+> 45 |     original.apply(console, args);
+     |              ^
+  46 |     const msg = args.map(serialize).join(" ");
+  47 |     queue.push({ level, msg });
+  48 |     if (queue.length >= MAX_QUEUE) flush(); (utils/logInterceptor.js:45:14)
+[browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <body className="h-full bg-...">
+      <Analytics2>
+      <SpeedInsights2>
+      <Providers>
+        <ThemeProvider>
+          <SidebarProvider>
+            <UserProvider>
+              <VoiceChatProvider>
+                <ToastProvider>
+                  <ErrorBoundary>
+                    <CallWrapper>
+                    <OnlineStatusTracker>
+                    <PushNotificationManager>
+                    <FcmPushBridge>
+                    <AutoUpdater>
+                      <div
++                       className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]"
+-                       className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 p..."
+                      >
++                       <div
++                         className="rounded-xl bg-gray-900 text-white shadow-2xl border border-gray-700/60 overflow-h..."
++                       >
+                    ...
+                  ...
+
+    at <unknown> (https://react.dev/link/hydration-mismatch)
+    at div (<anonymous>)
+    at AutoUpdater (components/Updates/AutoUpdater.jsx:76:13)
+    at Providers (app/providers.jsx:75:33)
+    at RootLayout (app\layout.js:171:9)
+  74 |     return (
+  75 |         <div className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]">
+> 76 |             <div className="rounded-xl bg-gray-900 text-white shadow-2xl border border-gra...
+     |             ^
+  77 |                 <div className="p-4">
+  78 |                     <div className="flex items-start justify-between gap-3">
+  79 |                         <div className="flex items-center gap-3">
+[browser] [AutoUpdater] update check failed: Command plugin:updater|check not allowed by ACL 
+    at capture (utils/logInterceptor.js:45:14)
+    at console.error (utils/logInterceptor.js:61:34)
+    at checkForUpdate (components/Updates/AutoUpdater.jsx:25:25)
+  43 |
+  44 | function capture(level, original, args) {
+> 45 |     original.apply(console, args);
+     |              ^
+  46 |     const msg = args.map(serialize).join(" ");
+  47 |     queue.push({ level, msg });
+  48 |     if (queue.length >= MAX_QUEUE) flush(); (utils/logInterceptor.js:45:14)
+[browser] [AutoUpdater] update check failed: Command plugin:updater|check not allowed by ACL 
+    at capture (utils/logInterceptor.js:45:14)
+    at console.error (utils/logInterceptor.js:61:34)
+    at checkForUpdate (components/Updates/AutoUpdater.jsx:25:25)
+  43 |
+  44 | function capture(level, original, args) {
+> 45 |     original.apply(console, args);
+     |              ^
+  46 |     const msg = args.map(serialize).join(" ");
+  47 |     queue.push({ level, msg });
+  48 |     if (queue.length >= MAX_QUEUE) flush(); (utils/logInterceptor.js:45:14)
+[browser] [Tauri] focus window failed: Command plugin:window|show not allowed by ACL (utils/logInterceptor.js:45:14)
+[browser] [Tauri] focus window failed: Command plugin:window|show not allowed by ACL (utils/logInterceptor.js:45:14)
+[browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <body className="h-full bg-...">
+      <Analytics2>
+      <SpeedInsights2>
+      <Providers>
+        <ThemeProvider>
+          <SidebarProvider>
+            <UserProvider>
+              <VoiceChatProvider>
+                <ToastProvider>
+                  <ErrorBoundary>
+                    <CallWrapper>
+                    <OnlineStatusTracker>
+                    <PushNotificationManager>
+                    <FcmPushBridge>
+                    <AutoUpdater>
+                      <div
++                       className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]"
+-                       className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 p..."
+                      >
++                       <div
++                         className="rounded-xl bg-gray-900 text-white shadow-2xl border border-gray-700/60 overflow-h..."
++                       >
+                    ...
+                  ...
+
+    at <unknown> (https://react.dev/link/hydration-mismatch)
+    at div (<anonymous>)
+    at AutoUpdater (components/Updates/AutoUpdater.jsx:76:13)
+    at Providers (app/providers.jsx:75:33)
+    at RootLayout (app\layout.js:171:9)
+  74 |     return (
+  75 |         <div className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]">
+> 76 |             <div className="rounded-xl bg-gray-900 text-white shadow-2xl border border-gra...
+     |             ^
+  77 |                 <div className="p-4">
+  78 |                     <div className="flex items-start justify-between gap-3">
+  79 |                         <div className="flex items-center gap-3">
+[browser] [AutoUpdater] update check failed: Command plugin:updater|check not allowed by ACL 
+    at capture (utils/logInterceptor.js:45:14)
+    at console.error (utils/logInterceptor.js:61:34)
+    at checkForUpdate (components/Updates/AutoUpdater.jsx:25:25)
+  43 |
+  44 | function capture(level, original, args) {
+> 45 |     original.apply(console, args);
+     |              ^
+  46 |     const msg = args.map(serialize).join(" ");
+  47 |     queue.push({ level, msg });
+  48 |     if (queue.length >= MAX_QUEUE) flush(); (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [AutoUpdater] update check failed: Command plugin:updater|check not allowed by ACL 
+    at capture (utils/logInterceptor.js:45:14)
+    at console.error (utils/logInterceptor.js:61:34)
+    at checkForUpdate (components/Updates/AutoUpdater.jsx:25:25)
+  43 |
+  44 | function capture(level, original, args) {
+> 45 |     original.apply(console, args);
+     |              ^
+  46 |     const msg = args.map(serialize).join(" ");
+  47 |     queue.push({ level, msg });
+  48 |     if (queue.length >= MAX_QUEUE) flush(); (utils/logInterceptor.js:45:14)
+⨯ Error: aborted
+    at ignore-listed frames
+[browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <body className="h-full bg-...">
+      <Analytics2>
+      <SpeedInsights2>
+      <Providers>
+        <ThemeProvider>
+          <SidebarProvider>
+            <UserProvider>
+              <VoiceChatProvider>
+                <ToastProvider>
+                  <ErrorBoundary>
+                    <CallWrapper>
+                    <OnlineStatusTracker>
+                    <PushNotificationManager>
+                    <FcmPushBridge>
+                    <AutoUpdater>
+                      <div
++                       className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]"
+-                       className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 p..."
+                      >
++                       <div
++                         className="rounded-xl bg-gray-900 text-white shadow-2xl border border-gray-700/60 overflow-h..."
++                       >
+                    ...
+                  ...
+
+    at <unknown> (https://react.dev/link/hydration-mismatch)
+    at div (<anonymous>)
+    at AutoUpdater (components/Updates/AutoUpdater.jsx:76:13)
+    at Providers (app/providers.jsx:75:33)
+    at RootLayout (app\layout.js:171:9)
+  74 |     return (
+  75 |         <div className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]">
+> 76 |             <div className="rounded-xl bg-gray-900 text-white shadow-2xl border border-gra...
+     |             ^
+  77 |                 <div className="p-4">
+  78 |                     <div className="flex items-start justify-between gap-3">
+  79 |                         <div className="flex items-center gap-3">
+[browser] [AutoUpdater] update check failed: Command plugin:updater|check not allowed by ACL 
+    at capture (utils/logInterceptor.js:45:14)
+    at console.error (utils/logInterceptor.js:61:34)
+    at checkForUpdate (components/Updates/AutoUpdater.jsx:25:25)
+  43 |
+  44 | function capture(level, original, args) {
+> 45 |     original.apply(console, args);
+     |              ^
+  46 |     const msg = args.map(serialize).join(" ");
+  47 |     queue.push({ level, msg });
+  48 |     if (queue.length >= MAX_QUEUE) flush(); (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [AutoUpdater] update check failed: Command plugin:updater|check not allowed by ACL 
+    at capture (utils/logInterceptor.js:45:14)
+    at console.error (utils/logInterceptor.js:61:34)
+    at checkForUpdate (components/Updates/AutoUpdater.jsx:25:25)
+  43 |
+  44 | function capture(level, original, args) {
+> 45 |     original.apply(console, args);
+     |              ^
+  46 |     const msg = args.map(serialize).join(" ");
+  47 |     queue.push({ level, msg });
+  48 |     if (queue.length >= MAX_QUEUE) flush(); (utils/logInterceptor.js:45:14)
+[browser] [Tauri] focus window failed: Command plugin:window|show not allowed by ACL (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] ReferenceError: Cannot access 'addTab' before initialization
+    at NativeBrowserClient (components/Browser/BrowserClient.jsx:665:7)
+  663 |     window.addEventListener("keydown", onKey);
+  664 |     return () => window.removeEventListener("keydown", onKey);
+> 665 |   }, [addTab, closeTab, reload, goBack, goForward, inputFocused, toggleBookmark, zoomIn, ...
+      |       ^
+  666 |
+  667 |   // Tabs
+  668 | (utils/logInterceptor.js:45:14)
+[browser] ReferenceError: Cannot access 'addTab' before initialization
+    at NativeBrowserClient (components/Browser/BrowserClient.jsx:665:7)
+  663 |     window.addEventListener("keydown", onKey);
+  664 |     return () => window.removeEventListener("keydown", onKey);
+> 665 |   }, [addTab, closeTab, reload, goBack, goForward, inputFocused, toggleBookmark, zoomIn, ...
+      |       ^
+  666 |
+  667 |   // Tabs
+  668 | (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [Tauri] focus window failed: Command plugin:window|show not allowed by ACL (utils/logInterceptor.js:45:14)
+[browser] [AutoUpdater] update check failed: Command plugin:updater|check not allowed by ACL 
+    at capture (utils/logInterceptor.js:45:14)
+    at console.error (utils/logInterceptor.js:61:34)
+    at checkForUpdate (components/Updates/AutoUpdater.jsx:25:25)
+  43 |
+  44 | function capture(level, original, args) {
+> 45 |     original.apply(console, args);
+     |              ^
+  46 |     const msg = args.map(serialize).join(" ");
+  47 |     queue.push({ level, msg });
+  48 |     if (queue.length >= MAX_QUEUE) flush(); (utils/logInterceptor.js:45:14)
+[browser] [Tauri] focus window failed: Command plugin:window|show not allowed by ACL (utils/logInterceptor.js:45:14)
+⨯ Error: aborted
+    at ignore-listed frames
+[browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <body className="h-full bg-...">
+      <Analytics2>
+      <SpeedInsights2>
+      <Providers>
+        <ThemeProvider>
+          <SidebarProvider>
+            <UserProvider>
+              <VoiceChatProvider>
+                <ToastProvider>
+                  <ErrorBoundary>
+                    <CallWrapper>
+                    <OnlineStatusTracker>
+                    <PushNotificationManager>
+                    <FcmPushBridge>
+                    <AutoUpdater>
+                      <div
++                       className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]"
+-                       className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 p..."
+                      >
++                       <div
++                         className="rounded-xl bg-gray-900 text-white shadow-2xl border border-gray-700/60 overflow-h..."
++                       >
+                    ...
+                  ...
+
+    at <unknown> (https://react.dev/link/hydration-mismatch)
+    at div (<anonymous>)
+    at AutoUpdater (components/Updates/AutoUpdater.jsx:76:13)
+    at Providers (app/providers.jsx:75:33)
+    at RootLayout (app\layout.js:171:9)
+  74 |     return (
+  75 |         <div className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]">
+> 76 |             <div className="rounded-xl bg-gray-900 text-white shadow-2xl border border-gra...
+     |             ^
+  77 |                 <div className="p-4">
+  78 |                     <div className="flex items-start justify-between gap-3">
+  79 |                         <div className="flex items-center gap-3">
+[browser] ReferenceError: Cannot access 'addTab' before initialization
+    at NativeBrowserClient (components/Browser/BrowserClient.jsx:665:7)
+  663 |     window.addEventListener("keydown", onKey);
+  664 |     return () => window.removeEventListener("keydown", onKey);
+> 665 |   }, [addTab, closeTab, reload, goBack, goForward, inputFocused, toggleBookmark, zoomIn, ...
+      |       ^
+  666 |
+  667 |   // Tabs
+  668 | (utils/logInterceptor.js:45:14)
+[browser] ReferenceError: Cannot access 'addTab' before initialization
+    at NativeBrowserClient (components/Browser/BrowserClient.jsx:665:7)
+  663 |     window.addEventListener("keydown", onKey);
+  664 |     return () => window.removeEventListener("keydown", onKey);
+> 665 |   }, [addTab, closeTab, reload, goBack, goForward, inputFocused, toggleBookmark, zoomIn, ...
+      |       ^
+  666 |
+  667 |   // Tabs
+  668 | (utils/logInterceptor.js:45:14)
+[browser] [AutoUpdater] update check failed: Command plugin:updater|check not allowed by ACL 
+    at capture (utils/logInterceptor.js:45:14)
+    at console.error (utils/logInterceptor.js:61:34)
+    at checkForUpdate (components/Updates/AutoUpdater.jsx:25:25)
+  43 |
+  44 | function capture(level, original, args) {
+> 45 |     original.apply(console, args);
+     |              ^
+  46 |     const msg = args.map(serialize).join(" ");
+  47 |     queue.push({ level, msg });
+  48 |     if (queue.length >= MAX_QUEUE) flush(); (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <body className="h-full bg-...">
+      <Analytics2>
+      <SpeedInsights2>
+      <Providers>
+        <ThemeProvider>
+          <SidebarProvider>
+            <UserProvider>
+              <VoiceChatProvider>
+                <ToastProvider>
+                  <ErrorBoundary>
+                    <CallWrapper>
+                    <OnlineStatusTracker>
+                    <PushNotificationManager>
+                    <FcmPushBridge>
+                    <AutoUpdater>
+                      <div
++                       className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]"
+-                       className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 p..."
+                      >
++                       <div
++                         className="rounded-xl bg-gray-900 text-white shadow-2xl border border-gray-700/60 overflow-h..."
++                       >
+                    ...
+                  ...
+
+    at <unknown> (https://react.dev/link/hydration-mismatch)
+    at div (<anonymous>)
+    at AutoUpdater (components/Updates/AutoUpdater.jsx:76:13)
+    at Providers (app/providers.jsx:75:33)
+    at RootLayout (app\layout.js:171:9)
+  74 |     return (
+  75 |         <div className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]">
+> 76 |             <div className="rounded-xl bg-gray-900 text-white shadow-2xl border border-gra...
+     |             ^
+  77 |                 <div className="p-4">
+  78 |                     <div className="flex items-start justify-between gap-3">
+  79 |                         <div className="flex items-center gap-3">
+[browser] [AutoUpdater] update check failed: Command plugin:updater|check not allowed by ACL 
+    at capture (utils/logInterceptor.js:45:14)
+    at console.error (utils/logInterceptor.js:61:34)
+    at checkForUpdate (components/Updates/AutoUpdater.jsx:25:25)
+  43 |
+  44 | function capture(level, original, args) {
+> 45 |     original.apply(console, args);
+     |              ^
+  46 |     const msg = args.map(serialize).join(" ");
+  47 |     queue.push({ level, msg });
+  48 |     if (queue.length >= MAX_QUEUE) flush(); (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [AutoUpdater] update check failed: Command plugin:updater|check not allowed by ACL 
+    at capture (utils/logInterceptor.js:45:14)
+    at console.error (utils/logInterceptor.js:61:34)
+    at checkForUpdate (components/Updates/AutoUpdater.jsx:25:25)
+  43 |
+  44 | function capture(level, original, args) {
+> 45 |     original.apply(console, args);
+     |              ^
+  46 |     const msg = args.map(serialize).join(" ");
+  47 |     queue.push({ level, msg });
+  48 |     if (queue.length >= MAX_QUEUE) flush(); (utils/logInterceptor.js:45:14)
+[browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <body className="h-full bg-...">
+      <Analytics2>
+      <SpeedInsights2>
+      <Providers>
+        <ThemeProvider>
+          <SidebarProvider>
+            <UserProvider>
+              <VoiceChatProvider>
+                <ToastProvider>
+                  <ErrorBoundary>
+                    <CallWrapper>
+                    <OnlineStatusTracker>
+                    <PushNotificationManager>
+                    <FcmPushBridge>
+                    <AutoUpdater>
+                      <div
++                       className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]"
+-                       className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 p..."
+                      >
++                       <div
++                         className="rounded-xl bg-gray-900 text-white shadow-2xl border border-gray-700/60 overflow-h..."
++                       >
+                    ...
+                  ...
+
+    at <unknown> (https://react.dev/link/hydration-mismatch)
+    at div (<anonymous>)
+    at AutoUpdater (components/Updates/AutoUpdater.jsx:76:13)
+    at Providers (app/providers.jsx:75:33)
+    at RootLayout (app\layout.js:171:9)
+  74 |     return (
+  75 |         <div className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]">
+> 76 |             <div className="rounded-xl bg-gray-900 text-white shadow-2xl border border-gra...
+     |             ^
+  77 |                 <div className="p-4">
+  78 |                     <div className="flex items-start justify-between gap-3">
+  79 |                         <div className="flex items-center gap-3">
+[browser] [AutoUpdater] update check failed: Command plugin:updater|check not allowed by ACL 
+    at capture (utils/logInterceptor.js:45:14)
+    at console.error (utils/logInterceptor.js:61:34)
+    at checkForUpdate (components/Updates/AutoUpdater.jsx:25:25)
+  43 |
+  44 | function capture(level, original, args) {
+> 45 |     original.apply(console, args);
+     |              ^
+  46 |     const msg = args.map(serialize).join(" ");
+  47 |     queue.push({ level, msg });
+  48 |     if (queue.length >= MAX_QUEUE) flush(); (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] ReferenceError: Cannot access 'addTab' before initialization
+    at NativeBrowserClient (components/Browser/BrowserClient.jsx:665:7)
+  663 |     window.addEventListener("keydown", onKey);
+  664 |     return () => window.removeEventListener("keydown", onKey);
+> 665 |   }, [addTab, closeTab, reload, goBack, goForward, inputFocused, toggleBookmark, zoomIn, ...
+      |       ^
+  666 |
+  667 |   // Tabs
+  668 | (utils/logInterceptor.js:45:14)
+[browser] ReferenceError: Cannot access 'addTab' before initialization
+    at NativeBrowserClient (components/Browser/BrowserClient.jsx:665:7)
+  663 |     window.addEventListener("keydown", onKey);
+  664 |     return () => window.removeEventListener("keydown", onKey);
+> 665 |   }, [addTab, closeTab, reload, goBack, goForward, inputFocused, toggleBookmark, zoomIn, ...
+      |       ^
+  666 |
+  667 |   // Tabs
+  668 | (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] ReferenceError: Cannot access 'addTab' before initialization
+    at NativeBrowserClient (components/Browser/BrowserClient.jsx:665:7)
+  663 |     window.addEventListener("keydown", onKey);
+  664 |     return () => window.removeEventListener("keydown", onKey);
+> 665 |   }, [addTab, closeTab, reload, goBack, goForward, inputFocused, toggleBookmark, zoomIn, ...
+      |       ^
+  666 |
+  667 |   // Tabs
+  668 | (utils/logInterceptor.js:45:14)
+[browser] ReferenceError: Cannot access 'addTab' before initialization
+    at NativeBrowserClient (components/Browser/BrowserClient.jsx:665:7)
+  663 |     window.addEventListener("keydown", onKey);
+  664 |     return () => window.removeEventListener("keydown", onKey);
+> 665 |   }, [addTab, closeTab, reload, goBack, goForward, inputFocused, toggleBookmark, zoomIn, ...
+      |       ^
+  666 |
+  667 |   // Tabs
+  668 | (utils/logInterceptor.js:45:14)
+[browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <body className="h-full bg-...">
+      <Analytics2>
+      <SpeedInsights2>
+      <Providers>
+        <ThemeProvider>
+          <SidebarProvider>
+            <UserProvider>
+              <VoiceChatProvider>
+                <ToastProvider>
+                  <ErrorBoundary>
+                    <CallWrapper>
+                    <OnlineStatusTracker>
+                    <PushNotificationManager>
+                    <FcmPushBridge>
+                    <AutoUpdater>
+                      <div
++                       className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]"
+-                       className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 p..."
+                      >
++                       <div
++                         className="rounded-xl bg-gray-900 text-white shadow-2xl border border-gray-700/60 overflow-h..."
++                       >
+                    ...
+                  ...
+
+    at <unknown> (https://react.dev/link/hydration-mismatch)
+    at div (<anonymous>)
+    at AutoUpdater (components/Updates/AutoUpdater.jsx:76:13)
+    at Providers (app/providers.jsx:75:33)
+    at RootLayout (app\layout.js:171:9)
+  74 |     return (
+  75 |         <div className="fixed bottom-4 right-4 z-[60] w-80 max-w-[calc(100vw-2rem)]">
+> 76 |             <div className="rounded-xl bg-gray-900 text-white shadow-2xl border border-gra...
+     |             ^
+  77 |                 <div className="p-4">
+  78 |                     <div className="flex items-start justify-between gap-3">
+  79 |                         <div className="flex items-center gap-3">
+[browser] [AutoUpdater] update check failed: Command plugin:updater|check not allowed by ACL 
+    at capture (utils/logInterceptor.js:45:14)
+    at console.error (utils/logInterceptor.js:61:34)
+    at checkForUpdate (components/Updates/AutoUpdater.jsx:25:25)
+  43 |
+  44 | function capture(level, original, args) {
+> 45 |     original.apply(console, args);
+     |              ^
+  46 |     const msg = args.map(serialize).join(" ");
+  47 |     queue.push({ level, msg });
+  48 |     if (queue.length >= MAX_QUEUE) flush(); (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: timeout (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: timeout (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [AutoUpdater] update check failed: Command plugin:updater|check not allowed by ACL 
+    at capture (utils/logInterceptor.js:45:14)
+    at console.error (utils/logInterceptor.js:61:34)
+    at checkForUpdate (components/Updates/AutoUpdater.jsx:25:25)
+  43 |
+  44 | function capture(level, original, args) {
+> 45 |     original.apply(console, args);
+     |              ^
+  46 |     const msg = args.map(serialize).join(" ");
+  47 |     queue.push({ level, msg });
+  48 |     if (queue.length >= MAX_QUEUE) flush(); (utils/logInterceptor.js:45:14)
+[browser] [Tauri] focus window failed: Command plugin:window|show not allowed by ACL (utils/logInterceptor.js:45:14)

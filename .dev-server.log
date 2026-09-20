@@ -1,0 +1,70 @@
+
+> anontweet@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.10 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.100.50:3000
+- Environments: .env
+✓ Ready in 6.9s
+○ Compiling middleware ...
+
+○ Compiling / ...
+✓ Finished writing to filesystem cache in 37.4s
+ GET / 307 in 2.4min (next.js: 2.4min, proxy.ts: 3ms, application-code: 587ms)
+ GET /login 200 in 1330ms (next.js: 1249ms, proxy.ts: 5ms, application-code: 75ms)
+ GET /login?redirect=%2Foffline.html 200 in 442ms (next.js: 385ms, proxy.ts: 1873µs, application-code: 56ms)
+✓ Finished writing to filesystem cache in 53s
+✓ Finished filesystem cache database compaction in 36.6s
+ GET /login 200 in 536ms (next.js: 432ms, proxy.ts: 6ms, application-code: 98ms)
+ GET / 200 in 531ms (next.js: 183ms, proxy.ts: 6ms, application-code: 343ms)
+ GET / 200 in 182ms (next.js: 152ms, proxy.ts: 3ms, application-code: 27ms)
+ GET /inbox 200 in 14.6s (next.js: 14.3s, proxy.ts: 2ms, application-code: 332ms)
+ GET /inbox 200 in 211ms (next.js: 53ms, proxy.ts: 9ms, application-code: 149ms)
+ GET /inbox 200 in 419ms (next.js: 78ms, proxy.ts: 7ms, application-code: 334ms)
+ GET /inbox 200 in 454ms (next.js: 32ms, proxy.ts: 305ms, application-code: 117ms)
+ GET /inbox 200 in 511ms (next.js: 358ms, proxy.ts: 5ms, application-code: 148ms)
+ GET / 307 in 3.0s (next.js: 19ms, proxy.ts: 18ms, application-code: 2.9s)
+ GET /inbox 200 in 2.8s (next.js: 56ms, proxy.ts: 6ms, application-code: 2.7s)
+○ Compiling /_error ...
+✓ Finished writing to filesystem cache in 42s
+ GET / 307 in 62ms (next.js: 3ms, proxy.ts: 3ms, application-code: 56ms)
+ GET /inbox 200 in 44ms (next.js: 2ms, proxy.ts: 2ms, application-code: 40ms)
+✓ Finished filesystem cache database compaction in 16.4s
+ GET /browser 200 in 366ms (next.js: 340ms, proxy.ts: 1688µs, application-code: 24ms)
+✓ Finished writing to filesystem cache in 36.3s
+ GET /browser 200 in 173ms (next.js: 7ms, proxy.ts: 3ms, application-code: 163ms)
+ GET /inbox 200 in 21ms (next.js: 2ms, proxy.ts: 3ms, application-code: 16ms)
+ GET / 307 in 118ms (next.js: 2ms, proxy.ts: 3ms, application-code: 113ms)
+ GET /inbox 200 in 67ms (next.js: 4ms, proxy.ts: 3ms, application-code: 60ms)
+○ Compiling /social ...
+ GET /inbox?user=Mian 200 in 35ms (next.js: 3ms, proxy.ts: 3ms, application-code: 29ms)
+ GET / 307 in 67ms (next.js: 3ms, proxy.ts: 2ms, application-code: 62ms)
+ GET /inbox 200 in 75ms (next.js: 21ms, proxy.ts: 4ms, application-code: 51ms)
+ GET /browser 200 in 20ms (next.js: 2ms, proxy.ts: 1937µs, application-code: 16ms)
+ GET /social 200 in 7.4s (next.js: 6.7s, proxy.ts: 1761µs, application-code: 660ms)
+ GET /social 200 in 391ms (next.js: 169ms, proxy.ts: 129ms, application-code: 93ms)
+ GET /entertainment 200 in 5.7s (next.js: 4.8s, proxy.ts: 2ms, application-code: 936ms)
+ GET /entertainment 200 in 520ms (next.js: 110ms, proxy.ts: 128ms, application-code: 282ms)
+ GET /social 200 in 103ms (next.js: 49ms, proxy.ts: 2ms, application-code: 52ms)
+ GET /entertainment 200 in 223ms (next.js: 17ms, proxy.ts: 3ms, application-code: 203ms)
+ GET /entertainment 200 in 218ms (next.js: 54ms, proxy.ts: 4ms, application-code: 160ms)
+ GET /social 200 in 43ms (next.js: 6ms, proxy.ts: 3ms, application-code: 34ms)
+ GET /entertainment 200 in 119ms (next.js: 8ms, proxy.ts: 3ms, application-code: 108ms)
+ GET /inbox 200 in 28ms (next.js: 7ms, proxy.ts: 2ms, application-code: 19ms)
+ GET /browser 200 in 26ms (next.js: 7ms, proxy.ts: 2ms, application-code: 17ms)
+ GET /inbox 200 in 29ms (next.js: 2ms, proxy.ts: 3ms, application-code: 24ms)
+ GET /social 200 in 19ms (next.js: 2ms, proxy.ts: 3ms, application-code: 14ms)
+ GET /social 200 in 17ms (next.js: 2ms, proxy.ts: 1668µs, application-code: 13ms)
+ GET /entertainment 200 in 118ms (next.js: 6ms, proxy.ts: 4ms, application-code: 108ms)
+○ Compiling /live-tv ...
+✓ Finished writing to filesystem cache in 2.2min
+✓ Finished filesystem cache database compaction in 64s
+ GET / 307 in 2.3min (next.js: 2.2min, proxy.ts: 2ms, application-code: 5.6s)
+ GET /inbox 200 in 1489ms (next.js: 687ms, proxy.ts: 522ms, application-code: 279ms)
+✓ Finished writing to filesystem cache in 74s
+✓ Finished writing to filesystem cache in 63s
+✓ Finished filesystem cache database compaction in 91s
+✓ Finished filesystem cache database compaction in 22.9s
+ GET /browser 200 in 114ms (next.js: 56ms, proxy.ts: 2ms, application-code: 56ms)
+✓ Finished writing to filesystem cache in 58s

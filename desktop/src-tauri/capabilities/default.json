@@ -4,7 +4,7 @@
   "description": "Capabilities for the main AnonTweet window and toast notification windows",
   "local": true,
   "remote": {
-    "urls": ["https://anontweet.vercel.app"]
+    "urls": ["https://anontweet.vercel.app", "http://localhost:3000"]
   },
   "windows": ["main", "toast-*"],
   "permissions": [
