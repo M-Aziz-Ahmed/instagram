@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 
-export default function ChessChat({ chat, onSendMessage, username }) {
+export default function ChessChat({ chat, onSendMessage, username, readOnly }) {
     const [message, setMessage] = useState("");
     const listRef = useRef(null);
 
@@ -53,23 +53,25 @@ export default function ChessChat({ chat, onSendMessage, username }) {
                     );
                 })}
             </div>
-            <form onSubmit={handleSend} className="flex border-t border-gray-200 dark:border-gray-700">
-                <input
-                    type="text"
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Type a message..."
-                    className="flex-1 px-3 py-2.5 text-xs bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
-                    maxLength={200}
-                />
-                <button
-                    type="submit"
-                    disabled={!message.trim()}
-                    className="px-3 py-2.5 text-xs font-semibold text-blue-500 hover:text-blue-600 disabled:text-gray-300 dark:disabled:text-gray-600 transition-colors"
-                >
-                    Send
-                </button>
-            </form>
+            {!readOnly && (
+                <form onSubmit={handleSend} className="flex border-t border-gray-200 dark:border-gray-700">
+                    <input
+                        type="text"
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        placeholder="Type a message..."
+                        className="flex-1 px-3 py-2.5 text-xs bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
+                        maxLength={200}
+                    />
+                    <button
+                        type="submit"
+                        disabled={!message.trim()}
+                        className="px-3 py-2.5 text-xs font-semibold text-blue-500 hover:text-blue-600 disabled:text-gray-300 dark:disabled:text-gray-600 transition-colors"
+                    >
+                        Send
+                    </button>
+                </form>
+            )}
         </div>
     );
 }

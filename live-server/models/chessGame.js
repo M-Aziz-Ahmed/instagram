@@ -18,6 +18,12 @@ const chatMsgSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
 }, { _id: false });
 
+const spectatorSchema = new mongoose.Schema({
+    username:   { type: String, required: true },
+    avatarUrl:  { type: String, default: "" },
+    avatarColor: { type: String, default: "#3b82f6" },
+}, { _id: false });
+
 const chessGameSchema = new mongoose.Schema({
     white: {
         username:   { type: String, default: "" },
@@ -58,6 +64,8 @@ const chessGameSchema = new mongoose.Schema({
     winner:        { type: String, default: "" },
     chat:          { type: [chatMsgSchema], default: [] },
     invitedBy:     { type: String, default: "" },
+    challengeFor:  { type: String, default: "" },
+    spectators:    { type: [spectatorSchema], default: [] },
     createdAt:     { type: Date, default: Date.now },
 }, { timestamps: true });
 
@@ -65,6 +73,7 @@ chessGameSchema.index({ status: 1, createdAt: -1 });
 chessGameSchema.index({ "white.username": 1 });
 chessGameSchema.index({ "black.username": 1 });
 chessGameSchema.index({ invitedBy: 1 });
+chessGameSchema.index({ challengeFor: 1 });
 
 chessGameSchema.index({ createdAt: 1 }, { expireAfterSeconds: 86400 });
 
