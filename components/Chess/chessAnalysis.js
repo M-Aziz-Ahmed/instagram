@@ -312,3 +312,132 @@ export function analyseGameMoves(moves, playerColor) {
 
     return { moves: analysed, stats };
 }
+
+export function findTurningPoints(moves, playerColor) {
+    if (!moves || moves.length < 4) return [];
+
+    let currentFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    const evals = [{ fen: currentFen, eval: 0, moveIndex: -1 }];
+
+    for (let i = 0; i < moves.length; i++) {
+        const m = moves[i];
+        const nextFen = applyMoveToFen(currentFen, m.from, m.to, m.promotion);
+        if (nextFen) {
+            const evalScore = evaluateBoard(nextFen) * (nextFen.split(" ")[1] === "w" ? 1 : -1);
+            evals.push({ fen: nextFen, eval: evalScore, moveIndex: i });
+            currentFen = nextFen;
+        }
+    }
+
+    const turningPoints = [];
+    for (let i = 1; i < evals.length; i++) {
+        const prevEval = evals[i - 1].eval;
+        const currEval = evals[i].eval;
+        const swing = Math.abs(currEval - prevEval);
+        const moveIdx = evals[i].moveIndex;
+        const move = moves[moveIdx];
+        const isPlayerMove = move && ((moveIdx % 2 === 0 && playerColor === "w") || (moveIdx % 2 === 1 && playerColor === "b"));
+
+        if (swing >= 200) {
+            turningPoints.push({
+                moveIndex: moveIdx,
+                moveNumber: Math.floor(moveIdx / 2) + 1,
+                color: moveIdx % 2 === 0 ? "w" : "b",
+                san: move?.san || "",
+                from: move?.from || "",
+                to: move?.to || "",
+                fenBefore: evals[i - 1].fen,
+                fenAfter: evals[i].fen,
+                evalBefore: prevEval,
+                evalAfter: currEval,
+                swing,
+                isPlayerMove,
+                isBlunder: (currEval - prevEval) * (moveIdx % 2 === 0 ? -1 : 1) < -200,
+            });
+        }
+    }
+
+    turningPoints.sort((a, b) => b.swing - a.swing);
+    return turningPoints.slice(0, 5);
+}
+
+export function findBestMovesAtPosition(fen, count = 3) {
+    const bestMoves = findBestMoves(fen);
+    return bestMoves.slice(0, count).map((m) => {
+        const newFen = applyMoveToFen(fen, m.from, m.to, m.promotion);
+        return {
+            from: m.from,
+            to: m.to,
+            promotion: m.promotion,
+            score: m.score,
+            evalAfter: newFen ? evaluateBoard(newFen) * (newFen.split(" ")[1] === "w" ? 1 : -1) : 0,
+        };
+    });
+}
+
+export function generateGameSummary(moves, playerColor, playerName, opponentName) {
+    if (!moves || moves.length === 0) return null;
+
+    const analysis = analyseGameMoves(moves, playerColor);
+    const turningPoints = findTurningPoints(moves, playerColor);
+
+    const playerMoves = analysis.moves.filter((m) => m.color === playerColor);
+    const blunders = playerMoves.filter((m) => m.classification.label === "blunder" || m.classification.label === "miss");
+    const brilliant = playerMoves.filter((m) => m.classification.label === "brilliant");
+    const accuracy = analysis.stats.total > 0
+        ? Math.round(((analysis.stats.brilliant + analysis.stats.excellent + analysis.stats.good) / analysis.stats.total) * 100)
+        : 0;
+
+    let biggestBlunder = null;
+    if (blunders.length > 0) {
+        const worstLoss = blunders.reduce((worst, m) => {
+            const loss = m.classification.label === "blunder" ? 1000 : 500;
+            return loss > worst.loss ? { move: m, loss } : worst;
+        }, { move: null, loss: 0 });
+        biggestBlunder = worstLoss.move;
+    }
+
+    let bestMove = null;
+    if (brilliant.length > 0) {
+        bestMove = brilliant[0];
+    } else {
+        const excellent = playerMoves.filter((m) => m.classification.label === "excellent");
+        if (excellent.length > 0) bestMove = excellent[0];
+    }
+
+    const playerTurn = turningPoints.find((tp) => tp.isPlayerMove);
+    const opponentTurn = turningPoints.find((tp) => !tp.isPlayerMove);
+
+    const summary = [];
+    if (accuracy >= 90) {
+        summary.push(`${playerName} played an excellent game with ${accuracy}% accuracy.`);
+    } else if (accuracy >= 70) {
+        summary.push(`${playerName} played a solid game with ${accuracy}% accuracy.`);
+    } else {
+        summary.push(`${playerName} played with ${accuracy}% accuracy.`);
+    }
+
+    if (turningPoints.length > 0) {
+        const tp = turningPoints[0];
+        if (tp.isPlayerMove) {
+            summary.push(`The turning point was move ${tp.moveNumber} (${tp.san}), where ${playerName} made a critical ${tp.isBlunder ? "blunder" : "move"} that shifted the evaluation significantly.`);
+        } else {
+            summary.push(`The turning point was move ${tp.moveNumber} (${tp.san}), when ${opponentName} made a critical ${tp.isBlunder ? "blunder" : "move"}.`);
+        }
+    }
+
+    if (biggestBlunder) {
+        summary.push(`The biggest mistake was ${biggestBlunder.san} on move ${biggestBlunder.moveNumber}.`);
+    }
+
+    return {
+        accuracy,
+        turningPoints,
+        biggestBlunder,
+        bestMove,
+        stats: analysis.stats,
+        summary: summary.join(" "),
+        playerName,
+        opponentName,
+    };
+}

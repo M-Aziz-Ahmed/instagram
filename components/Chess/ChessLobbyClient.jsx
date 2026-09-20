@@ -7,12 +7,12 @@ import Link from "next/link";
 import ChessProfileHistory from "./ChessProfileHistory";
 
 const TIME_CONTROLS = [
-    { label: "1 min", initial: 60, increment: 0, icon: "⚡" },
-    { label: "3 min", initial: 180, increment: 0, icon: "🔥" },
-    { label: "5 min", initial: 300, increment: 0, icon: "⏱" },
-    { label: "10 min", initial: 600, increment: 0, icon: "🕐" },
-    { label: "15 | 10", initial: 900, increment: 10, icon: "🕐" },
-    { label: "30 min", initial: 1800, increment: 0, icon: "🐢" },
+    { label: "1 min", initial: 60, increment: 0, icon: "\u26A1" },
+    { label: "3 min", initial: 180, increment: 0, icon: "\uD83D\uDD25" },
+    { label: "5 min", initial: 300, increment: 0, icon: "\u23F1" },
+    { label: "10 min", initial: 600, increment: 0, icon: "\uD83D\uDD50" },
+    { label: "15 | 10", initial: 900, increment: 10, icon: "\uD83D\uDD50" },
+    { label: "30 min", initial: 1800, increment: 0, icon: "\uD83D\uDC22" },
 ];
 
 const AI_LEVELS = [
@@ -39,27 +39,17 @@ function StatusBadge({ status }) {
 export default function ChessLobbyClient() {
     const { user } = useUser();
     const router = useRouter();
-    const [games, setGames] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [showCreate, setShowCreate] = useState(false);
+    const [showAIPanel, setShowAIPanel] = useState(false);
+    const [showChallengePanel, setShowChallengePanel] = useState(false);
     const [selectedTime, setSelectedTime] = useState(TIME_CONTROLS[3]);
-    const [mode, setMode] = useState("multiplayer");
+    const [challengeTime, setChallengeTime] = useState(TIME_CONTROLS[3]);
     const [aiLevel, setAiLevel] = useState(AI_LEVELS[2]);
     const [creating, setCreating] = useState(false);
+    const [challengeFriend, setChallengeFriend] = useState("");
+    const [challengeLink, setChallengeLink] = useState("");
+    const [challengeCopied, setChallengeCopied] = useState(false);
     const [myGames, setMyGames] = useState([]);
-
-    const fetchGames = useCallback(async () => {
-        try {
-            const res = await fetch("/api/chess/games?status=waiting");
-            if (res.ok) {
-                const data = await res.json();
-                setGames(data.games || []);
-            }
-        } catch (e) {
-            console.error("Failed to fetch games:", e);
-        }
-        setLoading(false);
-    }, []);
+    const [pendingChallenges, setPendingChallenges] = useState([]);
 
     const fetchMyGames = useCallback(async () => {
         if (!user?.username) return;
@@ -72,17 +62,29 @@ export default function ChessLobbyClient() {
         } catch (e) {}
     }, [user?.username]);
 
+    const fetchPendingChallenges = useCallback(async () => {
+        if (!user?.username) return;
+        try {
+            const res = await fetch("/api/chess/games?status=waiting");
+            if (res.ok) {
+                const data = await res.json();
+                const challenges = (data.games || []).filter(g => g.challengeFor === user.username);
+                setPendingChallenges(challenges);
+            }
+        } catch (e) {}
+    }, [user?.username]);
+
     useEffect(() => {
-        fetchGames();
         fetchMyGames();
+        fetchPendingChallenges();
         const id = setInterval(() => {
-            fetchGames();
             fetchMyGames();
+            fetchPendingChallenges();
         }, 10000);
         return () => clearInterval(id);
-    }, [fetchGames, fetchMyGames]);
+    }, [fetchMyGames, fetchPendingChallenges]);
 
-    const handleCreateGame = async () => {
+    const handleStartAIGame = async () => {
         if (!user) return;
         setCreating(true);
         try {
@@ -94,8 +96,8 @@ export default function ChessLobbyClient() {
                     avatarUrl: user.avatarUrl || "",
                     avatarColor: user.avatarColor || "#3b82f6",
                     timeControl: { initial: selectedTime.initial, increment: selectedTime.increment },
-                    mode,
-                    aiDifficulty: mode === "ai" ? aiLevel.level : 10,
+                    mode: "ai",
+                    aiDifficulty: aiLevel.level,
                 }),
             });
             if (res.ok) {
@@ -103,12 +105,37 @@ export default function ChessLobbyClient() {
                 router.push(`/chess/game/${data.game._id}`);
             }
         } catch (e) {
-            console.error("Failed to create game:", e);
+            console.error("Failed to create AI game:", e);
         }
         setCreating(false);
     };
 
-    const handleJoinGame = async (gameId) => {
+    const handleCreateChallenge = async () => {
+        if (!user || !challengeFriend.trim()) return;
+        setCreating(true);
+        try {
+            const res = await fetch("/api/chess/games/new/challenge", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    username: user.username,
+                    avatarUrl: user.avatarUrl || "",
+                    avatarColor: user.avatarColor || "#3b82f6",
+                    challengeFor: challengeFriend.trim(),
+                    timeControl: { initial: challengeTime.initial, increment: challengeTime.increment },
+                }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setChallengeLink(window.location.origin + data.challengeLink);
+            }
+        } catch (e) {
+            console.error("Failed to create challenge:", e);
+        }
+        setCreating(false);
+    };
+
+    const handleJoinChallenge = async (gameId) => {
         if (!user) return;
         try {
             const res = await fetch(`/api/chess/games/${gameId}/join`, {
@@ -123,9 +150,7 @@ export default function ChessLobbyClient() {
             if (res.ok) {
                 router.push(`/chess/game/${gameId}`);
             }
-        } catch (e) {
-            console.error("Failed to join game:", e);
-        }
+        } catch (e) {}
     };
 
     const formatTimeControl = (tc) => {
@@ -141,66 +166,66 @@ export default function ChessLobbyClient() {
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Chess</h1>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Play chess with friends or AI</p>
                 </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
                 <button
-                    onClick={() => setShowCreate(!showCreate)}
-                    className="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
+                    onClick={() => { setShowAIPanel(!showAIPanel); setShowChallengePanel(false); setChallengeLink(""); }}
+                    className={`p-4 rounded-xl border text-left transition-all ${
+                        showAIPanel
+                            ? "border-purple-400 bg-purple-50 dark:bg-purple-900/20 shadow-md"
+                            : "border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-purple-300 dark:hover:border-purple-700 hover:shadow-sm"
+                    }`}
                 >
-                    {showCreate ? "Cancel" : "New Game"}
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-lg">{"\uD83E\uDD16"}</div>
+                        <div>
+                            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Play vs Computer</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Challenge the AI at any level</p>
+                        </div>
+                    </div>
+                </button>
+
+                <button
+                    onClick={() => { setShowChallengePanel(!showChallengePanel); setShowAIPanel(false); setChallengeLink(""); }}
+                    className={`p-4 rounded-xl border text-left transition-all ${
+                        showChallengePanel
+                            ? "border-blue-400 bg-blue-50 dark:bg-blue-900/20 shadow-md"
+                            : "border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm"
+                    }`}
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-lg">{"\uD83C\uDFAF"}</div>
+                        <div>
+                            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Challenge Friend</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Send a link to play</p>
+                        </div>
+                    </div>
                 </button>
             </div>
 
-            {showCreate && (
+            {showAIPanel && (
                 <div className="mb-6 p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
-                    <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Create Game</h2>
-
+                    <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Play vs Computer</h2>
                     <div className="mb-3">
-                        <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">Mode</label>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => setMode("multiplayer")}
-                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                                    mode === "multiplayer"
-                                        ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                                        : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
-                                }`}
-                            >
-                                vs Player
-                            </button>
-                            <button
-                                onClick={() => setMode("ai")}
-                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                                    mode === "ai"
-                                        ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                                        : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
-                                }`}
-                            >
-                                vs Computer
-                            </button>
+                        <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">Difficulty</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {AI_LEVELS.map((level) => (
+                                <button
+                                    key={level.level}
+                                    onClick={() => setAiLevel(level)}
+                                    className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                                        aiLevel.level === level.level
+                                            ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                                            : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
+                                    }`}
+                                >
+                                    <div>{level.label}</div>
+                                    <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{level.desc}</div>
+                                </button>
+                            ))}
                         </div>
                     </div>
-
-                    {mode === "ai" && (
-                        <div className="mb-3">
-                            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">Difficulty</label>
-                            <div className="grid grid-cols-3 gap-2">
-                                {AI_LEVELS.map((level) => (
-                                    <button
-                                        key={level.level}
-                                        onClick={() => setAiLevel(level)}
-                                        className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
-                                            aiLevel.level === level.level
-                                                ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                                                : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
-                                        }`}
-                                    >
-                                        <div>{level.label}</div>
-                                        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{level.desc}</div>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
                     <div className="mb-4">
                         <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">Time Control</label>
                         <div className="grid grid-cols-3 gap-2">
@@ -219,14 +244,124 @@ export default function ChessLobbyClient() {
                             ))}
                         </div>
                     </div>
-
                     <button
-                        onClick={handleCreateGame}
+                        onClick={handleStartAIGame}
                         disabled={creating}
-                        className="w-full px-4 py-2.5 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                        className="w-full px-4 py-2.5 bg-purple-500 text-white text-sm font-medium rounded-lg hover:bg-purple-600 disabled:opacity-50 transition-colors"
                     >
-                        {creating ? "Creating..." : mode === "ai" ? "Start vs Computer" : "Create Game"}
+                        {creating ? "Starting..." : "Start Game"}
                     </button>
+                </div>
+            )}
+
+            {showChallengePanel && (
+                <div className="mb-6 p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
+                    <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Challenge a Friend</h2>
+                    {!challengeLink ? (
+                        <>
+                            <div className="mb-3">
+                                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">{"Friend's Username"}</label>
+                                <input
+                                    type="text"
+                                    value={challengeFriend}
+                                    onChange={(e) => setChallengeFriend(e.target.value)}
+                                    placeholder="Enter username..."
+                                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+                            <div className="mb-4">
+                                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">Time Control</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {TIME_CONTROLS.map((tc) => (
+                                        <button
+                                            key={tc.label}
+                                            onClick={() => setChallengeTime(tc)}
+                                            className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                                                challengeTime.label === tc.label
+                                                    ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                                                    : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
+                                            }`}
+                                        >
+                                            {tc.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleCreateChallenge}
+                                disabled={creating || !challengeFriend.trim()}
+                                className="w-full px-4 py-2.5 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                            >
+                                {creating ? "Creating..." : "Create Challenge Link"}
+                            </button>
+                        </>
+                    ) : (
+                        <div className="text-center">
+                            <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-3">
+                                <svg className="w-6 h-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                            </div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Challenge created!</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Send this link to {challengeFriend}</p>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={challengeLink}
+                                    readOnly
+                                    className="flex-1 px-3 py-2 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                                />
+                                <button
+                                    onClick={() => { navigator.clipboard?.writeText(challengeLink); setChallengeCopied(true); setTimeout(() => setChallengeCopied(false), 2000); }}
+                                    className="px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                                >
+                                    {challengeCopied ? "Copied!" : "Copy"}
+                                </button>
+                            </div>
+                            <button
+                                onClick={() => { setChallengeLink(""); setChallengeFriend(""); }}
+                                className="mt-4 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                            >
+                                Create another challenge
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {pendingChallenges.length > 0 && (
+                <div className="mb-6">
+                    <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Pending Challenges</h2>
+                    <div className="space-y-2">
+                        {pendingChallenges.map((game) => (
+                            <div
+                                key={game._id}
+                                className="flex items-center gap-3 p-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl"
+                            >
+                                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0" style={{ backgroundColor: game.white.avatarColor || "#3b82f6" }}>
+                                    {game.white.avatarUrl ? (
+                                        <img src={game.white.avatarUrl} alt="" className="w-full h-full object-cover rounded-full" />
+                                    ) : (
+                                        game.white.username?.[0]?.toUpperCase() || "?"
+                                    )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                        {game.white.username} challenged you
+                                    </p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        {formatTimeControl(game.timeControl)}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => handleJoinChallenge(game._id)}
+                                    className="px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg hover:bg-blue-600 transition-colors shrink-0"
+                                >
+                                    Accept
+                                </button>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
 
@@ -269,52 +404,6 @@ export default function ChessLobbyClient() {
                     </div>
                 </div>
             )}
-
-            <div>
-                <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Open Games</h2>
-                {loading ? (
-                    <div className="flex items-center justify-center py-12">
-                        <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                    </div>
-                ) : games.length === 0 ? (
-                    <div className="text-center py-12">
-                        <div className="text-4xl mb-3">♟️</div>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">No open games</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Create one and wait for an opponent!</p>
-                    </div>
-                ) : (
-                    <div className="space-y-2">
-                        {games.filter(g => g._id && g.white?.username !== user?.username).map((game) => (
-                            <div
-                                key={game._id}
-                                className="flex items-center gap-3 p-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
-                            >
-                                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0" style={{ backgroundColor: game.white.avatarColor || "#3b82f6" }}>
-                                    {game.white.avatarUrl ? (
-                                        <img src={game.white.avatarUrl} alt="" className="w-full h-full object-cover rounded-full" />
-                                    ) : (
-                                        game.white.username?.[0]?.toUpperCase() || "?"
-                                    )}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                                        {game.white.username || "Anonymous"}
-                                    </p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                        {formatTimeControl(game.timeControl)} · Playing as White
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={() => handleJoinGame(game._id)}
-                                    className="px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg hover:bg-blue-600 transition-colors shrink-0"
-                                >
-                                    Join
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
 
             {user?.username && (
                 <div className="mt-8 border-t border-gray-200 dark:border-gray-800 pt-6">

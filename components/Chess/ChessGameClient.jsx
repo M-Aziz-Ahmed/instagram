@@ -94,6 +94,7 @@ export default function ChessGameClient({ gameId }) {
         return null;
     }, [game, user]);
 
+    const isSpectator = myColor === null && game?.status === "active";
     const isMyTurn = game?.turn === myColor;
     const gameOver = game?.status && game.status !== "active" && game.status !== "waiting";
     const isReviewing = reviewIndex !== null;
@@ -408,7 +409,7 @@ export default function ChessGameClient({ gameId }) {
     }, [gameId, pendingMove]);
 
     const handleSquareClick = useCallback((square) => {
-        if (gameOver || !isMyTurn) return;
+        if (gameOver || !isMyTurn || isSpectator) return;
         if (!game?.fen) return;
 
         const boardData = parseFEN(game.fen).board;
@@ -472,6 +473,10 @@ export default function ChessGameClient({ gameId }) {
         setDrawOffer(null);
     };
 
+    const handleTakeBack = () => {
+        socketRef.current?.emit("chess:take-back", { gameId });
+    };
+
     const getResultText = () => {
         if (!gameOver) return null;
         const { status, result, resultReason, winner } = game;
@@ -532,13 +537,18 @@ export default function ChessGameClient({ gameId }) {
     const hasMoveReview = game.moves && game.moves.length > 0;
 
     return (
-        <div className="w-full max-w-[2000px] mx-auto">
-            <div className="flex flex-col lg:flex-row gap-2 lg:gap-4">
+        <div className="w-full max-w-[1400px] mx-auto px-2 sm:px-4">
+            <div className="flex flex-col lg:flex-row gap-2 lg:gap-6 items-start justify-center">
                 {/* Board column */}
-                <div className="w-full lg:flex-1 lg:max-w-[600px] xl:max-w-[700px] mx-auto lg:mx-0">
+                <div className="w-full lg:w-auto lg:flex-1 lg:max-w-[700px] xl:max-w-[800px] mx-auto lg:mx-auto">
                     {/* Top status bar - compact */}
                     <div className="flex items-center justify-between mb-1 px-1">
                         <div className="flex items-center gap-1.5">
+                            {isSpectator && (
+                                <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400">
+                                    Spectating
+                                </span>
+                            )}
                             {isAIMode && (
                                 <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
                                     vs AI
@@ -584,18 +594,18 @@ export default function ChessGameClient({ gameId }) {
                         <ChessBoard
                             fen={isReviewing ? reviewFen : game.fen}
                             turn={isReviewing ? reviewTurn : game.turn}
-                            onMove={isReviewing ? undefined : handleMove}
-                            selectedSquare={isReviewing ? null : selectedSquare}
-                            onSquareClick={isReviewing ? undefined : handleSquareClick}
+                            onMove={isReviewing || isSpectator ? undefined : handleMove}
+                            selectedSquare={isReviewing || isSpectator ? null : selectedSquare}
+                            onSquareClick={isReviewing || isSpectator ? undefined : handleSquareClick}
                             lastMove={isReviewing ? reviewLastMove : lastMove}
-                            legalMoves={isReviewing ? [] : legalMoves}
-                            playerColor={myColor}
+                            legalMoves={isReviewing || isSpectator ? [] : legalMoves}
+                            playerColor={isSpectator ? null : myColor}
                             isFlipped={isFlipped}
                             onFlip={() => setIsFlipped(!isFlipped)}
                             status={game.status}
                             promotionPending={promotionPending}
                             onPromotionChoice={handlePromotionChoice}
-                            moveAnimation={isReviewing ? null : moveAnimation}
+                            moveAnimation={isReviewing || isSpectator ? null : moveAnimation}
                         />
                     </div>
 
@@ -712,6 +722,14 @@ export default function ChessGameClient({ gameId }) {
                         <div className="flex items-center gap-0.5">
                             {game.status === "active" && myColor && (
                                 <>
+                                    {isAIMode && !aiThinking && game.moves?.length >= 2 && isMyTurn && (
+                                        <button onClick={handleTakeBack} className="px-2 py-1 text-[10px] sm:text-xs font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-md transition-colors">
+                                            Take Back
+                                        </button>
+                                    )}
+                                    {isAIMode && !aiThinking && game.moves?.length >= 2 && isMyTurn && (
+                                        <span className="text-gray-300 dark:text-gray-700 text-xs">|</span>
+                                    )}
                                     <button onClick={handleResign} className="px-2 py-1 text-[10px] sm:text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors">
                                         Resign
                                     </button>
@@ -743,7 +761,7 @@ export default function ChessGameClient({ gameId }) {
                 </div>
 
                 {/* Side panel - desktop: sidebar, mobile: tabbed panel */}
-                <div className="w-full lg:w-64 xl:w-72 shrink-0">
+                <div className="w-full lg:w-72 xl:w-80 shrink-0">
                     {/* Mobile tab header */}
                     <div className="flex lg:hidden border-b border-gray-200 dark:border-gray-700">
                         <button
@@ -787,6 +805,7 @@ export default function ChessGameClient({ gameId }) {
                                         chat={chatMessages}
                                         onSendMessage={handleSendChat}
                                         username={user?.username}
+                                        readOnly={isSpectator}
                                     />
                                 </div>
                             )}
@@ -794,7 +813,7 @@ export default function ChessGameClient({ gameId }) {
 
                         {/* Desktop: show both stacked */}
                         <div className="hidden lg:block">
-                            <div className="h-64 xl:h-72 border-b border-gray-200 dark:border-gray-700">
+                            <div className="h-72 xl:h-80 border-b border-gray-200 dark:border-gray-700">
                                 <ChessMoveHistory
                                     moves={game.moves || []}
                                     currentMoveIndex={isReviewing ? reviewIndex - 1 : -1}
@@ -802,11 +821,12 @@ export default function ChessGameClient({ gameId }) {
                                     orientation={myColor}
                                 />
                             </div>
-                            <div className="h-64 xl:h-72">
+                            <div className="h-72 xl:h-80">
                                 <ChessChat
                                     chat={chatMessages}
                                     onSendMessage={handleSendChat}
                                     username={user?.username}
+                                    readOnly={isSpectator}
                                 />
                             </div>
                         </div>
@@ -829,24 +849,27 @@ export default function ChessGameClient({ gameId }) {
                         <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mb-4">
                             <ChessReviewPanel
                                 moves={game.moves || []}
-                                playerColor={myColor}
+                                playerColor={myColor || "w"}
                                 playerName={me?.username || user?.username || "Player"}
                                 opponentName={opponent?.username || "Opponent"}
                                 result={game.result}
                                 resultReason={game.resultReason}
+                                onGoToMove={goToMove}
                             />
                         </div>
 
                         <div className="flex flex-col gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                            <button
-                                onClick={() => playAgain("/api/chess/games", { mode: game.mode, aiDifficulty: game.aiDifficulty })}
-                                disabled={creating}
-                                className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-colors shadow-md text-center text-sm"
-                            >
-                                {creating ? "Starting..." : "Play Again"}
-                            </button>
+                            {!isSpectator && (
+                                <button
+                                    onClick={() => playAgain("/api/chess/games", { mode: game.mode, aiDifficulty: game.aiDifficulty })}
+                                    disabled={creating}
+                                    className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-colors shadow-md text-center text-sm"
+                                >
+                                    {creating ? "Starting..." : "Play Again"}
+                                </button>
+                            )}
                             <a href="/chess" className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-colors shadow-md text-center text-sm">
-                                Back to Lobby
+                                {isSpectator ? "Back to Chess" : "Back to Lobby"}
                             </a>
                             <button
                                 onClick={() => setShowGameOver(false)}
