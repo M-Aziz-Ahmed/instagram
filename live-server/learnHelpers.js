@@ -119,7 +119,8 @@ function collectCourseItems(course) {
 }
 
 // Build the exercise question set for a lesson (deterministic per seed).
-function buildQuestions(langId, langMeta, course, lesson) {
+// `stage` = 0-based unit index. Deeper course units unlock speaking exercises.
+function buildQuestions(langId, langMeta, course, lesson, stage = 0) {
     const rng = mulberry32(hashCode(`${langId}:${lesson.id}`));
     const spaced = langMeta.spaced !== false;
     const all = collectCourseItems(course);
@@ -143,8 +144,9 @@ function buildQuestions(langId, langMeta, course, lesson) {
     // 1) select: Which of these means "<english>" → target options.
     //    For scripts without word spaces (CJK/Thai) we lead with extra easy
     //    selects instead of wordbank, so beginners never type raw characters.
+    //    Empty lessons (Reviews) sample from the whole course.
     const fwdCount = spaced ? 3 : 5;
-    const s1 = sample(rng, localVocab, fwdCount);
+    const s1 = sample(rng, pool, fwdCount);
     for (const item of s1) {
         const { options, emojis, glosses, correctIndex } = pickDistractors(item, uniqTargets(pool), 3, "t");
         questions.push({
@@ -157,7 +159,8 @@ function buildQuestions(langId, langMeta, course, lesson) {
     }
 
     // 2) select reverse: What does "<target>" mean → english options
-    const s2 = sample(rng, localPhrases.length ? localPhrases : localVocab, 2);
+    const s2src = localPhrases.length ? localPhrases : localVocab.length ? localVocab : all.vocab;
+    const s2 = sample(rng, s2src, 2);
     for (const item of s2) {
         const { options, emojis, glosses, correctIndex } = pickDistractors(item, uniqEnglish(pool), 3, "e");
         questions.push({
@@ -171,7 +174,8 @@ function buildQuestions(langId, langMeta, course, lesson) {
 
     // 3) wordbank: build "<english>" in target language from chips
     if (spaced) {
-        const wp = localPhrases.length ? sample(rng, localPhrases, 2) : localPhrases;
+        const wpSrc = localPhrases.length ? localPhrases : all.phrases;
+        const wp = sample(rng, wpSrc, 2);
         for (let i = 0; i < 2 && wp[i]; i++) {
             const phrase = wp[i];
             const tokens = phrase.t.split(" ").filter(Boolean);
@@ -185,12 +189,12 @@ function buildQuestions(langId, langMeta, course, lesson) {
                 prompt: `Write this in ${langMeta.name}: “${phrase.e}”`,
                 tokens,
                 bank: bank.length ? bank : tokens,
-                phrase: phrase,
+                phrase,
             });
         }
 
         // 4) wordbank reverse: write "<target>" in English
-        const wp2 = localPhrases.length ? sample(rng, localPhrases, 2) : localPhrases;
+        const wp2 = sample(rng, wpSrc, 2);
         for (let i = 0; i < 2 && wp2[i]; i++) {
             const phrase = wp2[i];
             const tokens = phrase.e.split(" ").filter(Boolean);
@@ -204,15 +208,16 @@ function buildQuestions(langId, langMeta, course, lesson) {
                 prompt: `Write this in English: “${phrase.t}”`,
                 tokens,
                 bank: bank.length ? bank : tokens,
-                phrase: phrase,
+                phrase,
                 reverse: true,
             });
         }
     }
 
     // 5) match: pair up translations
-    const pairCount = Math.min(6, Math.max(3, Math.floor(localVocab.length / 2)));
-    const pairs = sample(rng, localVocab, pairCount);
+    const matchPool = localVocab.length ? localVocab : all.vocab;
+    const pairCount = Math.min(6, Math.max(3, Math.floor(matchPool.length / 2)));
+    const pairs = sample(rng, matchPool, pairCount);
     questions.push({
         id: `q${qi++}`,
         type: "match",
@@ -221,7 +226,8 @@ function buildQuestions(langId, langMeta, course, lesson) {
     });
 
     // 6) listen: speak target, choose English meaning
-    const ls = localPhrases.length ? sample(rng, localPhrases.length >= 2 ? localPhrases : localVocab, 1)[0] : sample(rng, localVocab, 1)[0];
+    const lsSrc = localPhrases.length ? localPhrases : localVocab.length ? localVocab : all.vocab;
+    const ls = sample(rng, lsSrc, 1)[0] || sample(rng, all.vocab, 1)[0];
     const { options, emojis, glosses, correctIndex } = pickDistractors(ls, uniqEnglish(pool), 3, "e");
     questions.push({
         id: `q${qi++}`,
@@ -231,6 +237,26 @@ function buildQuestions(langId, langMeta, course, lesson) {
         options, emojis, glosses, correctIndex,
         item: { e: ls.e, t: ls.t, gloss: ls.gloss || "" },
     });
+
+    // 7) speak: "Say this in <lang>" — a speech-to-text exercise. Only in the
+    //    deeper half of a course so beginners aren't scared off. Uses the local
+    //    SpeechRecognition API on the client; the client skips it gracefully if
+    //    unsupported.
+    if (stage >= 5) {
+        const speakSrc = localPhrases.length ? localPhrases : localVocab.length ? localVocab : all.vocab;
+        const s3 = sample(rng, uniqEnglish(speakSrc), Math.min(2, new Set(speakSrc.map((i) => i.e)).size));
+        for (const item of s3) {
+            questions.push({
+                id: `q${qi++}`,
+                type: "speak",
+                prompt: `Say this in ${langMeta.name}`,
+                say: item.e,
+                expect: item.t,
+                gloss: item.gloss || "",
+                emoji: item.emoji || "",
+            });
+        }
+    }
 
     return questions;
 }

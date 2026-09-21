@@ -806,6 +806,26 @@ const TRANSLATIONS = {
             people: [["my mother is a doctor", "my ma is 'n dokter"], ["the teacher is my friend", "die onderwyser is my vriend"]],
         },
     },
+    urdu: {
+        basics:      [["hello", "سلام"], ["thank you", "شکریہ"], ["yes", "ہاں"], ["no", "نہیں"], ["please", "براہ کرم"], ["goodbye", "خدا حافظ"], ["man", "آدمی"], ["woman", "عورت"], ["boy", "لڑکا"], ["girl", "لڑکی"]],
+        greetings:   [["good morning", "صبح بخیر"], ["good night", "شب بخیر"], ["good afternoon", "دوپہر بخیر"], ["how are you?", "آپ کیسے ہیں؟"], ["I'm fine", "میں ٹھیک ہوں"], ["see you later", "بعد میں ملتے ہیں"], ["friend", "دوست"], ["family", "خاندان"], ["love", "محبت"], ["welcome", "خوش آمدید"]],
+        friends:     [["friend", "دوست"], ["home", "گھر"], ["water", "پانی"], ["food", "کھانا"], ["eat", "کھانا"], ["drink", "پینا"], ["cat", "بلی"], ["dog", "کتا"], ["happy", "خوش"], ["sad", "اداس"]],
+        travel:      [["airport", "ہوائی اڈہ"], ["train", "ٹرین"], ["hotel", "ہوٹل"], ["taxi", "ٹیکسی"], ["ticket", "ٹکٹ"], ["passport", "پاسپورٹ"], ["map", "نقشہ"], ["car", "گاڑی"], ["bus", "بس"], ["street", "گلی"]],
+        food:        [["bread", "روٹی"], ["coffee", "کافی"], ["milk", "دودھ"], ["apple", "سیب"], ["rice", "چاول"], ["meat", "گوشت"], ["tea", "چائے"], ["egg", "انڈا"], ["water", "پانی"], ["banana", "کیلا"]],
+        numbers:     [["one", "ایک"], ["two", "دو"], ["three", "تین"], ["four", "چار"], ["five", "پانچ"], ["six", "چھ"], ["seven", "سات"], ["eight", "آٹھ"], ["nine", "نو"], ["ten", "دس"]],
+        colors:      [["red", "سرخ"], ["blue", "نیلا"], ["green", "سبز"], ["yellow", "پیلا"], ["white", "سفید"], ["black", "سیاہ"], ["purple", "جامنی"], ["orange", "نارنجی"], ["pink", "گلابی"], ["brown", "بھورا"]],
+        people:      [["mother", "ماں"], ["father", "باپ"], ["sister", "بہن"], ["brother", "بھائی"], ["son", "بیٹا"], ["daughter", "بیٹی"], ["teacher", "استاد"], ["doctor", "ڈاکٹر"], ["child", "بچہ"], ["baby", "بچہ"]],
+        _phrases: {
+            basics: [["hello, how are you?", "سلام، آپ کیسے ہیں؟"], ["goodbye, my friend", "خدا حافظ، میرے دوست"]],
+            greetings: [["good morning, how are you?", "صبح بخیر، آپ کیسے ہیں؟"], ["I love my family", "میں اپنے خاندان سے محبت کرتا ہوں"]],
+            friends: [["the cat drinks water", "بلی پانی پیتی ہے"], ["we are happy", "ہم خوش ہیں"]],
+            travel: [["where is the hotel?", "ہوٹل کہاں ہے؟"], ["I have one ticket", "میرے پاس ایک ٹکٹ ہے"]],
+            food: [["I drink coffee in the morning", "میں صبح کافی پیتا ہوں"], ["the bread and the egg are good", "روٹی اور انڈا اچھے ہیں"]],
+            numbers: [["I have two cats", "میرے پاس دو بلیاں ہیں"], ["there are three apples", "تین سیب ہیں"]],
+            colors: [["the flower is red", "پھول سرخ ہے"], ["the sky is blue", "آسمان نیلا ہے"]],
+            people: [["my mother is a doctor", "میری ماں ڈاکٹر ہیں"], ["the teacher is my friend", "استاد میرے دوست ہیں"]],
+        },
+    },
     esperanto: {
         basics:      [["hello", "saluton"], ["thank you", "dankon"], ["yes", "jes"], ["no", "ne"], ["please", "bonvolu"], ["goodbye", "ĝis revido"], ["man", "viro"], ["woman", "virino"], ["boy", "knabo"], ["girl", "knabino"]],
         greetings:   [["good morning", "bonan matenon"], ["good night", "bonan nokton"], ["good afternoon", "bonan posttagmezon"], ["how are you?", "kiel vi fartas?"], ["I'm fine", "mi fartas bone"], ["see you later", "ĝis poste"], ["friend", "amiko"], ["family", "familio"], ["love", "amo"], ["welcome", "bonvenon"]],
@@ -828,36 +848,115 @@ const TRANSLATIONS = {
     },
 };
 
-// Build full course objects from the shared lesson blueprint + translations.
+// ── Deep (continuation) syllabus ──────────────────────────────
+const fs = require("fs");
+const path = require("path");
+const { LESSONS: DEEP_LESSONS, UNIT_PLAN } = require("./learnDeepEnglish");
+
+// Per-language deep translations live in live-server/learnDeep/<lang>.js,
+// each exporting `{ [deepLessonId]: { vocab: [[en, target, gloss?]...],
+// phrases: [[en, target, gloss?]...] } }`. Languages without a file fall
+// back to their core (beginner) lessons only.
+function loadDeepTranslations() {
+    const deep = {};
+    const dir = path.join(__dirname, "learnDeep");
+    if (!fs.existsSync(dir)) return deep;
+    for (const f of fs.readdirSync(dir)) {
+        if (!f.endsWith(".js")) continue;
+        const lang = f.replace(/\.js$/, "");
+        try {
+            const mod = require(path.join(dir, f));
+            deep[lang] = mod && mod.__esModule ? mod.default : mod;
+        } catch (err) {
+            console.error(`[LEARN] failed to load deep translations for ${lang}:`, err.message);
+        }
+    }
+    return deep;
+}
+
+const DEEP = loadDeepTranslations();
+
+// Build full course objects from the shared lesson blueprints + translations.
+// Each unit = core beginner lessons + deep lessons (where the target language
+// has translations) + one auto-review lesson (`vocab` empty → buildQuestions
+// samples from the whole course).
 function buildCourses() {
     const courses = {};
     for (const [langId, t] of Object.entries(TRANSLATIONS)) {
+        const deepForLang = DEEP[langId] || {};
         const units = [];
-        const unitMap = [
-            { id: "u1", title: "Rookie", color: "#58cc02", lessons: ["basics", "greetings", "friends"] },
-            { id: "u2", title: "Explorer", color: "#1cb0f6", lessons: ["travel", "food", "numbers"] },
-            { id: "u3", title: "Adventurer", color: "#ffc800", lessons: ["colors", "people"] },
-        ];
 
-        for (const u of unitMap) {
-            const lessons = u.lessons.map((lid) => {
-                const blueprint = BASIC_LESSON[lid];
-                const vocab = blueprint.vocab.map(([e, , emoji]) => {
-                    const found = (t[lid] || []).find(([en]) => en === e);
-                    return { e, t: found ? found[1] : e, emoji, gloss: (found && found[2]) || "" };
-                });
-                const phrases = (t._phrases[lid] || []).map(([e, target, gloss]) => ({ e, t: target, gloss: gloss || "" }));
-                return {
-                    id: `${langId}-${lid}`,
-                    title: blueprint.title,
-                    type: "lesson",
-                    xp: 10,
-                    vocab,
-                    phrases,
-                };
+        const buildCoreLesson = (lid) => {
+            const blueprint = BASIC_LESSON[lid];
+            const vocab = blueprint.vocab.map(([e, , emoji]) => {
+                const found = (t[lid] || []).find(([en]) => en === e);
+                return { e, t: found ? found[1] : e, emoji, gloss: (found && found[2]) || "" };
             });
-            units.push({ id: `${langId}-${u.id}`, title: u.title, color: u.color, lessons });
+            const phrases = (t._phrases[lid] || []).map(([e, target, gloss]) => ({ e, t: target, gloss: gloss || "" }));
+            return {
+                id: `${langId}-${lid}`,
+                title: blueprint.title,
+                type: "lesson",
+                xp: 10,
+                vocab,
+                phrases,
+            };
+        };
+
+        const buildDeepLesson = (lid) => {
+            const dl = deepForLang[lid];
+            if (!dl || !DEEP_LESSONS[lid]) return null;
+            const blueprint = DEEP_LESSONS[lid];
+            const emojiFor = (en) => {
+                const v = (blueprint.vocab || []).find(([e]) => e === en);
+                return v ? v[2] : "";
+            };
+            const vocab = (dl.vocab || []).map(([e, target, gloss]) => ({
+                e,
+                t: target || e,
+                emoji: emojiFor(e),
+                gloss: gloss || "",
+            }));
+            const phrases = (dl.phrases || []).map(([e, target, gloss]) => ({ e, t: target || e, gloss: gloss || "" }));
+            return {
+                id: `${langId}-${lid}`,
+                title: blueprint.title,
+                type: "lesson",
+                xp: 10,
+                vocab,
+                phrases,
+            };
+        };
+
+        const used = new Set();
+        UNIT_PLAN.forEach((u, ui) => {
+            const built = [];
+            for (const lid of u.lessons) {
+                if (used.has(lid)) continue;
+                used.add(lid);
+                const lesson = BASIC_LESSON[lid] ? buildCoreLesson(lid) : buildDeepLesson(lid);
+                if (lesson) built.push(lesson);
+            }
+            if (built.length === 0) return;
+            if (built.length > 1) {
+                built.push({
+                    id: `${langId}-u${ui + 1}-review`,
+                    title: "Review",
+                    type: "lesson",
+                    xp: 12,
+                    vocab: [],
+                    phrases: [],
+                });
+            }
+            units.push({ id: `${langId}-u${ui + 1}`, title: u.title, color: u.color, lessons: built });
+        });
+
+        // The course must never end on a vocabulary-less review node.
+        if (units.length > 0) {
+            const last = units[units.length - 1].lessons;
+            if (last[last.length - 1].title === "Review") last.pop();
         }
+
         courses[langId] = { units };
     }
     return courses;

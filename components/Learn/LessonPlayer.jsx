@@ -277,6 +277,31 @@ function Gloss({ text }) {
     return <span className="block text-xs font-semibold text-gray-400 dark:text-gray-500 mt-0.5 tracking-wide" dir="ltr">{text}</span>;
 }
 
+function normalizeSpeech(s) {
+    return (s || "")
+        .toLowerCase()
+        .replace(/[.,!?;:""''„“”‘’—–()]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function speechMatch(heard, expect) {
+    const h = normalizeSpeech(heard);
+    const e = normalizeSpeech(expect);
+    if (!h) return false;
+    if (!e) return true;
+    if (h === e) return true;
+    if (h.includes(e) || e.includes(h)) return true;
+    const hw = h.split(" ");
+    const ew = e.split(" ");
+    const overlap = hw.filter((w) => ew.includes(w)).length;
+    return overlap / ew.length >= 0.7;
+}
+
+function speechRecAvailable() {
+    return typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+
 function SpeakBtn({ text, lang }) {
     if (!text) return null;
     return (
@@ -300,12 +325,50 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
     const [bank, setBank] = useState(q.bank);
     const [checked, setChecked] = useState(false);
     const [correct, setCorrect] = useState(false);
+    const [heard, setHeard] = useState("");
+    const [srStatus, setSrStatus] = useState("idle"); // idle | listening | heard | unsupported
+    const recRef = useRef(null);
 
     const applyResult = (isCorrect) => {
         setChecked(true);
         setCorrect(isCorrect);
         if (!isCorrect) hurt(1);
     };
+
+    const stopRec = () => {
+        if (recRef.current) {
+            try { recRef.current.stop(); } catch {}
+            recRef.current = null;
+        }
+    };
+
+    const startRec = () => {
+        if (!speechRecAvailable()) {
+            setSrStatus("unsupported");
+            return;
+        }
+        stopRec();
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const r = new SR();
+        r.lang = hl || "en-US";
+        r.interimResults = false;
+        r.maxAlternatives = 1;
+        r.onresult = (e) => {
+            const t = e.results?.[0]?.[0]?.transcript || "";
+            if (t) setHeard(t);
+            setSrStatus("heard");
+            stopRec();
+        };
+        r.onerror = () => { stopRec(); setSrStatus((s) => (s === "heard" ? s : "idle")); };
+        r.onend = () => { recRef.current = null; setSrStatus((s) => (s === "listening" ? "idle" : s)); };
+        recRef.current = r;
+        setSrStatus("listening");
+        try { r.start(); } catch { setSrStatus("idle"); }
+    };
+
+    useEffect(() => {
+        return () => stopRec();
+    }, []);
 
     const check = () => {
         if (q.type === "select" || q.type === "listen") {
@@ -314,6 +377,9 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
             const expected = q.tokens.join(" ").trim().toLowerCase().replace(/\s+/g, " ");
             const actual = answer.trim().toLowerCase().replace(/\s+/g, " ");
             applyResult(expected === actual);
+        } else if (q.type === "speak") {
+            const supported = speechRecAvailable();
+            applyResult(supported ? speechMatch(heard, q.expect) : true);
         }
     };
 
@@ -347,6 +413,10 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
             ? choice !== null
             : q.type === "wordbank"
             ? answer.trim().length > 0
+            : q.type === "speak"
+            ? speechRecAvailable()
+                ? heard.trim().length > 0 || srStatus !== "listening"
+                : true
             : false;
 
     const optionClass = (i, isCorrectOption) => {
@@ -378,7 +448,10 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
                             {q.options.map((o, i) => (
                                 <button
                                     key={i}
-                                    onClick={() => !checked && setChoice(i)}
+                                    onClick={() => {
+                                        if (!checked) setChoice(i);
+                                        if (q.prompt.startsWith("Which of these")) speakText(o, hl);
+                                    }}
                                     className={`p-4 rounded-2xl border-2 text-sm font-bold transition-all text-left flex items-center justify-between ${optionClass(i, i === q.correctIndex)}`}
                                 >
                                     <span className="flex flex-col flex-1">
@@ -451,8 +524,57 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
                     </>
                 )}
 
+                {/* Speak */}
+                {q.type === "speak" && (
+                    <>
+                        <p className="text-sm font-bold text-gray-400 dark:text-gray-500 mb-1">🗣️ {q.prompt}</p>
+                        <div className="inline-flex items-center justify-center gap-3 px-5 py-3 rounded-2xl bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 mb-2">
+                            <span className="text-2xl">{q.emoji}</span>
+                            <span className="text-xl font-extrabold text-gray-800 dark:text-gray-100 leading-snug">{q.say}</span>
+                            <SpeakBtn text={q.expect} lang={hl} />
+                        </div>
+                        <Gloss text={q.gloss} />
+                        <p className="text-xs text-gray-400 mt-3 mb-5">Tap and hold the mic to record yourself saying the translation.</p>
+
+                        {speechRecAvailable() ? (
+                            <div className="flex flex-col items-center gap-3">
+                                <button
+                                    onMouseDown={startRec}
+                                    onTouchStart={startRec}
+                                    onMouseUp={stopRec}
+                                    onTouchEnd={stopRec}
+                                    className={`w-24 h-24 mx-auto rounded-full flex items-center justify-center shadow-lg transition-colors ${
+                                        srStatus === "listening"
+                                            ? "bg-red-500 hover:bg-red-600"
+                                            : "bg-[#1cb0f6] hover:bg-[#1899d6]"
+                                    } text-white`}
+                                    aria-label="Record"
+                                >
+                                    {srStatus === "listening" ? (
+                                        <span className="w-10 h-10 rounded-full bg-white/25 animate-ping" />
+                                    ) : (
+                                        <svg className="w-9 h-9" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z" />
+                                            <path d="M17 11a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z" />
+                                        </svg>
+                                    )}
+                                </button>
+                                <p className="text-xs font-bold text-gray-400">
+                                    {srStatus === "listening" ? "Listening…" : srStatus === "heard" ? `You said: “${heard}”` : "Tap & speak"}
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="max-w-sm mx-auto rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 p-4">
+                                <p className="text-sm text-gray-500 dark:text-gray-300">
+                                    Speech recognition isn&apos;t supported in this browser. Tap the speaker to hear the phrase, then continue.
+                                </p>
+                            </div>
+                        )}
+                    </>
+                )}
+
                 {/* Match */}
-                {q.type === "match" && <MatchGame pairs={q.pairs} hurt={hurt} onDone={(ok) => onCheck(ok)} />}
+                {q.type === "match" && <MatchGame pairs={q.pairs} hl={hl} hurt={hurt} onDone={(ok) => onCheck(ok)} />}
             </div>
 
             {/* Check bar */}
@@ -491,7 +613,7 @@ function qPromptDir(q) {
 }
 
 // ── Match game ────────────────────────────────────────────────
-function MatchGame({ pairs, hurt, onDone }) {
+function MatchGame({ pairs, hl, hurt, onDone }) {
     const [tiles, setTiles] = useState(() => [...pairs].map((p) => p.t).sort(() => Math.random() - 0.5));
     const [selLeft, setSelLeft] = useState(null);
     const [selRight, setSelRight] = useState(null);
@@ -544,6 +666,7 @@ function MatchGame({ pairs, hurt, onDone }) {
                         <button
                             key={`${t}-${ri}`}
                             onClick={() => {
+                                speakText(t, hl);
                                 if (shake) return;
                                 if (selLeft !== null) tryPair(selLeft, ri);
                                 else setSelRight(ri);
