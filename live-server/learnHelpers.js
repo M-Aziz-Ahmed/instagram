@@ -121,6 +121,7 @@ function collectCourseItems(course) {
 // Build the exercise question set for a lesson (deterministic per seed).
 function buildQuestions(langId, langMeta, course, lesson) {
     const rng = mulberry32(hashCode(`${langId}:${lesson.id}`));
+    const spaced = langMeta.spaced !== false;
     const all = collectCourseItems(course);
     const localVocab = lesson.vocab || [];
     const localPhrases = lesson.phrases || [];
@@ -131,77 +132,82 @@ function buildQuestions(langId, langMeta, course, lesson) {
 
     const pickDistractors = (correct, list, take, key) => {
         const others = list.filter((x) => x[key] !== correct[key]);
-        const picked = sample(rng, others, take).map((x) => ({ value: x[key], emoji: x.emoji || "" }));
-        const result = shuffle(rng, [{ value: correct[key], emoji: correct.emoji || "" }, ...picked]);
-        return { options: result.map((o) => o.value), emojis: result.map((o) => o.emoji), correctIndex: result.findIndex((o) => o.value === correct[key]) };
+        const picked = sample(rng, others, take).map((x) => ({ value: x[key], emoji: x.emoji || "", gloss: x.gloss || "" }));
+        const result = shuffle(rng, [{ value: correct[key], emoji: correct.emoji || "", gloss: correct.gloss || "" }, ...picked]);
+        return { options: result.map((o) => o.value), emojis: result.map((o) => o.emoji), glosses: result.map((o) => o.gloss), correctIndex: result.findIndex((o) => o.value === correct[key]) };
     };
 
     const questions = [];
     let qi = 0;
 
-    // 1) select: Which of these means "<english>" → target options
-    const s1 = sample(rng, localVocab, 3);
+    // 1) select: Which of these means "<english>" → target options.
+    //    For scripts without word spaces (CJK/Thai) we lead with extra easy
+    //    selects instead of wordbank, so beginners never type raw characters.
+    const fwdCount = spaced ? 3 : 5;
+    const s1 = sample(rng, localVocab, fwdCount);
     for (const item of s1) {
-        const { options, correctIndex } = pickDistractors(item, uniqTargets(pool), 3, "t");
+        const { options, emojis, glosses, correctIndex } = pickDistractors(item, uniqTargets(pool), 3, "t");
         questions.push({
             id: `q${qi++}`,
             type: "select",
             prompt: `Which of these means “${item.e}”?`,
-            options, correctIndex,
-            item: { e: item.e, t: item.t, emoji: item.emoji || "" },
+            options, emojis, glosses, correctIndex,
+            item: { e: item.e, t: item.t, emoji: item.emoji || "", gloss: item.gloss || "" },
         });
     }
 
     // 2) select reverse: What does "<target>" mean → english options
     const s2 = sample(rng, localPhrases.length ? localPhrases : localVocab, 2);
     for (const item of s2) {
-        const { options, correctIndex } = pickDistractors(item, uniqEnglish(pool), 3, "e");
+        const { options, emojis, glosses, correctIndex } = pickDistractors(item, uniqEnglish(pool), 3, "e");
         questions.push({
             id: `q${qi++}`,
             type: "select",
             prompt: `What does “${item.t}” mean?`,
-            options, correctIndex,
-            item: { e: item.e, t: item.t },
+            options, emojis, glosses, correctIndex,
+            item: { e: item.e, t: item.t, emoji: item.emoji || "", gloss: item.gloss || "" },
         });
     }
 
     // 3) wordbank: build "<english>" in target language from chips
-    const wp = localPhrases.length ? sample(rng, localPhrases, 2) : localPhrases;
-    for (let i = 0; i < 2 && wp[i]; i++) {
-        const phrase = wp[i];
-        const tokens = phrase.t.split(" ").filter(Boolean);
-        let bank = tokens.slice();
-        const others = pool.filter((v) => v.t !== phrase.t && v.t.split(" ").length === 1).slice(0, 4);
-        const distractor = sample(rng, others, Math.max(0, Math.min(2, 8 - tokens.length))).map((x) => x.t);
-        bank = shuffle(rng, [...bank, ...distractor]);
-        questions.push({
-            id: `q${qi++}`,
-            type: "wordbank",
-            prompt: `Write this in ${langMeta.name}: “${phrase.e}”`,
-            tokens,
-            bank: bank.length ? bank : tokens,
-            phrase: phrase,
-        });
-    }
+    if (spaced) {
+        const wp = localPhrases.length ? sample(rng, localPhrases, 2) : localPhrases;
+        for (let i = 0; i < 2 && wp[i]; i++) {
+            const phrase = wp[i];
+            const tokens = phrase.t.split(" ").filter(Boolean);
+            let bank = tokens.slice();
+            const others = pool.filter((v) => v.t !== phrase.t && v.t.split(" ").length === 1).slice(0, 4);
+            const distractor = sample(rng, others, Math.max(0, Math.min(2, 8 - tokens.length))).map((x) => x.t);
+            bank = shuffle(rng, [...bank, ...distractor]);
+            questions.push({
+                id: `q${qi++}`,
+                type: "wordbank",
+                prompt: `Write this in ${langMeta.name}: “${phrase.e}”`,
+                tokens,
+                bank: bank.length ? bank : tokens,
+                phrase: phrase,
+            });
+        }
 
-    // 4) wordbank reverse: write "<target>" in English
-    const wp2 = localPhrases.length ? sample(rng, localPhrases, 2) : localPhrases;
-    for (let i = 0; i < 2 && wp2[i]; i++) {
-        const phrase = wp2[i];
-        const tokens = phrase.e.split(" ").filter(Boolean);
-        let bank = tokens.slice();
-        const others = pool.filter((v) => v.e !== phrase.e && v.e.split(" ").length === 1).slice(0, 6);
-        const distractor = sample(rng, others, Math.max(0, Math.min(2, 8 - tokens.length))).map((x) => x.e);
-        bank = shuffle(rng, [...bank, ...distractor]);
-        questions.push({
-            id: `q${qi++}`,
-            type: "wordbank",
-            prompt: `Write this in English: “${phrase.t}”`,
-            tokens,
-            bank: bank.length ? bank : tokens,
-            phrase: phrase,
-            reverse: true,
-        });
+        // 4) wordbank reverse: write "<target>" in English
+        const wp2 = localPhrases.length ? sample(rng, localPhrases, 2) : localPhrases;
+        for (let i = 0; i < 2 && wp2[i]; i++) {
+            const phrase = wp2[i];
+            const tokens = phrase.e.split(" ").filter(Boolean);
+            let bank = tokens.slice();
+            const others = pool.filter((v) => v.e !== phrase.e && v.e.split(" ").length === 1).slice(0, 6);
+            const distractor = sample(rng, others, Math.max(0, Math.min(2, 8 - tokens.length))).map((x) => x.e);
+            bank = shuffle(rng, [...bank, ...distractor]);
+            questions.push({
+                id: `q${qi++}`,
+                type: "wordbank",
+                prompt: `Write this in English: “${phrase.t}”`,
+                tokens,
+                bank: bank.length ? bank : tokens,
+                phrase: phrase,
+                reverse: true,
+            });
+        }
     }
 
     // 5) match: pair up translations
@@ -211,19 +217,19 @@ function buildQuestions(langId, langMeta, course, lesson) {
         id: `q${qi++}`,
         type: "match",
         prompt: "Match the pairs",
-        pairs: pairs.map((v) => ({ e: v.e, t: v.t })),
+        pairs: pairs.map((v) => ({ e: v.e, t: v.t, gloss: v.gloss || "" })),
     });
 
     // 6) listen: speak target, choose English meaning
     const ls = localPhrases.length ? sample(rng, localPhrases.length >= 2 ? localPhrases : localVocab, 1)[0] : sample(rng, localVocab, 1)[0];
-    const { options, correctIndex } = pickDistractors(ls, uniqEnglish(pool), 3, "e");
+    const { options, emojis, glosses, correctIndex } = pickDistractors(ls, uniqEnglish(pool), 3, "e");
     questions.push({
         id: `q${qi++}`,
         type: "listen",
         prompt: "What does the audio say?",
         speak: ls.t,
-        options, correctIndex,
-        item: { e: ls.e, t: ls.t },
+        options, emojis, glosses, correctIndex,
+        item: { e: ls.e, t: ls.t, gloss: ls.gloss || "" },
     });
 
     return questions;
