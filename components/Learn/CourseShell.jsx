@@ -256,30 +256,48 @@ function LearningPath({ course, me, startLesson, openQuests, openLeague }) {
 }
 
 function LessonNode({ lesson, color, onOpen }) {
+    const isReview = lesson.title === "Review";
+    const crownCount = Math.min(5, lesson.crowns || 0);
     return (
-        <button
-            onClick={onOpen}
-            disabled={lesson.locked}
-            aria-label={lesson.title}
-            className={`relative w-14 h-14 rounded-full flex items-center justify-center text-2xl font-extrabold border-4 transition-transform active:scale-95 ${
-                lesson.done
-                    ? "border-white dark:border-gray-950 ring-2 text-white"
-                    : lesson.locked
-                    ? "border-gray-300 dark:border-gray-700 bg-gray-200 dark:bg-gray-800 text-gray-400 cursor-not-allowed"
-                    : "border-white dark:border-gray-950 ring-4 bg-[#58cc02] text-white animate-[pulse_2s_ease-in-out_infinite]"
-            }`}
-            style={lesson.done ? { backgroundColor: color, boxShadow: `0 0 0 1px ${color}55` } : lesson.locked ? {} : {}}
-        >
-            {lesson.locked ? (
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-                </svg>
-            ) : lesson.done ? (
-                <span>★</span>
-            ) : (
-                <span className="text-white">▶</span>
+        <div className="flex flex-col items-center">
+            <button
+                onClick={onOpen}
+                disabled={lesson.locked}
+                aria-label={lesson.title}
+                className={`relative w-14 h-14 rounded-full flex items-center justify-center text-2xl font-extrabold border-4 transition-transform active:scale-95 ${
+                    lesson.done
+                        ? "border-white dark:border-gray-950 ring-2 text-white"
+                        : lesson.locked
+                        ? "border-gray-300 dark:border-gray-700 bg-gray-200 dark:bg-gray-800 text-gray-400 cursor-not-allowed"
+                        : "border-white dark:border-gray-950 ring-4 bg-[#58cc02] text-white animate-[pulse_2s_ease-in-out_infinite]"
+                }`}
+                style={lesson.done ? { backgroundColor: color, boxShadow: `0 0 0 1px ${color}55` } : {}}
+            >
+                {lesson.locked ? (
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                    </svg>
+                ) : lesson.done ? (
+                    isReview ? <span>🔁</span> : <span>★</span>
+                ) : (
+                    <span className="text-white">▶</span>
+                )}
+            </button>
+
+            {/* Crown pips (earned by replaying a lesson perfectly, up to 5) */}
+            {crownCount > 0 && (
+                <div className="flex items-center justify-center gap-0.5 mt-1">
+                    {Array.from({ length: crownCount }).map((_, i) => (
+                        <span key={i} className="text-[11px] leading-none">👑</span>
+                    ))}
+                </div>
             )}
-        </button>
+            {!lesson.locked && isReview && (
+                <span className={`mt-1 text-[9px] font-extrabold tracking-wide px-1.5 py-0.5 rounded ${lesson.done ? "text-gray-400 dark:text-gray-500" : "text-gray-500 dark:text-gray-400"}`}>
+                    REVIEW
+                </span>
+            )}
+        </div>
     );
 }
 

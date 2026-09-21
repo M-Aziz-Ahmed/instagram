@@ -264,8 +264,9 @@ router.get("/course/:courseId", verifyToken, async (req, res) => {
         const lu = await ensureUser(req);
         await resetDailyIfNeeded(lu);
         const user = await User.findById(req.userId).lean();
-        const prog = lu.courseProgress?.get?.(courseId) || { crowns: 0, xp: 0, lessonsDone: [] };
+        const prog = lu.courseProgress?.get?.(courseId) || { crowns: 0, xp: 0, lessonsDone: [], lessonCrowns: {} };
         const done = new Set(prog.lessonsDone || []);
+        const lessonCrowns = prog.lessonCrowns || {};
 
         const units = course.units.map((unit, ui) => ({
             id: unit.id,
@@ -278,6 +279,7 @@ router.get("/course/:courseId", verifyToken, async (req, res) => {
                 xp: lesson.xp,
                 done: done.has(lesson.id),
                 crown: done.has(lesson.id),
+                crowns: done.has(lesson.id) ? Math.max(1, lessonCrowns[lesson.id] || 1) : 0,
                 locked: ui === 0 && li === 0 ? false : !done.has(prevLessonId(course, ui, li)),
                 index: li,
             })),
@@ -320,7 +322,11 @@ router.get("/lesson/:courseId/:lessonId", verifyToken, async (req, res) => {
         const lu = await ensureUser(req);
         await resetDailyIfNeeded(lu);
         const user = await User.findById(req.userId).lean();
-        const questions = buildQuestions(courseId, meta, course, found);
+        let stage = 0;
+        course.units.forEach((unit, ui) => {
+            if (unit.lessons.some((l) => l.id === lessonId)) stage = ui;
+        });
+        const questions = buildQuestions(courseId, meta, course, found, stage);
         res.json({
             me: buildMe(lu, user),
             lesson: {
@@ -384,9 +390,12 @@ router.post("/lesson/complete", verifyToken, async (req, res) => {
         if (!practice) {
             lu.lessonsCompleted += 1;
             if (isPerfect) lu.perfectLessons += 1;
-            const prog = lu.courseProgress.get(courseId) || { crowns: 0, xp: 0, lessonsDone: [] };
+            const prog = lu.courseProgress.get(courseId) || { crowns: 0, xp: 0, lessonsDone: [], lessonCrowns: {} };
             if (!prog.lessonsDone.includes(lessonId)) prog.lessonsDone.push(lessonId);
-            if (isPerfect) prog.crowns += 1;
+            prog.lessonCrowns = prog.lessonCrowns || {};
+            prog.lessonCrowns[lessonId] = Math.min(5, (prog.lessonCrowns[lessonId] || 0) + 1);
+            if (isPerfect) prog.crowns = Math.min(5, prog.crowns + 1);
+            if ((prog.lessonCrowns[lessonId] || 0) === 5) lu.gems += 30; // 5th crown: bonus gems
             prog.xp += xpEarned;
             lu.courseProgress.set(courseId, prog);
         }
