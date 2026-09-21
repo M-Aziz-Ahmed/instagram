@@ -3266,6 +3266,7 @@ app.use("/api/link-preview", apiLimiter, require("./routes/linkPreview"));
 app.use("/api/streaming", apiLimiter, require("./routes/streaming"));
 app.use("/api/media-proxy", require("./routes/mediaProxy"));
 app.use("/api/reactionduel", require("./routes/reactionduel")(io));
+app.use("/api/learn", apiLimiter, require("./routes/learn"));
 app.use("/api", require("./routes/social"));
 app.use("/api/bots", apiLimiter, require("./routes/bots"));
 
