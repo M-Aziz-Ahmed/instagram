@@ -263,6 +263,37 @@ function Hearts({ hearts }) {
 }
 
 // ── Question renderer ─────────────────────────────────────────
+function speakText(text, lang) {
+    if (!text || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang || "en-US";
+    u.rate = 0.85;
+    window.speechSynthesis.speak(u);
+}
+
+function Gloss({ text }) {
+    if (!text) return null;
+    return <span className="block text-xs font-semibold text-gray-400 dark:text-gray-500 mt-0.5 tracking-wide" dir="ltr">{text}</span>;
+}
+
+function SpeakBtn({ text, lang }) {
+    if (!text) return null;
+    return (
+        <button
+            type="button"
+            aria-label="Pronounce"
+            onClick={(e) => { e.stopPropagation(); speakText(text, lang); }}
+            className="w-9 h-9 rounded-full bg-[#1cb0f6]/10 text-[#1cb0f6] hover:bg-[#1cb0f6]/20 flex items-center justify-center shrink-0"
+        >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M3 9v6h4l5 5V4L7 9H3z" />
+                <path d="M16.5 12a4.5 4.5 0 0 0-2.5-4.03v8.05A4.5 4.5 0 0 0 16.5 12z" />
+            </svg>
+        </button>
+    );
+}
+
 function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
     const [choice, setChoice] = useState(null);
     const [answer, setAnswer] = useState("");
@@ -305,14 +336,7 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
         });
     };
 
-    const playAudio = () => {
-        if (!q.speak || !("speechSynthesis" in window)) return;
-        window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(q.speak);
-        u.lang = hl || "en-US";
-        u.rate = 0.9;
-        window.speechSynthesis.speak(u);
-    };
+    const playAudio = () => speakText(q.speak, hl);
 
     const targetDir = !q.reverse; // wordbank needing target-language assembly reads RTL
     const phrase = q.prompt.match(/“(.+)”/)?.[1] || "";
@@ -338,7 +362,18 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
                 {/* Select / reverse-select */}
                 {q.type === "select" && (
                     <>
-                        <p className="text-lg font-extrabold text-gray-800 dark:text-gray-100 leading-snug mb-6">{q.prompt}</p>
+                        {q.prompt.startsWith("What does") ? (
+                            <div className="mb-6">
+                                <p className="text-sm font-bold text-gray-400 dark:text-gray-500 mb-3">What does this mean?</p>
+                                <div className="inline-flex items-center justify-center gap-3 px-5 py-3 rounded-2xl bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800">
+                                    <span className="text-2xl font-extrabold text-gray-800 dark:text-gray-100 leading-snug" dir="ltr">{q.item?.t}</span>
+                                    <SpeakBtn text={q.item?.t} lang={hl} />
+                                </div>
+                                <div className="mt-2"><Gloss text={q.item?.gloss} /></div>
+                            </div>
+                        ) : (
+                            <p className="text-lg font-extrabold text-gray-800 dark:text-gray-100 leading-snug mb-6">{q.prompt}</p>
+                        )}
                         <div className="grid grid-cols-1 gap-3 max-w-md mx-auto">
                             {q.options.map((o, i) => (
                                 <button
@@ -346,7 +381,10 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
                                     onClick={() => !checked && setChoice(i)}
                                     className={`p-4 rounded-2xl border-2 text-sm font-bold transition-all text-left flex items-center justify-between ${optionClass(i, i === q.correctIndex)}`}
                                 >
-                                    <span dir={qPromptDir(q)}>{o}</span>
+                                    <span className="flex flex-col flex-1">
+                                        <span dir={qPromptDir(q)}>{o}</span>
+                                        {q.glosses?.[i] && <Gloss text={q.glosses[i]} />}
+                                    </span>
                                     {q.emojis?.[i] && <span className="text-xl">{q.emojis[i]}</span>}
                                 </button>
                             ))}
@@ -385,9 +423,13 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
                 {q.type === "wordbank" && (
                     <>
                         <p className="text-sm font-bold text-gray-400 dark:text-gray-500 mb-2">{q.prompt.replace(/“.+”/, "…")}</p>
-                        <p className="text-xl font-extrabold text-gray-700 dark:text-gray-200 mb-4" dir={rtl && !q.reverse ? "rtl" : "ltr"}>
-                            {phrase}
-                        </p>
+                        <div className="flex items-center justify-center gap-3 mb-4 max-w-full">
+                            <p className="text-xl font-extrabold text-gray-700 dark:text-gray-200 leading-snug" dir={rtl && !q.reverse ? "rtl" : "ltr"}>
+                                {phrase}
+                            </p>
+                            <SpeakBtn text={q.phrase?.t} lang={hl} />
+                        </div>
+                        {q.phrase?.gloss && <p className="mb-4"><Gloss text={q.phrase.gloss} /></p>}
                         <div className={`min-h-[64px] px-3 py-2 rounded-2xl border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex flex-wrap items-center gap-2 justify-center mb-5`} dir={isRtl ? "rtl" : "ltr"}>
                             {answer.split(" ").filter(Boolean).map((w, i) => (
                                 <button key={i} onClick={() => !checked && chipBack(i)} className="px-3 py-1.5 rounded-lg bg-[#1cb0f6] text-white text-sm font-bold">
@@ -455,6 +497,7 @@ function MatchGame({ pairs, hurt, onDone }) {
     const [selRight, setSelRight] = useState(null);
     const [paired, setPaired] = useState({});
     const [shake, setShake] = useState(false);
+    const glossMap = Object.fromEntries((pairs || []).map((p) => [p.t, p.gloss]));
 
     const tryPair = (li, ri) => {
         const p = pairs.find((x) => x.e === left[li] && x.t === tiles[ri]);
@@ -512,7 +555,10 @@ function MatchGame({ pairs, hurt, onDone }) {
                                     ? "border-[#1cb0f6] bg-[#1cb0f6]/10 text-gray-800 dark:text-gray-100"
                                     : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:border-[#1cb0f6]"
                             }`}>
-                            {t}
+                            <span className="flex flex-col items-center">
+                                {t}
+                                {glossMap[t] && <Gloss text={glossMap[t]} />}
+                            </span>
                         </button>
                     ))}
                 </div>
