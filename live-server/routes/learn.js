@@ -268,26 +268,40 @@ router.get("/course/:courseId", verifyToken, async (req, res) => {
         const done = new Set(prog.lessonsDone || []);
         const lessonCrowns = prog.lessonCrowns || {};
 
-        const units = course.units.map((unit, ui) => ({
-            id: unit.id,
-            title: unit.title,
-            color: unit.color,
-            lessons: unit.lessons.map((lesson, li) => ({
-                id: lesson.id,
-                title: lesson.title,
-                type: lesson.type,
-                xp: lesson.xp,
-                done: done.has(lesson.id),
-                crown: done.has(lesson.id),
-                crowns: done.has(lesson.id) ? Math.max(1, lessonCrowns[lesson.id] || 1) : 0,
-                locked: ui === 0 && li === 0 ? false : !done.has(prevLessonId(course, ui, li)),
-                index: li,
+        const chapters = course.chapters.map((chapter, ci) => ({
+            id: chapter.id,
+            chapter: chapter.chapter,
+            title: chapter.title,
+            theme: chapter.theme,
+            tier: chapter.tier,
+            difficulty: chapter.difficulty,
+            color: chapter.color,
+            steps: chapter.steps.map((step, si) => ({
+                id: step.id,
+                title: step.title,
+                lessons: step.lessons.map((lesson, li) => ({
+                    id: lesson.id,
+                    title: lesson.title,
+                    type: lesson.type,
+                    xp: lesson.xp,
+                    done: done.has(lesson.id),
+                    crown: done.has(lesson.id),
+                    crowns: done.has(lesson.id) ? Math.max(1, lessonCrowns[lesson.id] || 1) : 0,
+                    locked: ci === 0 && si === 0 && li === 0 ? false : !done.has(prevLessonId(course, ci, si, li)),
+                    index: li,
+                })),
             })),
         }));
 
+        const progress = {
+            lessonsDone: done.size,
+            totalLessons: course.chapters.reduce((n, c) => n + c.steps.reduce((m, s) => m + s.lessons.length, 0), 0),
+            chaptersDone: course.chapters.filter((c) => c.steps.every((s) => s.lessons.every((l) => done.has(l.id)))).length,
+        };
+
         res.json({
             me: buildMe(lu, user),
-            course: { id: courseId, meta, units },
+            course: { id: courseId, meta, chapters, progress },
         });
     } catch (err) {
         console.error("[LEARN] course error:", err.message);
@@ -295,11 +309,19 @@ router.get("/course/:courseId", verifyToken, async (req, res) => {
     }
 });
 
-function prevLessonId(course, ui, li) {
-    if (li > 0) return course.units[ui].lessons[li - 1]?.id;
-    for (let i = ui - 1; i >= 0; i--) {
-        const prevUnit = course.units[i];
-        if (prevUnit.lessons.length) return prevUnit.lessons[prevUnit.lessons.length - 1].id;
+function prevLessonId(course, ci, si, li) {
+    const chapters = course.chapters;
+    if (li > 0) return chapters[ci]?.steps[si]?.lessons[li - 1]?.id;
+    if (si > 0) {
+        const prev = chapters[ci]?.steps?.[si - 1]?.lessons;
+        if (prev?.length) return prev[prev.length - 1].id;
+    }
+    for (let i = ci - 1; i >= 0; i--) {
+        const steps = chapters[i].steps;
+        if (steps.length) {
+            const lessons = steps[steps.length - 1].lessons;
+            if (lessons.length) return lessons[lessons.length - 1].id;
+        }
     }
     return null;
 }
@@ -312,9 +334,11 @@ router.get("/lesson/:courseId/:lessonId", verifyToken, async (req, res) => {
         if (!meta || !course) return res.status(404).json({ error: "Course not found" });
 
         let found = null;
-        for (const unit of course.units) {
-            for (const lesson of unit.lessons) {
-                if (lesson.id === lessonId) found = lesson;
+        for (const chapter of course.chapters) {
+            for (const step of chapter.steps) {
+                for (const lesson of step.lessons) {
+                    if (lesson.id === lessonId) found = lesson;
+                }
             }
         }
         if (!found) return res.status(404).json({ error: "Lesson not found" });
@@ -322,16 +346,15 @@ router.get("/lesson/:courseId/:lessonId", verifyToken, async (req, res) => {
         const lu = await ensureUser(req);
         await resetDailyIfNeeded(lu);
         const user = await User.findById(req.userId).lean();
-        let stage = 0;
-        course.units.forEach((unit, ui) => {
-            if (unit.lessons.some((l) => l.id === lessonId)) stage = ui;
-        });
+        const stage = found.difficulty || 1;
         const questions = buildQuestions(courseId, meta, course, found, stage);
         res.json({
             me: buildMe(lu, user),
             lesson: {
                 id: found.id,
                 title: found.title,
+                type: found.type,
+                difficulty: stage,
                 xp: found.xp,
                 langName: meta.name,
                 flag: meta.flag,
@@ -355,7 +378,11 @@ router.post("/lesson/complete", verifyToken, async (req, res) => {
         if (!meta || !course) return res.status(400).json({ error: "Course not found" });
 
         let lessonMeta = null;
-        for (const unit of course.units) for (const lesson of unit.lessons) if (lesson.id === lessonId) lessonMeta = lesson;
+        for (const chapter of course.chapters) {
+            for (const step of chapter.steps) {
+                for (const lesson of step.lessons) if (lesson.id === lessonId) lessonMeta = lesson;
+            }
+        }
         if (!lessonMeta && !practice) return res.status(400).json({ error: "Lesson not found" });
 
         const user = await User.findById(req.userId).lean();

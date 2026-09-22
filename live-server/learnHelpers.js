@@ -105,12 +105,15 @@ function regenHearts(lu) {
     return lu;
 }
 
-// Flatten all vocab+phrases across a course to build distractor pools.
+// Flatten all vocab+phrases across a course (chapters → steps → lessons,
+// or legacy units) to build distractor pools.
 function collectCourseItems(course) {
     const vocab = [];
     const phrases = [];
-    for (const unit of course.units) {
-        for (const lesson of unit.lessons) {
+    const sections = course.chapters || course.units || [];
+    for (const chapter of sections) {
+        const lessons = chapter.steps ? chapter.steps.flatMap((s) => s.lessons) : chapter.lessons;
+        for (const lesson of lessons) {
             vocab.push(...(lesson.vocab || []));
             phrases.push(...(lesson.phrases || []));
         }
@@ -118,9 +121,33 @@ function collectCourseItems(course) {
     return { vocab, phrases };
 }
 
+const uniqTargets = (items) => [...new Map(items.map((v) => [v.t, v])).values()];
+const uniqEnglish = (items) => [...new Map(items.map((v) => [v.e, v])).values()];
+
+function pickDistractors(rng, correct, list, take, key) {
+    const others = list.filter((x) => x[key] !== correct[key]);
+    const picked = sample(rng, others, take).map((x) => ({ value: x[key], emoji: x.emoji || "", gloss: x.gloss || "" }));
+    const result = shuffle(rng, [{ value: correct[key], emoji: correct.emoji || "", gloss: correct.gloss || "" }, ...picked]);
+    return {
+        options: result.map((o) => o.value),
+        emojis: result.map((o) => o.emoji),
+        glosses: result.map((o) => o.gloss),
+        correctIndex: result.findIndex((o) => o.value === correct[key]),
+    };
+}
+
 // Build the exercise question set for a lesson (deterministic per seed).
-// `stage` = 0-based unit index. Deeper course units unlock speaking exercises.
-function buildQuestions(langId, langMeta, course, lesson, stage = 0) {
+// Route: story/pronounce lessons get their own generators; practice lessons
+// get the Duolingo-style drills. `stage` is the lesson difficulty (1-10) —
+// speaking exercises are available from difficulty 1, and whole sentences
+// are pronounced in "Speak up" steps from difficulty 6.
+function buildQuestions(langId, langMeta, course, lesson, stage = 1) {
+    if (lesson.type === "story") return buildStoryQuestions(langId, langMeta, course, lesson);
+    if (lesson.type === "pronounce") return buildPronounceQuestions(langId, langMeta, lesson, stage);
+    return buildPracticeQuestions(langId, langMeta, course, lesson, stage);
+}
+
+function buildPracticeQuestions(langId, langMeta, course, lesson, stage = 1) {
     const rng = mulberry32(hashCode(`${langId}:${lesson.id}`));
     const spaced = langMeta.spaced !== false;
     const all = collectCourseItems(course);
@@ -128,27 +155,16 @@ function buildQuestions(langId, langMeta, course, lesson, stage = 0) {
     const localPhrases = lesson.phrases || [];
     const pool = localVocab.length >= 6 ? localVocab : all.vocab;
 
-    const uniqTargets = (items) => [...new Map(items.map((v) => [v.t, v])).values()];
-    const uniqEnglish = (items) => [...new Map(items.map((v) => [v.e, v])).values()];
-
-    const pickDistractors = (correct, list, take, key) => {
-        const others = list.filter((x) => x[key] !== correct[key]);
-        const picked = sample(rng, others, take).map((x) => ({ value: x[key], emoji: x.emoji || "", gloss: x.gloss || "" }));
-        const result = shuffle(rng, [{ value: correct[key], emoji: correct.emoji || "", gloss: correct.gloss || "" }, ...picked]);
-        return { options: result.map((o) => o.value), emojis: result.map((o) => o.emoji), glosses: result.map((o) => o.gloss), correctIndex: result.findIndex((o) => o.value === correct[key]) };
-    };
-
     const questions = [];
     let qi = 0;
 
     // 1) select: Which of these means "<english>" → target options.
     //    For scripts without word spaces (CJK/Thai) we lead with extra easy
     //    selects instead of wordbank, so beginners never type raw characters.
-    //    Empty lessons (Reviews) sample from the whole course.
     const fwdCount = spaced ? 3 : 5;
     const s1 = sample(rng, pool, fwdCount);
     for (const item of s1) {
-        const { options, emojis, glosses, correctIndex } = pickDistractors(item, uniqTargets(pool), 3, "t");
+        const { options, emojis, glosses, correctIndex } = pickDistractors(rng, item, uniqTargets(pool), 3, "t");
         questions.push({
             id: `q${qi++}`,
             type: "select",
@@ -162,7 +178,7 @@ function buildQuestions(langId, langMeta, course, lesson, stage = 0) {
     const s2src = localPhrases.length ? localPhrases : localVocab.length ? localVocab : all.vocab;
     const s2 = sample(rng, s2src, 2);
     for (const item of s2) {
-        const { options, emojis, glosses, correctIndex } = pickDistractors(item, uniqEnglish(pool), 3, "e");
+        const { options, emojis, glosses, correctIndex } = pickDistractors(rng, item, uniqEnglish(pool), 3, "e");
         questions.push({
             id: `q${qi++}`,
             type: "select",
@@ -228,7 +244,7 @@ function buildQuestions(langId, langMeta, course, lesson, stage = 0) {
     // 6) listen: speak target, choose English meaning
     const lsSrc = localPhrases.length ? localPhrases : localVocab.length ? localVocab : all.vocab;
     const ls = sample(rng, lsSrc, 1)[0] || sample(rng, all.vocab, 1)[0];
-    const { options, emojis, glosses, correctIndex } = pickDistractors(ls, uniqEnglish(pool), 3, "e");
+    const { options, emojis, glosses, correctIndex } = pickDistractors(rng, ls, uniqEnglish(pool), 3, "e");
     questions.push({
         id: `q${qi++}`,
         type: "listen",
@@ -238,27 +254,136 @@ function buildQuestions(langId, langMeta, course, lesson, stage = 0) {
         item: { e: ls.e, t: ls.t, gloss: ls.gloss || "" },
     });
 
-    // 7) speak: "Say this in <lang>" — a speech-to-text exercise. Only in the
-    //    deeper half of a course so beginners aren't scared off. Uses the local
-    //    SpeechRecognition API on the client; the client skips it gracefully if
-    //    unsupported.
-    if (stage >= 5) {
-        const speakSrc = localPhrases.length ? localPhrases : localVocab.length ? localVocab : all.vocab;
-        const s3 = sample(rng, uniqEnglish(speakSrc), Math.min(2, new Set(speakSrc.map((i) => i.e)).size));
-        for (const item of s3) {
+    // 7) speak: "Say this in <lang>" — a speech-to-text exercise. Present from
+    //    difficulty 1 on (pronunciation from the very first chapter); deeper
+    //    steps add a second sentence. The client falls back to a speaker +
+    //    self-check when speech recognition is unavailable.
+    const speakSrc = localPhrases.length ? localPhrases : localVocab.length ? localVocab : all.vocab;
+    const s3 = sample(rng, uniqEnglish(speakSrc), Math.min(stage >= 5 ? 2 : 1, new Set(speakSrc.map((i) => i.e)).size));
+    for (const item of s3) {
+        questions.push({
+            id: `q${qi++}`,
+            type: "speak",
+            prompt: `Say this in ${langMeta.name}`,
+            say: item.e,
+            expect: item.t,
+            gloss: item.gloss || "",
+            emoji: item.emoji || "",
+        });
+    }
+
+    return questions;
+}
+
+// ── "Story time" — the 5th lesson of even steps ──────────────
+// The learner listens to a 1-3 sentence micro-story built from the chapter's
+// translated phrases, then answers comprehension questions. English is the
+// comprehension language; the target-language audio does the teaching.
+function buildStoryQuestions(langId, langMeta, course, lesson) {
+    const rng = mulberry32(hashCode(`${langId}:${lesson.id}:story`));
+    const all = collectCourseItems(course);
+    const phrases = uniqEnglish(lesson.phrases || []);
+    const vocab = uniqEnglish(lesson.vocab || []);
+    const allPhrases = uniqEnglish(all.phrases);
+    const allWords = uniqEnglish(all.vocab);
+
+    const nSentences = Math.min(3, Math.max(1, phrases.length || 0));
+    const sentences = sample(rng, phrases, nSentences).map((p) => ({ e: p.e, t: p.t, gloss: p.gloss || "" }));
+    const wordsShown = sample(rng, vocab.length ? vocab : allWords, 3).map((w) => ({
+        e: w.e, t: w.t, emoji: w.emoji || "", gloss: w.gloss || "",
+    }));
+
+    const questions = [
+        {
+            id: "q0",
+            type: "story",
+            story: {
+                title: (lesson.title || "").replace(/· Story time/i, "").trim() || lesson.title,
+                lang: langMeta.hl,
+                sentences,
+                words: wordsShown,
+            },
+            prompt: "Listen to the short story, then answer the questions that follow.",
+        },
+    ];
+
+    // q1: Which sentence did you hear? (target-language options)
+    const q1 = sentences[0] || (wordsShown[0] && { e: wordsShown[0].e, t: wordsShown[0].t, gloss: wordsShown[0].gloss });
+    if (q1 && q1.t) {
+        const q1pool = uniqTargets([...(allPhrases.map((p) => ({ e: p.e, t: p.t, gloss: p.gloss }))), ...sentences]);
+        const { options, emojis, glosses, correctIndex } = pickDistractors(rng, q1, q1pool, 3, "t");
+        questions.push({
+            id: "q1",
+            type: "select",
+            prompt: "Which of these sentences did you hear?",
+            options, emojis, glosses, correctIndex,
+            item: { e: q1.e, t: q1.t, gloss: q1.gloss || "" },
+        });
+    }
+
+    // q2: True/false comprehension — the statement is a real story sentence
+    //     when the "True" option happens to come first, else a distractor.
+    if (sentences.length) {
+        const tfOpts = shuffle(rng, ["True", "False"]);
+        const statementIsTrue = tfOpts[0] === "True";
+        const stmt = statementIsTrue
+            ? sentences[Math.floor(rng() * sentences.length)]
+            : (sample(rng, allPhrases.filter((p) => !sentences.some((s) => s.e === p.e)), 1)[0] || { e: "", t: "" });
+        if (stmt.t) {
             questions.push({
-                id: `q${qi++}`,
-                type: "speak",
-                prompt: `Say this in ${langMeta.name}`,
-                say: item.e,
-                expect: item.t,
-                gloss: item.gloss || "",
-                emoji: item.emoji || "",
+                id: "q2",
+                type: "truefalse",
+                prompt: "Did the story say this?",
+                statement: stmt.e,
+                speak: statementIsTrue ? stmt.t : "",
+                options: tfOpts,
+                correctIndex: tfOpts.indexOf(statementIsTrue ? "True" : "False"),
             });
         }
     }
 
+    // q3: What does a story word mean? (English options)
+    const word = wordsShown[0];
+    if (word && word.t) {
+        const src = vocab.length ? vocab : allWords;
+        const { options, emojis, glosses, correctIndex } = pickDistractors(rng, word, src, 3, "e");
+        questions.push({
+            id: "q3",
+            type: "select",
+            prompt: `What does “${word.t}” mean?`,
+            options, emojis, glosses, correctIndex,
+            item: { e: word.e, t: word.t, emoji: word.emoji || "", gloss: word.gloss || "" },
+        });
+    }
+
     return questions;
+}
+
+// ── "Speak up" — the 5th lesson of odd steps ──────────────────
+// Pronounce the chapter's words (and, from difficulty 6, whole sentences).
+// The client records, recognizes (native desktop or Web Speech API) and
+// grades each item against the expected target-language text.
+function buildPronounceQuestions(langId, langMeta, lesson, difficulty = 1) {
+    const rng = mulberry32(hashCode(`${langId}:${lesson.id}:speak`));
+    const words = uniqEnglish(lesson.vocab || []);
+    const phrases = uniqEnglish(lesson.phrases || []);
+
+    const items = [];
+    const wordCount = Math.min(3, Math.max(1, words.length));
+    items.push(...sample(rng, words, wordCount));
+    if (difficulty >= 6) {
+        const pCount = Math.min(2, phrases.length);
+        items.push(...sample(rng, phrases, pCount));
+    }
+
+    return [{
+        id: "q0",
+        type: "pronounce",
+        prompt: `Pronounce ${items.length === 1 ? "this" : "these"} in ${langMeta.name}.`,
+        items: items.map((w) => ({ e: w.e, t: w.t, emoji: w.emoji || "", gloss: w.gloss || "" })),
+        rtl: langMeta.rtl,
+        hl: langMeta.hl,
+    }];
 }
 
 // ── Daily Quests ───────────────────────────────────────────────

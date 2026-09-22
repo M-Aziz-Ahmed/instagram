@@ -236,15 +236,21 @@ export default function LessonPlayer() {
 
             {/* Question card */}
             <div className="flex-1 w-full max-w-2xl mx-auto px-4 py-8">
-                <QuestionCard
-                    key={q.id}
-                    q={q}
-                    rtl={rtl}
-                    hl={lesson?.hl}
-                    hearts={hearts}
-                    hurt={hurt}
-                    onCheck={handleEnd}
-                />
+                {q.type === "pronounce" ? (
+                    <PronounceCard key={q.id} q={q} rtl={rtl} hearts={hearts} hurt={hurt} onCheck={handleEnd} />
+                ) : q.type === "story" ? (
+                    <StoryCard key={q.id} q={q} rtl={rtl} hl={lesson?.hl} onCheck={handleEnd} />
+                ) : (
+                    <QuestionCard
+                        key={q.id}
+                        q={q}
+                        rtl={rtl}
+                        hl={lesson?.hl}
+                        hearts={hearts}
+                        hurt={hurt}
+                        onCheck={handleEnd}
+                    />
+                )}
             </div>
         </div>
     );
@@ -263,13 +269,134 @@ function Hearts({ hearts }) {
 }
 
 // ── Question renderer ─────────────────────────────────────────
-function speakText(text, lang) {
-    if (!text || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+// Text-to-speech with a robust fallback chain:
+//   1. Native desktop TTS (Tauri → Windows System.Speech) — real voices,
+//      works even for languages with no installed WebView2 voice pack.
+//   2. Web Speech synthesis — only if a voice matching the language exists.
+//   3. Online TTS audio stream — always available, any language.
+function isDesktop() {
+    return typeof window !== "undefined" && !!(window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke);
+}
+
+async function invokeTauri(cmd, args) {
+    if (!isDesktop()) return null;
+    try {
+        return await window.__TAURI_INTERNALS__.invoke(cmd, args || {});
+    } catch (err) {
+        console.warn(`[learn] tauri ${cmd} failed:`, err);
+        return null;
+    }
+}
+
+function pickVoice(lang) {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || !voices.length) return null;
+    const want = (lang || "en").toLowerCase();
+    const base = want.split("-")[0];
+    return voices.find((v) => (v.lang || "").toLowerCase() === want)
+        || voices.find((v) => (v.lang || "").toLowerCase().startsWith(base))
+        || null;
+}
+
+function speakWeb(text, lang, onend) {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = lang || "en-US";
+    const v = pickVoice(lang);
+    if (v) u.voice = v;
+    u.lang = (lang || "en-US").split("-")[0] === (lang || "en-US") && !lang ? "en-US" : lang || "en-US";
     u.rate = 0.85;
+    if (onend) u.onend = onend;
     window.speechSynthesis.speak(u);
+}
+
+// Streaming audio from Google Translate's TTS endpoint. No API key needed;
+// the client treats it as a plain audio stream.
+function speakOnline(text, lang) {
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${encodeURIComponent(lang || "en")}&q=${encodeURIComponent(text)}`;
+    const audio = new Audio(url);
+    audio.play();
+    return audio;
+}
+
+function speakText(text, lang, onend) {
+    if (!text || typeof window === "undefined") return null;
+    if (isDesktop()) {
+        invokeTauri("native_tts", { text, lang: (lang || "en").split("-")[0] }).then((ok) => {
+            if (!ok && onend) {
+                speakOnline(text, lang).addEventListener("ended", onend, { once: true });
+            }
+        }).catch(() => {
+            if (onend) speakOnline(text, lang).addEventListener("ended", onend, { once: true });
+        });
+        return null;
+    }
+    if ("speechSynthesis" in window && pickVoice(lang)) {
+        speakWeb(text, lang, onend);
+        return null;
+    }
+    const a = speakOnline(text, lang);
+    if (onend) a.addEventListener("ended", onend, { once: true });
+    return a;
+}
+
+// Play a sequence with natural pacing; advances after each chunk is done or
+// after an estimate for the streaming/native paths.
+function speakSequence(lines, lang, { sentenceDone = null, finished = null } = {}) {
+    let i = 0;
+    const next = () => {
+        if (i >= lines.length) {
+            if (finished) finished();
+            return;
+        }
+        const line = lines[i++];
+        speakText(line.t || line, lang, () => {
+            if (sentenceDone) sentenceDone(line);
+            next();
+        });
+        if (!("speechSynthesis" in window) || !pickVoice(lang)) {
+            // streaming/native path: hop to the next line after a rough estimate
+            setTimeout(next, Math.max(1500, Math.min(9000, (line.t || line).length * 90) + 400));
+        }
+    };
+    next();
+}
+
+// Speech-to-text with the same fallback philosophy:
+//   1. Native desktop recognition (Tauri → Windows System.Speech, grammar-
+//      constrained to the expected phrase) with confidence.
+//   2. Web Speech API (SpeechRecognition).
+//   3. null → caller falls back to self-check (say it yourself, then ✓).
+function captureSpeech(expect, lang, onResult) {
+    if (isDesktop()) {
+        invokeTauri("recognize_speech", { expect, lang: (lang || "en").split("-")[0], timeoutMs: 8000 }).then((res) => {
+            if (res && res.text) {
+                onResult({ text: res.text, confidence: res.confidence || 0, source: "native" });
+            } else if (res === false) {
+                onResult(null); // recognizer unavailable
+            } else if (res && res.error) {
+                onResult(null);
+            }
+        }).catch(() => onResult(null));
+        return () => {};
+    }
+    if (speechRecAvailable()) {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const r = new SR();
+        r.lang = lang || "en-US";
+        r.interimResults = false;
+        r.maxAlternatives = 1;
+        r.onresult = (e) => {
+            const t = e.results?.[0]?.[0]?.transcript || "";
+            onResult({ text: t, confidence: e.results?.[0]?.[0]?.confidence || 0, source: "web" });
+        };
+        r.onerror = () => onResult(null);
+        r.onend = () => {};
+        try { r.start(); } catch { onResult(null); }
+        return () => { try { r.stop(); } catch {} };
+    }
+    onResult(null);
+    return () => {};
 }
 
 function Gloss({ text }) {
@@ -371,7 +498,7 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
     }, []);
 
     const check = () => {
-        if (q.type === "select" || q.type === "listen") {
+        if (q.type === "select" || q.type === "listen" || q.type === "truefalse") {
             applyResult(choice !== null && choice === q.correctIndex);
         } else if (q.type === "wordbank") {
             const expected = q.tokens.join(" ").trim().toLowerCase().replace(/\s+/g, " ");
@@ -409,7 +536,7 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
     const isRtl = q.type !== "select" && q.type !== "listen" && targetDir && rtl;
 
     const canCheck =
-        q.type === "select" || q.type === "listen"
+        q.type === "select" || q.type === "listen" || q.type === "truefalse"
             ? choice !== null
             : q.type === "wordbank"
             ? answer.trim().length > 0
@@ -436,7 +563,7 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
                             <div className="mb-6">
                                 <p className="text-sm font-bold text-gray-400 dark:text-gray-500 mb-3">What does this mean?</p>
                                 <div className="inline-flex items-center justify-center gap-3 px-5 py-3 rounded-2xl bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800">
-                                    <span className="text-2xl font-extrabold text-gray-800 dark:text-gray-100 leading-snug" dir="ltr">{q.item?.t}</span>
+                                    <span className="text-2xl font-extrabold text-gray-800 dark:text-gray-100 leading-snug" dir={rtl ? "rtl" : "ltr"}>{q.item?.t}</span>
                                     <SpeakBtn text={q.item?.t} lang={hl} />
                                 </div>
                                 <div className="mt-2"><Gloss text={q.item?.gloss} /></div>
@@ -455,7 +582,7 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
                                     className={`p-4 rounded-2xl border-2 text-sm font-bold transition-all text-left flex items-center justify-between ${optionClass(i, i === q.correctIndex)}`}
                                 >
                                     <span className="flex flex-col flex-1">
-                                        <span dir={qPromptDir(q)}>{o}</span>
+                                        <span dir={qPromptDir(q, rtl)}>{o}</span>
                                         {q.glosses?.[i] && <Gloss text={q.glosses[i]} />}
                                     </span>
                                     {q.emojis?.[i] && <span className="text-xl">{q.emojis[i]}</span>}
@@ -484,6 +611,28 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
                                     key={i}
                                     onClick={() => !checked && setChoice(i)}
                                     className={`p-4 rounded-2xl border-2 text-sm font-bold transition-all text-left ${optionClass(i, i === q.correctIndex)}`}
+                                >
+                                    {o}
+                                </button>
+                            ))}
+                        </div>
+                    </>
+                )}
+
+                {/* True / false (story comprehension) */}
+                {q.type === "truefalse" && (
+                    <>
+                        <p className="text-sm font-bold text-gray-400 dark:text-gray-500 mb-3">🤔 {q.prompt}</p>
+                        <div className="inline-flex items-center justify-center gap-3 max-w-md px-5 py-4 rounded-2xl bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 mb-1">
+                            <span className="text-lg font-extrabold text-gray-800 dark:text-gray-100 leading-snug">“{q.statement}”</span>
+                            {q.speak && <SpeakBtn text={q.speak} lang={hl} />}
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 max-w-md mx-auto mt-6">
+                            {q.options.map((o, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => !checked && setChoice(i)}
+                                    className={`p-4 rounded-2xl border-2 text-sm font-extrabold transition-all ${optionClass(i, i === q.correctIndex)}`}
                                 >
                                     {o}
                                 </button>
@@ -604,11 +753,201 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
     );
 }
 
-function qPromptDir(q) {
-    if (q.type === "select") {
-        // reverse select shows target phrase → keep LTR here, the review answer is language-dependent
-        return "ltr";
-    }
+// ── Story time (5th lesson of even steps) ─────────────────────
+// Listen to a short story, then answer comprehension questions.
+function StoryCard({ q, rtl, hl, onCheck }) {
+    const story = q.story || {};
+    const sentences = story.sentences || [];
+    const words = story.words || [];
+    const [playing, setPlaying] = useState(false);
+
+    const playAll = () => {
+        setPlaying(true);
+        speakSequence(sentences, hl, { finished: () => setPlaying(false) });
+    };
+
+    return (
+        <div className="flex flex-col min-h-[70vh]">
+            <div className="flex-1">
+                <p className="text-center text-sm font-bold text-gray-400 dark:text-gray-500 mb-3">📖 {q.prompt}</p>
+                <div className="max-w-lg mx-auto rounded-3xl overflow-hidden border-2 border-[#1cb0f6]">
+                    <div className="bg-[#1cb0f6] text-white px-6 py-4 flex items-center justify-between">
+                        <div className="font-extrabold text-lg leading-tight">{story.title}</div>
+                        <button
+                            onClick={playAll}
+                            disabled={playing}
+                            className="w-11 h-11 rounded-full bg-white text-[#1cb0f6] flex items-center justify-center shadow shrink-0"
+                            aria-label="Play the whole story"
+                        >
+                            {playing ? (
+                                <span className="w-5 h-5 rounded-full bg-[#1cb0f6] animate-pulse" />
+                            ) : (
+                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z" />
+                                </svg>
+                            )}
+                        </button>
+                    </div>
+                    <div className="bg-white dark:bg-gray-900 px-6 py-5 space-y-4">
+                        {sentences.map((s, i) => (
+                            <div key={i} className="flex items-center gap-3">
+                                <span className="w-6 h-6 rounded-full bg-[#1cb0f6]/10 text-[#1cb0f6] text-[11px] font-extrabold flex items-center justify-center shrink-0">{i + 1}</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-lg font-extrabold text-gray-800 dark:text-gray-100 leading-snug" dir={rtl ? "rtl" : "ltr"}>{s.t}</p>
+                                    {s.gloss && <Gloss text={s.gloss} />}
+                                </div>
+                                <SpeakBtn text={s.t} lang={hl} />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                {words.length > 0 && (
+                    <div className="max-w-lg mx-auto mt-4 flex flex-wrap items-center justify-center gap-2">
+                        {words.map((w, i) => (
+                            <button key={i} onClick={() => speakText(w.t, hl)} className="px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-sm font-bold text-gray-700 dark:text-gray-200 flex items-center gap-1.5 hover:bg-gray-200 dark:hover:bg-gray-700">
+                                <span>{w.emoji}</span>
+                                <span dir={rtl ? "rtl" : "ltr"}>{w.t}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <div className="sticky bottom-0 bg-white dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800 mt-6">
+                <div className="w-full max-w-2xl mx-auto px-4 py-4">
+                    <button onClick={() => onCheck(true)} className="w-full py-3.5 rounded-2xl font-extrabold text-sm bg-[#1cb0f6] hover:bg-[#1899d6] text-white">
+                        GOT IT — ANSWER THE QUESTIONS ▶
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Speak up (5th lesson of odd steps) ────────────────────────
+// Pronounce words (and, deeper in the course, whole sentences): the mic
+// captures your voice, speech-to-text grades it against the expected phrase.
+function PronounceCard({ q, rtl, hearts, hurt, onCheck }) {
+    const items = q.items || [];
+    const [idx, setIdx] = useState(0);
+    const [results, setResults] = useState([]);
+    const [sttBusy, setSttBusy] = useState(false);
+    const [heard, setHeard] = useState("");
+    const [source, setSource] = useState("");
+    const finalizedRef = useRef(false);
+
+    const item = items[Math.min(idx, items.length - 1)];
+    const doneAll = results.length === items.length;
+    const allOk = doneAll && results.every(Boolean);
+
+    useEffect(() => {
+        if (doneAll && !finalizedRef.current) {
+            finalizedRef.current = true;
+            onCheck(allOk);
+        }
+    }, [doneAll, allOk, onCheck]);
+
+    const record = () => {
+        if (sttBusy || !item) return;
+        setSttBusy(true);
+        setHeard("");
+        setSource("");
+        captureSpeech(item.t, q.hl, (r) => {
+            setSttBusy(false);
+            if (r && r.text) {
+                setHeard(r.text);
+                setSource(r.source === "native" ? "desktop" : "browser");
+                const ok = speechMatch(r.text, item.t);
+                setResults((rs) => [...rs, ok]);
+                if (!ok) hurt(1);
+            } else {
+                // Speech recognition unavailable → self-check mode: the learner
+                // pronounces it aloud and confirms. Keeps pronunciation lessons
+                // usable on any device.
+                setSource("self");
+                setResults((rs) => [...rs, true]);
+            }
+        });
+    };
+
+    const nextItem = () => {
+        if (idx + 1 < items.length) {
+            setIdx(idx + 1);
+            setHeard("");
+            setSource("");
+        }
+    };
+
+    return (
+        <div className="flex flex-col min-h-[70vh]">
+            <div className="flex-1 text-center">
+                <p className="text-sm font-bold text-gray-400 dark:text-gray-500 mb-4">🗣️ {q.prompt}</p>
+
+                <div className="flex items-center justify-center gap-2 mb-6">
+                    {items.map((it, i) => {
+                        const state = i < results.length ? (results[i] ? "ok" : "bad") : i === idx ? "now" : "later";
+                        return (
+                            <span key={i} className={`w-2.5 h-2.5 rounded-full ${state === "ok" ? "bg-[#58cc02]" : state === "bad" ? "bg-red-500" : state === "now" ? "bg-[#1cb0f6]" : "bg-gray-200 dark:bg-gray-700"}`} />
+                        );
+                    })}
+                </div>
+
+                {item && !doneAll && (
+                    <>
+                        <div className="inline-flex items-center justify-center gap-3 px-6 py-4 rounded-2xl bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800">
+                            <span className="text-3xl">{item.emoji}</span>
+                            <div className="text-left">
+                                <p className="text-2xl font-extrabold text-gray-800 dark:text-gray-100 leading-snug" dir={rtl ? "rtl" : "ltr"}>{item.t}</p>
+                                {item.gloss && <Gloss text={item.gloss} />}
+                            </div>
+                            <SpeakBtn text={item.t} lang={q.hl} />
+                        </div>
+                        <p className="text-xs text-gray-400 mt-3 mb-5">Say it aloud — we&apos;ll listen and check it.</p>
+
+                        <div className="flex flex-col items-center gap-3">
+                            <button
+                                onClick={record}
+                                disabled={sttBusy}
+                                className={`w-24 h-24 rounded-full flex items-center justify-center shadow-lg transition-colors text-white ${sttBusy ? "bg-red-500 animate-pulse" : "bg-[#1cb0f6] hover:bg-[#1899d6]"}`}
+                                aria-label="Record pronunciation"
+                            >
+                                {sttBusy ? (
+                                    <span className="w-10 h-10 rounded-full bg-white/25 animate-ping" />
+                                ) : (
+                                    <svg className="w-9 h-9" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z" />
+                                        <path d="M17 11a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z" />
+                                    </svg>
+                                )}
+                            </button>
+                            <p className="text-xs font-bold text-gray-400">
+                                {sttBusy ? "Listening…" : heard ? (source === "self" ? "Said it yourself — nice! ✓" : `Heard: “${heard}”`) : "Tap the mic & speak"}
+                            </p>
+                            {heard && (
+                                <button onClick={nextItem} className="mt-1 w-full max-w-xs py-3 rounded-2xl bg-[#58cc02] text-white font-extrabold text-sm hover:bg-[#46a302]">
+                                    {source === "self" ? "I SAID IT — NEXT →" : "NEXT →"}
+                                </button>
+                            )}
+                        </div>
+                    </>
+                )}
+
+                {doneAll && (
+                    <div className="py-10">
+                        <span className="text-5xl block mb-3">{allOk ? "🎉" : "💪"}</span>
+                        <p className="font-extrabold text-xl text-gray-800 dark:text-gray-100">{allOk ? "Amazing pronunciation!" : "Nice try — keep practicing!"}</p>
+                        <p className="text-sm text-gray-400 mt-1">{results.filter(Boolean).length}/{items.length} pronounced correctly.</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function qPromptDir(q, rtl) {
+    // "Which of these…" options are target-language content → mirror for RTL scripts.
+    // "What does…" options are English → always LTR.
+    if (q.type === "select" && (q.prompt || "").startsWith("Which of these") && rtl) return "rtl";
     return "ltr";
 }
 
