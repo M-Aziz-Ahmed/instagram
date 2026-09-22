@@ -426,10 +426,8 @@ router.get("/analytics/growth", requireAdmin, async (req, res) => {
 
         const totals = series.reduce((acc, r) => {
             acc.users += r.users; acc.posts += r.posts; acc.events += r.events;
-            const act = new Set();
             return acc;
         }, { users: 0, posts: 0, events: 0 });
-        series.forEach((r) => { totals.users += r.users; totals.posts += r.posts; totals.events += r.events; });
 
         return res.json({ granularity, tz, from, to, series, totals });
     } catch (error) {
