@@ -893,6 +893,7 @@ function buildCourses() {
     return courses;
 }
 
-const COURSES = buildCourses();
+const COURSES = { ...buildCourses(), ...require("./learnSubjects").SUBJECT_COURSES };
+const SUBJECT_CATALOG = require("./learnSubjects").SUBJECT_CATALOG;
 
-module.exports = { LANGUAGE_CATALOG, COURSES };
+module.exports = { LANGUAGE_CATALOG, SUBJECT_CATALOG, COURSES };

@@ -3235,6 +3235,8 @@ const { apiLimiter, authLimiter, readLimiter, writeLimiter, verifyApiKey } = req
 app.use("/api/auth", authLimiter, require("./routes/auth"));
 // POSTS: no rate limit (read-only, high traffic)
 app.use("/api/posts", require("./routes/posts"));
+// Telemetry beacon — generous limit, high frequency but tiny.
+app.use("/api/track", readLimiter, require("./routes/events"));
 // Other routes use apiLimiter
 app.use("/api/feed", apiLimiter, require("./routes/feed"));
 app.use("/api/users", apiLimiter, require("./routes/users"));

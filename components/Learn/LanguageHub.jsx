@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import Link from "next/link";
@@ -10,30 +10,56 @@ export default function LanguageHub() {
     const router = useRouter();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
     const [starting, setStarting] = useState(null);
 
-    useEffect(() => {
-        if (!ready) return;
+    const doLoad = useCallback(() => {
         fetch("/api/learn/languages", { credentials: "include" })
             .then((r) => r.json())
-            .then((d) => { setData(d); setLoading(false); })
-            .catch(() => setLoading(false));
-    }, [ready]);
+            .then((d) => {
+                if (d.error) throw new Error(d.error);
+                setData(d);
+                setError("");
+            })
+            .catch((err) => setError(err.message || "Failed to load languages"))
+            .finally(() => setLoading(false));
+    }, []);
+
+    useEffect(() => {
+        if (!ready) {
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            await Promise.resolve();
+            if (!cancelled) doLoad();
+        })();
+        return () => { cancelled = true; };
+    }, [ready, doLoad]);
+
+    const retry = () => {
+        setLoading(true);
+        setError("");
+        doLoad();
+    };
 
     const me = data?.me;
 
     const startCourse = async (lang) => {
-        if (!lang.available) return;
+        if (!lang.available || starting) return;
         setStarting(lang.id);
         try {
-            await fetch("/api/learn/start", {
+            const r = await fetch("/api/learn/start", {
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ courseId: lang.id }),
             });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error || "Couldn't start course");
             router.push(`/education/course/${lang.id}`);
-        } catch {
+        } catch (err) {
+            setError(err.message || "Couldn't start course");
             setStarting(null);
         }
     };
@@ -66,6 +92,15 @@ export default function LanguageHub() {
                 {loading ? (
                     <div className="flex justify-center py-16">
                         <div className="w-7 h-7 border-2 border-gray-300 dark:border-gray-700 border-t-[#58cc02] rounded-full animate-spin" />
+                    </div>
+                ) : error ? (
+                    <div className="max-w-md mx-auto text-center py-12">
+                        <span className="text-4xl block mb-3">🌵</span>
+                        <p className="font-extrabold text-lg text-gray-800 dark:text-gray-100 mb-2">Couldn&apos;t load languages</p>
+                        <p className="text-sm text-gray-400 mb-5">{error}</p>
+                        <button onClick={retry} className="w-full py-3 rounded-2xl bg-[#58cc02] hover:bg-[#46a302] text-white font-extrabold text-sm">
+                            ↺ Try again
+                        </button>
                     </div>
                 ) : (
                     <>

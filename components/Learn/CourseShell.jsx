@@ -39,6 +39,7 @@ export default function CourseShell() {
     const [friends, setFriends] = useState([]);
     const [tab, setTab] = useState("learn");
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
     const [shopOpen, setShopOpen] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
     const [toast, setToast] = useState(null);
@@ -57,27 +58,45 @@ export default function CourseShell() {
         } catch {}
     }, []);
 
-    useEffect(() => {
-        let alive = true;
-        (async () => {
-            try {
-                const [d, lg, ld, fr] = await Promise.all([
-                    fetch(`/api/learn/course/${courseId}`, { credentials: "include" }).then((r) => r.json()),
-                    fetch(`/api/learn/league`, { credentials: "include" }).then((r) => r.json()),
-                    fetch(`/api/learn/leaderboard`, { credentials: "include" }).then((r) => r.json()),
-                    fetch(`/api/learn/friends`, { credentials: "include" }).then((r) => r.json()),
-                ]);
-                if (!alive) return;
-                setMe(d.me);
-                setCourse(d.course);
-                setLeague(lg.league);
-                setLeaders(ld);
-                setFriends(fr.friends || []);
-            } catch {}
+    const doLoad = useCallback(async () => {
+        try {
+            const check = async (r) => {
+                if (!r.ok) throw new Error((await r.json()).error || `Request failed (${r.status})`);
+                return r.json();
+            };
+            const [d, lg, ld, fr] = await Promise.all([
+                check(await fetch(`/api/learn/course/${courseId}`, { credentials: "include" })),
+                check(await fetch(`/api/learn/league`, { credentials: "include" })),
+                check(await fetch(`/api/learn/leaderboard`, { credentials: "include" })),
+                check(await fetch(`/api/learn/friends`, { credentials: "include" })),
+            ]);
+            setMe(d.me);
+            setCourse(d.course);
+            setLeague(lg.league);
+            setLeaders(ld);
+            setFriends(fr.friends || []);
+            setError("");
+        } catch (err) {
+            setError(err.message || "Failed to load your course. Check your connection and try again.");
+        } finally {
             setLoading(false);
-        })();
-        return () => { alive = false; };
+        }
     }, [courseId]);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            await Promise.resolve();
+            if (!cancelled) await doLoad();
+        })();
+        return () => { cancelled = true; };
+    }, [doLoad]);
+
+    const retry = () => {
+        setLoading(true);
+        setError("");
+        doLoad();
+    };
 
     const startLesson = (lesson) => {
         router.push(`/education/lesson/${courseId}/${lesson.id}`);
@@ -130,11 +149,20 @@ export default function CourseShell() {
                 </div>
             </div>
 
-            {loading ? (
+            {error ? (
+                <div className="px-6 py-24 max-w-md mx-auto text-center">
+                    <span className="text-4xl block mb-3">🌵</span>
+                    <p className="font-extrabold text-lg text-gray-800 dark:text-gray-100 mb-2">Couldn&apos;t load your course</p>
+                    <p className="text-sm text-gray-400 mb-5">{error}</p>
+                    <button onClick={retry} className="w-full py-3.5 rounded-2xl bg-[#58cc02] hover:bg-[#46a302] text-white font-extrabold text-sm">
+                        ↺ Try again
+                    </button>
+                </div>
+            ) : loading ? (
                 <div className="flex justify-center py-20">
                     <div className="w-8 h-8 border-2 border-gray-300 dark:border-gray-700 border-t-[#58cc02] rounded-full animate-spin" />
                 </div>
-            ) : (
+            ) : course ? (
                 <div className="max-w-3xl mx-auto">
                     {tab === "learn" && (
                         <LearningPath course={course} me={me} startLesson={startLesson} openQuests={() => setTab("quests")} openLeague={() => setTab("league")} />
@@ -143,6 +171,15 @@ export default function CourseShell() {
                     {tab === "league" && <LeaguePanel league={league} me={me} refreshLeague={refreshLeague} leaders={leaders} />}
                     {tab === "shop" && <ShopPanel me={me} friends={friends} refreshMe={refreshMe} notify={notify} refreshLeague={refreshLeague} />}
                     {tab === "profile" && <ProfilePanel me={me} friends={friends} notify={notify} onShowShop={() => setShopOpen(true)} />}
+                </div>
+            ) : (
+                <div className="px-6 py-24 max-w-md mx-auto text-center">
+                    <span className="text-4xl block mb-3">🗺️</span>
+                    <p className="font-extrabold text-lg text-gray-800 dark:text-gray-100 mb-2">Course not found</p>
+                    <p className="text-sm text-gray-400 mb-5">This course doesn&apos;t exist or isn&apos;t available.</p>
+                    <a href="/education" className="inline-block px-6 py-3 rounded-2xl bg-[#58cc02] text-white font-extrabold text-sm hover:bg-[#46a302]">
+                        Back to Education
+                    </a>
                 </div>
             )}
 
@@ -483,6 +520,17 @@ function LeadersPanel({ data, me }) {
 function ShopPanel({ me, friends, refreshMe, notify, refreshLeague }) {
     const [friend, setFriend] = useState("");
     const act = async (item, extra) => {
+        if (item === "hearts") {
+            const r = await fetch("/api/learn/hearts/refill", {
+                method: "POST", credentials: "include",
+                headers: { "Content-Type": "application/json" },
+            });
+            const d = await r.json();
+            if (d.me) refreshMe();
+            if (r.ok) notify("❤️ Hearts refilled!");
+            else notify(d.error || "Failed to refill hearts");
+            return;
+        }
         const r = await fetch("/api/learn/shop/buy", {
             method: "POST", credentials: "include",
             headers: { "Content-Type": "application/json" },
@@ -670,6 +718,16 @@ function ProfilePanel({ me, friends, notify, onShowShop }) {
 function ShopModal({ me, friends, onClose, refreshMe, notify }) {
     const [gotIt, setGotIt] = useState(false);
     const buy = async (item, extra) => {
+        if (item === "hearts") {
+            const r = await fetch("/api/learn/hearts/refill", {
+                method: "POST", credentials: "include",
+                headers: { "Content-Type": "application/json" },
+            });
+            const d = await r.json();
+            if (d.me) refreshMe();
+            if (!r.ok) notify(d.error || "Failed to refill hearts");
+            return;
+        }
         const r = await fetch("/api/learn/shop/buy", {
             method: "POST", credentials: "include",
             headers: { "Content-Type": "application/json" },

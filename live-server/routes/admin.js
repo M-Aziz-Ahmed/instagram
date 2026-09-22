@@ -6,6 +6,8 @@ const Post = require("../models/post");
 const ContentFilter = require("../models/contentFilter");
 const ModerationLog = require("../models/moderationLog");
 const Community = require("../models/community");
+const AnalyticsEvent = require("../models/analyticsEvent");
+const A = require("../analyticsHelpers");
 const { requireAdmin, requirePermission } = require("../middleware/auth");
 const { getLogs } = require("../logBuffer");
 const { VALID_PERMISSIONS } = require("../models/role");
@@ -389,6 +391,127 @@ router.get("/analytics", async (req, res) => {
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed to fetch admin analytics" });
+    }
+});
+
+// ── Growth analytics ──────────────────────────────────────────
+// /analytics/growth?granularity=day|week|month|year&days=30&tz=Asia/Karachi
+// Time series of users, posts, tracked events and active users, bucketed in
+// the specified timezone (defaults to the server's local time).
+const GRAN_CLAMP = { day: 90, week: 156, month: 60, year: 10 };
+
+router.get("/analytics/growth", requireAdmin, async (req, res) => {
+    try {
+        const granularity = ["day", "week", "month", "year"].includes(req.query.granularity) ? req.query.granularity : "day";
+        const days = Math.max(7, Math.min(parseInt(req.query.days, 10) || 30, (GRAN_CLAMP[granularity] || 90) * 7));
+        const tz = typeof req.query.tz === "string" && req.query.tz ? req.query.tz : "local";
+
+        const to = new Date();
+        const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
+
+        const [users, posts, events] = await Promise.all([
+            User.find({ createdAt: { $gte: from } }).select("createdAt").lean().limit(50000),
+            Post.find({ timeStamp: { $gte: from } }).select("timeStamp").lean().limit(50000),
+            AnalyticsEvent.find({ createdAt: { $gte: from } }).select("createdAt userId sessionId").lean().limit(50000),
+        ]);
+
+        const list = A.buckets(from, to, granularity, tz);
+        const series = A.toSeries(
+            list,
+            A.bucketCounts(users, "createdAt", granularity, tz),
+            A.bucketCounts(posts, "timeStamp", granularity, tz),
+            A.bucketCounts(events, "createdAt", granularity, tz),
+            A.bucketDistinct(events, "createdAt", "userId", granularity, tz),
+        ).map((row) => ({ key: row.key, label: row.label, users: row.v0, posts: row.v1, events: row.v2, active: row.v3 }));
+
+        const totals = series.reduce((acc, r) => {
+            acc.users += r.users; acc.posts += r.posts; acc.events += r.events;
+            const act = new Set();
+            return acc;
+        }, { users: 0, posts: 0, events: 0 });
+        series.forEach((r) => { totals.users += r.users; totals.posts += r.posts; totals.events += r.events; });
+
+        return res.json({ granularity, tz, from, to, series, totals });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed to fetch growth analytics" });
+    }
+});
+
+// /analytics/overview — headline numbers + day-over-day deltas.
+router.get("/analytics/overview", requireAdmin, async (req, res) => {
+    try {
+        const tz = typeof req.query.tz === "string" && req.query.tz ? req.query.tz : "local";
+        const now = new Date();
+        const todayKey = A.dayKey(now, tz);
+        const startOfToday = new Date(now);
+        startOfToday.setHours(0, 0, 0, 0);
+        const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+
+        const [totalUsers, totalPosts, newToday, newYesterday, postsToday, postsYesterday, eventsToday, eventsYesterday, active24h, topCountries] = await Promise.all([
+            User.countDocuments(),
+            Post.countDocuments(),
+            User.countDocuments({ createdAt: { $gte: startOfToday } }),
+            User.countDocuments({ createdAt: { $gte: startOfYesterday, $lt: startOfToday } }),
+            Post.countDocuments({ timeStamp: { $gte: startOfToday } }),
+            Post.countDocuments({ timeStamp: { $gte: startOfYesterday, $lt: startOfToday } }),
+            AnalyticsEvent.countDocuments({ createdAt: { $gte: startOfToday } }),
+            AnalyticsEvent.countDocuments({ createdAt: { $gte: startOfYesterday, $lt: startOfToday } }),
+            AnalyticsEvent.distinct("userId", { createdAt: { $gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) }, userId: { $ne: null } }),
+            AnalyticsEvent.aggregate([
+                { $match: { createdAt: { $gte: startOfToday }, "location.countryCode": { $ne: "" } } },
+                { $group: { _id: "$location.countryCode", name: { $first: "$location.country" }, count: { $sum: 1 } } },
+                { $sort: { count: -1 } },
+                { $limit: 5 },
+            ]),
+        ]);
+
+        return res.json({
+            tz,
+            totals: { users: totalUsers, posts: totalPosts },
+            today: {
+                key: todayKey,
+                newUsers: newToday, newUsersDelta: A.growthPercent(newToday, newYesterday),
+                posts: postsToday, postsDelta: A.growthPercent(postsToday, postsYesterday),
+                events: eventsToday, eventsDelta: A.growthPercent(eventsToday, eventsYesterday),
+            },
+            active24h: active24h.filter(Boolean).length,
+            topCountries: (topCountries || []).map((c) => ({ code: c._id, name: c.name || c._id, count: c.count })),
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed to fetch overview" });
+    }
+});
+
+// /analytics/devices?days=30 — device/os/browser mix + totals.
+router.get("/analytics/devices", requireAdmin, async (req, res) => {
+    try {
+        const days = Math.max(1, Math.min(parseInt(req.query.days, 10) || 30, 365));
+        const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const events = await AnalyticsEvent.find({ createdAt: { $gte: from } })
+            .select("device").lean().limit(30000);
+        return res.json({ days, ...A.deviceBreakdown(events), tracked: events.length });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed to fetch device analytics" });
+    }
+});
+
+// /analytics/locations?days=30 — country + city roll-ups with coordinates
+// for the globe, plus helper icons for the dots.
+router.get("/analytics/locations", requireAdmin, async (req, res) => {
+    try {
+        const days = Math.max(1, Math.min(parseInt(req.query.days, 10) || 30, 365));
+        const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const events = await AnalyticsEvent.find({
+            createdAt: { $gte: from },
+            "location.countryCode": { $ne: "" },
+        }).select("location").lean().limit(30000);
+        return res.json({ days, ...A.locationBreakdown(events) });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed to fetch location analytics" });
     }
 });
 

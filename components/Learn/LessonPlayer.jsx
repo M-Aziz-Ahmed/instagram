@@ -18,15 +18,32 @@ export default function LessonPlayer() {
     const [hearts, setHearts] = useState(MAX_HEARTS);
     const [result, setResult] = useState(null);
     const [error, setError] = useState("");
+    const completingRef = useRef(false);
 
+    // Questions are deterministic server-side, so we cache the last payload in
+    // sessionStorage: re-opening a lesson renders instantly (before the network
+    // round-trip below finishes) while the fetch refreshes hearts/progress.
     useEffect(() => {
         let alive = true;
         (async () => {
+            let cached = null;
+            try {
+                cached = JSON.parse(sessionStorage.getItem(`learn:q:${courseId}:${lessonId}:v2`) || "null");
+            } catch {}
+            if (alive && cached?.questions?.length) {
+                await Promise.resolve();
+                if (!alive) return;
+                setLesson(cached.lesson);
+                setQuestions(cached.questions);
+                setMe(cached.me || null);
+                setHearts(Math.max(0, cached.me?.hearts ?? MAX_HEARTS));
+                setPhase("question");
+            }
             try {
                 const r = await fetch(`/api/learn/lesson/${courseId}/${lessonId}`, { credentials: "include" });
                 const d = await r.json();
                 if (!r.ok) {
-                    if (alive) setError(d.error || "Failed to load lesson");
+                    if (alive && !cached?.questions?.length) setError(d.error || "Failed to load lesson");
                     return;
                 }
                 if (!alive) return;
@@ -35,8 +52,11 @@ export default function LessonPlayer() {
                 setMe(d.me);
                 setHearts(Math.max(0, d.me?.hearts ?? MAX_HEARTS));
                 setPhase(d.questions?.length ? "question" : "complete");
+                if (d.questions?.length) {
+                    try { sessionStorage.setItem(`learn:q:${courseId}:${lessonId}:v2`, JSON.stringify(d)); } catch {}
+                }
             } catch {
-                if (alive) setError("Failed to load lesson");
+                if (alive && !cached?.questions?.length) setError("Failed to load lesson");
             }
         })();
         return () => { alive = false; };
@@ -53,6 +73,8 @@ export default function LessonPlayer() {
     }, []);
 
     const submitComplete = useCallback(async (correct, total) => {
+        if (completingRef.current) return;
+        completingRef.current = true;
         try {
             const r = await fetch("/api/learn/lesson/complete", {
                 method: "POST",
@@ -236,10 +258,14 @@ export default function LessonPlayer() {
 
             {/* Question card */}
             <div className="flex-1 w-full max-w-2xl mx-auto px-4 py-8">
-                {q.type === "pronounce" ? (
+                {q.type === "learn" ? (
+                    <LearnCard key={q.id} q={q} rtl={rtl} hl={lesson?.hl} onCheck={handleEnd} />
+                ) : q.type === "pronounce" ? (
                     <PronounceCard key={q.id} q={q} rtl={rtl} hearts={hearts} hurt={hurt} onCheck={handleEnd} />
                 ) : q.type === "story" ? (
                     <StoryCard key={q.id} q={q} rtl={rtl} hl={lesson?.hl} onCheck={handleEnd} />
+                ) : q.type === "solve" ? (
+                    <SolveCard key={q.id} q={q} hearts={hearts} hurt={hurt} onCheck={handleEnd} />
                 ) : (
                     <QuestionCard
                         key={q.id}
@@ -251,6 +277,59 @@ export default function LessonPlayer() {
                         onCheck={handleEnd}
                     />
                 )}
+            </div>
+        </div>
+    );
+}
+
+// ── First, let's learn ────────────────────────────────────────
+// Non-graded flashcard pass shown at the start of beginner lessons: each new
+// word/phrase of the lesson is presented with emoji, target text, meaning and
+// audio before any quiz question expects the learner to already know it.
+function LearnCard({ q, rtl, hl, onCheck }) {
+    const items = q.items || [];
+    const [idx, setIdx] = useState(0);
+    const item = items[Math.min(idx, items.length - 1)];
+    const last = idx >= items.length - 1;
+
+    return (
+        <div className="flex flex-col min-h-[70vh]">
+            <div className="flex-1 text-center">
+                <p className="text-sm font-bold text-gray-400 dark:text-gray-500 mb-4">🆕 {q.prompt}</p>
+
+                {item && (
+                    <>
+                        <div className="flex items-center justify-center gap-2 mb-6">
+                            {items.map((it, i) => (
+                                <span
+                                    key={i}
+                                    className={`w-2.5 h-2.5 rounded-full ${i === idx ? "bg-[#58cc02]" : "bg-gray-200 dark:bg-gray-700"}`}
+                                />
+                            ))}
+                        </div>
+                        <div className="relative inline-flex items-center justify-center gap-4 px-8 py-6 rounded-3xl bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800">
+                            <span className="text-4xl">{item.emoji || "💬"}</span>
+                            <div className="text-left">
+                                <p className="text-2xl font-extrabold text-gray-800 dark:text-gray-100 leading-snug" dir={rtl ? "rtl" : "ltr"}>{item.t}</p>
+                                <p className="text-sm font-bold text-gray-500 dark:text-gray-400 mt-0.5">{item.e}</p>
+                                {item.gloss && <Gloss text={item.gloss} />}
+                            </div>
+                            <SpeakBtn text={item.t} lang={hl} />
+                        </div>
+                        <p className="text-xs text-gray-400 mt-4">Tap the speaker to hear it said aloud.</p>
+                    </>
+                )}
+            </div>
+
+            <div className="sticky bottom-0 bg-white dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800 mt-6">
+                <div className="w-full max-w-2xl mx-auto px-4 py-4">
+                    <button
+                        onClick={() => (last ? onCheck(true) : setIdx((i) => i + 1))}
+                        className="w-full py-3.5 rounded-2xl font-extrabold text-sm bg-[#58cc02] hover:bg-[#46a302] text-white"
+                    >
+                        {items.length === 1 ? "I'VE LEARNED IT — START QUIZ ▶" : last ? "I'VE LEARNED THESE — START QUIZ ▶" : "CONTINUE →"}
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -498,7 +577,7 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
     }, []);
 
     const check = () => {
-        if (q.type === "select" || q.type === "listen" || q.type === "truefalse") {
+        if (q.type === "select" || q.type === "listen" || q.type === "truefalse" || q.type === "mcq") {
             applyResult(choice !== null && choice === q.correctIndex);
         } else if (q.type === "wordbank") {
             const expected = q.tokens.join(" ").trim().toLowerCase().replace(/\s+/g, " ");
@@ -536,7 +615,7 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
     const isRtl = q.type !== "select" && q.type !== "listen" && targetDir && rtl;
 
     const canCheck =
-        q.type === "select" || q.type === "listen" || q.type === "truefalse"
+        q.type === "select" || q.type === "listen" || q.type === "truefalse" || q.type === "mcq"
             ? choice !== null
             : q.type === "wordbank"
             ? answer.trim().length > 0
@@ -556,6 +635,26 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
     return (
         <div className="flex flex-col min-h-[70vh]">
             <div className="flex-1 text-center">
+                {/* Multiple choice (subjects) — plain options, no emojis, with a
+                    "why" solution panel revealed after checking. */}
+                {q.type === "mcq" && (
+                    <>
+                        <p className="text-lg font-extrabold text-gray-800 dark:text-gray-100 leading-snug mb-6">{q.prompt}</p>
+                        <div className="grid grid-cols-1 gap-3 max-w-md mx-auto">
+                            {q.options.map((o, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => !checked && setChoice(i)}
+                                    className={`p-4 rounded-2xl border-2 text-lg font-extrabold transition-all flex items-center justify-center ${optionClass(i, i === q.correctIndex)}`}
+                                >
+                                    {o}
+                                </button>
+                            ))}
+                        </div>
+                        {checked && <SolutionPanel solution={q.solution} hl={hl} />}
+                    </>
+                )}
+
                 {/* Select / reverse-select */}
                 {q.type === "select" && (
                     <>
@@ -581,11 +680,10 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
                                     }}
                                     className={`p-4 rounded-2xl border-2 text-sm font-bold transition-all text-left flex items-center justify-between ${optionClass(i, i === q.correctIndex)}`}
                                 >
-                                    <span className="flex flex-col flex-1">
-                                        <span dir={qPromptDir(q, rtl)}>{o}</span>
-                                        {q.glosses?.[i] && <Gloss text={q.glosses[i]} />}
-                                    </span>
-                                    {q.emojis?.[i] && <span className="text-xl">{q.emojis[i]}</span>}
+<span className="flex flex-col flex-1">
+                                    <span dir={qPromptDir(q, rtl)}>{o}</span>
+                                    {q.glosses?.[i] && <Gloss text={q.glosses[i]} />}
+                                </span>
                                 </button>
                             ))}
                         </div>
@@ -749,6 +847,136 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+// ── Step-by-step solution reveal ──────────────────────────────
+// Shown after answering a subject question: numbered explanation steps,
+// each with its own speaker button, plus one "Narrate" button that reads
+// the whole chain aloud.
+function SolutionPanel({ solution, hl }) {
+    const steps = solution || [];
+    const [narrating, setNarrating] = useState(false);
+    if (!steps.length) return null;
+
+    const playAll = () => {
+        if (narrating) return;
+        setNarrating(true);
+        speakSequence(steps.map((s) => ({ t: s.say || s.t })), hl || "en", { finished: () => setNarrating(false) });
+    };
+
+    return (
+        <div className="mt-6 max-w-md mx-auto text-left">
+            <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] font-extrabold tracking-wider text-gray-400">WHY? HOW IT&apos;S SOLVED</p>
+                <button
+                    type="button"
+                    onClick={playAll}
+                    disabled={narrating}
+                    className="flex items-center gap-1.5 text-[#1cb0f6] text-xs font-extrabold hover:text-[#1899d6] disabled:opacity-50"
+                >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                    </svg>
+                    {narrating ? "NARRATING…" : "NARRATE"}
+                </button>
+            </div>
+            <div className="space-y-2">
+                {steps.map((s, i) => (
+                    <div key={i} className="flex items-center gap-3 rounded-2xl border-2 border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-3">
+                        <span className="w-6 h-6 rounded-full bg-[#1cb0f6]/10 text-[#1cb0f6] text-[11px] font-extrabold flex items-center justify-center shrink-0">{i + 1}</span>
+                        <p className="flex-1 text-sm font-bold text-gray-700 dark:text-gray-200 leading-snug">{s.t}</p>
+                        {s.say && <SpeakBtn text={s.say} lang={hl || "en"} />}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ── Typed answer (subjects) ───────────────────────────────────
+// "Solve" exercises: type the answer, get it checked against accept[]
+// (or a numeric tolerance), lose a heart on a miss, then reveal the fully
+// narrated step-by-step solution.
+function solveMatches(q, value) {
+    const raw = (value || "").trim();
+    if (!raw) return false;
+    if (typeof q.tol === "number") {
+        const n = parseFloat(raw);
+        if (isNaN(n)) return false;
+        return Math.abs(n - parseFloat(q.correct)) <= q.tol;
+    }
+    const norm = (s) => s.toLowerCase().replace(/[.,!?;:()]/g, "").replace(/\s+/g, " ").trim();
+    const cleaned = norm(raw);
+    return (q.accept || []).some((a) => norm(a) === cleaned);
+}
+
+function SolveCard({ q, hearts, hurt, onCheck }) {
+    const [value, setValue] = useState("");
+    const [checked, setChecked] = useState(false);
+    const [correct, setCorrect] = useState(false);
+
+    const numeric = (q.accept || []).length > 0 && (q.accept || []).every((a) => !isNaN(parseFloat(String(a))));
+    const canSubmit = value.trim().length > 0;
+
+    const check = () => {
+        if (!canSubmit || checked) return;
+        const ok = solveMatches(q, value);
+        setChecked(true);
+        setCorrect(ok);
+        if (!ok) hurt(1);
+    };
+
+    return (
+        <div className="flex flex-col min-h-[70vh]">
+            <div className="flex-1 text-center">
+                <p className="text-sm font-bold text-gray-400 dark:text-gray-500 mb-4">✏️ {q.prompt}</p>
+                <input
+                    type="text"
+                    inputMode={numeric ? "numeric" : "text"}
+                    autoFocus
+                    value={value}
+                    onChange={(e) => !checked && setValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") check(); }}
+                    placeholder={numeric ? "Type your answer…" : "Type your answer…"}
+                    disabled={checked}
+                    className="w-full max-w-sm mx-auto block text-center text-xl font-extrabold py-4 rounded-2xl border-2 border-[#1cb0f6] bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 outline-none focus:border-[#1899d6] disabled:opacity-50"
+                />
+                {q.unit && <p className="text-sm font-bold text-gray-400 mt-1">{q.unit}</p>}
+
+                {checked && (
+                    <>
+                        {!correct && (
+                            <div className="max-w-sm mx-auto mt-4 rounded-2xl border-2 border-red-200 bg-red-500/5 p-3">
+                                <p className="text-sm font-extrabold text-red-500">The answer is: {q.correct}</p>
+                            </div>
+                        )}
+                        <SolutionPanel solution={q.solution} hl={q.hl || "en"} />
+                    </>
+                )}
+            </div>
+
+            <div className="sticky bottom-0 bg-white dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800 mt-6">
+                <div className="w-full max-w-2xl mx-auto px-4 py-4 flex items-center gap-4">
+                    {checked && (
+                        <span className={`text-2xl w-8 ${correct ? "text-[#58cc02]" : "text-red-500"}`}>{correct ? "✅" : `❤️ ${hearts}`}</span>
+                    )}
+                    <button
+                        onClick={checked ? () => onCheck(correct) : check}
+                        disabled={!checked && !canSubmit}
+                        className={`flex-1 py-3.5 rounded-2xl font-extrabold text-sm transition-colors ${
+                            checked
+                                ? correct
+                                    ? "bg-[#58cc02] hover:bg-[#46a302] text-white"
+                                    : "bg-red-500 hover:bg-red-600 text-white"
+                                : "bg-[#58cc02] hover:bg-[#46a302] text-white disabled:bg-gray-200 dark:disabled:bg-gray-800 disabled:text-gray-400"
+                        }`}
+                    >
+                        {checked ? "CONTINUE" : "CHECK"}
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }
