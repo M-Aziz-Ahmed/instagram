@@ -204,6 +204,170 @@ fn get_window_inner_pos(app: tauri::AppHandle) -> Result<serde_json::Value, Stri
     Ok(serde_json::json!({ "x": pos.x, "y": pos.y, "scaleFactor": scale }))
 }
 
+// ─── Learning: native TTS + speech recognition ────────────────────────────────
+// The education sub-app needs pronunciation everywhere. WebView2 knows few
+// voices and has no speech-recognition API, so the desktop client bridges to
+// Windows' System.Speech through PowerShell:
+//   native_tts        — speak "text" in "lang" (best matching installed voice)
+//   recognize_speech  — listen for the expected phrase, return { text, conf }
+// Payloads travel as UTF-8 base64 JSON so no quoting can break on any script.
+
+fn b64_encode(input: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+    for chunk in input.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = chunk.get(1).map(|b| *b as u32).unwrap_or(0);
+        let b2 = chunk.get(2).map(|b| *b as u32).unwrap_or(0);
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(T[(n >> 18) as usize & 63] as char);
+        out.push(T[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 { T[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 2 { T[n as usize & 63] as char } else { '=' });
+    }
+    out
+}
+
+fn ps_encode(src: &str) -> String {
+    // PowerShell -EncodedCommand expects UTF-16LE, base64.
+    let mut bytes: Vec<u8> = Vec::with_capacity(src.len() * 2);
+    for u in src.encode_utf16() {
+        bytes.extend_from_slice(&u.to_le_bytes());
+    }
+    b64_encode(&bytes)
+}
+
+fn run_powershell(script: &str) -> Result<String, String> {
+    if std::env::consts::OS != "windows" {
+        return Err("native speech requires Windows".into());
+    }
+    let encoded = ps_encode(script);
+    let out = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", &encoded])
+        .output()
+        .map_err(|e| e.to_string())?;
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    if !out.status.success() {
+        return Err(format!(
+            "powershell exit {}: {}",
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    Ok(stdout)
+}
+
+fn ps_payload_b64(json: &serde_json::Value) -> String {
+    b64_encode(&json.to_string().into_bytes())
+}
+
+fn ps_decode_line(out: &str, marker: &str) -> String {
+    for line in out.lines() {
+        if let Some(rest) = line.strip_prefix(marker) {
+            return rest.trim().to_string();
+        }
+    }
+    String::new()
+}
+
+const PS_HEAD: &str = r#"
+$ErrorActionPreference = "SilentlyContinue"
+$p = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('"#;
+
+const PS_MID: &str = r#"')) | ConvertFrom-Json
+"#;
+
+fn build_tts_script(payload: &serde_json::Value) -> String {
+    let mut s = String::with_capacity(1024);
+    s.push_str(PS_HEAD);
+    s.push_str(&ps_payload_b64(payload));
+    s.push_str(PS_MID);
+    s.push_str(r#"
+try {
+  Add-Type -AssemblyName System.Speech
+  $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+  $base = (($(if ($null -eq $p.lang) { "" } else { $p.lang })) -split '-')[0].ToLower()
+  if ($base) {
+    foreach ($v in $synth.GetInstalledVoices()) {
+      $c = $v.VoiceInfo.Culture
+      if ($c -and $c.Name.ToLower().StartsWith($base)) { $synth.SelectVoice($v.VoiceInfo.Name); break }
+    }
+  }
+  $synth.Rate = 0
+  $synth.Speak([string]$p.text)
+  "OK"
+} catch { "ERR:" + $_.Exception.Message }
+"#);
+    s
+}
+
+fn build_recognize_script(payload: &serde_json::Value) -> String {
+    let mut s = String::with_capacity(2048);
+    s.push_str(PS_HEAD);
+    s.push_str(&ps_payload_b64(payload));
+    s.push_str(PS_MID);
+    s.push_str(r#"
+try {
+  Add-Type -AssemblyName System.Speech
+  $engine = $null
+  $base = (($(if ($null -eq $p.lang) { "" } else { $p.lang })) -split '-')[0]
+  if ($base) {
+    try { $engine = New-Object System.Speech.Recognition.SpeechRecognitionEngine($base) } catch { $engine = $null }
+  }
+  if (-not $engine) { try { $engine = New-Object System.Speech.Recognition.SpeechRecognitionEngine } catch {} }
+  if (-not $engine) { "UNSUPPORTED"; exit }
+
+  $phrase = [string]$p.expect
+  $gb = New-Object System.Speech.Recognition.GrammarBuilder
+  $choice = New-Object System.Speech.Recognition.Choices
+  if ($phrase) { $choice.Add($phrase) }
+  foreach ($w in ($phrase -split ' ')) { if ($w) { $choice.Add($w) } }
+  $gb.Append($choice)
+  $grammar = New-Object System.Speech.Recognition.Grammar($gb)
+  $engine.LoadGrammar($grammar)
+  $engine.SetInputToDefaultAudioDevice()
+  $timeout = [int]$(if ($p.timeoutMs) { $p.timeoutMs } else { 8000 })
+  $result = $engine.Recognize([TimeSpan]::FromMilliseconds($timeout))
+  if ($result) {
+    "RESULT::$($result.Text)|$($result.Confidence)"
+  } else {
+    "EMPTY::"
+  }
+} catch { "ERR:" + $_.Exception.Message }
+"#);
+    s
+}
+
+#[tauri::command]
+async fn native_tts(text: String, lang: String) -> Result<bool, String> {
+    let payload = serde_json::json!({ "text": text, "lang": lang });
+    let script = build_tts_script(&payload);
+    let out = tauri::async_runtime::spawn_blocking(move || run_powershell(&script))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(out.trim().starts_with("OK"))
+}
+
+#[tauri::command]
+async fn recognize_speech(expect: String, lang: String, timeout_ms: Option<u32>) -> Result<serde_json::Value, String> {
+    let payload = serde_json::json!({ "expect": expect, "lang": lang, "timeoutMs": timeout_ms.unwrap_or(8000) });
+    let script = build_recognize_script(&payload);
+    let out = tauri::async_runtime::spawn_blocking(move || run_powershell(&script))
+        .await
+        .map_err(|e| e.to_string())??;
+    if out.contains("UNSUPPORTED") {
+        return Ok(serde_json::json!({ "error": "unsupported" }));
+    }
+    let result = ps_decode_line(&out, "RESULT::");
+    if result.is_empty() {
+        return Ok(serde_json::json!({ "text": "" }));
+    }
+    if let Some((text, conf)) = result.split_once('|') {
+        return Ok(serde_json::json!({ "text": text, "confidence": conf.parse::<f64>().unwrap_or(0.0) }));
+    }
+    Ok(serde_json::json!({ "error": "unexpected" }))
+}
+
 // ─── App entry ────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -245,6 +409,7 @@ pub fn run() {
             show_toast, close_toast, handle_toast_click,
             get_window_inner_pos,
             browser_open, browser_navigate, browser_set_bounds, browser_close,
+            native_tts, recognize_speech,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

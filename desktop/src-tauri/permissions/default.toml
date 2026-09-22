@@ -11,6 +11,8 @@ permissions = [
   "allow-browser-navigate",
   "allow-browser-set-bounds",
   "allow-browser-close",
+  "allow-native-tts",
+  "allow-recognize-speech",
 ]
 
 [[permission]]
@@ -52,3 +54,13 @@ commands.allow = ["browser_set_bounds"]
 identifier = "allow-browser-close"
 description = "Closes the active inline browser webview."
 commands.allow = ["browser_close"]
+
+[[permission]]
+identifier = "allow-native-tts"
+description = "Enables the native_tts command which speaks text using the operating system speech synthesizer."
+commands.allow = ["native_tts"]
+
+[[permission]]
+identifier = "allow-recognize-speech"
+description = "Enables the recognize_speech command which recognizes spoken input via the operating system speech recognizer."
+commands.allow = ["recognize_speech"]

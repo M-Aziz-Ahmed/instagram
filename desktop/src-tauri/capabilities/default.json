@@ -33,6 +33,8 @@
     "allow-browser-open",
     "allow-browser-navigate",
     "allow-browser-set-bounds",
-    "allow-browser-close"
+    "allow-browser-close",
+    "allow-native-tts",
+    "allow-recognize-speech"
   ]
 }

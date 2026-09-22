@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 
 const LEAGUE_TIERS = ["Bronze", "Silver", "Gold", "Sapphire", "Ruby", "Emerald", "Amethyst", "Pearl", "Obsidian", "Diamond"];
-const OFFSETS = [0, 90, 150, 90, 0, -90, -150, -90];
 
 function Heart({ filled }) {
     return (
@@ -185,9 +184,10 @@ export default function CourseShell() {
 // ── Learning Path ─────────────────────────────────────────────
 function LearningPath({ course, me, startLesson, openQuests, openLeague }) {
     if (!course) return null;
-    const { meta, units } = course;
-
-    const allDone = units.every((u) => u.lessons.every((l) => l.done));
+    const { meta, chapters, progress } = course;
+    const total = progress?.totalLessons || chapters.reduce((n, c) => n + c.steps.reduce((m, s) => m + s.lessons.length, 0), 0);
+    const doneTotal = progress?.lessonsDone || 0;
+    const pct = total ? Math.round((doneTotal / total) * 100) : 0;
 
     return (
         <div className="relative">
@@ -209,37 +209,48 @@ function LearningPath({ course, me, startLesson, openQuests, openLeague }) {
             <div className="px-4 pt-4 pb-2 text-center">
                 <span className="text-4xl block">{meta.flag}</span>
                 <h1 className="font-extrabold text-xl text-gray-800 dark:text-gray-100 mt-1">
-                    {allDone ? "Course complete! 🎉" : `Learn ${meta.name}`}
+                    {pct >= 100 ? "Course complete! 🎉" : `Learn ${meta.name}`}
                 </h1>
                 <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1 leading-relaxed">
-                    {meta.rtl ? "You'll read right-to-left in this course." : "Follow the path below, one lesson at a time."}
+                    {chapters.length} chapters · {(chapters[0]?.steps || []).length} steps each · {doneTotal}/{total} lessons done
                 </p>
+                <div className="max-w-xs mx-auto mt-3 h-2 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                    <div className="h-full bg-[#58cc02] rounded-full transition-all" style={{ width: `${pct}%` }} />
+                </div>
+                <p className="text-[10px] font-extrabold text-gray-400 mt-1">{progress?.chaptersDone ?? 0}/{chapters.length} chapters cleared · {pct}%</p>
             </div>
 
-            {/* Units + nodes */}
-            {units.map((unit, ui) => (
-                <div key={unit.id} className="pt-4">
-                    <div className="px-4 py-6 text-center bg-white dark:bg-gray-900 mx-4 rounded-2xl border-2 border-gray-100 dark:border-gray-800 shadow-sm" style={{ borderTop: `6px solid ${unit.color}` }}>
-                        <p className="text-[10px] font-extrabold tracking-[0.2em] text-gray-400">UNIT {ui + 1}</p>
-                        <p className="font-extrabold text-lg text-gray-800 dark:text-gray-100" style={{ color: unit.color }}>
-                            {unit.title.toUpperCase()}
+            {/* Chapters → steps → lessons */}
+            {chapters.map((chapter) => (
+                <div key={chapter.id} className="pt-5">
+                    <div className="px-4 py-4 text-center bg-white dark:bg-gray-900 mx-4 rounded-2xl border-2 border-gray-100 dark:border-gray-800 shadow-sm" style={{ borderTop: `6px solid ${chapter.color}` }}>
+                        <p className="text-[10px] font-extrabold tracking-[0.2em] text-gray-400">
+                            CHAPTER {chapter.chapter} · {chapter.tier.toUpperCase()}
                         </p>
-                        <p className="text-xs text-gray-400 mt-1">{unit.lessons.filter((l) => l.done).length}/{unit.lessons.length} lessons · {unit.lessons.filter((l) => l.done).length === unit.lessons.length ? "Unit cleared ✓" : "Keep going!"}</p>
+                        <p className="font-extrabold text-lg text-gray-800 dark:text-gray-100" style={{ color: chapter.color }}>
+                            {chapter.title.toUpperCase()}
+                        </p>
+                        {/* Difficulty pips */}
+                        <div className="flex items-center justify-center gap-0.5 mt-1">
+                            {Array.from({ length: 10 }).map((_, i) => (
+                                <span key={i} className={`w-2 h-2 rounded-full ${i < chapter.difficulty ? "" : "bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700"}`} style={i < chapter.difficulty ? { backgroundColor: chapter.color } : {}} />
+                            ))}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">
+                            {chapter.steps.filter((s) => s.lessons.every((l) => l.done)).length}/{chapter.steps.length} steps · {chapter.difficulty}/10 difficulty
+                        </p>
                     </div>
 
-                    <div className="pt-2">
-                        {unit.lessons.map((lesson, li) => {
-                            const offset = OFFSETS[li % OFFSETS.length];
-                            return (
-                                <div key={lesson.id} className="relative">
-                                    {li > 0 && <div className="w-0.5 h-12 bg-gray-200 dark:bg-gray-700" style={{ marginLeft: `calc(50% + ${(offset + OFFSETS[(li - 1) % OFFSETS.length]) / 4}px)` }} />}
-                                    <div className="flex justify-center px-4 py-1" style={{ transform: `translateX(${offset}px)` }}>
-                                        <LessonNode lesson={lesson} color={unit.color} onOpen={() => startLesson(lesson)} />
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                    {chapter.steps.map((step) => (
+                        <div key={step.id} className="flex items-center justify-center px-4 py-1.5 gap-1.5">
+                            {step.lessons.map((lesson, li) => (
+                                <Fragment key={lesson.id}>
+                                    {li > 0 && <div className="w-4 sm:w-6 h-0.5 bg-gray-200 dark:bg-gray-700 shrink" />}
+                                    <LessonNode lesson={lesson} color={chapter.color} onOpen={() => startLesson(lesson)} />
+                                </Fragment>
+                            ))}
+                        </div>
+                    ))}
                 </div>
             ))}
 
@@ -258,44 +269,55 @@ function LearningPath({ course, me, startLesson, openQuests, openLeague }) {
 function LessonNode({ lesson, color, onOpen }) {
     const isReview = lesson.title === "Review";
     const crownCount = Math.min(5, lesson.crowns || 0);
+    const done = lesson.done;
+    const locked = lesson.locked;
+    let face = null;
+    if (locked) {
+        face = (
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+            </svg>
+        );
+    } else if (done) {
+        face = lesson.type === "story" ? "🎧" : lesson.type === "pronounce" ? "🗣️" : isReview ? "🔁" : "★";
+    } else {
+        face = lesson.type === "story" ? "🎧" : lesson.type === "pronounce" ? "🗣️" : "▶";
+    }
+
     return (
         <div className="flex flex-col items-center">
             <button
                 onClick={onOpen}
-                disabled={lesson.locked}
-                aria-label={lesson.title}
-                className={`relative w-14 h-14 rounded-full flex items-center justify-center text-2xl font-extrabold border-4 transition-transform active:scale-95 ${
-                    lesson.done
+                disabled={locked}
+                aria-label={`${lesson.title} — ${lesson.type === "story" ? "story time" : lesson.type === "pronounce" ? "speak up" : "lesson"}`}
+                className={`relative w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-lg font-extrabold border-4 transition-transform active:scale-95 ${
+                    done
                         ? "border-white dark:border-gray-950 ring-2 text-white"
-                        : lesson.locked
+                        : locked
                         ? "border-gray-300 dark:border-gray-700 bg-gray-200 dark:bg-gray-800 text-gray-400 cursor-not-allowed"
                         : "border-white dark:border-gray-950 ring-4 bg-[#58cc02] text-white animate-[pulse_2s_ease-in-out_infinite]"
                 }`}
-                style={lesson.done ? { backgroundColor: color, boxShadow: `0 0 0 1px ${color}55` } : {}}
+                style={done ? { backgroundColor: color, boxShadow: `0 0 0 1px ${color}55` } : {}}
             >
-                {lesson.locked ? (
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-                    </svg>
-                ) : lesson.done ? (
-                    isReview ? <span>🔁</span> : <span>★</span>
-                ) : (
-                    <span className="text-white">▶</span>
+                {face}
+                {!locked && lesson.type === "story" && (
+                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[#1cb0f6] text-white text-[9px] flex items-center justify-center shadow">📖</span>
+                )}
+                {!locked && lesson.type === "pronounce" && (
+                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[#ce82ff] text-white text-[9px] flex items-center justify-center shadow">🎙️</span>
+                )}
+                {!locked && lesson.type === "lesson" && (
+                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[#58cc02] text-white text-[9px] flex items-center justify-center shadow">⚡</span>
                 )}
             </button>
 
             {/* Crown pips (earned by replaying a lesson perfectly, up to 5) */}
             {crownCount > 0 && (
-                <div className="flex items-center justify-center gap-0.5 mt-1">
+                <div className="flex items-center justify-center gap-0.5 mt-0.5">
                     {Array.from({ length: crownCount }).map((_, i) => (
-                        <span key={i} className="text-[11px] leading-none">👑</span>
+                        <span key={i} className="text-[9px] leading-none">👑</span>
                     ))}
                 </div>
-            )}
-            {!lesson.locked && isReview && (
-                <span className={`mt-1 text-[9px] font-extrabold tracking-wide px-1.5 py-0.5 rounded ${lesson.done ? "text-gray-400 dark:text-gray-500" : "text-gray-500 dark:text-gray-400"}`}>
-                    REVIEW
-                </span>
             )}
         </div>
     );

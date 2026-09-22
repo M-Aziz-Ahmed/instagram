@@ -876,88 +876,19 @@ function loadDeepTranslations() {
 
 const DEEP = loadDeepTranslations();
 
-// Build full course objects from the shared lesson blueprints + translations.
-// Each unit = core beginner lessons + deep lessons (where the target language
-// has translations) + one auto-review lesson (`vocab` empty → buildQuestions
-// samples from the whole course).
+// ── Full course assembly ──────────────────────────────────────
+// Every playable language gets the comprehensive curriculum from
+// learnSyllabus: 50 chapters × 10 steps × 5 lessons (2500 nodes),
+// difficulty ramping from zero-knowledge (chapters 1-2) to mastery.
+// Languages with a learnDeep/<lang>.js file additionally draw on those
+// 49 deep themes; the rest rotate through their 8 verified core themes
+// with escalating difficulty + spaced repetition.
+const { buildCourseForLanguage } = require("./learnSyllabus");
+
 function buildCourses() {
     const courses = {};
     for (const [langId, t] of Object.entries(TRANSLATIONS)) {
-        const deepForLang = DEEP[langId] || {};
-        const units = [];
-
-        const buildCoreLesson = (lid) => {
-            const blueprint = BASIC_LESSON[lid];
-            const vocab = blueprint.vocab.map(([e, , emoji]) => {
-                const found = (t[lid] || []).find(([en]) => en === e);
-                return { e, t: found ? found[1] : e, emoji, gloss: (found && found[2]) || "" };
-            });
-            const phrases = (t._phrases[lid] || []).map(([e, target, gloss]) => ({ e, t: target, gloss: gloss || "" }));
-            return {
-                id: `${langId}-${lid}`,
-                title: blueprint.title,
-                type: "lesson",
-                xp: 10,
-                vocab,
-                phrases,
-            };
-        };
-
-        const buildDeepLesson = (lid) => {
-            const dl = deepForLang[lid];
-            if (!dl || !DEEP_LESSONS[lid]) return null;
-            const blueprint = DEEP_LESSONS[lid];
-            const emojiFor = (en) => {
-                const v = (blueprint.vocab || []).find(([e]) => e === en);
-                return v ? v[2] : "";
-            };
-            const vocab = (dl.vocab || []).map(([e, target, gloss]) => ({
-                e,
-                t: target || e,
-                emoji: emojiFor(e),
-                gloss: gloss || "",
-            }));
-            const phrases = (dl.phrases || []).map(([e, target, gloss]) => ({ e, t: target || e, gloss: gloss || "" }));
-            return {
-                id: `${langId}-${lid}`,
-                title: blueprint.title,
-                type: "lesson",
-                xp: 10,
-                vocab,
-                phrases,
-            };
-        };
-
-        const used = new Set();
-        UNIT_PLAN.forEach((u, ui) => {
-            const built = [];
-            for (const lid of u.lessons) {
-                if (used.has(lid)) continue;
-                used.add(lid);
-                const lesson = BASIC_LESSON[lid] ? buildCoreLesson(lid) : buildDeepLesson(lid);
-                if (lesson) built.push(lesson);
-            }
-            if (built.length === 0) return;
-            if (built.length > 1) {
-                built.push({
-                    id: `${langId}-u${ui + 1}-review`,
-                    title: "Review",
-                    type: "lesson",
-                    xp: 12,
-                    vocab: [],
-                    phrases: [],
-                });
-            }
-            units.push({ id: `${langId}-u${ui + 1}`, title: u.title, color: u.color, lessons: built });
-        });
-
-        // The course must never end on a vocabulary-less review node.
-        if (units.length > 0) {
-            const last = units[units.length - 1].lessons;
-            if (last[last.length - 1].title === "Review") last.pop();
-        }
-
-        courses[langId] = { units };
+        courses[langId] = buildCourseForLanguage(langId, t, DEEP[langId] || {}, BASIC_LESSON);
     }
     return courses;
 }
