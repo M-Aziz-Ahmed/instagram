@@ -23,9 +23,12 @@ export default function AdminDashboard() {
 
     const o = overview;
     const growthData = growth?.series || [];
-    const globePoints = (locations?.countries || [])
+    const globeCountries = (locations?.countries || [])
         .filter((c) => c.lat != null && c.lon != null)
         .map((c) => ({ code: c.code, name: c.name, count: c.count, lat: c.lat, lon: c.lon }));
+    const globeCities = (locations?.cities || [])
+        .filter((c) => c.lat != null && c.lon != null)
+        .map((c) => ({ code: c.code, name: c.city || c.name, country: c.country, count: c.count, lat: c.lat, lon: c.lon }));
 
     return (
         <div className="space-y-6">
@@ -102,11 +105,11 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between mb-4">
                     <div>
                         <h3 className="font-bold text-sm text-gray-900 dark:text-gray-100">Where your users are 🌍</h3>
-                        <p className="text-xs text-gray-400 mt-0.5">Live usage map — {globePoints.length} countries · {locations?.totalLocated || 0} located events</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Live usage map — {globeCountries.length} countries · {globeCities.length} cities · {locations?.totalLocated || 0} located events</p>
                     </div>
                 </div>
                 <div className="mx-auto" style={{ maxWidth: 640 }}>
-                    <Globe points={globePoints} width={640} height={440} />
+                    <Globe countries={globeCountries} cities={globeCities} width={640} height={440} />
                 </div>
             </div>
         </div>

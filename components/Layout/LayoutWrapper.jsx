@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import BottomNav from "./BottomNav";
 import Sidebar from "./Sidebar";
+import AnnouncementBanner from "./AnnouncementBanner";
 import VoiceChat from "@/components/VoiceChat/VoiceChat";
 import { useSidebar } from "@/context/SidebarContext";
 import { useUser } from "@/context/UserContext";
@@ -74,6 +75,7 @@ export default function LayoutWrapper({ children }) {
                 isMobile || isTablet ? "pb-16" :
                 collapsed ? "lg:pl-20" : "lg:pl-72"
             } ${voiceOpen && !isMobile ? "lg:pr-80" : ""}`}>
+                <AnnouncementBanner />
                 {children}
             </div>
             <BottomNav unreadCount={unreadCount} />

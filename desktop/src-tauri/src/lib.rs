@@ -42,7 +42,10 @@ struct ToastState {
 
 struct BrowserState {
     counter: Mutex<u32>,
-    /// Label of the currently open inline browser overlay window, if any.
+    /// Label of the inline browser overlay window. Created lazily on first use,
+    /// then REUSED (hide/show + navigate). Destroying and recreating a WebView2
+    /// window on every navigation is what crashed the app and left orphaned
+    /// "AnonTweet Browser" processes/windows in Task Manager.
     active_label: Mutex<Option<String>>,
 }
 
@@ -106,8 +109,10 @@ fn handle_toast_click(app: tauri::AppHandle, id: u32) {
 
 // ─── Browser commands ─────────────────────────────────────────────────────────
 
-/// Create (or replace) an overlay browser window positioned at absolute screen
-/// coordinates (physical pixels).
+/// Create (or reuse) the inline browser overlay window positioned at absolute
+/// screen coordinates (physical pixels). The window is created once and then
+/// merely hidden/re-shown, repositioned and re-navigated — never destroyed
+/// while the app runs.
 #[tauri::command]
 fn browser_open(
     app: tauri::AppHandle,
@@ -119,43 +124,48 @@ fn browser_open(
 ) -> Result<String, String> {
     let screen_x = x;
     let screen_y = y;
-    // Close any existing browser overlay first.
-    {
-        let bs: tauri::State<'_, Arc<BrowserState>> = app.state();
-        let old = bs.active_label.lock().unwrap().take();
-        drop(bs);
-        if let Some(old_label) = old {
-            if let Some(w) = app.get_webview_window(&old_label) { let _ = w.close(); }
-        }
-    }
-
     let target_url = url.parse::<Url>().map_err(|e| e.to_string())?;
+
+    // Determine the persistent label (create only once).
     let label = {
         let bs: tauri::State<'_, Arc<BrowserState>> = app.state();
-        let mut c = bs.counter.lock().unwrap();
-        *c += 1;
-        format!("browser-inline-{}", *c)
+        let mut labels = bs.active_label.lock().unwrap();
+        if let Some(l) = labels.as_ref() {
+            l.clone()
+        } else {
+            let mut counter = bs.counter.lock().unwrap();
+            *counter += 1;
+            let l = format!("browser-inline-{}", *counter);
+            labels.replace(l.clone());
+            l
+        }
     };
 
-    // Build a decoration-less window at the exact position of the content area.
-    let win = tauri::WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(target_url))
-        .title("AnonTweet Browser")
-        .decorations(false)
-        .resizable(false)
-        .skip_taskbar(true)
-        .shadow(false)
-        .focused(true)
-        .inner_size(800.0, 600.0) // temporary size — repositioned immediately after
-        .build()
-        .map_err(|e| format!("browser window build failed: {}", e))?;
+    let win = match app.get_webview_window(&label) {
+        Some(w) => w,
+        None => {
+            // First time — build the borderless overlay window.
+            tauri::WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(target_url.clone()))
+                .title("AnonTweet Browser")
+                .decorations(false)
+                .resizable(false)
+                .skip_taskbar(true)
+                .shadow(false)
+                .inner_size(800.0, 600.0) // temporary size — repositioned immediately after
+                .build()
+                .map_err(|e| format!("browser window build failed: {}", e))?
+        }
+    };
 
-    // Position precisely using physical pixels (accounts for DPI scaling).
+    // Reposition precisely using physical pixels (accounts for DPI scaling).
+    let _ = win.hide();
     let _ = win.set_position(tauri::PhysicalPosition::new(screen_x, screen_y));
     let _ = win.set_size(tauri::PhysicalSize::new(width, height));
+    if win.url().map(|u| u.as_str() != target_url.as_str()).unwrap_or(true) {
+        let _ = win.navigate(target_url);
+    }
+    let _ = win.show();
     let _ = win.set_focus();
-
-    let bs: tauri::State<'_, Arc<BrowserState>> = app.state();
-    *bs.active_label.lock().unwrap() = Some(label.clone());
     Ok(label)
 }
 
@@ -186,12 +196,13 @@ fn browser_set_bounds(
     Ok(())
 }
 
-/// Close the active inline browser window.
+/// Hide the inline browser overlay. The window is kept alive (reused on the
+/// next browser_open) so nothing is destroyed and no process lingers.
 #[tauri::command]
 fn browser_close(app: tauri::AppHandle) -> Result<(), String> {
     let bs: tauri::State<'_, Arc<BrowserState>> = app.state();
-    let label = match bs.active_label.lock().unwrap().take() { Some(l) => l, None => return Ok(()) };
-    if let Some(win) = app.get_webview_window(&label) { let _ = win.close(); }
+    let label = match bs.active_label.lock().unwrap().clone() { Some(l) => l, None => return Ok(()) };
+    if let Some(win) = app.get_webview_window(&label) { let _ = win.hide(); }
     Ok(())
 }
 
@@ -407,6 +418,14 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
+                    // Hide any open inline browser overlay so it never lingers
+                    // on the desktop (or in Task Manager) once the app hides
+                    // to the tray.
+                    let app = window.app_handle();
+                    let bs: tauri::State<'_, Arc<BrowserState>> = app.state();
+                    if let Some(label) = bs.active_label.lock().unwrap().clone() {
+                        if let Some(w) = app.get_webview_window(&label) { let _ = w.hide(); }
+                    }
                     let _ = window.hide();
                     api.prevent_close();
                 }

@@ -145,8 +145,16 @@ router.post("/verify-otp", async (req, res) => {
 
         let user = await User.findOne({ email: email.toLowerCase() });
         if (!user) {
-            const isAdmin = email.toLowerCase() === (process.env.ADMIN_EMAIL || "").toLowerCase();
-            user = await User.create({ email: email.toLowerCase(), isAdmin });
+            const isAdminEmail = email.toLowerCase() === (process.env.ADMIN_EMAIL || "").toLowerCase();
+            if (!isAdminEmail) {
+                const { getSettings } = require("../models/siteSettings");
+                const cfg = await getSettings();
+                if (!cfg.signupsOpen) {
+                    logAuth("signup_blocked", null, { level: "warn", message: `Signup blocked (closed) for ${email}`, ip: req.ip });
+                    return res.status(403).json({ error: "Signups are currently closed. Try again later." });
+                }
+            }
+            user = await User.create({ email: email.toLowerCase(), isAdmin: isAdminEmail });
         } else if (!user.isAdmin && email.toLowerCase() === (process.env.ADMIN_EMAIL || "").toLowerCase()) {
             user.isAdmin = true;
             await user.save();
