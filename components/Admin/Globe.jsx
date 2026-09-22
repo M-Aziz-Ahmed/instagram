@@ -13,8 +13,11 @@ const TILT = -22;
 const LAND = "rgba(108, 122, 137, 0.55)";
 const GRID = "rgba(148, 163, 184, 0.16)";
 const ZOOM_MIN = 0.7;
-const ZOOM_MAX = 3.4;
-const Z_CITIES = 1.55; // zoom level where city dots replace country dots
+const ZOOM_MAX = 8;
+const Z_CITIES = 1.5; // zoom level where city dots replace country dots
+// Below a place's event-count drops under this zoom-dependent floor it is
+// hidden, so zooming in progressively reveals smaller towns (Google-Maps-like).
+const minVisibleCount = (z) => Math.max(1, Math.round(48 / (z * z)));
 
 function toVec(lon, lat) {
     const phi = (lon * Math.PI) / 180;
@@ -129,9 +132,9 @@ export default function Globe({
             ctx.stroke();
         }
 
-        // landmasses (front-facing polylines)
+        // landmasses (front-facing polylines); thicken a little when zoomed
         ctx.strokeStyle = LAND;
-        ctx.lineWidth = 1.25;
+        ctx.lineWidth = 1.25 + Math.min(0.9, z * 0.12);
         ctx.lineJoin = "round";
         for (const ring of WORLD_RINGS) {
             ctx.beginPath();
@@ -145,18 +148,20 @@ export default function Globe({
         }
 
         // Which dots do we draw? Zoomed out → countries; zoomed in → the
-        // cities nearest to the view centre (so you can drill down).
+        // cities/towns nearest to the view centre, revealing smaller places
+        // the deeper you zoom.
         const zoomed = z >= Z_CITIES;
         let list;
         if (zoomed) {
             const cLon = clampDeg((yaw / DEG) * -1, -180, 180);
             const cLat = clampDeg(s.pitchDeg, -90, 90);
-            const halfLon = 120 / z;
-            const halfLat = 72 / z;
+            const halfLon = 110 / z;
+            const halfLat = 70 / z;
+            const minCount = minVisibleCount(z);
             list = cities
-                .filter((c) => c.lat != null && c.lon != null)
+                .filter((c) => c.lat != null && c.lon != null && (c.count || 1) >= minCount)
                 .filter((c) => Math.abs(wrapDelta(c.lon, cLon)) <= halfLon && Math.abs(c.lat - cLat) <= halfLat)
-                .slice(0, 40);
+                .slice(0, 420);
         } else {
             list = countries;
         }
@@ -164,14 +169,15 @@ export default function Globe({
         const saved = [];
         if (list.length) {
             const maxCount = Math.max(1, ...list.map((p) => p.count || 1));
+            const sizeK = zoomed ? Math.min(2.5, z / 1.5) : Math.min(1.25, z);
             for (const pt of list) {
                 if (typeof pt.lat !== "number" || typeof pt.lon !== "number") continue;
                 const p = project(pt.lon, pt.lat, yaw, pitch, cx);
                 if (!p) continue;
-                const rr = zoomed
+                const rr = (zoomed
                     ? 1.6 + Math.sqrt(pt.count / maxCount) * 3.4
-                    : 2 + Math.sqrt(pt.count / maxCount) * 5.5;
-                const alpha = 0.45 + (pt.count / maxCount) * 0.55;
+                    : 2 + Math.sqrt(pt.count / maxCount) * 5.5) * sizeK;
+                const alpha = zoomed ? 0.5 + (pt.count / maxCount) * 0.5 : 0.45 + (pt.count / maxCount) * 0.55;
                 const col = zoomed ? "59, 130, 246" : "88, 204, 2";
 
                 ctx.beginPath();
@@ -198,6 +204,27 @@ export default function Globe({
                     sy: p.sy,
                     r: rr,
                 });
+            }
+        }
+
+        // city/town labels at deeper zoom levels (most visited first)
+        if (zoomed && z >= 2.4) {
+            const labelMin = Math.max(1, Math.round(28 / z));
+            const labelShown = saved
+                .filter((d) => (d.count || 1) >= labelMin)
+                .slice(0, 45);
+            ctx.font = `${10 + Math.min(3, (z - 2.4))}px ui-sans-serif, system-ui, sans-serif`;
+            ctx.textAlign = "center";
+            for (const d of labelShown) {
+                const lab = (d.name || d.code || "").slice(0, 20);
+                if (!lab) continue;
+                ctx.beginPath();
+                ctx.fillStyle = "rgba(15,23,42,0.72)";
+                const tw = ctx.measureText(lab).width;
+                ctx.roundRect ? ctx.roundRect(d.sx - tw / 2 - 3, d.sy + d.r + 2, tw + 6, 13, 3) : ctx.rect(d.sx - tw / 2 - 3, d.sy + d.r + 2, tw + 6, 13);
+                ctx.fill();
+                ctx.fillStyle = "#dbeafe";
+                ctx.fillText(lab, d.sx, d.sy + d.r + 12);
             }
         }
 
@@ -263,19 +290,53 @@ export default function Globe({
     };
     const onPointerUp = () => { stateRef.current.drag = false; };
     const onLeave = () => { stateRef.current.pointer = null; stateRef.current.hover = null; setHover(null); };
+    const setZoomS = (next) => {
+        const clamped = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, next));
+        setZoom(clamped);
+        stateRef.current.zoom = clamped;
+    };
     const onWheel = (e) => {
         e.preventDefault();
-        const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, stateRef.current.zoom - e.deltaY * 0.002));
-        setZoom(next);
-        stateRef.current.zoom = next;
+        setZoomS(stateRef.current.zoom * Math.exp(-e.deltaY * 0.0011));
     };
+    const zoomBy = (f) => setZoomS(stateRef.current.zoom * f);
     const resetView = () => {
         stateRef.current.yaw = 0;
         stateRef.current.pitchDeg = TILT;
-        setZoom(1);
-        stateRef.current.zoom = 1;
+        setZoomS(1);
         setHover(null);
         stateRef.current.hover = null;
+    };
+    const zoomToPointer = (e) => {
+        // Invert the current projection to find the spot under the cursor,
+        // then re-centre on it and zoom in (Google-Maps-style double-click).
+        const s = stateRef.current;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const cw = rect.width || width;
+        const ch = rect.height || height;
+        const R = (Math.min(cw, ch) / 2) * 0.92 * s.zoom;
+        const cx = cw / 2;
+        const cy = ch / 2;
+        const ux = (e.clientX - rect.left - cx) / R;
+        const uy = (cy - (e.clientY - rect.top)) / R;
+        if (ux * ux + uy * uy > 1) {
+            if (s.zoom >= ZOOM_MAX) resetView();
+            return;
+        }
+        const uz = Math.sqrt(1 - ux * ux - uy * uy);
+        const cp = Math.cos(s.pitchDeg * DEG), sp = Math.sin(s.pitchDeg * DEG);
+        const cyf = Math.cos(s.yaw), syf = Math.sin(s.yaw);
+        const yp = cp * uy + sp * uz;
+        const z1 = -sp * uy + cp * uz;
+        const vx = ux * cyf - z1 * syf;
+        const vz = z1 * cyf + ux * syf;
+        const latP = Math.asin(Math.max(-1, Math.min(1, yp))) / DEG;
+        const lonP = Math.atan2(vx, vz) / DEG;
+        s.yaw = -lonP * DEG;
+        s.pitchDeg = clampDeg(latP, -85, 85);
+        setZoomS(Math.min(ZOOM_MAX, s.zoom * 1.65));
+        setHover(null);
+        s.hover = null;
     };
 
     const zoomedMode = zoom >= Z_CITIES;
@@ -290,11 +351,29 @@ export default function Globe({
                 onPointerUp={onPointerUp}
                 onPointerLeave={onLeave}
                 onWheel={onWheel}
-                onDoubleClick={resetView}
+                onDoubleClick={zoomToPointer}
             />
 
             {/* controls */}
             <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                <div className="flex flex-col items-center gap-0.5 rounded-xl bg-white/90 dark:bg-gray-900/90 backdrop-blur border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                    <button
+                        type="button"
+                        onClick={() => zoomBy(1.5)}
+                        aria-label="Zoom in"
+                        className="w-9 h-8 flex items-center justify-center text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" d="M12 5v14M5 12h14" /></svg>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => zoomBy(1 / 1.5)}
+                        aria-label="Zoom out"
+                        className="w-9 h-8 flex items-center justify-center text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border-t border-gray-200 dark:border-gray-700"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" d="M5 12h14" /></svg>
+                    </button>
+                </div>
                 <button
                     type="button"
                     onClick={togglePaused}
@@ -319,9 +398,11 @@ export default function Globe({
 
             {/* mode hint */}
             <div className="absolute bottom-2 left-3 text-[11px] text-gray-400 dark:text-gray-500 font-medium">
-                {zoomedMode ? `🔍 cities near centre — ${(cities || []).length} total` : `🌍 country dots · ${(countries || []).length} countries`}
+                {zoomedMode
+                    ? `🔎 zoom ${zoom.toFixed(2)} — smallest places ≥ ${minVisibleCount(zoom)} events · ${(cities || []).length} cities/towns`
+                    : `🌍 country dots · ${(countries || []).length} countries · zoom ${zoom.toFixed(2)}`}
                 <span className="hidden sm:inline"> · drag to spin</span>
-                <span className="hidden md:inline"> · scroll to zoom{zoomedMode ? " · zoom out for countries" : ", zoom in for cities"}</span>
+                <span className="hidden md:inline"> · scroll or +/− to zoom · double-click to dive in</span>
             </div>
             <div className="absolute bottom-2 right-3 text-[11px] text-gray-400 dark:text-gray-500 font-medium">
                 {paused ? "▶ paused" : "auto-rotating"}

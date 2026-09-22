@@ -168,7 +168,9 @@ function locationBreakdown(events) {
     }
 
     const countryList = [...countries.values()].sort((a, b) => b.count - a.count);
-    const cityList = [...cities.values()].sort((a, b) => b.count - a.count).slice(0, 50);
+    // Keep enough cities for the globe's town-level drill-down; the dashboard
+    // tables slice their own top-N from this list afterwards.
+    const cityList = [...cities.values()].sort((a, b) => b.count - a.count).slice(0, 400);
 
     // Resolve missing country coords from the first city that has them.
     for (const c of countryList) {
