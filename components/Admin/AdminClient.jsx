@@ -9,6 +9,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BotsPanel from "@/components/Admin/BotsPanel";
 import AdminLogsPanel from "@/components/Admin/AdminLogsPanel";
+import SystemPanel from "@/components/Admin/SystemPanel";
+import AnnouncePanel from "@/components/Admin/AnnouncePanel";
+import ReportsPanel from "@/components/Admin/ReportsPanel";
+import ExportsPanel from "@/components/Admin/ExportsPanel";
+import SettingsPanel from "@/components/Admin/SettingsPanel";
+import SecurityPanel from "@/components/Admin/SecurityPanel";
+import InvitesPanel from "@/components/Admin/InvitesPanel";
+import LivePanel from "@/components/Admin/LivePanel";
 
 const EMOJI_PRESETS = ["⭐","🛡️","👑","💎","🔥","🎯","🏆","🎨","🧪","🤖","💡","🌟"];
 
@@ -98,6 +106,38 @@ export default function AdminClient() {
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "communities" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         🏘 Communities
                     </button>
+                    <button onClick={() => setTab("system")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "system" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        ⚙️ System
+                    </button>
+                    <button onClick={() => setTab("announce")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "announce" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        📢 Announce
+                    </button>
+                    <button onClick={() => setTab("reports")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "reports" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        🚩 Reports
+                    </button>
+                    <button onClick={() => setTab("exports")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "exports" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        📦 Exports
+                    </button>
+                    <button onClick={() => setTab("settings")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "settings" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        🧪 Settings
+                    </button>
+                    <button onClick={() => setTab("security")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "security" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        🛡 Security
+                    </button>
+                    <button onClick={() => setTab("invites")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "invites" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        🎟 Invites
+                    </button>
+                    <button onClick={() => setTab("live")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "live" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        ⚡ Live
+                    </button>
                 </div>
 
                 {tab === "users" && <UsersPanel />}
@@ -111,6 +151,14 @@ export default function AdminClient() {
                 {tab === "adult" && <AdultMangaPanel />}
                 {tab === "bots" && <BotsPanel />}
                 {tab === "communities" && <CommunitiesPanel />}
+                {tab === "system" && <SystemPanel />}
+                {tab === "announce" && <AnnouncePanel />}
+                {tab === "reports" && <ReportsPanel />}
+                {tab === "exports" && <ExportsPanel />}
+                {tab === "settings" && <SettingsPanel />}
+                {tab === "security" && <SecurityPanel />}
+                {tab === "invites" && <InvitesPanel />}
+                {tab === "live" && <LivePanel />}
             </div>
         </div>
     );

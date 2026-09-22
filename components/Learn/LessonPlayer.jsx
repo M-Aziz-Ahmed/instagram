@@ -353,8 +353,15 @@ function Hearts({ hearts }) {
 //      works even for languages with no installed WebView2 voice pack.
 //   2. Web Speech synthesis — only if a voice matching the language exists.
 //   3. Online TTS audio stream — always available, any language.
+// `speakText` guarantees sound plays everywhere AND that `onend` always
+// fires — from a real "ended" event or a duration estimate on native paths.
 function isDesktop() {
     return typeof window !== "undefined" && !!(window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke);
+}
+
+function canListen() {
+    if (isDesktop()) return true;
+    return typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
 
 async function invokeTauri(cmd, args) {
@@ -365,6 +372,48 @@ async function invokeTauri(cmd, args) {
         console.warn(`[learn] tauri ${cmd} failed:`, err);
         return null;
     }
+}
+
+let audioCtx = null;
+// iOS / installed-PWA / WebView2 keep speechSynthesis and <audio> silent until
+// a real user gesture unlocks audio. Resume a silent AudioContext inside the
+// first click so TTS is audible in the installed app and on the desktop shell.
+function ensureAudioUnlocked() {
+    if (typeof window === "undefined") return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try {
+        if (!audioCtx) audioCtx = new AC();
+        if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+    } catch {
+        // audio already usable; nothing to unlock
+    }
+}
+
+let micReady = null;
+// Installed PWAs / standalone iOS can lose the implicit mic grant a browser
+// tab gets for webkitSpeechRecognition, so request it explicitly first.
+function ensureMic() {
+    if (micReady) return micReady;
+    if (typeof navigator === "undefined" || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        return Promise.resolve(false);
+    }
+    micReady = navigator.mediaDevices
+        .getUserMedia({ audio: true })
+        .then((stream) => {
+            stream.getTracks().forEach((t) => t.stop());
+            return true;
+        })
+        .catch((err) => {
+            console.warn("[learn] mic denied:", err?.name);
+            micReady = null; // allow a retry on the next attempt
+            return false;
+        });
+    return micReady;
+}
+
+function ttsEstimate(text) {
+    return Math.max(1200, Math.min(10000, String(text || "").length * 90 + 350));
 }
 
 function pickVoice(lang) {
@@ -383,98 +432,164 @@ function speakWeb(text, lang, onend) {
     const u = new SpeechSynthesisUtterance(text);
     const v = pickVoice(lang);
     if (v) u.voice = v;
-    u.lang = (lang || "en-US").split("-")[0] === (lang || "en-US") && !lang ? "en-US" : lang || "en-US";
+    u.lang = lang || "en-US";
     u.rate = 0.85;
     if (onend) u.onend = onend;
     window.speechSynthesis.speak(u);
+    // iOS quirks: a resume nudge right after speak() gets synthesis going.
+    window.setTimeout(() => {
+        if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+            window.speechSynthesis.pause();
+            window.speechSynthesis.resume();
+        }
+    }, 0);
 }
 
 // Streaming audio from Google Translate's TTS endpoint. No API key needed;
 // the client treats it as a plain audio stream.
-function speakOnline(text, lang) {
+function playAudioStream(text, lang, onend) {
     const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${encodeURIComponent(lang || "en")}&q=${encodeURIComponent(text)}`;
     const audio = new Audio(url);
-    audio.play();
+    audio.preload = "auto";
+    const played = audio.play();
+    // The gesture context can be lost by the time this resolves (await/then);
+    // give the browser a moment and retry once.
+    if (played && typeof played.then === "function") {
+        played.catch(() => {
+            setTimeout(() => audio.play().catch(() => {}), 300);
+        });
+    }
+    if (onend) {
+        audio.addEventListener("ended", onend, { once: true });
+        setTimeout(onend, ttsEstimate(text) + 2000); // blocked streams still release
+    }
     return audio;
+}
+
+function fallbackSpeak(text, lang, onend) {
+    if ("speechSynthesis" in window && pickVoice(lang)) {
+        speakWeb(text, lang, onend);
+        return null;
+    }
+    return playAudioStream(text, lang, onend);
 }
 
 function speakText(text, lang, onend) {
     if (!text || typeof window === "undefined") return null;
+    ensureAudioUnlocked();
     if (isDesktop()) {
         invokeTauri("native_tts", { text, lang: (lang || "en").split("-")[0] }).then((ok) => {
-            if (!ok && onend) {
-                speakOnline(text, lang).addEventListener("ended", onend, { once: true });
+            if (ok) {
+                if (onend) setTimeout(onend, ttsEstimate(text));
+            } else {
+                fallbackSpeak(text, lang, onend);
             }
-        }).catch(() => {
-            if (onend) speakOnline(text, lang).addEventListener("ended", onend, { once: true });
-        });
+        }).catch(() => fallbackSpeak(text, lang, onend));
         return null;
     }
     if ("speechSynthesis" in window && pickVoice(lang)) {
         speakWeb(text, lang, onend);
         return null;
     }
-    const a = speakOnline(text, lang);
-    if (onend) a.addEventListener("ended", onend, { once: true });
-    return a;
+    return playAudioStream(text, lang, onend);
 }
 
-// Play a sequence with natural pacing; advances after each chunk is done or
-// after an estimate for the streaming/native paths.
+// Play a sequence with natural pacing; advances after each chunk finishes.
+// A guard makes sure each line advances exactly once, no matter whether the
+// "ended" callback or the safety timer arrives first.
 function speakSequence(lines, lang, { sentenceDone = null, finished = null } = {}) {
+    if (!lines || !lines.length) {
+        if (finished) finished();
+        return;
+    }
     let i = 0;
+    let timer = null;
+
     const next = () => {
+        if (timer) { clearTimeout(timer); timer = null; }
         if (i >= lines.length) {
             if (finished) finished();
             return;
         }
         const line = lines[i++];
-        speakText(line.t || line, lang, () => {
-            if (sentenceDone) sentenceDone(line);
-            next();
-        });
-        if (!("speechSynthesis" in window) || !pickVoice(lang)) {
-            // streaming/native path: hop to the next line after a rough estimate
-            setTimeout(next, Math.max(1500, Math.min(9000, (line.t || line).length * 90) + 400));
+        const t = line.t || line;
+        const useWebTTS = !isDesktop() && "speechSynthesis" in window && pickVoice(lang);
+        if (useWebTTS) {
+            speakText(t, lang, () => {
+                if (timer) { clearTimeout(timer); timer = null; }
+                if (sentenceDone) sentenceDone(line);
+                next();
+            });
+            // broken synthesis (iOS) must not stall the chain
+            timer = setTimeout(() => {
+                timer = null;
+                if (sentenceDone) sentenceDone(line);
+                next();
+            }, Math.max(2500, t.length * 90 + 1500));
+        } else {
+            // native/streaming emit no "ended" event → pace by duration estimate
+            speakText(t, lang);
+            timer = setTimeout(() => {
+                timer = null;
+                if (sentenceDone) sentenceDone(line);
+                next();
+            }, ttsEstimate(t));
         }
     };
+
     next();
 }
 
 // Speech-to-text with the same fallback philosophy:
 //   1. Native desktop recognition (Tauri → Windows System.Speech, grammar-
 //      constrained to the expected phrase) with confidence.
-//   2. Web Speech API (SpeechRecognition).
+//   2. Web Speech API (SpeechRecognition) — after an explicit mic grant.
 //   3. null → caller falls back to self-check (say it yourself, then ✓).
+// Guarantees `onResult` fires exactly once (hard timeout guards engines that
+// stay silent, e.g. desktop returning { text: "" } when nothing was heard).
 function captureSpeech(expect, lang, onResult) {
+    let settled = false;
+    let guard = null;
+    const finish = (r) => {
+        if (settled) return;
+        settled = true;
+        if (guard) { clearTimeout(guard); guard = null; }
+        onResult(r);
+    };
+
     if (isDesktop()) {
         invokeTauri("recognize_speech", { expect, lang: (lang || "en").split("-")[0], timeoutMs: 8000 }).then((res) => {
-            if (res && res.text) {
-                onResult({ text: res.text, confidence: res.confidence || 0, source: "native" });
-            } else if (res === false) {
-                onResult(null); // recognizer unavailable
-            } else if (res && res.error) {
-                onResult(null);
+            if (res && typeof res.text === "string" && res.text) {
+                finish({ text: res.text, confidence: res.confidence || 0, source: "native" });
+            } else {
+                finish(null); // unavailable / nothing heard within the window
             }
-        }).catch(() => onResult(null));
+        }).catch(() => finish(null));
+        guard = setTimeout(() => finish(null), 11000);
         return () => {};
     }
+
     if (speechRecAvailable()) {
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const r = new SR();
-        r.lang = lang || "en-US";
-        r.interimResults = false;
-        r.maxAlternatives = 1;
-        r.onresult = (e) => {
-            const t = e.results?.[0]?.[0]?.transcript || "";
-            onResult({ text: t, confidence: e.results?.[0]?.[0]?.confidence || 0, source: "web" });
-        };
-        r.onerror = () => onResult(null);
-        r.onend = () => {};
-        try { r.start(); } catch { onResult(null); }
-        return () => { try { r.stop(); } catch {} };
+        ensureMic().then((granted) => {
+            if (!granted) { finish(null); return; }
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const r = new SR();
+            r.lang = lang || "en-US";
+            r.interimResults = false;
+            r.maxAlternatives = 1;
+            r.onresult = (e) => {
+                const t = e.results?.[0]?.[0]?.transcript || "";
+                finish(t ? { text: t, confidence: e.results?.[0]?.[0]?.confidence || 0, source: "web" } : null);
+            };
+            r.onerror = () => finish(null);
+            r.onend = () => finish(null); // no-op if a result already settled
+            try { r.start(); } catch { finish(null); }
+            setTimeout(() => finish(null), 12000); // hang guard
+        });
+        return () => {};
     }
-    onResult(null);
+
+    finish(null);
     return () => {};
 }
 
@@ -549,27 +664,55 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
     };
 
     const startRec = () => {
-        if (!speechRecAvailable()) {
+        if (!canListen()) {
             setSrStatus("unsupported");
             return;
         }
         stopRec();
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const r = new SR();
-        r.lang = hl || "en-US";
-        r.interimResults = false;
-        r.maxAlternatives = 1;
-        r.onresult = (e) => {
-            const t = e.results?.[0]?.[0]?.transcript || "";
-            if (t) setHeard(t);
-            setSrStatus("heard");
-            stopRec();
-        };
-        r.onerror = () => { stopRec(); setSrStatus((s) => (s === "heard" ? s : "idle")); };
-        r.onend = () => { recRef.current = null; setSrStatus((s) => (s === "listening" ? "idle" : s)); };
-        recRef.current = r;
         setSrStatus("listening");
-        try { r.start(); } catch { setSrStatus("idle"); }
+
+        // Desktop: the WebView2 has no SpeechRecognition, so use the Tauri
+        // native engine (grammar constrained to the expected phrase).
+        if (isDesktop()) {
+            recRef.current = { stop: () => {} };
+            captureSpeech(q.expect, hl, (r) => {
+                recRef.current = null;
+                if (r && r.text) {
+                    setHeard(r.text);
+                    setSrStatus("heard");
+                } else {
+                    setSrStatus((s) => (s === "heard" ? s : "idle"));
+                }
+            });
+            return;
+        }
+
+        if (!speechRecAvailable()) {
+            setSrStatus("unsupported");
+            return;
+        }
+        // Installed PWAs / standalone iOS don't inherit the tab's mic grant —
+        // request it explicitly, then start recognition inside the gesture.
+        ensureMic().then((granted) => {
+            if (!granted) { setSrStatus("unsupported"); return; }
+            stopRec();
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const r = new SR();
+            r.lang = hl || "en-US";
+            r.interimResults = false;
+            r.maxAlternatives = 1;
+            r.onresult = (e) => {
+                const t = e.results?.[0]?.[0]?.transcript || "";
+                if (t) setHeard(t);
+                setSrStatus("heard");
+                stopRec();
+            };
+            r.onerror = () => { stopRec(); setSrStatus((s) => (s === "heard" ? s : "idle")); };
+            r.onend = () => { recRef.current = null; setSrStatus((s) => (s === "listening" ? "idle" : s)); };
+            recRef.current = r;
+            setSrStatus("listening");
+            try { r.start(); } catch { setSrStatus("idle"); }
+        });
     };
 
     useEffect(() => {
@@ -584,7 +727,7 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
             const actual = answer.trim().toLowerCase().replace(/\s+/g, " ");
             applyResult(expected === actual);
         } else if (q.type === "speak") {
-            const supported = speechRecAvailable();
+            const supported = canListen();
             applyResult(supported ? speechMatch(heard, q.expect) : true);
         }
     };
@@ -620,7 +763,7 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
             : q.type === "wordbank"
             ? answer.trim().length > 0
             : q.type === "speak"
-            ? speechRecAvailable()
+            ? canListen()
                 ? heard.trim().length > 0 || srStatus !== "listening"
                 : true
             : false;
@@ -783,7 +926,7 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
                         <Gloss text={q.gloss} />
                         <p className="text-xs text-gray-400 mt-3 mb-5">Tap and hold the mic to record yourself saying the translation.</p>
 
-                        {speechRecAvailable() ? (
+                        {canListen() ? (
                             <div className="flex flex-col items-center gap-3">
                                 <button
                                     onMouseDown={startRec}

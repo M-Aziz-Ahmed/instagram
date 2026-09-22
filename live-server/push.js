@@ -139,4 +139,55 @@ function titleFor(type, fromUser) {
     }
 }
 
-module.exports = { sendPushNotification };
+/**
+ * Broadcast a notification to every subscribed device (web push + FCM).
+ * @param {Object} opts { title, body, url, type }
+ */
+async function broadcastPush({ title, body, url, type }) {
+    const payload = JSON.stringify({ title, body, icon: "/icon-192.svg", badge: "/icon-192.svg", url: url || "/", type: type || "announcement", tag: "announcement" });
+    let webOk = 0, webTotal = 0, fcmOk = 0, fcmTotal = 0;
+
+    if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+        try {
+            const col = mongoose.connection.db.collection("pushsubscriptions");
+            const subs = await col.find({}).toArray();
+            webTotal = subs.length;
+            for (const sub of subs) {
+                try {
+                    await webPush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload);
+                    webOk++;
+                } catch (err) {
+                    if (err.statusCode === 404 || err.statusCode === 410) await col.deleteOne({ _id: sub._id });
+                }
+            }
+        } catch (err) {
+            console.error("[PUSH] broadcast web error:", err.message);
+        }
+    }
+
+    if (messaging) {
+        try {
+            const tokens = await FcmToken.find().select("token").lean();
+            fcmTotal = tokens.length;
+            if (tokens.length) {
+                const result = await messaging.messaging().sendEachForMulticast({
+                    tokens: tokens.map(t => t.token),
+                    notification: { title, body },
+                    data: { type: type || "announcement", url: url || "/", title, body },
+                    android: { priority: "high" },
+                    apns: { payload: { aps: { sound: "default", contentAvailable: true } } },
+                });
+                fcmOk = result.successCount || 0;
+                await cleanupDeadTokens(result, tokens);
+            }
+        } catch (err) {
+            console.error("[PUSH] broadcast fcm error:", err.message);
+        }
+    }
+
+    const summary = { webOk, webTotal, fcmOk, fcmTotal };
+    console.warn("[PUSH] broadcast done:", summary);
+    return summary;
+}
+
+module.exports = { sendPushNotification, broadcastPush };

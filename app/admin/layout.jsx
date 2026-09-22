@@ -13,6 +13,7 @@ const NAV = [
     { href: "/admin", label: "Dashboard", icon: "📊" },
     { href: "/admin/analytics", label: "Analytics", icon: "📈" },
     { href: "/admin/manage", label: "Manage", icon: "🛠" },
+    { href: "/admin/settings", label: "Settings", icon: "⚙️" },
 ];
 
 export default async function AdminLayout({ children }) {

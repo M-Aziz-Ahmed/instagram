@@ -526,6 +526,8 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
     const [savingEdit, setSavingEdit]         = useState(false);
     const [showModMenu, setShowModMenu]       = useState(false);
     const [moderating, setModerating]         = useState(false);
+    const [showReportMenu, setShowReportMenu] = useState(false);
+    const [reporting, setReporting]           = useState(false);
     const autoTranslatedRef = useRef(false);
     const origTranslatedRef = useRef(false);
     const commentTranslatedRef = useRef(false);
@@ -946,6 +948,25 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
         }
     };
 
+    const handleReport = async (reason) => {
+        if (!user || reporting) return;
+        setReporting(true);
+        setShowReportMenu(false);
+        try {
+            const res = await fetch("/api/reports", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ targetType: "post", targetId: post._id, reason }),
+            });
+            const data = await res.json();
+            showToast(res.ok ? "Report submitted. Thanks!" : (data.error || "Failed to report"), res.ok ? "success" : "error");
+        } catch {
+            showToast("Failed to report", "error");
+        } finally {
+            setReporting(false);
+        }
+    };
+
     return (
         <>
         <article className={`border-b border-gray-200 dark:border-gray-800 px-4 py-4 ${POST_THEMES[post.theme?.type] || ""}`}>
@@ -1022,6 +1043,36 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         <div className="ml-auto flex items-center gap-1">
                             {!isOwn && user && !author?.followers?.includes?.(user.username) && (
                                 <FollowButton username={post.sender} size="xs" />
+                            )}
+                            {user && !isOwn && !post.isRemoved && (
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setShowReportMenu(!showReportMenu)}
+                                        disabled={reporting}
+                                        title="Report"
+                                        aria-label="Report this post"
+                                        className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors p-2.5 -mr-1 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5" />
+                                        </svg>
+                                    </button>
+                                    {showReportMenu && (
+                                        <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-full z-30 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg p-2 w-56">
+                                            <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-2 py-1">Report for:</p>
+                                            {["Spam", "Harassment", "Nudity", "False information", "Hate speech", "Other"].map((reason) => (
+                                                <button key={reason} onClick={() => handleReport(reason)}
+                                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-colors">
+                                                    {reason}
+                                                </button>
+                                            ))}
+                                            <button onClick={() => setShowReportMenu(false)}
+                                                className="w-full text-center px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 mt-1">
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             )}
                             {canMod && !isOwn && !post.isRemoved && (
                                 <div className="relative">
