@@ -4,12 +4,13 @@ const courseProgressSchema = new mongoose.Schema({
     crowns:   { type: Number, default: 0 },
     xp:       { type: Number, default: 0 },
     lessonsDone: [{ type: String, default: [] }],
+    lessonCrowns: { type: mongoose.Schema.Types.Mixed, default: {} },
 }, { _id: false });
 
 const learnUserSchema = new mongoose.Schema({
     userId:        { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true, unique: true },
-    username:      { type: String, default: "" },
-    xp:            { type: Number, default: 0 },
+    username:      { type: String, default: "", index: true },
+    xp:            { type: Number, default: 0, index: true },
     gems:          { type: Number, default: 100 },
     hearts:        { type: Number, default: 5 },
     heartsUpdatedAt: { type: Date, default: Date.now },

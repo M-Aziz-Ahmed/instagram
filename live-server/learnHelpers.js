@@ -142,6 +142,11 @@ function pickDistractors(rng, correct, list, take, key) {
 // speaking exercises are available from difficulty 1, and whole sentences
 // are pronounced in "Speak up" steps from difficulty 6.
 function buildQuestions(langId, langMeta, course, lesson, stage = 1) {
+    // Subject courses (maths, tests, MCQ banks…) author their own question
+    // set per lesson — no generation, fully hand-curated order.
+    if (Array.isArray(lesson.questions) && lesson.questions.length) {
+        return lesson.questions;
+    }
     if (lesson.type === "story") return buildStoryQuestions(langId, langMeta, course, lesson);
     if (lesson.type === "pronounce") return buildPronounceQuestions(langId, langMeta, lesson, stage);
     return buildPracticeQuestions(langId, langMeta, course, lesson, stage);
@@ -157,6 +162,26 @@ function buildPracticeQuestions(langId, langMeta, course, lesson, stage = 1) {
 
     const questions = [];
     let qi = 0;
+
+    // 0) "First, let's learn" — a non-graded flashcard pass over the lesson's
+    //    own words (or phrases) that opens beginner lessons (difficulty ≤ 2).
+    //    A zero-knowledge learner meets each word with emoji, audio and meaning
+    //    BEFORE any question presupposes it — no more "you're expected to know
+    //    请 on day one".
+    if (stage <= 2) {
+        const teachSrc = localVocab.length ? localVocab : localPhrases.length ? localPhrases : all.vocab;
+        const teachItems = uniqEnglish(teachSrc).slice(0, 6).map((w) => ({
+            e: w.e, t: w.t, emoji: w.emoji || "", gloss: w.gloss || "",
+        }));
+        if (teachItems.length) {
+            questions.push({
+                id: "learn",
+                type: "learn",
+                prompt: "First, let's learn these before the questions",
+                items: teachItems,
+            });
+        }
+    }
 
     // 1) select: Which of these means "<english>" → target options.
     //    For scripts without word spaces (CJK/Thai) we lead with extra easy

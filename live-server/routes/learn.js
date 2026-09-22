@@ -1,11 +1,12 @@
 const express = require("express");
+const zlib = require("zlib");
 const mongoose = require("mongoose");
 const LearnUser = require("../models/learnUser");
 const LearnLeague = require("../models/learnLeague");
 const User = require("../models/user");
 const Notification = require("../models/notification");
 const { verifyToken } = require("../middleware/auth");
-const { LANGUAGE_CATALOG, COURSES } = require("../learnContent");
+const { LANGUAGE_CATALOG, SUBJECT_CATALOG, COURSES } = require("../learnContent");
 const {
     LEAGUE_TIERS, LEAGUE_SIZE, PROMOTE_N, RELEGATE_N,
     HEARTS_REFILL_COST, STREAK_FREEZE_COST, STREAK_REPAIR_COST, TIP_FRIEND_COST, COMEBACK_BONUS_GEMS,
@@ -15,7 +16,51 @@ const {
 
 const router = express.Router();
 
-const catalogById = Object.fromEntries(LANGUAGE_CATALOG.map((l) => [l.id, l]));
+// Compression: gzip JSON responses for clients that accept it. We use Node's
+// built-in zlib (no extra dependency) and keep it scoped to this router so
+// streaming/SSE routes elsewhere are never affected. Falls back to a plain
+// JSON response when gzip isn't smaller.
+function gzipJson(req, res, next) {
+    res.setHeader("Cache-Control", "no-store");
+    if (!/\bgzip\b/.test(req.headers["accept-encoding"] || "")) return next();
+    const origJson = res.json.bind(res);
+    res.json = (body) => {
+        const data = Buffer.from(JSON.stringify(body));
+        zlib.gzip(data, (err, zipped) => {
+            if (err || zipped.length >= data.length) return origJson(body);
+            res.setHeader("Content-Encoding", "gzip");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.setHeader("Content-Length", zipped.length);
+            res.setHeader("Vary", "Accept-Encoding");
+            res.end(zipped);
+        });
+    };
+    next();
+}
+router.use(gzipJson);
+
+// Bounded LRU for deterministic question sets. buildQuestions resolves once
+// per (course, lesson, stage) — caching it turns the per-request O(course)
+// flatten + shuffle into an O(1) lookup after the first fetch.
+const QUESTION_CACHE_MAX = 1000;
+const questionCache = new Map();
+function cachedQuestions(courseId, meta, course, lesson, stage) {
+    const key = `${courseId}:${lesson.id}:${stage}`;
+    const hit = questionCache.get(key);
+    if (hit !== undefined) {
+        questionCache.delete(key);
+        questionCache.set(key, hit);
+        return hit;
+    }
+    const built = buildQuestions(courseId, meta, course, lesson, stage);
+    if (questionCache.size >= QUESTION_CACHE_MAX) {
+        questionCache.delete(questionCache.keys().next().value);
+    }
+    questionCache.set(key, built);
+    return built;
+}
+
+const catalogById = Object.fromEntries([...LANGUAGE_CATALOG, ...SUBJECT_CATALOG].map((l) => [l.id, l]));
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function parseDay(s) {
@@ -222,7 +267,7 @@ router.get("/me", verifyToken, async (req, res) => {
         await finalizeStaleLeague(lu);
         await resetDailyIfNeeded(lu);
         await ensureLeague(lu);
-        await lu.save();
+        if (lu.isModified()) await lu.save();
         res.json(buildMe(lu, user));
     } catch (err) {
         console.error("[LEARN] /me error:", err.message);
@@ -347,7 +392,7 @@ router.get("/lesson/:courseId/:lessonId", verifyToken, async (req, res) => {
         await resetDailyIfNeeded(lu);
         const user = await User.findById(req.userId).lean();
         const stage = found.difficulty || 1;
-        const questions = buildQuestions(courseId, meta, course, found, stage);
+        const questions = cachedQuestions(courseId, meta, course, found, stage);
         res.json({
             me: buildMe(lu, user),
             lesson: {
@@ -620,7 +665,7 @@ router.get("/league", verifyToken, async (req, res) => {
         let lu = await ensureUser(req);
         await finalizeStaleLeague(lu);
         await ensureLeague(lu);
-        await lu.save();
+        if (lu.isModified()) await lu.save();
 
         let standings = [];
         let leagueInfo = null;

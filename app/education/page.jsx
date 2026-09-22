@@ -1,10 +1,10 @@
-import LanguageHub from "@/components/Learn/LanguageHub";
+import EducationHub from "@/components/Learn/EducationHub";
 
 export const metadata = {
-    title: "Education - Learn Languages",
-    description: "Learn languages step by step with lessons, streaks, leagues and more.",
+    title: "Education",
+    description: "Learn step by step — languages, maths, science and more.",
 };
 
 export default function EducationPage() {
-    return <LanguageHub />;
+    return <EducationHub />;
 }

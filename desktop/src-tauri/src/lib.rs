@@ -242,10 +242,17 @@ fn run_powershell(script: &str) -> Result<String, String> {
         return Err("native speech requires Windows".into());
     }
     let encoded = ps_encode(script);
-    let out = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", &encoded])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let mut cmd = std::process::Command::new("powershell");
+    cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", &encoded]);
+    // The Tauri app is a GUI process: without this flag a new console window
+    // flashes on every TTS click. CREATE_NO_WINDOW runs PowerShell invisible.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let out = cmd.output().map_err(|e| e.to_string())?;
     let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
     if !out.status.success() {
         return Err(format!(
