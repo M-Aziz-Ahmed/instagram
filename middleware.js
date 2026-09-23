@@ -27,6 +27,7 @@ const PUBLIC_PATHS = [
     "/api/feed",
     "/api/search",
     "/api/ads",
+    "/api/tts",
     "/api/trending",
     "/api/hashtags",
     "/api/anime-proxy",

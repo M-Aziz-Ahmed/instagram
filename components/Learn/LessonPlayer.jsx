@@ -352,7 +352,10 @@ function Hearts({ hearts }) {
 //   1. Native desktop TTS (Tauri → Windows System.Speech) — real voices,
 //      works even for languages with no installed WebView2 voice pack.
 //   2. Web Speech synthesis — only if a voice matching the language exists.
-//   3. Online TTS audio stream — always available, any language.
+//   3. Same-origin audio stream — proxied through `/api/tts` at our own
+//      origin. Unlike Google's cross-origin endpoint, WebViews, iOS, Android
+//      and Tauri desktop can all play it reliably (Web Speech is absent, and
+//      the direct Google stream is blocked/silent inside WebViews).
 // `speakText` guarantees sound plays everywhere AND that `onend` always
 // fires — from a real "ended" event or a duration estimate on native paths.
 function isDesktop() {
@@ -445,10 +448,17 @@ function speakWeb(text, lang, onend) {
     }, 0);
 }
 
-// Streaming audio from Google Translate's TTS endpoint. No API key needed;
-// the client treats it as a plain audio stream.
+// Streaming audio from our same-origin TTS relay (`/api/tts`). We split the
+// Google endpoint off to a single URL and have the proxy render it onto our
+// origin — so mobile WebViews / Tauri WebView2 / iOS, which refuse Google's
+// cross-origin stream (and have no Web Speech API), still hear sound. No API
+// key needed; the client treats the relay as a plain audio stream.
 function playAudioStream(text, lang, onend) {
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${encodeURIComponent(lang || "en")}&q=${encodeURIComponent(text)}`;
+    const q = {
+        lang: encodeURIComponent(lang || "en"),
+        text: encodeURIComponent(text),
+    };
+    const url = `api/tts?lang=${q.lang}&text=${q.text}`;
     const audio = new Audio(url);
     audio.preload = "auto";
     const played = audio.play();
@@ -456,7 +466,14 @@ function playAudioStream(text, lang, onend) {
     // give the browser a moment and retry once.
     if (played && typeof played.then === "function") {
         played.catch(() => {
-            setTimeout(() => audio.play().catch(() => {}), 300);
+            setTimeout(() => {
+                // Fall back to the raw Google stream only if our relay also
+                // failed to start — it can't hurt, and desktop Chrome handles
+                // the cross-origin URL while streaming via the same audio tag.
+                const gUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${q.lang}&q=${q.text}`;
+                audio.src = gUrl;
+                audio.play().catch(() => {});
+            }, 300);
         });
     }
     if (onend) {
