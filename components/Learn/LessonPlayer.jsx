@@ -483,6 +483,63 @@ function playAudioStream(text, lang, onend) {
     return audio;
 }
 
+// Stream Windows' real installed voices as same-origin audio. The desktop shell
+// renders the phrase to WAV bytes with the true system voices (`tts_to_wav`),
+// and we decode those base64 bytes into a Blob that plays through the **exact
+// same** `<audio>`/"ended" relay stack every other tier uses — so Windows TTS
+// rides the natural browser "ended" timing like everything else. The shell's
+// out-of-band `native_tts` bool path is used only as a last resort, and the
+// online relay as the final fallback.
+function playNativeWav(text, lang, onend) {
+    const render = () => invokeTauri("tts_to_wav", { text, lang: (lang || "en").split("-")[0] });
+    render().then((b64) => {
+        if (b64 && typeof b64 === "string" && b64.length > 64) {
+            // Atob → bytes → same-origin Blob → the shared relay audio stack.
+            const bin = atob(b64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            const url = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+            const audio = new Audio(url);
+            audio.preload = "auto";
+            const played = audio.play();
+            // The gesture context can be lost by the time this resolves; give
+            // the browser a moment and retry once before giving up.
+            if (played && typeof played.then === "function") {
+                played.catch(() => {
+                    setTimeout(() => audio.play().catch(() => {}), 300);
+                });
+            }
+            if (onend) {
+                audio.addEventListener("ended", onend, { once: true });
+                setTimeout(onend, ttsEstimate(text) + 2000); // blocked audio still releases
+            }
+            return;
+        }
+        // WAV rendering unavailable — fall through to the out-of-band path,
+        // then the online relay.
+        nativeTtsFallback(text, lang, onend);
+    }).catch(() => nativeTtsFallback(text, lang, onend));
+}
+
+// The desktop shell's out-of-band PowerShell speak (bool), tried once with a
+// single retry, then the online relay. Only used when WAV rendering is missing.
+function nativeTtsFallback(text, lang, onend) {
+    const native = () => invokeTauri("native_tts", { text, lang: (lang || "en").split("-")[0] });
+    native().then((ok) => {
+        if (ok) {
+            if (onend) setTimeout(onend, ttsEstimate(text));
+            return;
+        }
+        return native().then((ok2) => {
+            if (ok2) {
+                if (onend) setTimeout(onend, ttsEstimate(text));
+            } else {
+                fallbackSpeak(text, lang, onend);
+            }
+        });
+    }).catch(() => fallbackSpeak(text, lang, onend));
+}
+
 function fallbackSpeak(text, lang, onend) {
     if ("speechSynthesis" in window && pickVoice(lang)) {
         speakWeb(text, lang, onend);
@@ -495,23 +552,14 @@ function speakText(text, lang, onend) {
     if (!text || typeof window === "undefined") return null;
     ensureAudioUnlocked();
     if (isDesktop()) {
-        // Retry the native TTS once — the very first call right after the app
-        // starts can time out starting PowerShell before speech audio engages,
-        // which would otherwise silently fall through to the online stream.
-        const native = () => invokeTauri("native_tts", { text, lang: (lang || "en").split("-")[0] });
-        native().then((ok) => {
-            if (ok || !isDesktop()) {
-                if (ok && onend) setTimeout(onend, ttsEstimate(text));
-                return;
-            }
-            return native().then((ok2) => {
-                if (ok2) {
-                    if (onend) setTimeout(onend, ttsEstimate(text));
-                } else {
-                    fallbackSpeak(text, lang, onend);
-                }
-            });
-        }).catch(() => fallbackSpeak(text, lang, onend));
+        // Windows' real installed voices, rendered to a same-origin Blob and
+        // played through the **exact same** relay/`<audio>`/"ended" stack used
+        // by every other tier. The desktop shell passes back the WAV bytes and
+        // we let the browser's natural "ended" timing drive `onend` — no
+        // out-of-band PowerShell speaking to the default device (which WebView2
+        // can't hear). Falls back to the raw powershell-out path only if WAV
+        // rendering is unavailable.
+        playNativeWav(text, lang, onend);
         return null;
     }
     if ("speechSynthesis" in window && pickVoice(lang)) {

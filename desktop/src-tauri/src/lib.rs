@@ -342,6 +342,40 @@ try {
     s
 }
 
+// Same engine as build_tts_script, but instead of speaking to the default
+// audio device it renders the phrase to a WAV buffer and emits the base64
+// bytes. The front end takes those bytes and plays them through the exact
+// same same-origin <audio>/relay pipeline used by every other TTS tier — so
+// Windows' real installed voices get consistent "ended" timing and WebView2
+// actually hears them (its audio element can't mix with PowerShell speaking
+// out of band).
+fn build_tts_wav_script(payload: &serde_json::Value) -> String {
+    let mut s = String::with_capacity(2048);
+    s.push_str(PS_HEAD);
+    s.push_str(&ps_payload_b64(payload));
+    s.push_str(PS_MID);
+    s.push_str(r#"
+try {
+  Add-Type -AssemblyName System.Speech
+  $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+  $base = (($(if ($null -eq $p.lang) { "" } else { $p.lang })) -split '-')[0].ToLower()
+  if ($base) {
+    foreach ($v in $synth.GetInstalledVoices()) {
+      $c = $v.VoiceInfo.Culture
+      if ($c -and $c.Name.ToLower().StartsWith($base)) { $synth.SelectVoice($v.VoiceInfo.Name); break }
+    }
+  }
+  $synth.Rate = 0
+  $stream = New-Object System.IO.MemoryStream
+  $synth.SetOutputToWaveStream($stream)
+  $synth.Speak([string]$p.text)
+  $synth.SetOutputToNull()
+  [Convert]::ToBase64String($stream.ToArray())
+} catch { "ERR:" + $_.Exception.Message }
+"#);
+    s
+}
+
 fn build_recognize_script(payload: &serde_json::Value) -> String {
     let mut s = String::with_capacity(2048);
     s.push_str(PS_HEAD);
@@ -387,6 +421,20 @@ async fn native_tts(text: String, lang: String) -> Result<bool, String> {
         .await
         .map_err(|e| e.to_string())??;
     Ok(out.trim().starts_with("OK"))
+}
+
+#[tauri::command]
+async fn tts_to_wav(text: String, lang: String) -> Result<Option<String>, String> {
+    let payload = serde_json::json!({ "text": text, "lang": lang });
+    let script = build_tts_wav_script(&payload);
+    let out = tauri::async_runtime::spawn_blocking(move || run_powershell(&script))
+        .await
+        .map_err(|e| e.to_string())??;
+    let trimmed = out.trim();
+    if trimmed.is_empty() || trimmed.starts_with("ERR:") || trimmed.starts_with("ERR") {
+        return Ok(None);
+    }
+    Ok(Some(trimmed.to_string()))
 }
 
 #[tauri::command]
@@ -458,7 +506,7 @@ pub fn run() {
             show_toast, close_toast, handle_toast_click,
             get_window_inner_pos,
             browser_open, browser_navigate, browser_set_bounds, browser_close,
-            native_tts, recognize_speech,
+            native_tts, tts_to_wav, recognize_speech,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
