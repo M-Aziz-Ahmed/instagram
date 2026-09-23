@@ -1,7 +1,7 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, Url, WebviewUrl, WindowEvent,
+    Manager, RunEvent, Url, WebviewUrl, WindowEvent,
 };
 use std::sync::{Arc, Mutex};
 
@@ -10,6 +10,26 @@ fn show_main(app: &tauri::AppHandle) {
         let _ = win.show();
         let _ = win.set_focus();
     }
+}
+
+/// Quit the app from the tray. The reused external-URL overlay window can make
+/// WebView2 teardown hang, so we first point it at a local blank page, request
+/// a normal exit, and keep a watchdog that force-exits if teardown stalls.
+fn quit_app(app: &tauri::AppHandle) {
+    let bs: tauri::State<'_, Arc<BrowserState>> = app.state();
+    if let Some(label) = bs.active_label.lock().unwrap().clone() {
+        if let Some(w) = app.get_webview_window(&label) {
+            let _ = w.hide();
+            let _ = w.navigate("about:blank".parse::<Url>().unwrap_or_else(|_| Url::parse("about:blank").unwrap()));
+        }
+    }
+    app.clone().exit(0);
+    // Backstop: if the event loop can't finish tearing down the webviews,
+    // hard-exit a moment later so the app never becomes unquittable.
+    std::thread::spawn(|| {
+        std::thread::sleep(std::time::Duration::from_secs(4));
+        std::process::exit(0);
+    });
 }
 
 fn navigate_to_url(app: &tauri::AppHandle, url_str: &str) {
@@ -254,7 +274,10 @@ fn run_powershell(script: &str) -> Result<String, String> {
     }
     let encoded = ps_encode(script);
     let mut cmd = std::process::Command::new("powershell");
-    cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", &encoded]);
+    // -Sta: System.Speech synth/recognition engines run on an STA thread;
+    // defaulting to STA for the spawned PowerShell avoids intermittent
+    // "engine not initialized" failures that come back as silent TTS.
+    cmd.args(["-NoProfile", "-Sta", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", &encoded]);
     // The Tauri app is a GUI process: without this flag a new console window
     // flashes on every TTS click. CREATE_NO_WINDOW runs PowerShell invisible.
     #[cfg(windows)]
@@ -406,7 +429,7 @@ pub fn run() {
                 .icon(app.default_window_icon().cloned().expect("missing app icon"))
                 .tooltip("AnonTweet")
                 .menu(&menu)
-                .on_menu_event(|app, event| match event.id().as_ref() { "show" => show_main(app), "quit" => app.exit(0), _ => {} })
+                .on_menu_event(|app, event| match event.id().as_ref() { "show" => show_main(app), "quit" => quit_app(app), _ => {} })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
                         show_main(tray.app_handle());
@@ -437,6 +460,14 @@ pub fn run() {
             browser_open, browser_navigate, browser_set_bounds, browser_close,
             native_tts, recognize_speech,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_awn, event| {
+            // Hard-exit once the loop is done so WebView2 teardown can never
+            // freeze the app and make Quit appear broken. (Windows close
+            // first; if that itself stalls, quit_app's watchdog force-exits.)
+            if let RunEvent::Exit = event {
+                std::process::exit(0);
+            }
+        });
 }

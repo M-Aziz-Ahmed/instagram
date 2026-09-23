@@ -478,12 +478,22 @@ function speakText(text, lang, onend) {
     if (!text || typeof window === "undefined") return null;
     ensureAudioUnlocked();
     if (isDesktop()) {
-        invokeTauri("native_tts", { text, lang: (lang || "en").split("-")[0] }).then((ok) => {
-            if (ok) {
-                if (onend) setTimeout(onend, ttsEstimate(text));
-            } else {
-                fallbackSpeak(text, lang, onend);
+        // Retry the native TTS once — the very first call right after the app
+        // starts can time out starting PowerShell before speech audio engages,
+        // which would otherwise silently fall through to the online stream.
+        const native = () => invokeTauri("native_tts", { text, lang: (lang || "en").split("-")[0] });
+        native().then((ok) => {
+            if (ok || !isDesktop()) {
+                if (ok && onend) setTimeout(onend, ttsEstimate(text));
+                return;
             }
+            return native().then((ok2) => {
+                if (ok2) {
+                    if (onend) setTimeout(onend, ttsEstimate(text));
+                } else {
+                    fallbackSpeak(text, lang, onend);
+                }
+            });
         }).catch(() => fallbackSpeak(text, lang, onend));
         return null;
     }
