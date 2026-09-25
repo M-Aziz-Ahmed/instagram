@@ -174,6 +174,12 @@ function ChannelCard({ channel, isActive, onJoin, onDelete, participantCount, is
     );
 }
 
+// Community voice channels are re-derived from Mongo on every
+// `voice:get-channels`, so a light poll keeps the VC sidebar in sync with
+// community membership and channel create/delete without the user having to
+// reopen the panel. The server caches membership lookups, so this is cheap.
+const CHANNEL_POLL_MS = 30000;
+
 export default function VoiceChat({ isOpen, onClose }) {
     const { socket, socketError, reconnectSocket } = useVoiceChat();
     const { user } = useUser();
@@ -434,7 +440,17 @@ export default function VoiceChat({ isOpen, onClose }) {
             showNotif("Reconnected to voice chat");
         };
 
-        const handleConnect = () => setSocketConnected(true);
+        const fetchChannels = () => { if (socket.connected) socket.emit("voice:get-channels"); };
+
+        // Re-hydrate on *every* connect, not just a transport-level reconnect.
+        // socket.io only emits "reconnect" when an established Manager recovers;
+        // a fresh connect (first mount, reconnectionAttempts exhausted, a new
+        // socket object) emits "connect" instead, and the server derives
+        // community channels from Mongo on each `voice:get-channels`.
+        const handleConnect = () => {
+            setSocketConnected(true);
+            fetchChannels();
+        };
 
         setSocketConnected(socket.connected);
         socket.on("connect", handleConnect);
@@ -471,27 +487,22 @@ export default function VoiceChat({ isOpen, onClose }) {
         socket.on("voice:music:queue-add", handleMusicQueueAdd);
         socket.on("voice:music:queue-remove", handleMusicQueueRemove);
 
-        const fetchChannels = () => socket.emit("voice:get-channels");
-        if (socket.connected) {
-            fetchChannels();
-        } else {
-            socket.once("connect", fetchChannels);
-        }
+        // Initial fetch. A "connect" handler above covers the not-yet-connected
+        // case, so there is no need for a one-shot `once("connect")` here.
+        fetchChannels();
 
-        let retryTimer = null;
-        retryTimer = setInterval(() => {
-            if (socket.connected) {
-                fetchChannels();
-                clearInterval(retryTimer);
-                retryTimer = null;
-            }
-        }, 2000);
+        // Keep the list fresh. Community channels are derived from Mongo on the
+        // server, so joining/leaving a community, having a channel created or
+        // deleted, or any transient broadcast being dropped all self-heal on
+        // the next tick. The previous self-cancelling 2s retry gave up after the
+        // first connected tick and never polled again, which is why a truncated
+        // list could stick until the panel was closed and reopened.
+        const pollTimer = setInterval(fetchChannels, CHANNEL_POLL_MS);
 
         return () => {
-            if (retryTimer) clearInterval(retryTimer);
+            if (pollTimer) clearInterval(pollTimer);
             if (disconnectTimer) clearTimeout(disconnectTimer);
             socket.off("connect", handleConnect);
-            socket.off("connect", fetchChannels);
             socket.off("disconnect", handleDisconnect);
             socket.off("reconnect", handleReconnect);
             socket.off("voice:channels", handleChannels);

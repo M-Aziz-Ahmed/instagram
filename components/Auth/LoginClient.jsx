@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@/context/UserContext";
+import { getRedirectTarget } from "@/utils/redirect";
 import LoginForm from "./LoginForm";
 import SetupForm from "./SetupForm";
 
@@ -12,8 +13,9 @@ export default function LoginClient() {
     const searchParams    = useSearchParams();
     const [screen, setScreen] = useState("login");
 
-    // Get the intended destination from query param or default to home
-    const redirectTo = searchParams.get("redirect") || "/";
+    // Intended destination from the query param. Validated because it is
+    // attacker-controllable — an unchecked value is an open redirect.
+    const redirectTo = getRedirectTarget(searchParams);
 
     useEffect(() => {
         if (!ready) return;

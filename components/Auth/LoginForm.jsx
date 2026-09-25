@@ -1,12 +1,14 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@/context/UserContext";
+import { withRedirect } from "@/utils/redirect";
 
 export default function LoginForm({ onSuccess }) {
     const { reloadUser }          = useUser();
     const router                  = useRouter();
+    const searchParams            = useSearchParams();
     const [step, setStep]         = useState("email");
     const [email, setEmail]       = useState("");
     const [otp, setOtp]           = useState(["", "", "", "", "", ""]);
@@ -214,8 +216,8 @@ export default function LoginForm({ onSuccess }) {
                         </button>
                         <button
                             type="button"
-                            onClick={() => { setPin(""); setError(""); router.push("/forgot-pin"); }}
-                            className="text-sm text-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
+                            onClick={() => { setPin(""); setError(""); router.push(withRedirect("/forgot-pin", searchParams)); }}
+                            className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400"
                         >
                             Forgot PIN?
                         </button>

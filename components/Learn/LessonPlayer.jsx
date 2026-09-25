@@ -349,8 +349,9 @@ function Hearts({ hearts }) {
 
 // ── Question renderer ─────────────────────────────────────────
 // Text-to-speech with a robust fallback chain:
-//   1. Native desktop TTS (Tauri → Windows System.Speech) — real voices,
-//      works even for languages with no installed WebView2 voice pack.
+//   1. Native desktop TTS (Tauri → Windows System.Speech) rendered to WAV
+//      bytes, so the webview plays real installed voices for languages with
+//      no WebView2 voice pack.
 //   2. Web Speech synthesis — only if a voice matching the language exists.
 //   3. Same-origin audio stream — proxied through `/api/tts` at our own
 //      origin. Unlike Google's cross-origin endpoint, WebViews, iOS, Android
@@ -419,15 +420,61 @@ function ttsEstimate(text) {
     return Math.max(1200, Math.min(10000, String(text || "").length * 90 + 350));
 }
 
+// Mobile Chrome and iOS Safari populate `speechSynthesis` voices
+// asynchronously: the first getVoices() call routinely returns an empty list,
+// so a naive check used to conclude "no voice for this language" on the very
+// first tap and push us down the streaming path. Cache the list and keep it
+// fresh via `voiceschanged` so repeat taps pick the real system voice.
+let voiceCache = [];
+let voicesHooked = false;
+
+function getVoices() {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return [];
+    let list = [];
+    try {
+        list = window.speechSynthesis.getVoices() || [];
+    } catch {
+        return voiceCache;
+    }
+    if (list.length) voiceCache = list;
+    if (!voicesHooked) {
+        voicesHooked = true;
+        try {
+            window.speechSynthesis.addEventListener("voiceschanged", () => {
+                try {
+                    const next = window.speechSynthesis.getVoices() || [];
+                    if (next.length) voiceCache = next;
+                } catch { /* voices unavailable; keep the last good list */ }
+            });
+        } catch { /* older engines only support the onvoiceschanged property */ }
+    }
+    return voiceCache;
+}
+
 function pickVoice(lang) {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
-    const voices = window.speechSynthesis.getVoices();
+    const voices = getVoices();
     if (!voices || !voices.length) return null;
     const want = (lang || "en").toLowerCase();
     const base = want.split("-")[0];
     return voices.find((v) => (v.lang || "").toLowerCase() === want)
         || voices.find((v) => (v.lang || "").toLowerCase().startsWith(base))
         || null;
+}
+
+// Playback and the safety timer can both want to release a caller, so make
+// sure `onend` is delivered exactly once.
+function onceOnend(audio, text, onend) {
+    if (!onend) return;
+    let fired = false;
+    const fire = () => {
+        if (fired) return;
+        fired = true;
+        onend();
+    };
+    audio.addEventListener("ended", fire, { once: true });
+    audio.addEventListener("error", fire, { once: true });
+    setTimeout(fire, ttsEstimate(text) + 2000); // blocked audio still releases
 }
 
 function speakWeb(text, lang, onend) {
@@ -453,32 +500,29 @@ function speakWeb(text, lang, onend) {
 // origin — so mobile WebViews / Tauri WebView2 / iOS, which refuse Google's
 // cross-origin stream (and have no Web Speech API), still hear sound. No API
 // key needed; the client treats the relay as a plain audio stream.
+//
+// The URL must be ROOT-relative. Lessons live under a multi-segment route
+// (`/education/lesson/<courseId>/<lessonId>`), so a bare `api/tts?...`
+// resolved against the document and requested
+// `/education/lesson/<courseId>/api/tts` — a 404 on every lesson page, which
+// is why mobile browsers played nothing. There is deliberately no cross-origin
+// Google fallback any more: it is unreachable from WebViews and mobile
+// browsers, so retrying it only masked the real failure with more silence.
 function playAudioStream(text, lang, onend) {
-    const q = {
-        lang: encodeURIComponent(lang || "en"),
-        text: encodeURIComponent(text),
-    };
-    const url = `api/tts?lang=${q.lang}&text=${q.text}`;
-    const audio = new Audio(url);
+    const params = new URLSearchParams({ lang: lang || "en", text });
+    const audio = new Audio(`/api/tts?${params.toString()}`);
     audio.preload = "auto";
+    onceOnend(audio, text, onend);
     const played = audio.play();
     // The gesture context can be lost by the time this resolves (await/then);
-    // give the browser a moment and retry once.
+    // give the browser a moment and retry once before giving up.
     if (played && typeof played.then === "function") {
         played.catch(() => {
             setTimeout(() => {
-                // Fall back to the raw Google stream only if our relay also
-                // failed to start — it can't hurt, and desktop Chrome handles
-                // the cross-origin URL while streaming via the same audio tag.
-                const gUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${q.lang}&q=${q.text}`;
-                audio.src = gUrl;
+                audio.currentTime = 0;
                 audio.play().catch(() => {});
             }, 300);
         });
-    }
-    if (onend) {
-        audio.addEventListener("ended", onend, { once: true });
-        setTimeout(onend, ttsEstimate(text) + 2000); // blocked streams still release
     }
     return audio;
 }
@@ -501,18 +545,19 @@ function playNativeWav(text, lang, onend) {
             const url = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
             const audio = new Audio(url);
             audio.preload = "auto";
+            onceOnend(audio, text, onend);
             const played = audio.play();
             // The gesture context can be lost by the time this resolves; give
             // the browser a moment and retry once before giving up.
             if (played && typeof played.then === "function") {
                 played.catch(() => {
-                    setTimeout(() => audio.play().catch(() => {}), 300);
+                    setTimeout(() => {
+                        audio.currentTime = 0;
+                        audio.play().catch(() => {});
+                    }, 300);
                 });
             }
-            if (onend) {
-                audio.addEventListener("ended", onend, { once: true });
-                setTimeout(onend, ttsEstimate(text) + 2000); // blocked audio still releases
-            }
+            audio.addEventListener("ended", () => URL.revokeObjectURL(url), { once: true });
             return;
         }
         // WAV rendering unavailable — fall through to the out-of-band path,
@@ -521,23 +566,18 @@ function playNativeWav(text, lang, onend) {
     }).catch(() => nativeTtsFallback(text, lang, onend));
 }
 
-// The desktop shell's out-of-band PowerShell speak (bool), tried once with a
-// single retry, then the online relay. Only used when WAV rendering is missing.
+// The desktop shell's out-of-band PowerShell speak, then the online relay.
+// The out-of-band path is only ever a best-effort extra: `System.Speech`
+// renders to the default output device, which a WebView2-hosted page cannot
+// hear even when the command reports success. Treating that success as
+// terminal is what left desktop lessons silent, so we always continue on to
+// the relay — on a host where native audio *is* audible the relay simply
+// plays over the top, and `onceOnend` keeps the caller in sync.
 function nativeTtsFallback(text, lang, onend) {
     const native = () => invokeTauri("native_tts", { text, lang: (lang || "en").split("-")[0] });
-    native().then((ok) => {
-        if (ok) {
-            if (onend) setTimeout(onend, ttsEstimate(text));
-            return;
-        }
-        return native().then((ok2) => {
-            if (ok2) {
-                if (onend) setTimeout(onend, ttsEstimate(text));
-            } else {
-                fallbackSpeak(text, lang, onend);
-            }
-        });
-    }).catch(() => fallbackSpeak(text, lang, onend));
+    native()
+        .catch(() => false)
+        .then(() => fallbackSpeak(text, lang, onend));
 }
 
 function fallbackSpeak(text, lang, onend) {

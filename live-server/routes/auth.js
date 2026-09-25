@@ -15,8 +15,21 @@ function generateCode() {
     return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-function isProd() {
-    return process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
+// The session cookie's Secure/SameSite flags must follow the scheme the
+// *browser* actually used, not the server's NODE_ENV. Deriving them from
+// NODE_ENV marked the cookie `Secure` while the app was being served over
+// plain HTTP — the Tauri shell against http://localhost:3000, or a phone
+// opening a LAN IP — and browsers silently discard `Secure` cookies received
+// over http. Login then returned 200 with no session stored, so the app
+// bounced straight back to /login and "login doesn't redirect".
+// `trust proxy` is enabled, so req.secure already honours X-Forwarded-Proto.
+function cookieFlags(req) {
+    const forwarded = String(req.headers["x-forwarded-proto"] || "")
+        .split(",")[0]
+        .trim()
+        .toLowerCase();
+    const secure = req.secure === true || forwarded === "https";
+    return { secure, sameSite: secure ? "none" : "lax" };
 }
 
 const transporter = nodemailer.createTransport({
@@ -169,12 +182,9 @@ router.post("/verify-otp", async (req, res) => {
             userData = sendUserPayload(user);
         }
 
-        const secure = isProd();
-        const sameSite = secure ? "none" : "lax";
         res.cookie("af_session", token, {
             httpOnly: true,
-            secure,
-            sameSite,
+            ...cookieFlags(req),
             maxAge: MAX_AGE,
             path: "/",
         });
@@ -204,12 +214,9 @@ router.post("/verify-pin", async (req, res) => {
         await user.populate("roles");
         const needsSetup = !user.username;
 
-        const secure = isProd();
-        const sameSite = secure ? "none" : "lax";
         res.cookie("af_session", token, {
             httpOnly: true,
-            secure,
-            sameSite,
+            ...cookieFlags(req),
             maxAge: MAX_AGE,
             path: "/",
         });
@@ -284,12 +291,14 @@ router.post("/forgot-pin", async (req, res) => {
         await user.populate("roles");
 
         const token = jwt.sign({ userId: user._id.toString() }, SECRET, { expiresIn: "365d" });
-        const secure = isProd();
-        const sameSite = secure ? "none" : "lax";
+        user.pinHash = hashPin(pin);
+        user.pinChangedAt = new Date();
+        await user.save();
+        await user.populate("roles");
+
         res.cookie("af_session", token, {
             httpOnly: true,
-            secure,
-            sameSite,
+            ...cookieFlags(req),
             maxAge: MAX_AGE,
             path: "/",
         });
@@ -332,8 +341,7 @@ router.get("/me", optionalAuthMiddleware, async (req, res) => {
                 const newToken = jwt.sign({ userId: user._id.toString() }, SECRET, { expiresIn: "365d" });
                 res.cookie("af_session", newToken, {
                     httpOnly: true,
-                    secure: isProd(),
-                    sameSite: isProd() ? "none" : "lax",
+                    ...cookieFlags(req),
                     maxAge: MAX_AGE,
                     path: "/",
                 });
