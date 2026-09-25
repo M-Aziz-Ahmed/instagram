@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@/context/UserContext";
+import { getRedirectTarget, withRedirect } from "@/utils/redirect";
 
 export default function InviteLandingClient({ inviteCode }) {
     const { user, ready } = useUser();
     const router = useRouter();
     const searchParams = useSearchParams();
-    const redirectTo = searchParams.get("redirect") || "/";
+    const redirectTo = getRedirectTarget(searchParams);
     const [validating, setValidating] = useState(true);
     const [valid, setValid] = useState(false);
     const [inviter, setInviter] = useState("");
@@ -100,7 +101,7 @@ export default function InviteLandingClient({ inviteCode }) {
                                 Code: <span className="font-mono font-bold">{inviteCode}</span>
                             </p>
                             <button
-                                onClick={() => router.replace(`/login?invite=${inviteCode}`)}
+                                onClick={() => router.replace(withRedirect(`/login?invite=${inviteCode}`, searchParams))}
                                 className="mt-4 px-6 py-3 bg-black dark:bg-gray-100 text-white dark:text-gray-900 font-bold rounded-xl hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
                             >
                                 {user ? "Continue to App" : "Create Account"}

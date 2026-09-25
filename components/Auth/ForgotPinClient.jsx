@@ -4,12 +4,13 @@ import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/context/UserContext";
+import { getRedirectTarget } from "@/utils/redirect";
 
 export default function ForgotPinClient() {
     const { reloadUser } = useUser();
     const router = useRouter();
     const searchParams = useSearchParams();
-    const redirectTo = searchParams.get("redirect") || "/";
+    const redirectTo = getRedirectTarget(searchParams);
     const [step, setStep]       = useState("email");
     const [email, setEmail]     = useState("");
     const [otp, setOtp]         = useState(["", "", "", "", "", ""]);

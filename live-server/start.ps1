@@ -35,6 +35,19 @@ try {
 
 # 3) Launch the Node live-server in the foreground.
 Write-Host "[start] Launching live-server (node server.js)..." -ForegroundColor Cyan
-Push-Location
-cd "C:\Users\munee\Desktop\work\instagram\live-server"
-& node server.js
+
+# Resolve this script's own directory instead of a hardcoded path from another
+# machine, so `npm start` works wherever the repo is checked out.
+$serverDir = $PSScriptRoot
+if (-not $serverDir) { $serverDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not (Test-Path -LiteralPath (Join-Path $serverDir "server.js"))) {
+    Write-Host "[start] ERROR: server.js not found in $serverDir" -ForegroundColor Red
+    exit 1
+}
+
+Push-Location -LiteralPath $serverDir
+try {
+    & node server.js
+} finally {
+    Pop-Location
+}

@@ -61,7 +61,11 @@ export function VoiceChatProvider({ children }) {
     const reconnectSocket = useCallback(() => {
         reconnectCountRef.current = 0;
         setSocketError(null);
-        socket?.disconnect();
+        // `.disconnect()` puts socket.io into a manually-disconnected state, so
+        // it stops reconnecting on its own and a plain `connect()` is a no-op.
+        // `.connect()` is what actually brings the Manager back, and it does
+        // restore automatic reconnection afterwards.
+        socket?.connect();
     }, [socket]);
 
     const openVoiceChat = useCallback(() => setVoiceOpen(true), []);

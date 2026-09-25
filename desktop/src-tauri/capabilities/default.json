@@ -35,6 +35,7 @@
     "allow-browser-set-bounds",
     "allow-browser-close",
     "allow-native-tts",
+    "allow-tts-to-wav",
     "allow-recognize-speech"
   ]
 }

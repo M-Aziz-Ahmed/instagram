@@ -23,6 +23,40 @@ const BROWSER_UA =
 const LANG_RE = /^[a-z]{2,3}(?:-[A-Za-z]{2,4})?$/;
 const MAX_TEXT = 300;
 
+// This endpoint is deliberately unauthenticated (see proxy.js PUBLIC_PATHS) so
+// lessons can speak before sign-in, which also makes it an open relay to Google.
+// MAX_TEXT bounds a single request; this bounds how fast one client can burn
+// through them.
+const RATE_LIMIT_MAX = 30;        // requests...
+const RATE_LIMIT_WINDOW_MS = 60000; // ...per minute
+const rateBuckets = new Map();
+
+function clientKey(request) {
+    const fwd = request.headers.get("x-forwarded-for") || "";
+    const ip = fwd.split(",")[0].trim() || request.headers.get("x-real-ip") || "unknown";
+    return ip;
+}
+
+function rateLimited(request) {
+    const key = clientKey(request);
+    const now = Date.now();
+    const bucket = rateBuckets.get(key);
+    if (!bucket || now - bucket.start >= RATE_LIMIT_WINDOW_MS) {
+        rateBuckets.set(key, { start: now, count: 1 });
+        return false;
+    }
+    bucket.count++;
+    return bucket.count > RATE_LIMIT_MAX;
+}
+
+// Keep the bucket map from growing without bound on a long-lived instance.
+function sweepBuckets(now) {
+    if (rateBuckets.size < 5000) return;
+    for (const [key, bucket] of rateBuckets) {
+        if (now - bucket.start >= RATE_LIMIT_WINDOW_MS) rateBuckets.delete(key);
+    }
+}
+
 export async function GET(request) {
     const url = new URL(request.url);
     const text = (url.searchParams.get("text") || "").trim();
@@ -31,6 +65,14 @@ export async function GET(request) {
     if (!text) return Response.json({ error: "missing text" }, { status: 400 });
     if (text.length > MAX_TEXT) return Response.json({ error: "text too long" }, { status: 400 });
     if (!LANG_RE.test(lang)) return Response.json({ error: "bad lang" }, { status: 400 });
+
+    if (rateLimited(request)) {
+        sweepBuckets(Date.now());
+        return Response.json(
+            { error: "Too many speech requests" },
+            { status: 429, headers: { "Retry-After": String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)) } }
+        );
+    }
 
     const upstreamUrl = `${UPSTREAM}?ie=UTF-8&client=tw-ob&tl=${encodeURIComponent(lang)}&q=${encodeURIComponent(text)}`;
 

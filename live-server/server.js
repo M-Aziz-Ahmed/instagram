@@ -1100,11 +1100,17 @@ async function getCommunityMembershipSet(username) {
     if (!username) return new Set();
     const cached = communityMembershipCache.get(username);
     if (cached && Date.now() - cached.at < COMMUNITY_MEMBERSHIP_CACHE_MS) return cached.ids;
-    let ids = new Set();
+    let ids = null;
     try {
         const communities = await Community.find({ "members.username": username }, { _id: 1 }).lean();
         ids = new Set(communities.map((c) => c._id.toString()));
-    } catch {}
+    } catch (err) {
+        // Never cache a failed lookup. An empty set here hides every community
+        // channel from this user, and broadcasting that made the whole
+        // community section vanish for everyone whenever Mongo hiccuped.
+        console.error("[VOICE] Community membership lookup failed:", err.message);
+        return cached ? cached.ids : new Set();
+    }
     communityMembershipCache.set(username, { ids, at: Date.now() });
     return ids;
 }
@@ -1124,10 +1130,28 @@ function broadcastChannelList() {
             .then((list) => {
                 if (sock.connected) sock.emit("voice:channels", list);
             })
-            .catch(() => {
-                if (sock.connected) sock.emit("voice:channels", getAllChannelsState().filter((ch) => !ch.communityId));
+            .catch((err) => {
+                // Skip the broadcast rather than sending a truncated list: a
+                // global-channels-only payload replaces the client's state and
+                // makes every community channel disappear until it re-fetches.
+                console.error("[VOICE] Skipping channel broadcast:", err?.message || err);
             });
     });
+}
+
+// Community voice channel *definitions* are persisted in MongoDB; this map is
+// only a runtime cache of them plus live participant state. Deleting a
+// definition as soon as it went idle used to drop community channels within
+// 10s of the VC panel opening, and the resulting truncated list was broadcast
+// to every client. An idle channel now sheds only its runtime state; the
+// definition stays cached, and `voice:get-channels` prunes the ones that no
+// longer exist in Mongo.
+function clearVoiceChannelRuntimeState(channelId) {
+    const ch = voiceChannels.get(channelId);
+    if (!ch) return;
+    ch.participants.clear();
+    if (io._voiceMusic) io._voiceMusic.delete(channelId);
+    channelMutedUsers.delete(channelId);
 }
 
 function broadcastChannelParticipants(channelId) {
@@ -1167,10 +1191,7 @@ async function reapStaleVoiceParticipants() {
         }
 
         if (ch.communityId && ch.participants.size === 0) {
-            voiceChannels.delete(channelId);
-            if (io._voiceMusic) io._voiceMusic.delete(channelId);
-            channelMutedUsers.delete(channelId);
-            changed = true;
+            clearVoiceChannelRuntimeState(channelId);
         } else if (ch.participants.size > 0) {
             broadcastChannelParticipants(channelId);
         }
@@ -1367,10 +1388,15 @@ io.on("connection", async (socket) => {
             const username = socket.data?.username;
             if (username) {
                 const communities = await Community.find({ "members.username": username }).lean();
+                // Definitions that still exist in Mongo for this user. Anything
+                // cached but absent here was deleted (or the user left the
+                // community), so prune it now that we have a fresh read.
+                const liveKeys = new Set();
                 for (const c of communities) {
                     const voiceChannelsList = (c.voiceChannels || []);
                     for (const ch of voiceChannelsList) {
                         const memKey = `community-${c._id}-${ch.id}`;
+                        liveKeys.add(memKey);
                         if (!voiceChannels.has(memKey)) {
                             voiceChannels.set(memKey, {
                                 id: memKey,
@@ -1380,6 +1406,14 @@ io.on("connection", async (socket) => {
                                 communityName: c.name,
                             });
                         }
+                    }
+                }
+                for (const channelId of [...voiceChannels.keys()]) {
+                    const cached = voiceChannels.get(channelId);
+                    if (cached?.communityId && !liveKeys.has(channelId)) {
+                        voiceChannels.delete(channelId);
+                        if (io._voiceMusic) io._voiceMusic.delete(channelId);
+                        channelMutedUsers.delete(channelId);
                     }
                 }
             }
@@ -1513,11 +1547,11 @@ io.on("connection", async (socket) => {
         broadcastChannelParticipants(channelId);
         broadcastChannelList();
 
-        // Clean up empty community voice channels from memory (persisted in MongoDB anyway)
+        // Drop the leftover runtime state of an empty community voice channel.
+        // The definition itself must stay cached, otherwise it vanishes from
+        // the VC sidebar as soon as the last person leaves.
         if (ch.communityId && ch.participants.size === 0) {
-            voiceChannels.delete(channelId);
-            if (io._voiceMusic) io._voiceMusic.delete(channelId);
-            channelMutedUsers.delete(channelId);
+            clearVoiceChannelRuntimeState(channelId);
         }
 
         if (participant) {
@@ -3184,11 +3218,10 @@ io.on("connection", async (socket) => {
                 broadcastChannelParticipants(socket.data.voiceChannel);
                 broadcastChannelList();
                 io.to(`voice:${socket.data.voiceChannel}`).emit("voice:user-left", { username });
-                // Clean up empty community voice channels from memory
+                // Shed runtime state of the now-empty community voice channel
+                // but keep its definition cached (see clearVoiceChannelRuntimeState).
                 if (ch.communityId && ch.participants.size === 0) {
-                    voiceChannels.delete(socket.data.voiceChannel);
-                    if (io._voiceMusic) io._voiceMusic.delete(socket.data.voiceChannel);
-                    channelMutedUsers.delete(socket.data.voiceChannel);
+                    clearVoiceChannelRuntimeState(socket.data.voiceChannel);
                 }
             }
         }

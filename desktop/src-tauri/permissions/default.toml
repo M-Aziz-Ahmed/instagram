@@ -12,6 +12,7 @@ permissions = [
   "allow-browser-set-bounds",
   "allow-browser-close",
   "allow-native-tts",
+  "allow-tts-to-wav",
   "allow-recognize-speech",
 ]
 
@@ -59,6 +60,11 @@ commands.allow = ["browser_close"]
 identifier = "allow-native-tts"
 description = "Enables the native_tts command which speaks text using the operating system speech synthesizer."
 commands.allow = ["native_tts"]
+
+[[permission]]
+identifier = "allow-tts-to-wav"
+description = "Enables the tts_to_wav command which renders text to base64 WAV audio using the installed system voices, so the webview can play real pronunciation."
+commands.allow = ["tts_to_wav"]
 
 [[permission]]
 identifier = "allow-recognize-speech"
