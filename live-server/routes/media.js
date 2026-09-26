@@ -131,16 +131,10 @@ async function fetchTVMaze(path, retries = 1) {
     return [];
 }
 
-// Helper functions for type-specific filtering
-function getTypeCountry(type) {
-    const countries = { kdrama: "KR", cdrama: "CN" };
-    return countries[type];
-}
-
-function getTypeGenre(type) {
-    const genres = { cartoon: "Animation", kdrama: "Drama", cdrama: "Drama" };
-    return genres[type];
-}
+// getTypeCountry / getTypeGenre used to be declared a second time further down
+// this file. Plain function declarations, so the later copy hoisted and the one
+// here was dead code - which meant the surviving genre map had silently lost its
+// kdrama/cdrama entries. One definition now, holding the union.
 
 const EMBED_HOSTS = ["vidsrc.to", "vidsrc.in", "vidsrc.su", "vidsrc.me", "2embed.cc"];
 
@@ -249,7 +243,9 @@ function getTypeCountry(type) {
 function getTypeGenre(type) {
     const genres = {
         cartoon: "Animation",
-        movie: "Movie",
+        kdrama:  "Drama",
+        cdrama:  "Drama",
+        movie:   "Movie",
     };
     return genres[type];
 }

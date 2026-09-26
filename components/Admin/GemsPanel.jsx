@@ -24,6 +24,11 @@ export default function GemsPanel() {
     const [amount, setAmount] = useState("");
     const [note, setNote] = useState("");
 
+    // Ledger audit view.
+    const [ledgerUser, setLedgerUser] = useState("");
+    const [ledger, setLedger] = useState(null);
+    const [ledgerLoading, setLedgerLoading] = useState(false);
+
     const refresh = useCallback(async () => {
         setLoading(true);
         try {
@@ -109,6 +114,25 @@ export default function GemsPanel() {
             `${sign > 0 ? "Granted" : "Deducted"} ${Math.abs(n)} gems`,
         );
     };
+
+    const loadLedger = useCallback(async (username) => {
+        setLedgerLoading(true);
+        try {
+            const qs = new URLSearchParams({ limit: "50" });
+            if (username) qs.set("username", username);
+            const res = await fetch(`/api/admin/gems/ledger?${qs}`, { cache: "no-store" });
+            if (res.ok) setLedger(await res.json());
+        } catch {
+            showToast("Could not load the ledger", "error");
+        } finally {
+            setLedgerLoading(false);
+        }
+    }, [showToast]);
+
+    // Open with the full ledger so the panel is useful before anyone types.
+    useEffect(() => {
+        loadLedger("");
+    }, [loadLedger]);
 
     return (
         <div className="space-y-5">
@@ -200,6 +224,130 @@ export default function GemsPanel() {
                     </table>
                 </div>
             )}
+
+            {/* ── Ledger ──────────────────────────────────────────────
+                The grant/deduct controls above can move a balance but cannot
+                explain one. This is the audit trail that answers "why does this
+                account have 4,000 gems", and it is read-only on purpose: history
+                is corrected by writing a new compensating row, never by editing
+                or deleting an old one. */}
+            <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-raised)] p-4">
+                <div className="flex flex-wrap items-end justify-between gap-2 mb-3">
+                    <div>
+                        <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                            Ledger
+                        </h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                            Every gem movement, newest first.
+                            {ledger?.total ? ` ${ledger.total} entries.` : ""}
+                        </p>
+                    </div>
+                    <form
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            loadLedger(ledgerUser.trim());
+                        }}
+                        className="flex gap-2"
+                    >
+                        <input
+                            value={ledgerUser}
+                            onChange={(e) => setLedgerUser(e.target.value)}
+                            placeholder="Filter by username"
+                            className="px-3 py-1.5 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500"
+                        />
+                        <button
+                            type="submit"
+                            disabled={ledgerLoading}
+                            className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-black dark:bg-gray-100 text-white dark:text-gray-900 disabled:opacity-50"
+                        >
+                            {ledgerLoading ? "…" : "Filter"}
+                        </button>
+                    </form>
+                </div>
+
+                {ledger?.net?.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-1.5">
+                        {ledger.net.map((n) => (
+                            <span
+                                key={n._id}
+                                className="rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-1 text-[11px] font-semibold text-gray-600 dark:text-gray-300"
+                            >
+                                {n._id}{" "}
+                                <span
+                                    className={
+                                        n.total > 0
+                                            ? "text-emerald-600 dark:text-emerald-400"
+                                            : "text-rose-600 dark:text-rose-400"
+                                    }
+                                >
+                                    {n.total > 0 ? "+" : ""}
+                                    {n.total.toLocaleString()}
+                                </span>
+                            </span>
+                        ))}
+                    </div>
+                )}
+
+                {!ledgerLoading && (!ledger?.rows || ledger.rows.length === 0) ? (
+                    <p className="py-4 text-center text-sm text-gray-400">
+                        No movements recorded yet.
+                    </p>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                            <thead className="text-gray-500">
+                                <tr>
+                                    <th className="px-2 py-1.5 text-left">User</th>
+                                    <th className="px-2 py-1.5 text-left">Reason</th>
+                                    <th className="px-2 py-1.5 text-right">Amount</th>
+                                    <th className="px-2 py-1.5 text-right">Balance</th>
+                                    <th className="px-2 py-1.5 text-left">By</th>
+                                    <th className="px-2 py-1.5 text-left">When</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {(ledger?.rows || []).map((r) => (
+                                    <tr
+                                        key={r._id}
+                                        className="border-t border-gray-100 dark:border-gray-800"
+                                    >
+                                        <td className="px-2 py-1.5 font-medium text-gray-800 dark:text-gray-200">
+                                            {r.user}
+                                        </td>
+                                        <td className="px-2 py-1.5 text-gray-500 dark:text-gray-400">
+                                            {String(r.reason || "").replace(/_/g, " ")}
+                                            {r.note ? (
+                                                <span className="block text-[10px] text-gray-400">
+                                                    {r.note}
+                                                </span>
+                                            ) : null}
+                                        </td>
+                                        <td
+                                            className={`px-2 py-1.5 text-right font-bold tabular-nums ${
+                                                r.amount > 0
+                                                    ? "text-emerald-600 dark:text-emerald-400"
+                                                    : "text-rose-600 dark:text-rose-400"
+                                            }`}
+                                        >
+                                            {r.amount > 0 ? "+" : ""}
+                                            {r.amount.toLocaleString()}
+                                        </td>
+                                        <td className="px-2 py-1.5 text-right tabular-nums text-gray-500 dark:text-gray-400">
+                                            {r.balanceAfter.toLocaleString()}
+                                        </td>
+                                        <td className="px-2 py-1.5 text-gray-500 dark:text-gray-400">
+                                            {r.by || "system"}
+                                        </td>
+                                        <td className="px-2 py-1.5 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                            {new Date(r.createdAt).toLocaleString()}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </section>
 
             {grantUser && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

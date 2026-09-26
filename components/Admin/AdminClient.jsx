@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import BotsPanel from "@/components/Admin/BotsPanel";
 import AdminLogsPanel from "@/components/Admin/AdminLogsPanel";
 import GemsPanel from "@/components/Admin/GemsPanel";
+import FlagsPanel from "@/components/Admin/FlagsPanel";
 import SystemPanel from "@/components/Admin/SystemPanel";
 import AnnouncePanel from "@/components/Admin/AnnouncePanel";
 import ReportsPanel from "@/components/Admin/ReportsPanel";
@@ -95,6 +96,10 @@ export default function AdminClient() {
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "gems" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         💎 Gems &amp; Pro
                     </button>
+                    <button onClick={() => setTab("flags")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "flags" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        🚦 Feature Flags
+                    </button>
                     <button onClick={() => setTab("logs")}
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "logs" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         Logs
@@ -153,6 +158,7 @@ export default function AdminClient() {
                 {tab === "voice" && <VoicePanel />}
                 {tab === "ads" && <AdsPanel />}
                 {tab === "gems" && <GemsPanel />}
+                {tab === "flags" && <FlagsPanel />}
                 {tab === "logs" && <AdminLogsPanel />}
                 {tab === "adult" && <AdultMangaPanel />}
                 {tab === "bots" && <BotsPanel />}

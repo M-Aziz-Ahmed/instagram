@@ -4,6 +4,9 @@ const Role = require("../models/role");
 const Ad = require("../models/ad");
 const { AD_SLOTS } = require("../models/ad");
 const { creditGems, debitGems, isProUserDoc } = require("../lib/economy");
+const GemTransaction = require("../models/gemTransaction");
+const SiteSetting = require("../models/siteSettings");
+const { getFlags, invalidate: invalidateFlags } = require("../lib/featureFlags");
 const Post = require("../models/post");
 const ContentFilter = require("../models/contentFilter");
 const ModerationLog = require("../models/moderationLog");
@@ -13,7 +16,7 @@ const A = require("../analyticsHelpers");
 const { requireAdmin, requirePermission } = require("../middleware/auth");
 const { getLogs } = require("../logBuffer");
 const { VALID_PERMISSIONS } = require("../models/role");
-const { logModeration, logUser } = require("../logService");
+const { logModeration, logUser, logSystem } = require("../logService");
 const { isValidPin, hashPin } = require("../utils/pin");
 
 const router = express.Router();
@@ -99,6 +102,127 @@ router.post("/gems/pro", requireAdmin, async (req, res) => {
     } catch (err) {
         console.error("admin pro grant error:", err);
         return res.status(500).json({ error: "Failed to grant Pro" });
+    }
+});
+
+// GET /gems/ledger?username=&limit=&skip=
+// Read-only view of the append-only gem ledger.
+//
+// The write endpoints above can move a balance but cannot explain how it got
+// there, and "an admin typed the wrong number" is only provable with a history.
+// This is that history: the same rows a purchase writes, filterable by account.
+router.get("/gems/ledger", requireAdmin, async (req, res) => {
+    try {
+        const { username, reason } = req.query;
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+        const skip = Math.max(parseInt(req.query.skip, 10) || 0, 0);
+
+        const query = {};
+        // Usernames are matched exactly rather than by regex: this is an audit
+        // trail, and a pattern match here would let a stray `.` pull in other
+        // people's rows.
+        if (username) query.user = String(username).trim();
+        if (reason) query.reason = String(reason).trim();
+
+        const [rows, total] = await Promise.all([
+            GemTransaction.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+            GemTransaction.countDocuments(query),
+        ]);
+
+        // Net movement per account across the whole filtered set, so an admin
+        // can see at a glance whether an account was drained or farmed.
+        const net = await GemTransaction.aggregate([
+            { $match: query },
+            { $group: { _id: "$user", total: { $sum: "$amount" } } },
+            { $sort: { total: 1 } },
+            { $limit: 20 },
+        ]);
+
+        return res.json({ rows, total, limit, skip, net });
+    } catch (err) {
+        console.error("admin gem ledger error:", err);
+        return res.status(500).json({ error: "Failed to load gem ledger" });
+    }
+});
+
+// GET /flags
+router.get("/flags", requireAdmin, async (req, res) => {
+    try {
+        return res.json({ flags: await getFlags() });
+    } catch (err) {
+        console.error("admin flags read error:", err);
+        return res.status(500).json({ error: "Failed to load flags" });
+    }
+});
+
+// PATCH /flags  { maintenance?, signupsOpen?, posting?, uploads?, dms?, ... }
+//
+// Setting maintenance stops every write except /api/admin and /api/auth, so
+// this endpoint and the auth routes are exempt from the gate by design - an
+// operator has to be able to log in and turn the switch back off.
+router.patch("/flags", requireAdmin, async (req, res) => {
+    try {
+        const body = req.body || {};
+
+        // Only these keys are writable, and only as real booleans. Taking an
+        // allow-list means a typo like { postingg: false } is rejected instead
+        // of being written into the document as an unknown field.
+        const ALLOWED = new Set([
+            "maintenance", "signupsOpen",
+            "posting", "uploads", "dms", "liveStreams", "voiceChat", "comments",
+        ]);
+        const toBool = (v) => v === true || v === "true" || v === 1 || v === "1";
+        const toStr = (v) => String(v).slice(0, 300);
+
+        const set = {};
+        const features = {};
+        let maintenanceMessage;
+
+        for (const [k, v] of Object.entries(body)) {
+            if (!ALLOWED.has(k)) continue;
+            if (k === "maintenance") {
+                // A bare `maintenance: true` toggles it on; an object can also
+                // carry the message shown to users.
+                if (v && typeof v === "object") {
+                    if (v.active !== undefined) set["maintenance.active"] = toBool(v.active);
+                    if (v.message !== undefined) maintenanceMessage = toStr(v.message);
+                } else {
+                    set["maintenance.active"] = toBool(v);
+                }
+            } else if (k === "signupsOpen") {
+                set.signupsOpen = toBool(v);
+            } else {
+                features[k] = toBool(v);
+            }
+        }
+
+        const update = {};
+        if (Object.keys(set).length) update.$set = set;
+        if (maintenanceMessage !== undefined) {
+            update.$set = { ...(update.$set || {}), "maintenance.message": maintenanceMessage };
+        }
+        if (Object.keys(features).length) update.$set = { ...(update.$set || {}), features };
+        if (Object.keys(update).length) update.updatedAt = new Date();
+        update.updatedBy = adminUsername(req);
+
+        if (Object.keys(update).length) {
+            await SiteSetting.findOneAndUpdate(
+                { key: "config" },
+                { $set: update },
+                { upsert: true, new: true, setDefaultsOnInsert: true },
+            );
+        }
+
+        // Drop the read cache so the change takes effect on the next request
+        // rather than up to TTL_MS later.
+        invalidateFlags();
+
+        const flags = await getFlags();
+        logSystem?.("admin_flags_updated", { flags, by: adminUsername(req) });
+        return res.json({ ok: true, flags });
+    } catch (err) {
+        console.error("admin flags write error:", err);
+        return res.status(500).json({ error: "Failed to update flags" });
     }
 });
 

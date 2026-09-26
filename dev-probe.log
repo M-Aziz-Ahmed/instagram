@@ -1,0 +1,27 @@
+
+> anontweet@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.10 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.100.50:3000
+- Environments: .env
+✓ Ready in 338ms
+⚠ Slow filesystem detected. The benchmark took 305ms. If D:\Work\instagram-clone\.next/dev is a network drive, consider moving it to a local folder.
+See more: https://nextjs.org/docs/app/guides/local-development
+
+○ Compiling /social ...
+ GET /social 200 in 7.8s (next.js: 7.0s, proxy.ts: 512ms, application-code: 292ms)
+ GET /login?redirect=%2Fexplore 200 in 385ms (next.js: 316ms, proxy.ts: 3ms, application-code: 66ms)
+ GET /reels 200 in 304ms (next.js: 243ms, proxy.ts: 3ms, application-code: 58ms)
+ GET /watch 200 in 802ms (next.js: 703ms, proxy.ts: 3ms, application-code: 96ms)
+ GET /manga 200 in 295ms (next.js: 231ms, proxy.ts: 3ms, application-code: 61ms)
+ GET /login?redirect=%2Feducation 200 in 50ms (next.js: 2ms, proxy.ts: 3ms, application-code: 46ms)
+ GET /me 200 in 298ms (next.js: 243ms, proxy.ts: 3ms, application-code: 52ms)
+ GET /login?redirect=%2Finbox 200 in 48ms (next.js: 1877µs, proxy.ts: 1969µs, application-code: 44ms)
+ GET /search 200 in 297ms (next.js: 236ms, proxy.ts: 2ms, application-code: 59ms)
+ GET /login?redirect=%2Ftrending 200 in 54ms (next.js: 2ms, proxy.ts: 2ms, application-code: 49ms)
+ GET /login?redirect=%2Fadmin 200 in 64ms (next.js: 3ms, proxy.ts: 3ms, application-code: 57ms)
+✓ Finished writing to filesystem cache in 3.2min
+✓ Finished filesystem cache database compaction in 25.7s
+✓ Finished filesystem cache database compaction in 17.1s

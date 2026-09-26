@@ -2,6 +2,7 @@ const express = require("express");
 const LiveStream = require("../models/liveStream");
 const User = require("../models/user");
 const Notification = require("../models/notification");
+const { requireFeature } = require("../lib/featureFlags");
 
 const router = express.Router();
 
@@ -37,7 +38,7 @@ router.get("/", async (req, res) => {
 });
 
 // POST / - create stream
-router.post("/", async (req, res) => {
+router.post("/", requireFeature("liveStreams"), async (req, res) => {
     try {
         const { username, title } = req.body;
         if (!username) return res.status(400).json({ error: "Username required" });
@@ -93,7 +94,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // POST /:id - actions (join, leave, signal, poll, chat)
-router.post("/:id", async (req, res) => {
+router.post("/:id", requireFeature("liveStreams"), async (req, res) => {
     try {
         const { id } = req.params;
         const { username, action, to, type, data, since, chatSince, text, color, avatarUrl, replyTo } = req.body;

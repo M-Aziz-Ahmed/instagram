@@ -6,6 +6,7 @@ const ContentFilter = require("../models/contentFilter");
 const { verifyToken, optionalAuth, requirePermission } = require("../middleware/auth");
 const { getHiddenUsers, applySenderExclusion, filterComments } = require("../lib/visibility");
 const { isProUserDoc } = require("../lib/economy");
+const { requireFeature } = require("../lib/featureFlags");
 const { trimComments, removeComment, displayCount } = require("../lib/postComments");
 const { logServer } = require("../logService");
 
@@ -72,20 +73,20 @@ async function getUserPermissions(userId) {
 }
 
 const ACHIEVEMENTS = [
-    { id: "first_post",     name: "First Post",     icon: "🎉", description: "Created your first post",           check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 1 },
-    { id: "posts_10",       name: "Active Voice",    icon: "🔊", description: "Created 10 posts",                  check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 10 },
-    { id: "posts_50",       name: "Power Poster",   icon: "💪", description: "Created 50 posts",                  check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 50 },
-    { id: "posts_100",      name: "Century Club",   icon: "💯", description: "Created 100 posts",                 check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 100 },
-    { id: "streak_3",       name: "On Fire",         icon: "🔥", description: "3-day posting streak",              check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 3; } },
-    { id: "streak_7",       name: "Week Warrior",   icon: "⚔️", description: "7-day posting streak",              check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 7; } },
-    { id: "streak_30",      name: "Unstoppable",    icon: "🏆", description: "30-day posting streak",             check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 30; } },
-    { id: "liked_10",       name: "Crowd Pleaser",  icon: "❤️", description: "Received 10 likes total",           check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return (result[0]?.total || 0) >= 10; } },
-    { id: "liked_100",      name: "Fan Favorite",   icon: "😍", description: "Received 100 likes total",          check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return (result[0]?.total || 0) >= 100; } },
-    { id: "comment_10",     name: "Conversationalist", icon: "💬", description: "Left 10 comments",              check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { isRemoved: { $ne: true } } }, { $unwind: "$comments" }, { $match: { "comments.sender": username } }, { $count: "total" }]); return (result[0]?.total || 0) >= 10; } },
-    { id: "views_1000",     name: "Influencer",      icon: "👁️", description: "Posts received 1,000 views",       check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $group: { _id: null, total: { $sum: "$viewCount" } } }]); return (result[0]?.total || 0) >= 1000; } },
-    { id: "views_10000",    name: "Viral",           icon: "🌟", description: "Posts received 10,000 views",      check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $group: { _id: null, total: { $sum: "$viewCount" } } }]); return (result[0]?.total || 0) >= 10000; } },
-    { id: "bookmarked_10",  name: "Saved",           icon: "🔖", description: "Your posts were bookmarked 10 times", check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return false; } },
-    { id: "repost_5",       name: "Amplifier",       icon: "🔄", description: "Posts were reposted 5 times",       check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const count = await Post.countDocuments({ originalSender: username, isRemoved: { $ne: true } }); return count >= 5; } },
+    { id: "first_post",     name: "First Post",     icon: "ðŸŽ‰", description: "Created your first post",           check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 1 },
+    { id: "posts_10",       name: "Active Voice",    icon: "ðŸ”Š", description: "Created 10 posts",                  check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 10 },
+    { id: "posts_50",       name: "Power Poster",   icon: "ðŸ’ª", description: "Created 50 posts",                  check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 50 },
+    { id: "posts_100",      name: "Century Club",   icon: "ðŸ’¯", description: "Created 100 posts",                 check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 100 },
+    { id: "streak_3",       name: "On Fire",         icon: "ðŸ”¥", description: "3-day posting streak",              check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 3; } },
+    { id: "streak_7",       name: "Week Warrior",   icon: "âš”ï¸", description: "7-day posting streak",              check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 7; } },
+    { id: "streak_30",      name: "Unstoppable",    icon: "ðŸ†", description: "30-day posting streak",             check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 30; } },
+    { id: "liked_10",       name: "Crowd Pleaser",  icon: "â¤ï¸", description: "Received 10 likes total",           check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return (result[0]?.total || 0) >= 10; } },
+    { id: "liked_100",      name: "Fan Favorite",   icon: "ðŸ˜", description: "Received 100 likes total",          check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return (result[0]?.total || 0) >= 100; } },
+    { id: "comment_10",     name: "Conversationalist", icon: "ðŸ’¬", description: "Left 10 comments",              check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { isRemoved: { $ne: true } } }, { $unwind: "$comments" }, { $match: { "comments.sender": username } }, { $count: "total" }]); return (result[0]?.total || 0) >= 10; } },
+    { id: "views_1000",     name: "Influencer",      icon: "ðŸ‘ï¸", description: "Posts received 1,000 views",       check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $group: { _id: null, total: { $sum: "$viewCount" } } }]); return (result[0]?.total || 0) >= 1000; } },
+    { id: "views_10000",    name: "Viral",           icon: "ðŸŒŸ", description: "Posts received 10,000 views",      check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $group: { _id: null, total: { $sum: "$viewCount" } } }]); return (result[0]?.total || 0) >= 10000; } },
+    { id: "bookmarked_10",  name: "Saved",           icon: "ðŸ”–", description: "Your posts were bookmarked 10 times", check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return false; } },
+    { id: "repost_5",       name: "Amplifier",       icon: "ðŸ”„", description: "Posts were reposted 5 times",       check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const count = await Post.countDocuments({ originalSender: username, isRemoved: { $ne: true } }); return count >= 5; } },
 ];
 
 async function updateStreak(userId) {
@@ -277,7 +278,7 @@ router.get("/", async (req, res) => {
             viewerIsAdmin = !!viewerDoc?.isAdmin;
             viewerFollowing = viewerDoc?.following || [];
             viewerCloseFriends = viewerDoc?.closeFriends || [];
-            // getHiddenUsers is async — without await this was a Promise, which
+            // getHiddenUsers is async â€” without await this was a Promise, which
             // made applySenderExclusion's `for (const name of hidden)` throw and
             // took the whole feed down with a 500.
             hiddenUsers = await getHiddenUsers(username, viewerDoc);
@@ -442,7 +443,7 @@ router.get("/", async (req, res) => {
 });
 
 // POST /
-router.post("/", verifyToken, async (req, res) => {
+router.post("/", verifyToken, requireFeature("posting"), async (req, res) => {
     try {
         const { text, imageUrl, imageUrls, audioUrl, videoUrl, videoDuration, videoWidth, videoHeight, visibility, poll, theme, scheduledAt, communityId, flair } = req.body;
         const username = req.body.sender || req.session?.userId;
@@ -618,7 +619,7 @@ router.delete("/:id", verifyToken, async (req, res) => {
     }
 });
 
-// PUT /:id — edit post
+// PUT /:id â€” edit post
 router.put("/:id", verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
@@ -663,7 +664,7 @@ router.put("/:id", verifyToken, async (req, res) => {
     }
 });
 
-// PATCH /:id  — unified action dispatcher (mirrors Next.js API route)
+// PATCH /:id  â€” unified action dispatcher (mirrors Next.js API route)
 router.patch("/:id", optionalAuth, async (req, res) => {
     try {
         const { id } = req.params;
@@ -1014,7 +1015,7 @@ router.post("/:id/react", verifyToken, async (req, res) => {
 });
 
 // POST /:id/comment
-router.post("/:id/comment", verifyToken, async (req, res) => {
+router.post("/:id/comment", verifyToken, requireFeature("comments"), async (req, res) => {
     try {
         const { id } = req.params;
         const { text, imageUrl, audioUrl, parentId } = req.body;
@@ -1125,7 +1126,7 @@ router.delete("/:id/comment/:commentId", verifyToken, async (req, res) => {
 });
 
 // POST /:id/comment/:commentId/like
-router.post("/:id/comment/:commentId/like", verifyToken, async (req, res) => {
+router.post("/:id/comment/:commentId/like", verifyToken, requireFeature("comments"), async (req, res) => {
     try {
         const { id, commentId } = req.params;
         const user = await User.findById(req.userId).select("username").lean();
@@ -1151,7 +1152,7 @@ router.post("/:id/comment/:commentId/like", verifyToken, async (req, res) => {
 });
 
 // POST /:id/comment/:commentId/react
-router.post("/:id/comment/:commentId/react", verifyToken, async (req, res) => {
+router.post("/:id/comment/:commentId/react", verifyToken, requireFeature("comments"), async (req, res) => {
     try {
         const { id, commentId } = req.params;
         const { reaction } = req.body;
@@ -1547,7 +1548,7 @@ router.get("/user/:username", async (req, res) => {
     }
 });
 
-// POST /:id/view — increment view count (rate-limited by client)
+// POST /:id/view â€” increment view count (rate-limited by client)
 router.post("/:id/view", async (req, res) => {
     try {
         const { id } = req.params;
@@ -1559,12 +1560,12 @@ router.post("/:id/view", async (req, res) => {
     }
 });
 
-// GET /achievements/list — all possible achievements
+// GET /achievements/list â€” all possible achievements
 router.get("/achievements/list", async (req, res) => {
     return res.json(ACHIEVEMENTS.map((a) => ({ id: a.id, name: a.name, icon: a.icon, description: a.description })));
 });
 
-// GET /scheduled/mine — list my scheduled posts
+// GET /scheduled/mine â€” list my scheduled posts
 router.get("/scheduled/mine", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId).select("username").lean();
@@ -1577,7 +1578,7 @@ router.get("/scheduled/mine", verifyToken, async (req, res) => {
     }
 });
 
-// DELETE /scheduled/:id — cancel a scheduled post
+// DELETE /scheduled/:id â€” cancel a scheduled post
 router.delete("/scheduled/:id", verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
@@ -1591,7 +1592,7 @@ router.delete("/scheduled/:id", verifyToken, async (req, res) => {
     }
 });
 
-// GET /user-stats — stats for the logged-in user
+// GET /user-stats â€” stats for the logged-in user
 router.get("/user-stats", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId).select("username postingStreak longestStreak achievements defaultTheme").lean();
@@ -1629,7 +1630,7 @@ router.get("/user-stats", verifyToken, async (req, res) => {
     }
 });
 
-// PATCH /default-theme — set user's default post theme
+// PATCH /default-theme â€” set user's default post theme
 router.patch("/default-theme", verifyToken, async (req, res) => {
     try {
         const { theme } = req.body;
@@ -1664,7 +1665,7 @@ async function publishScheduledPosts() {
     }
 }
 
-// ── Voting ────────────────────────────────────────────────────
+// â”€â”€ Voting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 router.post("/:id/vote", verifyToken, async (req, res) => {
     try {

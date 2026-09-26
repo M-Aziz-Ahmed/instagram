@@ -3305,6 +3305,14 @@ io.on("connection", async (socket) => {
 
 // ── API Routes ───────────────────────────────────────────────────
 const { apiLimiter, authLimiter, readLimiter, writeLimiter, verifyApiKey } = require("./middleware/rateLimit");
+const { maintenanceGate } = require("./lib/featureFlags");
+
+// Global maintenance gate, mounted ahead of every API router so it cannot be
+// bypassed by adding a route later. Reads pass through (the app still has to
+// render so the banner can be shown); writes are refused while maintenance is
+// active. /api/admin and /api/auth are exempt - see lib/featureFlags.js, or
+// the switch becomes a one-way door with no way back in.
+app.use("/api", maintenanceGate());
 
 app.use("/api/auth", authLimiter, require("./routes/auth"));
 // POSTS: no rate limit (read-only, high traffic)

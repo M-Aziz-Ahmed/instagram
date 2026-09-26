@@ -6,6 +6,7 @@ const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
 const { getBlockedUsers } = require("../lib/visibility");
 const { isProUserDoc } = require("../lib/economy");
+const { requireFeature } = require("../lib/featureFlags");
 const { logChat } = require("../logService");
 const { sendPushNotification } = require("../push");
 const { resolveLinkPreview } = require("../utils/linkPreview");
@@ -254,7 +255,7 @@ router.get("/search", verifyToken, async (req, res) => {
     }
 });
 
-router.post("/", verifyToken, async (req, res) => {
+router.post("/", verifyToken, requireFeature("dms"), async (req, res) => {
     try {
         const { text, imageUrl, audioUrl, recipient, color, replyTo, linkPreview } = req.body;
         const senderDoc = await User.findById(req.userId).select("username avatarColor blockedUsers mutedUsers").lean();
