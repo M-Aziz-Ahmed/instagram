@@ -17,8 +17,17 @@ export function ToastProvider({ children }) {
     }, []);
 
     const showToast = useCallback((message, type = "info") => {
+        // Never render a context-free pill. A missing/blank message used to
+        // produce a coloured toast containing nothing but the ℹ/✓/✕ glyph,
+        // which reads as a glitch. Fall back to the type's own wording, and
+        // drop the toast entirely if there is genuinely nothing to say.
+        const text = typeof message === "string" ? message.trim() : "";
+        const fallback = type === "success" ? "Done" : type === "error" ? "Something went wrong" : "";
+        const body = text || fallback;
+        if (!body) return;
+
         const id = ++toastId;
-        setToasts((prev) => [...prev.slice(-2), { id, message, type }]);
+        setToasts((prev) => [...prev.slice(-2), { id, message: body, type }]);
         timers.current[id] = setTimeout(() => removeToast(id), 3500);
     }, [removeToast]);
 

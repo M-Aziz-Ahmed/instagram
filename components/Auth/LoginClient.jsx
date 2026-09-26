@@ -6,6 +6,7 @@ import { useUser } from "@/context/UserContext";
 import { getRedirectTarget } from "@/utils/redirect";
 import LoginForm from "./LoginForm";
 import SetupForm from "./SetupForm";
+import BrandLogo from "@/components/common/BrandLogo";
 
 export default function LoginClient() {
     const { user, ready } = useUser();
@@ -34,7 +35,7 @@ export default function LoginClient() {
     return (
         <div className="min-h-dvh bg-white dark:bg-gray-950 flex flex-col">
             <div className="border-b border-gray-100 dark:border-gray-800 px-6 py-4">
-                <span className="font-black text-xl tracking-tight text-gray-900 dark:text-gray-100">AnonTweet</span>
+                <BrandLogo />
             </div>
 
             <div className="flex-1 flex items-center justify-center px-6 py-12">

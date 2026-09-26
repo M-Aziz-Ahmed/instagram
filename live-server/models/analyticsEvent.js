@@ -28,5 +28,9 @@ const analyticsEventSchema = new mongoose.Schema({
 
 analyticsEventSchema.index({ createdAt: -1, type: 1 });
 analyticsEventSchema.index({ "location.countryCode": 1, createdAt: -1 });
+// The admin globe rolls locations up with $group over the time window, so the
+// match+sort it relies on has to be index-backed or it degrades into a
+// collection scan as the events collection grows.
+analyticsEventSchema.index({ createdAt: -1, "location.countryCode": 1, "location.region": 1, "location.city": 1 });
 
 module.exports = mongoose.models.AnalyticsEvent || mongoose.model("AnalyticsEvent", analyticsEventSchema);

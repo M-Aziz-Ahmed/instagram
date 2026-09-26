@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "npm run test:globe && npm run test:rollup",
+    "test:globe": "node components/Admin/globeProjection.test.mjs",
+    "test:rollup": "node live-server/scripts/test-location-rollup.js",
+    "gen:icons": "node tools/gen-icons.mjs"
   },
   "dependencies": {
     "@getbrevo/brevo": "^6.0.2",

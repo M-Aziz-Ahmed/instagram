@@ -62,11 +62,11 @@ export const metadata = {
     description: 'Post, message, go live, and play games — all anonymously. Speak freely on AnonTweet, the private social network.',
     images: [
       {
-        url: '/icon-512.svg',
-        width: 512,
-        height: 512,
+        url: '/opengraph-image',
+        width: 1200,
+        height: 630,
         alt: 'AnonTweet - Anonymous Social Media',
-        type: 'image/svg+xml',
+        type: 'image/png',
       }
     ],
   },
@@ -74,7 +74,7 @@ export const metadata = {
     card: 'summary_large_image',
     title: 'AnonTweet - Anonymous Social Media & Messaging Platform',
     description: 'Post, message, go live, and play games — all anonymously. Speak freely on AnonTweet.',
-    images: ['/icon-512.svg'],
+    images: ['/opengraph-image'],
     creator: '@anontweet',
   },
   robots: {
@@ -129,7 +129,7 @@ const jsonLd = {
       "@id": "https://anontweet.vercel.app/#organization",
       name: "AnonTweet",
       url: "https://anontweet.vercel.app",
-      logo: "https://anontweet.vercel.app/icon-512.svg",
+      logo: "https://anontweet.vercel.app/icon-512.png",
       sameAs: [],
     },
     {
@@ -163,8 +163,10 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="AnonTweet" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
-        <link rel="icon" href="/icon-192.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
       </head>
       <body className="h-full bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased font-sans transition-colors duration-200">
         <Analytics/>

@@ -496,17 +496,93 @@ router.get("/analytics/devices", requireAdmin, async (req, res) => {
     }
 });
 
-// /analytics/locations?days=30 — country + city roll-ups with coordinates
-// for the globe, plus helper icons for the dots.
+// /analytics/locations?days=30 — country + state/region + city roll-ups with
+// coordinates for the globe, plus helper icons for the dots.
+//
+// Rolled up by Mongo rather than by pulling documents into Node: the previous
+// implementation fetched up to 30 000 raw events and counted them in JS, so
+// cost scaled with traffic and silently truncated past the cap. A $group makes
+// the result proportional to the number of distinct places, not the number of
+// events, and never truncates the totals.
 router.get("/analytics/locations", requireAdmin, async (req, res) => {
     try {
         const days = Math.max(1, Math.min(parseInt(req.query.days, 10) || 30, 365));
         const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-        const events = await AnalyticsEvent.find({
+        const match = {
             createdAt: { $gte: from },
-            "location.countryCode": { $ne: "" },
-        }).select("location").lean().limit(30000);
-        return res.json({ days, ...A.locationBreakdown(events) });
+            "location.countryCode": { $nin: ["", null] },
+        };
+
+        // The three levels the globe drills through. Each returns rows that are
+        // already aggregated and capped — the only thing that scales with size.
+        const [countries, regions, cities, total] = await Promise.all([
+            AnalyticsEvent.aggregate([
+                { $match: match },
+                {
+                    $group: {
+                        _id: "$location.countryCode",
+                        name: { $first: "$location.country" },
+                        lat: { $first: "$location.lat" },
+                        lon: { $first: "$location.lon" },
+                        count: { $sum: 1 },
+                    },
+                },
+                { $sort: { count: -1 } },
+                { $limit: 400 },
+            ]).allowDiskUse(true),
+            AnalyticsEvent.aggregate([
+                { $match: match },
+                {
+                    $group: {
+                        _id: {
+                            country: "$location.countryCode",
+                            region: "$location.region",
+                        },
+                        name: { $first: "$location.region" },
+                        country: { $first: "$location.country" },
+                        lat: { $first: "$location.lat" },
+                        lon: { $first: "$location.lon" },
+                        count: { $sum: 1 },
+                    },
+                },
+                { $sort: { count: -1 } },
+                { $limit: 1200 },
+            ]).allowDiskUse(true),
+            AnalyticsEvent.aggregate([
+                { $match: match },
+                {
+                    $group: {
+                        _id: {
+                            country: "$location.countryCode",
+                            region: "$location.region",
+                            city: "$location.city",
+                        },
+                        name: { $first: "$location.city" },
+                        region: { $first: "$location.region" },
+                        countryName: { $first: "$location.country" },
+                        lat: { $first: "$location.lat" },
+                        lon: { $first: "$location.lon" },
+                        count: { $sum: 1 },
+                    },
+                },
+                { $sort: { count: -1 } },
+                { $limit: 2000 },
+            ]).allowDiskUse(true),
+            AnalyticsEvent.countDocuments(match),
+        ]);
+
+        const countryList = countries.map(A.mapCountryRollup);
+        const regionList = regions.map(A.mapRegionRollup);
+        const cityList = cities.map(A.mapCityRollup);
+        A.backfillCountryCoords(countryList, cityList);
+
+        return res.json({
+            days,
+            countries: countryList,
+            regions: regionList,
+            cities: cityList,
+            totalLocated: total,
+        });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed to fetch location analytics" });

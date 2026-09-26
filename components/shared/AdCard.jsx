@@ -1,33 +1,95 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-function AdsterraAd({ code }) {
-    const iframeRef = useRef(null);
+// Ad creatives are arbitrary HTML/JS pasted by an admin. They used to be
+// injected with `document.write` into a same-origin, unsandboxed iframe, which
+// meant a "push notification"/"social bar" style ad could:
+//   • call the real Notification API and stack OS-level toasts forever
+//     (re-arming itself on a timer, once per ad slot that mounted), and
+//   • read/write our DOM, cookies and localStorage.
+// That is what made notifications fire endlessly on /social with no context.
+//
+// The creative now renders through `srcdoc` in a `sandbox="allow-scripts"`
+// iframe, which gives it an *opaque* origin: no DOM/cookie/storage access, no
+// access to our Notification permission, and it can only paint inside its own
+// 300x250 frame. Combined with the once-per-session guard below, a creative
+// executes at most once per session no matter how often React remounts it.
+
+const SEEN_ADS_KEY = "at_ads_seen_v1";
+
+function readSeenAds() {
+    try {
+        const raw = JSON.parse(sessionStorage.getItem(SEEN_ADS_KEY) || "[]");
+        return new Set(Array.isArray(raw) ? raw : []);
+    } catch {
+        return new Set();
+    }
+}
+
+function hasSeenAd(key) {
+    return readSeenAds().has(key);
+}
+
+function markAdSeen(key) {
+    try {
+        const set = readSeenAds();
+        set.add(key);
+        // Bound the list so a long-lived tab can't grow it without limit.
+        sessionStorage.setItem(SEEN_ADS_KEY, JSON.stringify([...set].slice(-200)));
+    } catch {
+        // storage unavailable (locked-down browser): ads still render, just
+        // without the once-per-session dedupe.
+    }
+}
+
+function adDoc(code) {
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;border:0;overflow:hidden;}html,body{overflow:hidden;width:100%;height:100%;font-family:system-ui,sans-serif;}</style></head><body>${code}</body></html>`;
+}
+
+function AdsterraAd({ adId, code }) {
+    const key = adId || code;
+
+    // Decide during render from a *read* only, so the value is stable across
+    // StrictMode's double render. Recording the decision is a separate
+    // write-only effect below. Reading it back on the next mount is what stops
+    // a remounted slot from executing the creative a second time.
+    const srcDoc = useMemo(() => {
+        // Never run a creative while the tab is in the background: those ads
+        // are built to fire on a timer the moment they load.
+        if (typeof document !== "undefined" && document.hidden) return null;
+        if (hasSeenAd(key)) return null;
+        return adDoc(code);
+    }, [key, code]);
 
     useEffect(() => {
-        const iframe = iframeRef.current;
-        if (!iframe) return;
+        if (srcDoc) markAdSeen(key);
+    }, [srcDoc, key]);
 
-        const doc = iframe.contentDocument || iframe.contentWindow.document;
-        doc.open();
-        doc.write(`<!DOCTYPE html><html><head><style>*{margin:0;padding:0;border:0;overflow:hidden;}html,body{overflow:hidden;width:100%;height:100%;}</style></head><body>${code}</body></html>`);
-        doc.close();
-    }, [code]);
-
+    // Reserve the slot's space even before the creative loads, so injecting it
+    // does not shove the feed around.
     return (
         <div className="border-b border-gray-200 dark:border-gray-800 px-4 py-3 text-center">
             <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-medium">Sponsored</span>
             <div className="flex justify-center mt-2">
-                <iframe
-                    ref={iframeRef}
-                    width="300"
-                    height="250"
-                    className="border-0 overflow-hidden"
-                    loading="lazy"
-                    title="Sponsored"
-                    
-                />
+                {srcDoc ? (
+                    <iframe
+                        title="Sponsored"
+                        width="300"
+                        height="250"
+                        className="border-0 overflow-hidden rounded"
+                        sandbox="allow-scripts"
+                        referrerPolicy="no-referrer"
+                        loading="lazy"
+                        srcDoc={srcDoc}
+                    />
+                ) : (
+                    <div
+                        aria-hidden="true"
+                        style={{ width: 300, height: 250 }}
+                        className="rounded bg-gray-100 dark:bg-gray-800"
+                    />
+                )}
             </div>
         </div>
     );
@@ -39,6 +101,11 @@ export default function AdCard({ ad }) {
 
     useEffect(() => {
         if (!ad?._id) return;
+        // Count an ad once per session per creative, matching the injection
+        // guard — otherwise every remount inflated the impression counter.
+        const key = `imp:${ad._id}`;
+        if (hasSeenAd(key)) return;
+        markAdSeen(key);
         fetch(`/api/admin/ads/${ad._id}/track`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -79,9 +146,9 @@ export default function AdCard({ ad }) {
         );
     }
 
-    // Adsterra
+    // Adsterra (or any raw-HTML creative)
     if (ad.adType === "adsterra" && ad.adsterraCode) {
-        return <AdsterraAd code={ad.adsterraCode} />;
+        return <AdsterraAd adId={ad._id} code={ad.adsterraCode} />;
     }
 
     // Custom ad
