@@ -268,7 +268,11 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             .catch(() => {});
     }, []);
 
-    const AD_INTERVAL = 5;
+    // Insert an ad every N posts. N is deliberately smaller than PAGE_SIZE so
+    // that at least one slot always lands inside the first page: with N === 5
+    // and a 5-post page, the only ad rendered was the last item on screen, which
+    // is indistinguishable from having no ads at all.
+    const AD_INTERVAL = 3;
     // Hard ceiling on how many ad slots a single feed render may contain.
     // The feed grows with every 60s prepend and every scroll-driven append, so
     // without a cap the number of live ad slots — and the number of ad
@@ -286,9 +290,10 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             items.push({ type: "post", data: post });
             if (post?._id) lastPostId = post._id;
             if ((i + 1) % AD_INTERVAL === 0 && ads.length > 0 && adCount < MAX_AD_SLOTS) {
-                // Walk `ads` in order rather than computing an index: `ads` is
-                // already ordered fresh-creatives-first, and every slot gets a
-                // different ad until that pool runs dry.
+                // Walk `ads` in order so consecutive slots get different ads
+                // until the configured pool runs dry, at which point they
+                // cycle. Every slot renders a real creative, so cycling is
+                // preferable to leaving a slot empty.
                 const ad = ads[adCount % ads.length];
                 // Anchor the slot to the post it follows, not to its ordinal
                 // position. Ordinal keys renumbered on every prepend/delete and
@@ -299,6 +304,13 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                 adCount++;
             }
         }
+
+        // A feed shorter than AD_INTERVAL (new or low-activity account) would
+        // otherwise contain no ad at all, so always close it out with one.
+        if (adCount === 0 && ads.length > 0 && items.length > 0) {
+            items.push({ type: "ad", data: ads[0], adKey: `${lastPostId}:${ads[0]._id}:tail` });
+        }
+
         return items;
     }, [ads]);
 

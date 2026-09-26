@@ -222,7 +222,11 @@ function AdsterraAd({ ad }) {
                     className="absolute inset-0 h-full w-full border-0"
                     sandbox="allow-scripts"
                     referrerPolicy="no-referrer"
-                    loading="lazy"
+                    // Deliberately NOT loading="lazy". A slot near the top of the
+                    // feed is above the fold, and a lazy srcdoc iframe there can
+                    // defer its load past the point the user is actually looking,
+                    // which reads as a blank ad slot. There are at most
+                    // MAX_AD_SLOTS of these per page, so eager loading is cheap.
                     scrolling="no"
                     srcDoc={adDoc(code, width, height)}
                 />
