@@ -217,7 +217,14 @@ server.prependListener("request", (req, res) => {
 });
 
 // ── MongoDB ─────────────────────────────────────────────────────
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://azizahmed:I_hateyou2@localhost:27017/?authSource=admin";
+// MONGODB_URI must be provided by the environment (see .env.example). It used
+// to fall back to a hard-coded credential committed to the repo, so anyone
+// with a copy of the source had the database password. Fail loudly instead.
+if (!process.env.MONGODB_URI) {
+    console.error("[DB] MONGODB_URI is not set. Refusing to start.");
+    process.exit(1);
+}
+const MONGODB_URI = process.env.MONGODB_URI;
 
 mongoose.connect(MONGODB_URI, {
     maxPoolSize: 50,
@@ -237,32 +244,25 @@ mongoose.connect(MONGODB_URI, {
 });
 
 // ── Database Indexes (run once, safe to call repeatedly) ────────
+// Only creates indexes that are NOT already declared on a schema — Mongoose
+// builds those itself on model init. This function used to re-create a dozen
+// indexes against field names that no longer exist (posts.author/tags/views/
+// createdAt instead of sender/hashtags/viewCount/timeStamp,
+// notifications.userId instead of recipient, moderationlogs.targetType/
+// moderatorId instead of postId/moderator) and it also created indexes on a
+// `comments` collection that was never defined. Those were pure disk waste.
 async function ensureIndexes() {
     try {
         const db = mongoose.connection.db;
+
+        // posts: the schema already declares 15 indexes; only these are missing.
         await Promise.all([
-            db.collection("posts").createIndex({ createdAt: -1 }),
-            db.collection("posts").createIndex({ author: 1, createdAt: -1 }),
-            db.collection("posts").createIndex({ isRemoved: 1, createdAt: -1 }),
-            db.collection("posts").createIndex({ tags: 1 }),
-            db.collection("posts").createIndex({ likes: -1 }),
-            db.collection("posts").createIndex({ views: -1 }),
+            db.collection("posts").createIndex({ viewCount: -1 }),
             db.collection("posts").createIndex({ scheduledAt: 1, isScheduled: 1 }),
-            db.collection("users").createIndex({ username: 1 }, { unique: true }),
-            db.collection("users").createIndex({ email: 1 }, { unique: true, sparse: true }),
-            db.collection("users").createIndex({ isVerified: 1 }),
-            db.collection("users").createIndex({ roles: 1 }),
-            db.collection("comments").createIndex({ postId: 1, createdAt: -1 }),
-            db.collection("comments").createIndex({ author: 1 }),
-            db.collection("notifications").createIndex({ userId: 1, read: 1, createdAt: -1 }),
-            db.collection("moderationlogs").createIndex({ targetType: 1, targetId: 1, createdAt: -1 }),
-            db.collection("moderationlogs").createIndex({ moderatorId: 1, createdAt: -1 }),
-            db.collection("systemlogs").createIndex({ category: 1, createdAt: -1 }),
-            db.collection("systemlogs").createIndex({ username: 1, createdAt: -1 }),
-            db.collection("systemlogs").createIndex({ action: 1, createdAt: -1 }),
-            db.collection("systemlogs").createIndex({ level: 1, createdAt: -1 }),
-            db.collection("systemlogs").createIndex({ gameId: 1 }),
         ]);
+
+        // users: { username: 1 } and { email: 1 } are both declared on the
+        // schema, so nothing to add here — see ensureUniqueUsernames below.
         console.log("[DB] Indexes ensured");
         logDatabase("indexes_created", { message: "Database indexes ensured" });
     } catch (err) {
@@ -270,6 +270,47 @@ async function ensureIndexes() {
     }
 }
 mongoose.connection.once("open", () => ensureIndexes());
+
+// Username is the primary identity in this app: it is what Post.sender,
+// Message.sender and every follow edge store. Two users sharing one username
+// silently merges their social graphs, so it is worth a unique index — but the
+// schema only declares a non-unique sparse one, and adding uniqueness to a
+// live database fails outright if any duplicate already exists. Detect that
+// case and report it instead of crashing the server on boot.
+async function ensureUniqueUsernames() {
+    try {
+        const db = mongoose.connection.db;
+        const dupes = await db
+            .collection("users")
+            .aggregate([
+                { $match: { username: { $type: "string", $ne: "" } } },
+                { $group: { _id: "$username", n: { $sum: 1 } } },
+                { $match: { n: { $gt: 1 } } },
+                { $project: { _id: 1, n: 1 } },
+                { $limit: 20 },
+            ])
+            .toArray();
+
+        if (dupes.length) {
+            console.warn(
+                `[DB] ${dupes.length}+ duplicate usernames block the unique index. ` +
+                "Merge these accounts before enabling it: " +
+                dupes.map((d) => `${d._id} (x${d.n})`).join(", ")
+            );
+            return;
+        }
+
+        await db.collection("users").createIndex({ username: 1 }, { unique: true, sparse: true });
+        console.log("[DB] users.username unique index ensured");
+    } catch (err) {
+        if (err && err.code === 85) {
+            console.warn("[DB] Could not make users.username unique (index conflict):", err.message);
+        } else {
+            console.warn("[DB] Username uniqueness check failed:", err.message);
+        }
+    }
+}
+mongoose.connection.once("open", () => ensureUniqueUsernames());
 
 const { getLogs } = require("./logBuffer");
 
@@ -3271,17 +3312,22 @@ app.use("/api/posts", require("./routes/posts"));
 // Telemetry beacon — generous limit, high frequency but tiny.
 app.use("/api/track", readLimiter, require("./routes/events"));
 // Other routes use apiLimiter
-app.use("/api/feed", apiLimiter, require("./routes/feed"));
+// NOTE: /api/feed (routes/feed.js) was removed. It registered no handlers at
+// all — only unused helpers — and getRecommendedPosts() referenced an undefined
+// `username` binding, so it would have thrown if it ever had been wired up.
+// Nothing in the client called it; the real feed is served by /api/posts.
 app.use("/api/users", apiLimiter, require("./routes/users"));
 app.use("/api/admin", apiLimiter, require("./routes/admin"));
 app.use("/api/admin", apiLimiter, require("./routes/adminPower"));
 app.use("/api/admin/system-logs", apiLimiter, require("./routes/systemLogs"));
 app.use("/api/messages", apiLimiter, require("./routes/messages"));
+app.use("/api/drafts", apiLimiter, require("./routes/drafts"));
 app.use("/api/groups", apiLimiter, require("./routes/groups"));
 app.use("/api/communities", apiLimiter, require("./routes/communities"));
 app.use("/api/stories", apiLimiter, require("./routes/stories"));
 app.use("/api/search", apiLimiter, require("./routes/search"));
 app.use("/api/hashtags", apiLimiter, require("./routes/hashtags"));
+app.use("/api/trending", apiLimiter, require("./routes/trending"));
 app.use("/api/notifications", apiLimiter, require("./routes/notifications"));
 app.use("/api/typing", apiLimiter, require("./routes/typing"));
 app.use("/api/push", apiLimiter, require("./routes/push"));
@@ -3294,10 +3340,12 @@ app.use("/api/debug", require("./routes/debug"));
 app.use("/api/live", apiLimiter, require("./routes/live"));
 app.use("/api/translate", apiLimiter, require("./routes/translate"));
 app.use("/api/invites", apiLimiter, require("./routes/invites"));
+app.use("/api/gems", apiLimiter, require("./routes/gems"));
 app.use("/api/music", apiLimiter, require("./routes/music"));
 app.use("/api/anime", apiLimiter, require("./routes/anime"));
 app.use("/api/manga", apiLimiter, require("./routes/manga"));
 app.use("/api/adult-manga", apiLimiter, require("./routes/adultManga"));
+app.use("/api/adult-gate", require("./middleware/adultGate").adultGateRouter);
 app.use("/api/media", apiLimiter, require("./routes/media"));
 app.use("/api/media-bookmarks", apiLimiter, require("./routes/mediaBookmarks"));
 app.use("/api/link-preview", apiLimiter, require("./routes/linkPreview"));

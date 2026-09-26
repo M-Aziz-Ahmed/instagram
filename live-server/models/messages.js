@@ -8,6 +8,10 @@ const messagesSchema = new mongoose.Schema({
     recipient: { type: String, required: true },
     color:     { type: String, default: "#3b82f6" },
     replyTo:   { type: { sender: String, text: String }, default: null },
+    // Set when a message was re-sent to a third party. Mirrors replyTo so the
+    // bubble renderer can treat them the same way: the original is quoted as
+    // provenance, and the forwarded content is the message's own body.
+    forwardedFrom: { type: { sender: String, text: String }, default: null },
     reactions: {
         like:  { type: [String], default: [] },
         love:  { type: [String], default: [] },

@@ -67,4 +67,4 @@ battleshipGameSchema.pre("save", function () {
     if (!this.boards || !this.boards.p1) this.boards = initialBoards();
 });
 
-module.exports = mongoose.model("BattleshipGame", battleshipGameSchema);
+module.exports = mongoose.models.BattleshipGame || mongoose.model("BattleshipGame", battleshipGameSchema);

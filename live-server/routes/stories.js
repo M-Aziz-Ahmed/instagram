@@ -4,8 +4,34 @@ const Message = require("../models/messages");
 const Notification = require("../models/notification");
 const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
+const { getBlockedUsers } = require("../lib/visibility");
 
 const router = express.Router();
+
+/**
+ * Replying to a story is a direct message, so it has to honour the same
+ * symmetric block as POST /api/messages. Without this, blocking someone was
+ * trivially bypassable: view their story, hit reply, and the message landed in
+ * their inbox anyway. Mute is intentionally not consulted — see lib/visibility.
+ *
+ * @returns {Promise<boolean>} true when delivery is allowed
+ */
+async function canDeliverStoryReply(requesterUsername, storySender) {
+    if (!requesterUsername || !storySender) return false;
+    if (requesterUsername.toLowerCase() === String(storySender).toLowerCase()) return true;
+
+    const [requesterBlocked, senderDoc] = await Promise.all([
+        getBlockedUsers(requesterUsername),
+        User.findOne({ username: storySender }).select("blockedUsers").lean(),
+    ]);
+
+    const target = storySender.toLowerCase();
+    if (requesterBlocked.includes(target)) return false;
+    if ((senderDoc?.blockedUsers || []).some((u) => String(u).toLowerCase() === requesterUsername.toLowerCase())) {
+        return false;
+    }
+    return true;
+}
 
 // GET /
 router.get("/", async (req, res) => {
@@ -97,6 +123,12 @@ router.patch("/:id", async (req, res) => {
         }
 
         if (action === "reply") {
+            // Enforce the block before anything is written, so a blocked user's
+            // reply doesn't show up as a story reply either.
+            if (!(await canDeliverStoryReply(username, story.sender))) {
+                return res.status(403).json({ error: "You cannot reply to this account" });
+            }
+
             story.replies.push({ fromUser: username, text: text || "" });
             await story.save();
 
@@ -175,6 +207,10 @@ router.post("/:id/reply", verifyToken, async (req, res) => {
 
         const story = await Story.findById(id);
         if (!story) return res.status(404).json({ error: "Not found" });
+
+        if (!(await canDeliverStoryReply(username, story.sender))) {
+            return res.status(403).json({ error: "You cannot reply to this account" });
+        }
 
         story.replies.push({ fromUser: username, text: text || "" });
         await story.save();

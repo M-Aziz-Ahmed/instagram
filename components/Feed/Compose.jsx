@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/context/ToastContext";
 import MentionInput from "@/components/shared/MentionInput";
 import VoiceRecorder from "@/components/shared/VoiceRecorder";
 import EmojiPicker from "@/components/shared/EmojiPicker";
 import GifPicker from "@/components/shared/GifPicker";
+import { useDraftSync } from "@/utils/useDraftSync";
 
 const CLOUD_NAME     = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET  = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
@@ -18,6 +19,8 @@ export default function Compose({ onPosted }) {
     const [imageFiles, setImageFiles]     = useState([]);
     const [previews, setPreviews]         = useState([]);
     const [audioUrl, setAudioUrl]         = useState("");
+    const [video, setVideo]               = useState(null); // { file, preview, duration, width, height }
+    const [videoError, setVideoError]     = useState("");
     const [posting, setPosting]           = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [error, setError]               = useState("");
@@ -27,7 +30,9 @@ export default function Compose({ onPosted }) {
     const [showPoll, setShowPoll]         = useState(false);
     const [pollOptions, setPollOptions]   = useState(["", ""]);
     const [pollExpiry, setPollExpiry]     = useState(null);
+    const [draft, setDraft]               = useState(null);
     const fileRef                         = useRef(null);
+    const videoRef                        = useRef(null);
 
     useEffect(() => {
         const handler = () => {
@@ -41,6 +46,53 @@ export default function Compose({ onPosted }) {
         window.addEventListener("open-compose", handler);
         return () => window.removeEventListener("open-compose", handler);
     }, []);
+
+    // ── Drafts ────────────────────────────────────────────────────────────
+    // A draft exists on the server; `draft` is only the banner offering to put
+    // it back, so restoring stays an explicit choice rather than silently
+    // overwriting whatever the author is currently typing.
+    const draftValue = {
+        text,
+        visibility,
+        expiresIn: pollExpiry,
+        pollEnabled: showPoll,
+        pollOptions,
+        hadAttachments: imageFiles.length > 0 || previews.length > 0 || !!audioUrl || !!video,
+    };
+
+    const handleRestored = useCallback((saved) => {
+        setDraft(saved);
+    }, []);
+
+    const { clearDraft } = useDraftSync({
+        enabled: !!user,
+        value: draftValue,
+        onRestored: handleRestored,
+    });
+
+    const restoreDraft = () => {
+        if (!draft) return;
+        setText(draft.text || "");
+        setVisibility(draft.visibility || "public");
+        setPollExpiry(draft.expiresIn ?? null);
+        if (draft.pollEnabled && (draft.pollOptions || []).length >= 2) {
+            setShowPoll(true);
+            setPollOptions(draft.pollOptions);
+        }
+        setDraft(null);
+        showToast(draft.hadAttachments ? "Draft restored — re-attach any media" : "Draft restored");
+    };
+
+    const discardDraft = async () => {
+        setDraft(null);
+        setText("");
+        setShowPoll(false);
+        setPollOptions(["", ""]);
+        setPollExpiry(null);
+        clearImages();
+        setAudioUrl("");
+        await clearDraft();
+    };
 
     const handleFile = (e) => {
         const files = Array.from(e.target.files || []);
@@ -69,6 +121,89 @@ export default function Compose({ onPosted }) {
         if (fileRef.current) fileRef.current.value = "";
     };
 
+    // ── Video ──────────────────────────────────────────────────────────────
+    // One video per post, and video replaces images rather than joining them:
+    // a mixed carousel of photos and video is not something the feed or the
+    // Reels player renders, so it is rejected here instead of being stored and
+    // then displayed wrong.
+    const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+    const MAX_VIDEO_SECONDS_LOCAL = 180;
+
+    const clearVideo = () => {
+        if (video?.preview) URL.revokeObjectURL(video.preview);
+        setVideo(null);
+        setVideoError("");
+        if (videoRef.current) videoRef.current.value = "";
+    };
+
+    const handleVideo = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith("video/")) {
+            setVideoError("That file is not a video.");
+            return;
+        }
+        if (file.size > MAX_VIDEO_BYTES) {
+            setVideoError("Videos must be 100 MB or smaller.");
+            return;
+        }
+
+        // Duration and dimensions are read from the file itself rather than
+        // trusted from the upload response, so the stored metadata always
+        // matches the bytes that were actually selected.
+        const probe = document.createElement("video");
+        const preview = URL.createObjectURL(file);
+        probe.preload = "metadata";
+        probe.onloadedmetadata = () => {
+            const duration = Math.round(probe.duration || 0);
+            if (duration > MAX_VIDEO_SECONDS_LOCAL) {
+                URL.revokeObjectURL(preview);
+                setVideoError("Videos must be 3 minutes or shorter.");
+                if (videoRef.current) videoRef.current.value = "";
+                return;
+            }
+            // Videos are exclusive with images and voice notes.
+            clearImages();
+            setAudioUrl("");
+            setVideo({
+                file,
+                preview,
+                duration,
+                width: probe.videoWidth || 0,
+                height: probe.videoHeight || 0,
+            });
+            setVideoError("");
+        };
+        probe.onerror = () => {
+            URL.revokeObjectURL(preview);
+            setVideoError("That video could not be read.");
+            if (videoRef.current) videoRef.current.value = "";
+        };
+        probe.src = preview;
+    };
+
+    const uploadVideoToCloudinary = (file) =>
+        new Promise((resolve, reject) => {
+            const fd = new FormData();
+            fd.append("file", file);
+            fd.append("upload_preset", UPLOAD_PRESET);
+            fd.append("folder", "anon-reels");
+
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`);
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    setUploadProgress(Math.round((e.loaded / e.total) * 100));
+                }
+            };
+            xhr.onload  = () => xhr.status === 200
+                ? resolve(JSON.parse(xhr.responseText).secure_url)
+                : reject(new Error("Cloudinary upload failed"));
+            xhr.onerror = () => reject(new Error("Network error during upload"));
+            xhr.send(fd);
+        });
+
     const uploadToCloudinary = (file) =>
         new Promise((resolve, reject) => {
             const fd = new FormData();
@@ -95,7 +230,7 @@ export default function Compose({ onPosted }) {
         const trimmedText = text.trim();
         const hasGif = previews.some(u => u.includes("media.giphy.com"));
         const hasImages = imageFiles.length > 0 || previews.some(u => !u.includes("media.giphy.com"));
-        if ((!trimmedText && !hasImages && !hasGif && !audioUrl) || posting || !user) return;
+        if ((!trimmedText && !hasImages && !hasGif && !audioUrl && !video) || posting || !user) return;
         
         if (trimmedText.length > 500) {
             setError("Post text cannot exceed 500 characters");
@@ -119,6 +254,16 @@ export default function Compose({ onPosted }) {
             const gifUrls = previews.filter(u => u.includes("media.giphy.com") && !uploadedUrls.includes(u));
             const allImageUrls = [...uploadedUrls, ...gifUrls];
 
+            let uploadedVideoUrl = "";
+            if (video) {
+                try {
+                    uploadedVideoUrl = await uploadVideoToCloudinary(video.file);
+                } catch (uploadErr) {
+                    setError("Failed to upload the video. Please try again.");
+                    return;
+                }
+            }
+
             const res = await fetch("/api/posts", {
                 method:  "POST",
                 credentials: "include",
@@ -128,6 +273,12 @@ export default function Compose({ onPosted }) {
                     imageUrl: allImageUrls[0] || "",
                     imageUrls: allImageUrls,
                     audioUrl: audioUrl || "",
+                    ...(uploadedVideoUrl ? {
+                        videoUrl: uploadedVideoUrl,
+                        videoDuration: video.duration || 0,
+                        videoWidth: video.width || 0,
+                        videoHeight: video.height || 0,
+                    } : {}),
                     sender:   user.username,
                     color:    user.color,
                     visibility,
@@ -149,9 +300,13 @@ export default function Compose({ onPosted }) {
             setText("");
             clearImages();
             setAudioUrl("");
+            clearVideo();
             setShowPoll(false);
             setPollOptions(["", ""]);
             setPollExpiry(null);
+            setDraft(null);
+            // The post is live, so the saved copy is now stale.
+            clearDraft();
             showToast("Post published", "success");
             if (onPosted) onPosted();
         } catch (err) {
@@ -166,7 +321,7 @@ export default function Compose({ onPosted }) {
     const hasValidPoll = showPoll && pollOptions.filter(o => o.trim()).length >= 2;
     const hasGif = previews.some(u => u.includes("media.giphy.com"));
     const hasMedia = imageFiles.length > 0 || previews.some(u => !u.includes("media.giphy.com"));
-    const canPost = ((text.trim().length > 0 || hasMedia || hasGif || !!audioUrl) || hasValidPoll) && !posting;
+    const canPost = ((text.trim().length > 0 || hasMedia || hasGif || !!audioUrl || !!video) || hasValidPoll) && !posting;
 
     return (
         <div id="compose" className="border-b border-gray-200 dark:border-gray-800 p-4">
@@ -183,6 +338,61 @@ export default function Compose({ onPosted }) {
                 </div>
 
                 <div className="flex-1 flex flex-col gap-3">
+                    {videoError && (
+                        <p className="text-xs text-red-500 dark:text-red-400">{videoError}</p>
+                    )}
+
+                    {video && (
+                        <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-black">
+                            <video
+                                src={video.preview}
+                                controls
+                                muted
+                                playsInline
+                                className="w-full max-h-[320px] object-contain"
+                            />
+                            {!posting && (
+                                <button
+                                    onClick={clearVideo}
+                                    aria-label="Remove video"
+                                    className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1.5 hover:bg-black/80 transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            )}
+                            <p className="absolute bottom-2 left-2 text-[10px] text-white/80 bg-black/50 rounded px-1.5 py-0.5">
+                                {video.width}x{video.height} · {video.duration}s
+                            </p>
+                        </div>
+                    )}
+
+                    {draft && (
+                        <div className="flex items-center gap-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                            </svg>
+                            <p className="text-xs text-amber-800 dark:text-amber-300 flex-1 min-w-0">
+                                {draft.hadAttachments
+                                    ? "You have an unfinished post. Media has to be re-attached."
+                                    : "You have an unfinished post."}
+                            </p>
+                            <button
+                                onClick={restoreDraft}
+                                className="text-xs font-semibold text-amber-700 dark:text-amber-300 hover:underline shrink-0"
+                            >
+                                Restore
+                            </button>
+                            <button
+                                onClick={discardDraft}
+                                className="text-xs text-amber-700/70 dark:text-amber-300/70 hover:text-amber-700 dark:hover:text-amber-300 shrink-0"
+                            >
+                                Discard
+                            </button>
+                        </div>
+                    )}
+
                     <MentionInput
                         value={text}
                         onChange={setText}
@@ -355,13 +565,26 @@ export default function Compose({ onPosted }) {
                             <button
                                 onClick={() => fileRef.current?.click()}
                                 aria-label="Add image"
-                                disabled={!user || posting}
+                                disabled={!user || posting || !!video}
                                 className="p-1.5 sm:p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors disabled:opacity-40"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                     strokeWidth={1.8} stroke="currentColor" className="w-4.5 h-4.5 sm:w-5 sm:h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round"
                                         d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={() => videoRef.current?.click()}
+                                aria-label="Add video"
+                                title="Add a video (max 3 minutes)"
+                                disabled={!user || posting || !!video || hasMedia || !!audioUrl}
+                                className="p-1.5 sm:p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors disabled:opacity-40"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    strokeWidth={1.8} stroke="currentColor" className="w-4.5 h-4.5 sm:w-5 sm:h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round"
+                                        d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H15.75Z" />
                                 </svg>
                             </button>
                             <VoiceRecorder
@@ -422,6 +645,7 @@ export default function Compose({ onPosted }) {
                         </div>
 
                         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFile} />
+                <input ref={videoRef} type="file" accept="video/*" className="hidden" onChange={handleVideo} />
 
                         <button
                             onClick={handlePost}

@@ -1,10 +1,8 @@
-import BrowserClient from "@/components/Browser/BrowserClient";
+import { redirect } from "next/navigation";
 
-export const metadata = {
-    title: "Browser",
-    description: "Browse the web inside AnonTweet — a full in-app browser with tabs, history and a proxy that renders framed-out sites.",
-};
-
+// The browser moved under Tools so it stops competing with the feed, chats and
+// Learn for a top-level nav slot. Old links, bookmarks and the PWA start_url
+// still point here, so redirect rather than 404.
 export default function BrowserPage() {
-    return <BrowserClient />;
+    redirect("/me/tools/browser");
 }

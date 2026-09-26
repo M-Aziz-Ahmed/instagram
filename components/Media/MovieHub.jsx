@@ -6,6 +6,7 @@ import Tabs from "@/components/ui/Tabs";
 import MediaPage from "@/components/Media/MediaPage";
 import AnimePage from "@/components/Anime/AnimePage";
 import LiveTVPage from "@/components/LiveTV/LiveTVPage";
+import AdSlot from "@/components/shared/AdSlot";
 import { getMediaSource } from "@/live-server/utils/mediaSources";
 import {
     DEFAULT_HUB_TAB,
@@ -83,6 +84,7 @@ export default function MovieHub() {
             <main className="max-w-7xl mx-auto px-3 sm:px-5 py-5 sm:py-7">
                 <TabPanel key={activeTab} tab={tab} />
             </main>
+            <AdSlot slot="watch" className="max-w-7xl mx-auto px-3 sm:px-5 pb-8" />
         </div>
     );
 }

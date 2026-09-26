@@ -73,7 +73,7 @@ export default function MeHub() {
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
                                 <p className="font-bold text-lg text-gray-900 dark:text-gray-100 truncate">@{user?.username || "guest"}</p>
-                                <UserBadges isVerified={user?.isVerified} isAdmin={user?.isAdmin} roles={user?.roles || []} size="sm" />
+                                <UserBadges isPro={user?.isPro} isVerified={user?.isVerified} isAdmin={user?.isAdmin} roles={user?.roles || []} size="sm" />
                             </div>
                             {user?.bio ? (
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 truncate">{user.bio}</p>
@@ -106,8 +106,7 @@ export default function MeHub() {
                 {/* Sections */}
                 <div className="bg-white dark:bg-gray-900 mb-3 rounded-2xl mx-4 overflow-hidden">
                     <Item icon="👤" label="My Profile" href={user ? `/profile/${encodeURIComponent(user.username)}` : "/login"} />
-                    <Item icon="🔖" label="Bookmarks" href="/bookmarks" />
-                    <Item icon="📚" label="Library" href="/library" />
+                    <Item icon="🔖" label="Saved" href="/me/saved" />
                     <Item icon="👥" label="Communities" href="/communities" />
                     <Item icon="🏆" label="Leaderboard" href="/leaderboard" />
                 </div>
@@ -130,6 +129,8 @@ export default function MeHub() {
                         />
                     )}
                     <Item icon="⚙️" label="Settings" onClick={() => setShowSettings(true)} />
+                    <Item icon="🔇" label="Muted & Blocked" href="/me/blocked-accounts" />
+                    <Item icon="🧰" label="Tools" href="/me/tools" />
                     {user?.isAdmin && (
                         <Item icon="🛡️" label="Admin" href="/admin" />
                     )}

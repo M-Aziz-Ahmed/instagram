@@ -63,7 +63,7 @@ function GroupMessageBubble({ msg, user, onReact, onDelete, onReply, onHashtag }
                 {!isOwn && (
                     <div className="flex items-center gap-1.5 mb-0.5">
                         <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{msg.sender}</span>
-                        <UserBadges isVerified={author?.isVerified} isAdmin={author?.isAdmin} roles={author?.roles || []} size="sm" />
+                        <UserBadges isPro={author?.isPro} isVerified={author?.isVerified} isAdmin={author?.isAdmin} roles={author?.roles || []} size="sm" />
                     </div>
                 )}
                 {msg.replyTo?.messageId && (

@@ -2,6 +2,8 @@ const express = require("express");
 const User = require("../models/user");
 const Role = require("../models/role");
 const Ad = require("../models/ad");
+const { AD_SLOTS } = require("../models/ad");
+const { creditGems, debitGems, isProUserDoc } = require("../lib/economy");
 const Post = require("../models/post");
 const ContentFilter = require("../models/contentFilter");
 const ModerationLog = require("../models/moderationLog");
@@ -16,6 +18,90 @@ const { isValidPin, hashPin } = require("../utils/pin");
 
 const router = express.Router();
 
+// â”€â”€ Gems â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// There is no payment provider, so gems enter the economy through admins (and
+// in-app rewards). These endpoints are therefore the whole distribution story
+// for now, and they are the only place a balance can be moved by hand.
+
+const adminUsername = (req) => {
+    return req.adminUser?.username || req.session?.username || "admin";
+};
+
+// POST /gems/grant  { username, amount, note? }
+// POST /gems/deduct { username, amount, note? }
+async function adjustGems(req, res, sign) {
+    try {
+        const { username, amount, note } = req.body || {};
+        const delta = Math.floor(Number(amount));
+        const who = String(username || "").trim();
+
+        if (!who) return res.status(400).json({ error: "A username is required" });
+        if (!Number.isFinite(delta) || delta === 0) {
+            return res.status(400).json({ error: "Amount must be a non-zero number" });
+        }
+
+        const target = await User.findOne({ username: who }).select("_id username").lean();
+        if (!target) return res.status(404).json({ error: "User not found" });
+
+        const move = sign > 0 ? creditGems : debitGems;
+        const reason = sign > 0 ? "admin_grant" : "admin_deduct";
+
+        const result = await move(
+            target._id,
+            Math.abs(delta),
+            reason,
+            { note: String(note || "").slice(0, 200), by: adminUsername(req) }
+        );
+
+        // A null result from a debit means the guard rejected it: the account
+        // does not have that many gems. Refusing is the point - an admin cannot
+        // push a balance negative through the manual path either.
+        if (!result) {
+            return res.status(402).json({ error: "Not enough gems to deduct" });
+        }
+
+        logUser?.(`gems ${sign > 0 ? "granted" : "deducted"}`, { target: who, amount: Math.abs(delta), by: adminUsername(req) });
+        return res.json({ ok: true, username: result.username, gems: result.balance });
+    } catch (err) {
+        console.error("admin gems error:", err);
+        return res.status(500).json({ error: "Failed to adjust gems" });
+    }
+}
+
+router.post("/gems/grant", requireAdmin, (req, res) => adjustGems(req, res, 1));
+router.post("/gems/deduct", requireAdmin, (req, res) => adjustGems(req, res, -1));
+
+// POST /gems/pro  { username, months } â€” grant Pro directly, bypassing gems.
+// Useful for staff, testers and compensation, and the only way to grant Pro
+// today since there is no checkout.
+router.post("/gems/pro", requireAdmin, async (req, res) => {
+    try {
+        const { username, months } = req.body || {};
+        const who = String(username || "").trim();
+        const term = Math.min(Math.max(parseInt(months, 10) || 1, 1), 36);
+
+        if (!who) return res.status(400).json({ error: "A username is required" });
+
+        const target = await User.findOne({ username: who }).select("proUntil").lean();
+        if (!target) return res.status(404).json({ error: "User not found" });
+
+        // Extend from the current expiry when still active, otherwise from now.
+        const from = isProUserDoc(target) ? new Date(target.proUntil) : new Date();
+        const proUntil = new Date(from.getTime() + term * 30 * 24 * 60 * 60 * 1000);
+
+        const updated = await User.findByIdAndUpdate(
+            target._id,
+            { $set: { proUntil } },
+            { new: true }
+        ).select("username proUntil");
+
+        return res.json({ ok: true, username: updated.username, proUntil: updated.proUntil });
+    } catch (err) {
+        console.error("admin pro grant error:", err);
+        return res.status(500).json({ error: "Failed to grant Pro" });
+    }
+});
+
 // GET /users
 router.get("/users", requireAdmin, async (req, res) => {
     try {
@@ -26,12 +112,15 @@ router.get("/users", requireAdmin, async (req, res) => {
             email:      u.email,
             isVerified: u.isVerified || false,
             isAdmin:    u.isAdmin || false,
+            isPro:      isProUserDoc(u),
             liveStreamAllowed: u.liveStreamAllowed || false,
             voiceChatBanned: u.voiceChatBanned || false,
             voiceChatBannedUntil: u.voiceChatBannedUntil || null,
             voiceChatBannedReason: u.voiceChatBannedReason || "",
             avatarColor: u.avatarColor,
             avatarUrl:  u.avatarUrl || "",
+            gems:       u.gems || 0,
+            proUntil:   u.proUntil || null,
             roles:      (u.roles || []).map((r) => ({ id: r._id.toString(), name: r.name, badge: r.badge, color: r.color })),
         })));
     } catch (error) {
@@ -76,6 +165,7 @@ router.patch("/users", requireAdmin, async (req, res) => {
             user: {
                 id: user._id.toString(), username: user.username,
                 isVerified: user.isVerified, isAdmin: user.isAdmin,
+                isPro: isProUserDoc(user),
                 roles: user.roles.map((r) => ({ id: r._id.toString(), name: r.name, badge: r.badge, color: r.color })),
             },
         });
@@ -85,7 +175,7 @@ router.patch("/users", requireAdmin, async (req, res) => {
     }
 });
 
-// POST /users — admin creates a user with a login PIN ("create user with a code")
+// POST /users â€” admin creates a user with a login PIN ("create user with a code")
 router.post("/users", requireAdmin, async (req, res) => {
     try {
         const { email, username, pin } = req.body;
@@ -160,7 +250,7 @@ router.delete("/roles", requireAdmin, async (req, res) => {
     }
 });
 
-// POST /roles/seed-normal — create "Normal User" role (no badge) and assign to all users without roles
+// POST /roles/seed-normal â€” create "Normal User" role (no badge) and assign to all users without roles
 router.post("/roles/seed-normal", requireAdmin, async (req, res) => {
     try {
         let normalRole = await Role.findOne({ name: "Normal User" });
@@ -208,7 +298,7 @@ router.get("/ads", requireAdmin, async (req, res) => {
 // POST /ads
 router.post("/ads", requireAdmin, async (req, res) => {
     try {
-        const { title, description, imageUrl, linkUrl, adType, adsterraCode, adsenseSlot, adsenseClient, adSize, ctaText, startDate, endDate, isActive } = req.body;
+        const { title, description, imageUrl, linkUrl, adType, adsterraCode, adsenseSlot, adsenseClient, adSize, ctaText, slot, startDate, endDate, isActive } = req.body;
         if (!title?.trim()) return res.status(400).json({ error: "Title required" });
 
         const ad = await Ad.create({
@@ -222,6 +312,9 @@ router.post("/ads", requireAdmin, async (req, res) => {
             adsenseClient: adsenseClient || "",
             adSize: adSize || "",
             ctaText: ctaText || "Learn More",
+            // An unknown placement is stored as "" (unassigned) rather than
+            // rejected, so a typo cannot silently put an ad on the wrong page.
+            slot: AD_SLOTS.includes(slot) ? slot : "",
             startDate: startDate || null,
             endDate: endDate || null,
             isActive: isActive !== false,
@@ -267,7 +360,7 @@ router.delete("/ads", requireAdmin, async (req, res) => {
 router.patch("/ads/:id", requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, imageUrl, linkUrl, adType, adsterraCode, adsenseSlot, adsenseClient, adSize, ctaText, startDate, endDate, isActive } = req.body;
+        const { title, description, imageUrl, linkUrl, adType, adsterraCode, adsenseSlot, adsenseClient, adSize, ctaText, slot, startDate, endDate, isActive } = req.body;
 
         const ad = await Ad.findByIdAndUpdate(id, {
             ...(title !== undefined && { title: title.trim().slice(0, 100) }),
@@ -280,6 +373,7 @@ router.patch("/ads/:id", requireAdmin, async (req, res) => {
             ...(adsenseClient !== undefined && { adsenseClient }),
             ...(adSize !== undefined && { adSize }),
             ...(ctaText !== undefined && { ctaText }),
+            ...(slot !== undefined && { slot: AD_SLOTS.includes(slot) ? slot : "" }),
             ...(startDate !== undefined && { startDate: startDate || null }),
             ...(endDate !== undefined && { endDate: endDate || null }),
             ...(isActive !== undefined && { isActive }),
@@ -398,7 +492,7 @@ router.get("/analytics", async (req, res) => {
     }
 });
 
-// ── Growth analytics ──────────────────────────────────────────
+// â”€â”€ Growth analytics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // /analytics/growth?granularity=day|week|month|year&days=30&tz=Asia/Karachi
 // Time series of users, posts, tracked events and active users, bucketed in
 // the specified timezone (defaults to the server's local time).
@@ -440,7 +534,7 @@ router.get("/analytics/growth", requireAdmin, async (req, res) => {
     }
 });
 
-// /analytics/overview — headline numbers + day-over-day deltas.
+// /analytics/overview â€” headline numbers + day-over-day deltas.
 router.get("/analytics/overview", requireAdmin, async (req, res) => {
     try {
         const tz = typeof req.query.tz === "string" && req.query.tz ? req.query.tz : "local";
@@ -486,7 +580,7 @@ router.get("/analytics/overview", requireAdmin, async (req, res) => {
     }
 });
 
-// /analytics/devices?days=30 — device/os/browser mix + totals.
+// /analytics/devices?days=30 â€” device/os/browser mix + totals.
 router.get("/analytics/devices", requireAdmin, async (req, res) => {
     try {
         const days = Math.max(1, Math.min(parseInt(req.query.days, 10) || 30, 365));
@@ -500,7 +594,7 @@ router.get("/analytics/devices", requireAdmin, async (req, res) => {
     }
 });
 
-// /analytics/locations?days=30 — country + state/region + city roll-ups with
+// /analytics/locations?days=30 â€” country + state/region + city roll-ups with
 // coordinates for the globe, plus helper icons for the dots.
 //
 // Rolled up by Mongo rather than by pulling documents into Node: the previous
@@ -518,7 +612,7 @@ router.get("/analytics/locations", requireAdmin, async (req, res) => {
         };
 
         // The three levels the globe drills through. Each returns rows that are
-        // already aggregated and capped — the only thing that scales with size.
+        // already aggregated and capped â€” the only thing that scales with size.
         const [countries, regions, cities, total] = await Promise.all([
             AnalyticsEvent.aggregate([
                 { $match: match },
@@ -605,12 +699,12 @@ router.get("/logs", requireAdmin, (req, res) => {
     }
 });
 
-// GET /permissions — list all valid permission keys
+// GET /permissions â€” list all valid permission keys
 router.get("/permissions", requireAdmin, (req, res) => {
     return res.json(VALID_PERMISSIONS);
 });
 
-// PATCH /roles/:id/permissions — set permissions for a role
+// PATCH /roles/:id/permissions â€” set permissions for a role
 router.patch("/roles/:id/permissions", requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
@@ -627,7 +721,7 @@ router.patch("/roles/:id/permissions", requireAdmin, async (req, res) => {
     }
 });
 
-// GET /moderation — list moderation logs
+// GET /moderation â€” list moderation logs
 router.get("/moderation", requireAdmin, async (req, res) => {
     try {
         const limit = Math.min(parseInt(req.query.limit || "50", 10), 200);
@@ -648,7 +742,7 @@ router.get("/moderation", requireAdmin, async (req, res) => {
     }
 });
 
-// GET /moderation/flagged — list removed posts
+// GET /moderation/flagged â€” list removed posts
 router.get("/moderation/flagged", requireAdmin, async (req, res) => {
     try {
         const limit = Math.min(parseInt(req.query.limit || "50", 10), 200);
@@ -669,7 +763,7 @@ router.get("/moderation/flagged", requireAdmin, async (req, res) => {
     }
 });
 
-// POST /moderation/remove — take down a post
+// POST /moderation/remove â€” take down a post
 router.post("/moderation/remove", requirePermission("moderate_posts"), async (req, res) => {
     try {
         const { postId, reason } = req.body;
@@ -703,7 +797,7 @@ router.post("/moderation/remove", requirePermission("moderate_posts"), async (re
     }
 });
 
-// POST /moderation/restore — restore a taken-down post
+// POST /moderation/restore â€” restore a taken-down post
 router.post("/moderation/restore", requirePermission("moderate_posts"), async (req, res) => {
     try {
         const { postId } = req.body;
@@ -737,7 +831,7 @@ router.post("/moderation/restore", requirePermission("moderate_posts"), async (r
     }
 });
 
-// GET /content-filter — get content filter settings
+// GET /content-filter â€” get content filter settings
 router.get("/content-filter", requireAdmin, async (req, res) => {
     try {
         let filter = await ContentFilter.findOne({}).lean();
@@ -757,7 +851,7 @@ router.get("/content-filter", requireAdmin, async (req, res) => {
     }
 });
 
-// PATCH /content-filter — update content filter settings
+// PATCH /content-filter â€” update content filter settings
 router.patch("/content-filter", requireAdmin, async (req, res) => {
     try {
         const { toxicWords, nudityKeywords, blockNudity, blurToxicWords } = req.body;
@@ -787,7 +881,7 @@ router.patch("/content-filter", requireAdmin, async (req, res) => {
     }
 });
 
-// GET /content-filter/public — public endpoint for client-side toxic word blurring (no auth required)
+// GET /content-filter/public â€” public endpoint for client-side toxic word blurring (no auth required)
 router.get("/content-filter/public", async (req, res) => {
     try {
         let filter = await ContentFilter.findOne({}).lean();
@@ -804,7 +898,7 @@ router.get("/content-filter/public", async (req, res) => {
     }
 });
 
-// GET /debug/user-permissions/:userId — debug the permission resolution chain for a user
+// GET /debug/user-permissions/:userId â€” debug the permission resolution chain for a user
 router.get("/debug/user-permissions/:userId", requireAdmin, async (req, res) => {
     try {
         const { userId } = req.params;
@@ -841,7 +935,7 @@ router.get("/debug/user-permissions/:userId", requireAdmin, async (req, res) => 
     }
 });
 
-// PATCH /users/:id/suspend — suspend/unsuspend a user
+// PATCH /users/:id/suspend â€” suspend/unsuspend a user
 router.patch("/users/:id/suspend", requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
@@ -863,9 +957,9 @@ router.patch("/users/:id/suspend", requireAdmin, async (req, res) => {
     }
 });
 
-// ── Community Management ────────────────────────────────────────────────
+// â”€â”€ Community Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// GET /communities — list all communities for admin
+// GET /communities â€” list all communities for admin
 router.get("/communities", requireAdmin, async (req, res) => {
     try {
         const { search, sort = "memberCount", page = 1, limit = 50 } = req.query;
@@ -888,7 +982,7 @@ router.get("/communities", requireAdmin, async (req, res) => {
     }
 });
 
-// DELETE /communities/:id — admin delete any community
+// DELETE /communities/:id â€” admin delete any community
 router.delete("/communities/:id", requireAdmin, async (req, res) => {
     try {
         const community = await Community.findByIdAndDelete(req.params.id);
@@ -901,7 +995,7 @@ router.delete("/communities/:id", requireAdmin, async (req, res) => {
     }
 });
 
-// PATCH /communities/:id — admin edit any community
+// PATCH /communities/:id â€” admin edit any community
 router.patch("/communities/:id", requireAdmin, async (req, res) => {
     try {
         const community = await Community.findById(req.params.id);

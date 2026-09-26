@@ -1064,7 +1064,61 @@ function ProxyBrowserClient() {
 
 export default function BrowserClient() {
   const [inTauri, setInTauri] = useState(false);
+  // The proxy route is gated server-side by the `use_browser` role permission
+  // (see app/api/browser/route.js). Check it up front too, so a user without
+  // the permission gets an explanation instead of an iframe full of proxy
+  // error pages. Admins and the native Tauri build are always allowed.
+  //
+  // `perm` stays null while in flight; `allowed` is derived rather than stored
+  // so the Tauri case never has to write state from an effect.
+  const [perm, setPerm] = useState(null);
   useEffect(() => { setInTauri(isTauri()); }, []);
+
+  useEffect(() => {
+    if (inTauri) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/users/me/permissions", { credentials: "include" });
+        if (!res.ok) throw new Error("denied");
+        const data = await res.json();
+        if (!cancelled) setPerm(data);
+      } catch {
+        if (!cancelled) setPerm({ isAdmin: false, permissions: [] });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [inTauri]);
+
+  const checked = inTauri || perm !== null;
+  const allowed =
+    inTauri || !!perm?.isAdmin || (perm?.permissions || []).includes("use_browser");
+
+  if (!checked) {
+    return (
+      <div className="min-h-dvh bg-white dark:bg-gray-950 flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-gray-300 dark:border-gray-700 border-t-blue-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!allowed) {
+    return (
+      <div className="min-h-dvh bg-white dark:bg-gray-950 flex flex-col items-center justify-center px-6 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-7 h-7 text-gray-400">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+          </svg>
+        </div>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Browser is turned off</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">
+          The in-app browser is an opt-in feature. Ask an admin to enable the
+          Browser permission on your account.
+        </p>
+      </div>
+    );
+  }
+
   return inTauri ? <NativeBrowserClient /> : <ProxyBrowserClient />;
 }
 

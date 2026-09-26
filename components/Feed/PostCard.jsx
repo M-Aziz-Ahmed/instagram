@@ -13,6 +13,7 @@ import ReactionPicker, { ReactionCounts } from "./ReactionPicker";
 import RepostButton from "./RepostButton";
 import VoiceRecorder from "@/components/shared/VoiceRecorder";
 import AudioPlayer from "@/components/shared/AudioPlayer";
+import VideoPlayer from "@/components/shared/VideoPlayer";
 import EmojiPicker from "@/components/shared/EmojiPicker";
 import GifPicker from "@/components/shared/GifPicker";
 import PollCard from "./PollCard";
@@ -20,6 +21,7 @@ import ToxicText from "@/components/shared/ToxicText";
 import Link from "next/link";
 import { LoginModal } from "@/components/shared/GuestPrompt";
 import { timeAgo } from "@/utils/timeAgo";
+import { trackImpression } from "@/utils/postAnalytics";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
@@ -366,7 +368,7 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                             <Link href={`/profile/${encodeURIComponent(comment.sender)}`} className="hover:underline">
                                 {comment.sender}
                             </Link>
-                            <UserBadges isVerified={author?.isVerified} isAdmin={author?.isAdmin} roles={author?.roles || []} size="sm" />
+                            <UserBadges isPro={author?.isPro} isVerified={author?.isVerified} isAdmin={author?.isAdmin} roles={author?.roles || []} size="sm" />
                         </span>
                         {editing ? (
                             <div className="inline-flex items-center gap-1">
@@ -548,10 +550,24 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
     const origKey = isRepostOrig ? `${post._id}_orig` : null;
     const commentKey = post.isRepost && post.repostComment ? `${post._id}_cmt` : null;
 
+    // Records the tap for the creator's analytics, then hands off to whatever
+    // the parent feed does with hashtags. Wrapping the prop here means every
+    // hashtag surface in the card is covered without threading a new callback
+    // down from Feed.
+    const handleHashtag = useCallback((tag) => {
+        trackHashtagClick(post._id, tag);
+        onHashtag?.(tag);
+    }, [post._id, onHashtag]);
+
     useEffect(() => {
         if (hasTrackedView.current) return;
         const timer = setTimeout(() => {
             hasTrackedView.current = true;
+            // Only fires after the card has been on screen for 2s, so a fast
+            // scroll past doesn't count as an impression. The event is what
+            // gives creators a real per-day reach chart; viewCount stays the
+            // cheap lifetime total.
+            trackImpression(post._id);
             if (trackView) {
                 trackView(post._id);
             } else {
@@ -1014,7 +1030,7 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                 u/{post.sender}
                             </Link>
                         )}
-                        {!post._community && <UserBadges isVerified={author?.isVerified} isAdmin={author?.isAdmin} roles={author?.roles || []} size="sm" />}
+                        {!post._community && <UserBadges isPro={author?.isPro} isVerified={author?.isVerified} isAdmin={author?.isAdmin} roles={author?.roles || []} size="sm" />}
                         <span className="text-gray-400 dark:text-gray-500 text-xs">&middot;</span>
                         <span className="text-gray-400 dark:text-gray-500 text-xs">{timeAgo(post.timeStamp)}</span>
                         {post.flair?.name && (
@@ -1157,7 +1173,7 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                     {post.isRepost && post.repostComment && (
                         <div className="mt-1.5">
                             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
-                                <RichText text={post.repostComment} onHashtag={onHashtag} />
+                                <RichText text={post.repostComment} onHashtag={handleHashtag} />
                             </p>
                             {commentKey && translations[commentKey] && (
                                 <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-1 leading-relaxed whitespace-pre-wrap">
@@ -1191,12 +1207,12 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                     <span className="font-semibold text-xs text-gray-900 dark:text-gray-100">
                                         {post._originalPost.sender}
                                     </span>
-                                    <UserBadges isVerified={post._originalPost._author?.isVerified} isAdmin={post._originalPost._author?.isAdmin} roles={post._originalPost._author?.roles || []} size="sm" />
+                                    <UserBadges isPro={post._originalPost._author?.isPro} isVerified={post._originalPost._author?.isVerified} isAdmin={post._originalPost._author?.isAdmin} roles={post._originalPost._author?.roles || []} size="sm" />
                                     <span className="text-gray-400 dark:text-gray-500 text-[11px]">{timeAgo(post._originalPost.timeStamp)}</span>
                                 </div>
                                 {post._originalPost.text && (
                                     <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap">
-                                        <RichText text={post._originalPost.text} onHashtag={onHashtag} />
+                                        <RichText text={post._originalPost.text} onHashtag={handleHashtag} />
                                     </p>
                                 )}
                                 {origKey && translations[origKey] && (
@@ -1230,7 +1246,18 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                         <ImageCarousel images={imgs} onImageClick={(src) => setLightboxSrc(src)} />
                                     );
                                 })()}
-                                {post._originalPost.audioUrl && !post._originalPost.text && !(post._originalPost.imageUrl || post._originalPost.imageUrls?.length) && (
+                                {post._originalPost.videoUrl && (
+                        <div className="mt-3 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                            <VideoPlayer
+                                src={post._originalPost.videoUrl}
+                                duration={post._originalPost.videoDuration}
+                                width={post._originalPost.videoWidth}
+                                height={post._originalPost.videoHeight}
+                            />
+                        </div>
+                    )}
+
+                    {post._originalPost.audioUrl && !post._originalPost.text && !(post._originalPost.imageUrl || post._originalPost.imageUrls?.length) && (
                                     <div className="mt-2 max-w-xs">
                                         <AudioPlayer src={post._originalPost.audioUrl} />
                                     </div>
@@ -1268,7 +1295,7 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                             ) : (
                                 <>
                                     <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap">
-                                        <RichText text={post.text} onHashtag={onHashtag} toxicWords />
+                                        <RichText text={post.text} onHashtag={handleHashtag} toxicWords />
                                     </p>
                                     {translations[post._id] && (
                                         <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-1 leading-relaxed whitespace-pre-wrap">
@@ -1294,7 +1321,18 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         </div>
                     ) : null)}
 
-                    {post.audioUrl && !post.text && !post.imageUrl && !(post.imageUrls?.length) && (
+                    {post.videoUrl && (
+                        <div className="mt-3 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                            <VideoPlayer
+                                src={post.videoUrl}
+                                duration={post.videoDuration}
+                                width={post.videoWidth}
+                                height={post.videoHeight}
+                            />
+                        </div>
+                    )}
+
+                    {post.audioUrl && !post.text && !post.imageUrl && !(post.imageUrls?.length) && !post.videoUrl && (
                         <div className="mt-2 max-w-xs">
                             <AudioPlayer src={post.audioUrl} />
                         </div>
@@ -1420,7 +1458,7 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                             allComments={post.comments || []}
                                             depth={0}
                                             onReply={handleReply}
-                                            onHashtag={onHashtag}
+                                            onHashtag={handleHashtag}
                                             user={user}
                                             postId={post._id}
                                             onDelete={handleDeleteComment}

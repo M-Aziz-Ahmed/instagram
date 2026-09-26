@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import MediaBookmarkButton from "@/components/shared/MediaBookmarkButton";
 import ImportDataButton from "@/components/common/ImportDataButton";
+import AdSlot from "@/components/shared/AdSlot";
 
 const COVER_URL = (id, fileName) => {
     if (!fileName) return "";
@@ -595,6 +596,7 @@ export default function MangaPage() {
             </div>
 
             <div className="max-w-6xl mx-auto px-4 py-6 text-center border-t border-gray-100 dark:border-gray-800 mt-8">
+                <AdSlot slot="manga" className="mb-6" />
                 <p className="text-xs text-gray-400 dark:text-gray-500">
                     Free manga reading powered by MangaDex.{" "}
                     <a href="https://mangaplus.shueisha.co.jp" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Read official releases on MangaPlus</a>

@@ -4,7 +4,10 @@ const User = require("../models/user");
 const Post = require("../models/post");
 
 const router = express.Router();
-const SECRET = process.env.JWT_SECRET || "anonfeed_jwt_secret_change_in_production_32chars";
+// Verified secret from the central auth middleware. This route used to carry its
+// own hardcoded fallback, so with JWT_SECRET unset it would accept tokens signed
+// with a value committed in this repo.
+const { SECRET } = require("../middleware/auth");
 
 // GET /me
 router.get("/me", async (req, res) => {

@@ -34,6 +34,9 @@ export default function InboxClient() {
     const [selectedGroup, setSelectedGroup] = useState(null);
     const [showCreateGroup, setShowCreateGroup] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    // Hits carry the query that produced them, so results from an earlier
+    // keystroke are ignored by comparison rather than cleared inside an effect.
+    const [hitState, setHitState] = useState({ query: "", results: [] });
     const { openSidebar } = useSidebar();
     const prevTargetRef = useRef(null);
 
@@ -164,6 +167,33 @@ export default function InboxClient() {
         }
     }, [targetUser, targetGroup, conversations, groups]);
 
+    // The box filters loaded conversations by name, but the interesting query is
+    // "what did we say about X" — that needs the server, since only the first
+    // page of each thread is ever loaded client-side.
+    useEffect(() => {
+        const q = searchQuery.trim();
+        if (tab !== "dm" || q.length < 2 || !user?.username) return;
+
+        const controller = new AbortController();
+        const id = setTimeout(async () => {
+            try {
+                const res = await fetch(`/api/messages/search?q=${encodeURIComponent(q)}`, {
+                    credentials: "include", signal: controller.signal,
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setHitState({ query: q, results: data.results || [] });
+                }
+            } catch { /* aborted */ }
+        }, 300);
+
+        return () => { clearTimeout(id); controller.abort(); };
+    }, [searchQuery, tab, user?.username]);
+
+    const messageHits = hitState.query === searchQuery.trim() ? hitState.results : [];
+    const searchingMessages =
+        tab === "dm" && searchQuery.trim().length >= 2 && hitState.query !== searchQuery.trim();
+
     if (!ready) {
         return (
             <div className="flex h-dvh items-center justify-center bg-white dark:bg-gray-950">
@@ -201,6 +231,11 @@ export default function InboxClient() {
         url.searchParams.delete("user");
         url.searchParams.delete("group");
         router.replace(url.pathname, { scroll: false });
+    };
+
+    const openSearchHit = (hit) => {
+        const existing = conversations.find(c => c.username === hit.with);
+        handleSelectConvo(existing || { username: hit.with, user: null, lastMessage: hit.text });
     };
 
     const filteredConversations = searchQuery.trim()
@@ -275,10 +310,50 @@ export default function InboxClient() {
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            placeholder={tab === "dm" ? "Search conversations..." : "Search groups..."}
+                            placeholder={tab === "dm" ? "Search messages and people..." : "Search groups..."}
                             className="w-full bg-gray-100 dark:bg-gray-800 rounded-full px-4 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
                         />
                     </div>
+
+                    {/* Message-content hits from the server */}
+                    {tab === "dm" && searchQuery.trim().length >= 2 && (
+                        searchingMessages ? (
+                            <p className="px-4 py-2 text-xs text-gray-400 dark:text-gray-500">Searching messages...</p>
+                        ) : messageHits.length > 0 ? (
+                            <div className="pb-1">
+                                <p className="px-4 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                                    Messages
+                                </p>
+                                {messageHits.map(hit => (
+                                    <button
+                                        key={hit._id || hit.id}
+                                        onClick={() => openSearchHit(hit)}
+                                        className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 active:bg-gray-100 dark:active:bg-gray-700 transition-colors text-left"
+                                    >
+                                        {hit.hasImage ? (
+                                            <span className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-xs">📷</span>
+                                        ) : hit.hasAudio ? (
+                                            <span className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-xs">🎤</span>
+                                        ) : (
+                                            <span className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs font-bold uppercase">
+                                                {hit.with?.[0]}
+                                            </span>
+                                        )}
+                                        <span className="min-w-0 flex-1">
+                                            <span className="flex items-center gap-2">
+                                                <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{hit.with}</span>
+                                                <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{timeAgo(hit.timeStamp)}</span>
+                                            </span>
+                                            <span className="block text-xs text-gray-500 dark:text-gray-400 truncate">
+                                                {hit.text}
+                                            </span>
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        ) : null
+                    )}
+
                     {loading ? (
                         <ConversationSkeleton />
                     ) : tab === "dm" ? (
@@ -311,7 +386,7 @@ export default function InboxClient() {
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-1.5">
                                             <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{convo.username}</p>
-                                            <UserBadges isVerified={convo.user?.isVerified} isAdmin={convo.user?.isAdmin} roles={convo.user?.roles || []} size="sm" />
+                                            <UserBadges isPro={convo.user?.isPro} isVerified={convo.user?.isVerified} isAdmin={convo.user?.isAdmin} roles={convo.user?.roles || []} size="sm" />
                                             <OnlineDot username={convo.username} onlineMap={onlineMap} />
                                         </div>
                                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">

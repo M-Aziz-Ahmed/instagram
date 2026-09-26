@@ -63,4 +63,4 @@ hangmanGameSchema.pre("save", function () {
 
 hangmanGameSchema.statics.WORDS = WORDS;
 
-module.exports = mongoose.model("HangmanGame", hangmanGameSchema);
+module.exports = mongoose.models.HangmanGame || mongoose.model("HangmanGame", hangmanGameSchema);

@@ -1,5 +1,18 @@
 const mongoose = require("mongoose");
 
+// Semantic placement. Kept separate from `position`, which is a numeric sort
+// weight - they used to be conflated, and because `position` is a Number the
+// string placements ("banner", "sidebar", ...) could never match it, so every
+// placement request silently returned zero ads.
+const AD_SLOTS = [
+    "feed",      // main social feed
+    "reels",     // /reels
+    "watch",     // movie & tv hub
+    "manga",     // manga reader
+    "education", // learn hub and course pages
+    "sidebar",   // desktop side rail
+];
+
 const adSchema = new mongoose.Schema({
     title:       { type: String, required: true, trim: true, maxlength: 100 },
     description: { type: String, default: "", maxlength: 300 },
@@ -16,6 +29,11 @@ const adSchema = new mongoose.Schema({
     // real dimensions or the creative gets clipped to an empty box.
     adSize:      { type: String, default: "" },
     ctaText:     { type: String, default: "Learn More" },
+    // Which surface this ad belongs on. Empty means "unassigned" and such ads
+    // are never served, because a client asking for a specific placement must
+    // not receive an ad that was never meant for it.
+    slot:        { type: String, enum: [...AD_SLOTS, ""], default: "" },
+    // Numeric ordering weight among ads that share a slot.
     position:    { type: Number, default: 0 },
     startDate:   { type: Date, default: null },
     endDate:     { type: Date, default: null },
@@ -27,7 +45,8 @@ const adSchema = new mongoose.Schema({
     updatedAt:   { type: Date, default: Date.now },
 });
 
-adSchema.index({ isActive: 1, position: 1 });
+adSchema.index({ isActive: 1, slot: 1, position: 1 });
 adSchema.index({ startDate: 1, endDate: 1 });
 
 module.exports = mongoose.models.Ad || mongoose.model("Ad", adSchema);
+module.exports.AD_SLOTS = AD_SLOTS;

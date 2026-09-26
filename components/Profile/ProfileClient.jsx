@@ -7,6 +7,7 @@ import UserBadges from "@/components/shared/UserBadges";
 import { ProfileSkeleton } from "@/components/shared/Skeleton";
 import FollowButton from "@/components/shared/FollowButton";
 import ImageLightbox from "@/components/shared/ImageLightbox";
+import UserActionsMenu from "@/components/shared/UserActionsMenu";
 import SettingsModal from "@/components/Auth/EditProfileModal";
 import InviteManager from "@/components/shared/InviteManager";
 import { useSidebar } from "@/context/SidebarContext";
@@ -99,7 +100,7 @@ function FollowListModal({ username, type, onClose }) {
                                     </div>
                                     <div className="flex items-center gap-1.5 min-w-0">
                                         <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{u.username}</span>
-                                        <UserBadges isVerified={u.isVerified} isAdmin={u.isAdmin} roles={u.roles || []} size="sm" />
+                                        <UserBadges isPro={u.isPro} isVerified={u.isVerified} isAdmin={u.isAdmin} roles={u.roles || []} size="sm" />
                                     </div>
                                 </Link>
                             ))}
@@ -240,6 +241,7 @@ export default function ProfileClient({ username }) {
     const [pendingRequests, setPendingRequests] = useState([]);
 
     const isOwn = user?.username === username;
+    const viewer = user?.username ?? "";
     const isPrivateProfile = !isOwn && data?.profile?.isPrivate && !user?.following?.includes(username);
     const isPrivateAdmin = !isOwn && data?.profile?.isPrivate && user?.isAdmin;
 
@@ -256,11 +258,14 @@ export default function ProfileClient({ username }) {
     const fetchProfile = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/posts/user/${encodeURIComponent(username)}`);
+            // `viewer` is what lets the server hide this profile from someone who
+            // blocked the account; without it the block only applies to the feed.
+            const viewerParam = viewer ? `?viewer=${encodeURIComponent(viewer)}` : "";
+            const res = await fetch(`/api/posts/user/${encodeURIComponent(username)}${viewerParam}`);
             if (res.ok) setData(await res.json());
         } catch (err) { console.error(err); }
         finally { setLoading(false); }
-    }, [username]);
+    }, [username, viewer]);
 
     const handleDeletePost = useCallback((postId) => {
         setData((prev) => prev ? { ...prev, posts: prev.posts.filter((p) => p._id !== postId) } : prev);
@@ -300,6 +305,7 @@ export default function ProfileClient({ username }) {
             avatarUrl:   user?.avatarUrl ?? "",
             isVerified:  user?.isVerified ?? false,
             isAdmin:     user?.isAdmin ?? false,
+            isPro:       user?.isPro ?? false,
             roles:       user?.roles ?? [],
             followersCount: user?.followers?.length ?? 0,
             followingCount: user?.following?.length ?? 0,
@@ -311,12 +317,57 @@ export default function ProfileClient({ username }) {
             avatarUrl:   "",
             isVerified:  false,
             isAdmin:     false,
+            isPro:       false,
             roles:       [],
             followersCount: 0,
             followingCount: 0,
           });
 
     const expandedPost = expanded ? data?.posts?.find((p) => p._id === expanded) : null;
+
+    // A blocked account is served as `notFound` by the API rather than as a
+    // private profile, so say so plainly instead of rendering an empty shell
+    // that looks like a broken page.
+    if (!isOwn && !loading && data?.notFound) {
+        return (
+            <div className="min-h-dvh bg-white dark:bg-gray-950 flex flex-col">
+                <header className="sticky top-0 z-20 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-200 dark:border-gray-800 safe-top">
+                    <div className="max-w-2xl mx-auto px-4 h-12 sm:h-14 flex items-center gap-3">
+                        <button
+                            onClick={() => router.back()}
+                            aria-label="Go back"
+                            className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                            </svg>
+                        </button>
+                        <span className="font-bold text-base text-gray-900 dark:text-gray-100 truncate flex-1">Profile</span>
+                    </div>
+                </header>
+                <main className="flex-1 flex flex-col items-center justify-center px-6 text-center">
+                    <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">This account isn&apos;t available</h1>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm mb-6">
+                        @{username} may have been removed, or you may have blocked this account.
+                    </p>
+                    <div className="flex gap-3">
+                        <Link
+                            href="/social"
+                            className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors min-h-[44px] flex items-center"
+                        >
+                            Back to feed
+                        </Link>
+                        <button
+                            onClick={() => router.push("/me/blocked-accounts")}
+                            className="px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors min-h-[44px]"
+                        >
+                            Manage blocks
+                        </button>
+                    </div>
+                </main>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-dvh bg-white dark:bg-gray-950">
@@ -329,15 +380,22 @@ export default function ProfileClient({ username }) {
                         </svg>
                     </Link>
                     <span className="font-bold text-base text-gray-900 dark:text-gray-100 truncate flex-1">{username}</span>
-                    <button
-                        onClick={openSidebar}
-                        aria-label="Open menu"
-                        className="p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-                        </svg>
-                    </button>
+                    {/* On someone else's profile the overflow menu is the safety
+                        controls (report / mute / block). On your own it stays the
+                        generic drawer button, which is what it has always been. */}
+                    {isOwn ? (
+                        <button
+                            onClick={openSidebar}
+                            aria-label="Open menu"
+                            className="p-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                            </svg>
+                        </button>
+                    ) : (
+                        <UserActionsMenu username={username} />
+                    )}
                 </div>
             </header>
 
@@ -368,7 +426,7 @@ export default function ProfileClient({ username }) {
                             <div className="flex-1 min-w-0 pt-1">
                                 <div className="flex items-center gap-2 flex-wrap mb-1">
                                     <h1 className="font-black text-xl text-gray-900 dark:text-gray-100">@{username}</h1>
-                                    <UserBadges isVerified={profile.isVerified} isAdmin={profile.isAdmin} roles={profile.roles} />
+                                    <UserBadges isPro={profile.isPro} isVerified={profile.isVerified} isAdmin={profile.isAdmin} roles={profile.roles} />
                                     {!isOwn && <ActiveIndicator username={username} />}
                                     {!isOwn && user && (
                                         <>

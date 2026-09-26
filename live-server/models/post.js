@@ -34,11 +34,25 @@ const postSchema = new mongoose.Schema({
     imageUrl:  { type: String, default: "" },
     imageUrls: { type: [String], default: [] },
     audioUrl:  { type: String, default: "" },
+    // Video posts. A post with a videoUrl is what the /reels feed selects, so
+    // there is no separate "isReel" flag to keep in sync. Dimensions are stored
+    // so the player can reserve space before the video loads and the layout does
+    // not jump.
+    videoUrl:      { type: String, default: "" },
+    videoDuration: { type: Number, default: 0 },
+    videoWidth:    { type: Number, default: 0 },
+    videoHeight:   { type: Number, default: 0 },
     sender:    { type: String, required: true },
     color:     { type: String, default: "#3b82f6" },
     avatarUrl: { type: String, default: "" },
     likes:     { type: [String], default: [] },
+    // `comments` is a bounded window of the most recent comments, NOT the full
+    // history — see MAX_EMBEDDED_COMMENTS in lib/postComments.js. Keeping every
+    // comment embedded meant a popular post grew toward the 16MB BSON document
+    // limit and dragged the whole comment thread through every feed read.
+    // `commentCount` is the authoritative total for display and ranking.
     comments:  { type: [commentSchema], default: [] },
+    commentCount: { type: Number, default: 0, index: true },
     hashtags:  { type: [String], default: [] },
     mentions:  { type: [String], default: [] },
     editedAt:  { type: Date, default: null },
@@ -100,5 +114,8 @@ postSchema.index({ timeStamp: -1, isRemoved: 1, expiresAt: 1 });
 postSchema.index({ communityId: 1, timeStamp: -1 });
 postSchema.index({ communityId: 1, score: -1 });
 postSchema.index({ communityId: 1, flair: 1, timeStamp: -1 });
+// Partial index backing the /reels feed: only video posts are indexed, so it
+// stays small no matter how much text/image content the site accumulates.
+postSchema.index({ timeStamp: -1 }, { partialFilterExpression: { videoUrl: { $type: "string", $ne: "" } } });
 
 module.exports = mongoose.models.Post || mongoose.model("Post", postSchema);

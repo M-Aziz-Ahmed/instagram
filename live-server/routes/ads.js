@@ -23,12 +23,30 @@ router.get("/config", (req, res) => {
 });
 
 // GET /
-router.get("/", async (req, res) => {
+// Delivers the ads eligible right now for a given placement.
+//
+// Placements are selected with `slot` (a real string field on the Ad schema,
+// see models/ad.js). This router used to filter on `position` with string
+// values while `position` is a Number, so no ad could ever match and every
+// client silently received an empty array. `position` is now only the numeric
+// sort weight within a slot.
+const { AD_SLOTS } = require("../models/ad");
+const { isProUser } = require("../lib/economy");
+const { optionalAuth } = require("../middleware/auth");
+
+const VALID_SLOTS = new Set(AD_SLOTS);
+
+router.get("/", optionalAuth, async (req, res) => {
     try {
+        // Pro is ad-free. Checked here rather than in each placement component
+        // so the promise holds for every surface at once, including any added
+        // later, and so an ad cannot be smuggled in by calling the API directly.
+        if (req.userId && await isProUser(req.userId)) {
+            return res.json([]);
+        }
+
         const now = new Date();
-        const limit = Math.min(parseInt(req.query.limit) || 10, 50);
-        const position = req.query.position; // optional: filter by position (e.g., "pre-roll", "mid-roll", "banner")
-        const page = req.query.page; // optional: filter by page/context
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 50);
 
         const query = {
             isActive: true,
@@ -38,11 +56,19 @@ router.get("/", async (req, res) => {
             ],
         };
 
-        if (position) {
-            query.position = position;
-        }
-        if (page) {
-            query.page = page;
+        const slot = typeof req.query.slot === "string" ? req.query.slot.trim() : "";
+        if (VALID_SLOTS.has(slot)) {
+            query.slot = slot;
+        } else if (slot) {
+            // Unknown placement: return empty rather than serving whatever is
+            // scheduled. This keeps a typo in a client from dumping unrelated
+            // placements onto the page.
+            return res.json([]);
+        } else {
+            // No slot requested: only serve ads that were never assigned to a
+            // specific surface, so a bare /api/ads call cannot bypass placement
+            // targeting.
+            query.slot = "";
         }
 
         const ads = await Ad.find(query)

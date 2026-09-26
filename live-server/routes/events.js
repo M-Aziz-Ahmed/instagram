@@ -1,35 +1,55 @@
 const express = require("express");
 const AnalyticsEvent = require("../models/analyticsEvent");
+const { resolveLocation } = require("../lib/geo");
+const { optionalAuth } = require("../middleware/auth");
 
 const router = express.Router();
 
 // POST /track — fire-and-forget telemetry beacon from the browser client.
-// The client resolves device info + rough geo itself and sends it along, so
-// the server never has to block on external lookups. Body is validated,
-// trimmed and written; failures are swallowed (analytics must never break UX).
-router.post("/", async (req, res) => {
+//
+// The client only sends what it legitimately knows (page, referrer, device
+// shape, its own session id). Two things are deliberately NOT taken from the
+// body:
+//   - `location` — resolved server-side from the connection IP in lib/geo.js,
+//     so a caller can't fabricate a city and the raw IP never leaves the server.
+//   - `userId`   — read from the session cookie, so events can't be attributed
+//     to an arbitrary account by a hostile client.
+//
+// Failures are swallowed: analytics must never break the page that sent them.
+router.post("/", optionalAuth, async (req, res) => {
     try {
-        const { type, path, referrer, sessionId, device, location, userId } = req.body || {};
+        const { type, path, referrer, sessionId, device } = req.body || {};
+
+        // Resolving geo can mean a (cached) outbound call, so kick it off
+        // alongside the validation instead of serially ahead of the write.
+        const locationPromise = resolveLocation(req);
+
+        let location = null;
+        try {
+            location = await locationPromise;
+        } catch {
+            location = null;
+        }
 
         const ev = new AnalyticsEvent({
             type: typeof type === "string" && type.length <= 32 ? type : "page_view",
-            userId: userId || null,
+            userId: req.userId || null,
             sessionId: typeof sessionId === "string" ? sessionId.slice(0, 64) : "",
             path: typeof path === "string" ? path.slice(0, 500) : "",
             referrer: typeof referrer === "string" ? referrer.slice(0, 300) : "",
             device: {
-                type: device?.type || "",
+                type: ["mobile", "tablet", "desktop", "bot", ""].includes(device?.type) ? device.type : "",
                 os: typeof device?.os === "string" ? device.os.slice(0, 40) : "",
                 browser: typeof device?.browser === "string" ? device.browser.slice(0, 40) : "",
             },
             location: {
-                country: typeof location?.country === "string" ? location.country.slice(0, 64) : "",
-                countryCode: typeof location?.countryCode === "string" ? location.countryCode.slice(0, 3).toUpperCase() : "",
-                region: typeof location?.region === "string" ? location.region.slice(0, 64) : "",
-                city: typeof location?.city === "string" ? location.city.slice(0, 64) : "",
-                lat: Number.isFinite(location?.lat) ? location.lat : null,
-                lon: Number.isFinite(location?.lon) ? location.lon : null,
-                tz: typeof location?.tz === "string" ? location.tz.slice(0, 32) : "",
+                country: location?.country || "",
+                countryCode: location?.countryCode || "",
+                region: location?.region || "",
+                city: location?.city || "",
+                lat: location?.lat ?? null,
+                lon: location?.lon ?? null,
+                tz: location?.tz || "",
             },
         });
 

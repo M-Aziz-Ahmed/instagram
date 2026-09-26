@@ -1,0 +1,25 @@
+# ads.txt — authorized digital sellers (IAB Tech Lab spec 1.0.2)
+#
+# AdSense, Adsterra and any other networks only serve ads to a property after
+# they can verify this file at /ads.txt. The AdCard component in this app pulls
+# AdSense via ads.js (see components/shared/AdCard.jsx), so this file is what
+# ties the app to your publisher account.
+#
+# HOW TO USE
+# 1. Put your real AdSense publisher id in the LIVE SERVER env (ADSENSE_CLIENT,
+#    see .env.example). It is served to the client by GET /api/ads/config.
+# 2. Add the matching line below and replace the placeholder domain.
+#    Only the AdSense line is mandatory; the others are optional sellers.
+#
+# Keep this file at the site root (/ads.txt) and never put it behind auth.
+# See https://iabtechlab.com/ads-txt/ for the full spec.
+
+# --- Google AdSense -------------------------------------------------------
+# Replace both the publisher id and the domain before going live.
+# google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0
+# app.anontweet.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0
+
+# --- Adsterra (popunder / social bar) -------------------------------------
+# Only add these lines if you actually run Adsterra on this domain.
+# adsterra.com, <SELF-SERVE PUBLISHER ID>, DIRECT, 03d01ed1d0f8a1bd
+# anontweet.com, <SELF-SERVE PUBLISHER ID>, DIRECT, 03d01ed1d0f8a1bd

@@ -1,15 +1,16 @@
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://anontweet.vercel.app";
 const LIVE_SERVER = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "https://anontweet.duckdns.org";
 
+// Only genuinely public, indexable pages belong here. Personal routes
+// (`/me/*`, `/inbox`, `/analytics`, `/referrals`, `/admin`, saved content) are
+// disallowed in robots.js and must not be advertised here.
 const STATIC_ROUTES = [
   { url: "", priority: 1.0, changeFrequency: "daily" },
+  { url: "/explore", priority: 0.9, changeFrequency: "daily" },
+  { url: "/trending", priority: 0.8, changeFrequency: "daily" },
   { url: "/games", priority: 0.9, changeFrequency: "weekly" },
   { url: "/search", priority: 0.7, changeFrequency: "daily" },
-  { url: "/inbox", priority: 0.6, changeFrequency: "monthly" },
-  { url: "/bookmarks", priority: 0.6, changeFrequency: "monthly" },
-  { url: "/analytics", priority: 0.5, changeFrequency: "weekly" },
-  { url: "/referrals", priority: 0.5, changeFrequency: "monthly" },
-  { url: "/admin", priority: 0.3, changeFrequency: "monthly" },
+  { url: "/watch", priority: 0.7, changeFrequency: "weekly" },
 ];
 
 async function getPublicPosts() {

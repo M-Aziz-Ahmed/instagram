@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { trackShare } from "@/utils/postAnalytics";
 
 function ShareIcon() {
     return (
@@ -241,6 +242,8 @@ export default function ShareButton({ postId, text, imageUrl, className = "" }) 
         if (navigator.share) {
             try {
                 await navigator.share({ title: text || "Check this out", text: text || "", url: shareUrl });
+                // Only a completed share counts; a dismissed sheet is not one.
+                trackShare(postId);
             } catch {}
         } else {
             setOpen(true);
@@ -256,6 +259,9 @@ export default function ShareButton({ postId, text, imageUrl, className = "" }) 
     };
 
     const handleShare = useCallback((id) => {
+        // Every branch below leaves the app, so the share itself is recorded
+        // once here rather than in each target.
+        trackShare(postId);
         switch (id) {
             case "copy":
                 copyLink();
@@ -289,7 +295,7 @@ export default function ShareButton({ postId, text, imageUrl, className = "" }) 
                 break;
         }
         if (id !== "copy") setOpen(false);
-    }, [shareUrl, encodedText, encodedUrl]);
+    }, [shareUrl, encodedText, encodedUrl, postId]);
 
     const handleQRCode = () => {
         if (showQR) {

@@ -5,6 +5,7 @@ import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 import PostCard from "./PostCard";
 import { PostSkeleton } from "@/components/shared/Skeleton";
+import { trackPostClick } from "@/utils/postAnalytics";
 
 export default function PostDetailClient({ postId }) {
     const { user, ready } = useUser();
@@ -16,6 +17,10 @@ export default function PostDetailClient({ postId }) {
     useEffect(() => {
         if (!postId) return;
         let cancelled = false;
+        // Arriving here is the click, whichever surface linked to it (explore,
+        // trending, a community, a notification or a shared link). Recording it
+        // in one place means no entry point can be missed.
+        trackPostClick(postId);
         fetch(`/api/posts/${postId}`)
             .then((res) => {
                 if (!res.ok) throw new Error("Post not found");

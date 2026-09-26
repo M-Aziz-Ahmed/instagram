@@ -31,4 +31,4 @@ const reactionDuelGameSchema = new mongoose.Schema({
     finishedAt: { type: Date, default: null },
 }, { timestamps: true });
 
-module.exports = mongoose.model("ReactionDuelGame", reactionDuelGameSchema);
+module.exports = mongoose.models.ReactionDuelGame || mongoose.model("ReactionDuelGame", reactionDuelGameSchema);

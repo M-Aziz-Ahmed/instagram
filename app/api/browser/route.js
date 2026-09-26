@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { canUseBrowser } from "@/utils/browserAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -669,6 +670,22 @@ export async function OPTIONS(request) {
 async function handle(request, rawUrl, method, bodyText) {
   const { protocol, host } = request.nextUrl;
   const proxyBase = `${protocol}//${host}/api/browser?url=`;
+
+  // Permission gate. This route turns the app's server into a general-purpose
+  // web proxy: every request here is the server fetching a third-party site on
+  // a user's behalf, which is an abuse, bandwidth and ad-fraud liability, and
+  // it used to be reachable without a session at all (it was listed in
+  // proxy.js PUBLIC_PATHS). It is now opt-in via the `use_browser` role
+  // permission — see live-server/models/role.js. Admins always pass.
+  const allowed = await canUseBrowser(request);
+  if (!allowed) {
+    return html502(
+      renderError(
+        "The in-app browser is not enabled for your account. Ask an admin to grant the Browser permission."
+      ),
+      403
+    );
+  }
 
   if (!rawUrl) {
     return html502(renderError("Missing ?url= parameter"), 400);

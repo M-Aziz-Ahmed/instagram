@@ -17,6 +17,15 @@ const VALID_PERMISSIONS = [
     "use_voice_chat",
     "use_live_stream",
     "access_entertainment",
+    // The in-app browser proxies arbitrary third-party sites through this
+    // server. That makes it an abuse and ad-fraud liability, so it is opt-in
+    // per role rather than available to everyone by default. Admins bypass
+    // all permission checks (see middleware/auth.js requirePermission).
+    "use_browser",
+    // Adult content carries age-verification and geo-blocking duties under
+    // GDPR Art. 8 / the UK's Age Appropriate Design Code, and it will be
+    // rejected outright by the mainstream ad networks. Off by default.
+    "view_adult",
 ];
 
 const roleSchema = new mongoose.Schema({

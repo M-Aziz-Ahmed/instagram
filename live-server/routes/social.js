@@ -1,10 +1,11 @@
 const express = require("express");
 const Post = require("../models/post");
 const User = require("../models/user");
+const { isProUserDoc } = require("../lib/economy");
 
 const router = express.Router();
 
-// GET /leaderboard — top users by different metrics
+// GET /leaderboard â€” top users by different metrics
 router.get("/leaderboard", async (req, res) => {
     try {
         const { period, metric, limit: limitStr } = req.query;
@@ -48,7 +49,7 @@ router.get("/leaderboard", async (req, res) => {
 
         const usernames = result.map((r) => r._id);
         const users = await User.find({ username: { $in: usernames } })
-            .select("username avatarUrl avatarColor isVerified isAdmin achievements postingStreak")
+            .select("username avatarUrl avatarColor isVerified isAdmin proUntil  achievements postingStreak")
             .lean();
         const userMap = {};
         users.forEach((u) => { userMap[u.username] = u; });
@@ -70,7 +71,7 @@ router.get("/leaderboard", async (req, res) => {
     }
 });
 
-// GET /trending — trending hashtags and hot posts
+// GET /trending â€” trending hashtags and hot posts
 router.get("/trending", async (req, res) => {
     try {
         const since = new Date(Date.now() - 24 * 86400000);
@@ -92,7 +93,7 @@ router.get("/trending", async (req, res) => {
 
         const hotUsernames = hotPosts.map((p) => p.sender);
         const hotUsers = await User.find({ username: { $in: hotUsernames } })
-            .select("username avatarUrl avatarColor isVerified isAdmin")
+            .select("username avatarUrl avatarColor isVerified isAdmin proUntil ")
             .lean();
         const hotUserMap = {};
         hotUsers.forEach((u) => { hotUserMap[u.username] = u; });
@@ -119,7 +120,7 @@ router.get("/trending", async (req, res) => {
     }
 });
 
-// GET /suggested — suggested users to follow
+// GET /suggested â€” suggested users to follow
 router.get("/suggested", async (req, res) => {
     try {
         const { username, limit: limitStr } = req.query;
@@ -127,11 +128,18 @@ router.get("/suggested", async (req, res) => {
 
         let currentUser = null;
         if (username) {
-            currentUser = await User.findOne({ username }).select("following").lean();
+            currentUser = await User.findOne({ username }).select("following blockedUsers mutedUsers").lean();
         }
 
         const followingSet = new Set(currentUser?.following || []);
         followingSet.add(username);
+
+        // Never suggest someone the viewer blocked or muted â€” the suggestion
+        // rail is a follow prompt, and a block must survive the rail.
+        const hiddenSet = new Set(
+            [...(currentUser?.blockedUsers || []), ...(currentUser?.mutedUsers || [])]
+                .map((u) => String(u).toLowerCase())
+        );
 
         const since = new Date(Date.now() - 30 * 86400000);
 
@@ -139,13 +147,14 @@ router.get("/suggested", async (req, res) => {
             { $match: { timeStamp: { $gte: since }, isScheduled: false, isRemoved: { $ne: true } } },
             { $group: { _id: "$sender", postCount: { $sum: 1 }, totalLikes: { $sum: { $size: "$likes" } } } },
             { $match: { _id: { $nin: [...followingSet] } } },
+            ...(hiddenSet.size ? [{ $match: { _id: { $nin: [...hiddenSet] } } }] : []),
             { $sort: { totalLikes: -1 } },
             { $limit: limit * 2 },
         ]);
 
         const candidates = activeUsers.map((u) => u._id);
         const users = await User.find({ username: { $in: candidates } })
-            .select("username avatarUrl avatarColor isVerified isAdmin bio postingStreak achievements")
+            .select("username avatarUrl avatarColor isVerified isAdmin proUntil  bio postingStreak achievements")
             .lean();
 
         const statsMap = {};
@@ -157,6 +166,7 @@ router.get("/suggested", async (req, res) => {
             avatarColor: u.avatarColor || "#3b82f6",
             isVerified: u.isVerified || false,
             isAdmin: u.isAdmin || false,
+            isPro: isProUserDoc(u),
             bio: (u.bio || "").slice(0, 100),
             postingStreak: u.postingStreak || 0,
             achievements: u.achievements || [],

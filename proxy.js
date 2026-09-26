@@ -9,7 +9,6 @@ const PUBLIC_PATHS = [
     "/",
     "/login",
     "/social",
-    "/browser",
     "/entertainment",
     "/me",
     "/search",
@@ -27,16 +26,28 @@ const PUBLIC_PATHS = [
     // to /login on arrival.
     "/watch",
     "/library",
+    // Reels is a feed surface: reachable when signed out so the page can show
+    // its own sign-in prompt, exactly like /social.
+    "/reels",
     "/api/auth",
     "/api/posts",
-    "/api/feed",
     "/api/search",
     "/api/ads",
     "/api/tts",
     "/api/trending",
     "/api/hashtags",
     "/api/anime-proxy",
-    "/api/browser",
+    // Analytics event ingestion must be reachable by signed-out viewers, or
+    // impressions from the anonymous majority are never recorded. Passing the
+    // proxy does not weaken the dashboard: GET /api/analytics still verifies
+    // ownership or admin in the route itself.
+    "/api/analytics",
+    // NOTE: /browser and /api/browser are deliberately NOT public.
+    // /api/browser turns this server into an open relay for arbitrary
+    // third-party sites, so it now requires a session and the `use_browser`
+    // role permission (enforced in app/api/browser/route.js via
+    // utils/browserAccess.js). /browser itself just redirects to
+    // /me/tools/browser.
 ];
 
 function isPublicPath(pathname) {

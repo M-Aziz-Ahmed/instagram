@@ -36,4 +36,4 @@ reversiGameSchema.pre("save", function () {
     if (!this.board || this.board.length === 0) this.board = initialBoard();
 });
 
-module.exports = mongoose.model("ReversiGame", reversiGameSchema);
+module.exports = mongoose.models.ReversiGame || mongoose.model("ReversiGame", reversiGameSchema);

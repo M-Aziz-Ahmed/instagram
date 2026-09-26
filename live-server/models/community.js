@@ -68,4 +68,4 @@ communitySchema.pre("save", function () {
     this.updatedAt = new Date();
 });
 
-module.exports = mongoose.model("Community", communitySchema);
+module.exports = mongoose.models.Community || mongoose.model("Community", communitySchema);

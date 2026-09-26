@@ -1,0 +1,19 @@
+# app-ads.txt — app-ads standard for the mobile / desktop app builds.
+#
+# This repo ships three app shells that all load the same web app:
+#   - mobile/  (Capacitor, appId com.anontweet.mobile)
+#   - desktop/ (Tauri 2, Windows installer served from /api/downloads/desktop)
+#   - public/  (the PWA installed to the home screen)
+#
+# Because the shells are a thin wrapper around the same origin, networks that
+# ask for app-ads.txt expect the same seller lines as ads.txt. Keep the two in
+# sync — this is the app-ads 1.0 spec.
+# See https://iabtechlab.com/app-ads/ for the full spec.
+
+# --- Google AdSense / Ad Manager (app) -------------------------------------
+# Replace with the real app publisher id before submitting either app store.
+# google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0
+# app.anontweet.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0
+
+# --- Adsterra (app) -------------------------------------------------------
+# adsterra.com, <SELF-SERVE PUBLISHER ID>, DIRECT, 03d01ed1d0f8a1bd

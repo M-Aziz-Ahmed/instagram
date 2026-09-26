@@ -121,7 +121,7 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                         <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{recipient || user?.username}</p>
-                        <UserBadges isVerified={recipientUser?.isVerified} isAdmin={recipientUser?.isAdmin} roles={recipientUser?.roles || []} size="sm" />
+                        <UserBadges isPro={recipientUser?.isPro} isVerified={recipientUser?.isVerified} isAdmin={recipientUser?.isAdmin} roles={recipientUser?.roles || []} size="sm" />
                     </div>
                     {isRecording ? (
                         <div className="flex items-center gap-1.5">

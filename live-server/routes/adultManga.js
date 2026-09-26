@@ -2,6 +2,14 @@ const express = require("express");
 const fetch = require("node-fetch");
 const dns = require("dns");
 const router = express.Router();
+const { requireAdultAccess } = require("../middleware/adultGate");
+
+// Every route in this file proxies MangaDex's erotica/pornographic catalogue
+// through this server. That makes the whole router age-gated, permission-gated
+// and geo-gated — see middleware/adultGate.js. It is deliberately mounted with
+// the gate on the router itself rather than at app.use() time so a future
+// route added here cannot accidentally be left public.
+router.use(requireAdultAccess);
 
 dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
 

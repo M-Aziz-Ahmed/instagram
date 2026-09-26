@@ -32,12 +32,37 @@ export function RoleBadge({ role }) {
     );
 }
 
-/** Shows verified + all role badges for a user */
-export default function UserBadges({ isVerified, isAdmin, roles = [], size = "sm" }) {
+/**
+ * Shows Pro + verified + all role badges for a user.
+ *
+ * `isPro` is optional because not every author payload carries it: the server
+ * only derives it where it already reads the user document (profile, /me,
+ * admin). It is passed through rather than recomputed so the badge follows the
+ * same server-side expiry check and cannot drift out of sync with it.
+ */
+export default function UserBadges({ isPro, isVerified, isAdmin, roles = [], size = "sm" }) {
     const hasVerified = isVerified || isAdmin;
-    if (!hasVerified && roles.length === 0) return null;
+    if (!isPro && !hasVerified && roles.length === 0) return null;
     return (
         <span className="inline-flex items-center gap-1">
+            {isPro && (
+                <span
+                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-amber-600 text-white text-[10px] font-bold select-none shrink-0"
+                    title="Pro — no ads on any surface"
+                    aria-label="Pro"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="h-2.5 w-2.5"
+                        aria-hidden="true"
+                    >
+                        <path d="M5 3l4.5 2.5L15 3l1.5 3.5L21 5l-1 6h3l-3.5 6-2.5-4-4 4 1-6H5l1-6H3l3.5-6L5 3z" />
+                    </svg>
+                    Pro
+                </span>
+            )}
             {hasVerified && <VerifiedBadge />}
             {isAdmin && (
                 <span

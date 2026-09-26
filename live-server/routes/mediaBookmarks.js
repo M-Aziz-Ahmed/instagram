@@ -47,29 +47,10 @@ async function findAnilistId(mediaType, title, fallbackId) {
     }
 }
 
-function optionalAuth(req, res, next) {
-    const token = req.headers.authorization?.replace("Bearer ", "") || req.cookies?.af_session;
-    if (!token) return next();
-    try {
-        const jwt = require("jsonwebtoken");
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
-        req.userId = decoded.userId;
-    } catch {}
-    next();
-}
-
-function requireAuth(req, res, next) {
-    const token = req.headers.authorization?.replace("Bearer ", "") || req.cookies?.af_session;
-    if (!token) return res.status(401).json({ error: "Unauthorized" });
-    try {
-        const jwt = require("jsonwebtoken");
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
-        req.userId = decoded.userId;
-    } catch {
-        return res.status(401).json({ error: "Invalid token" });
-    }
-    next();
-}
+// Shared auth middleware, replacing two local copies in this file that verified
+// with a hardcoded `process.env.JWT_SECRET || "your-secret-key"`. Aliased to the
+// old local names so the route table is unchanged.
+const { optionalAuth, verifyToken: requireAuth } = require("../middleware/auth");
 
 const User = require("../models/user");
 

@@ -3,12 +3,12 @@ const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 const OTP = require("../models/otp");
 const User = require("../models/user");
-const { verifyToken } = require("../middleware/auth");
+const { verifyToken, SECRET } = require("../middleware/auth");
+const { isProUserDoc } = require("../lib/economy");
 const { logAuth } = require("../logService");
 const { isValidPin, hashPin, verifyPin } = require("../utils/pin");
 
 const router = express.Router();
-const SECRET = process.env.JWT_SECRET || "anonfeed_jwt_secret_change_in_production_32chars";
 const MAX_AGE = 31536000000;
 
 function generateCode() {
@@ -18,8 +18,8 @@ function generateCode() {
 // The session cookie's Secure/SameSite flags must follow the scheme the
 // *browser* actually used, not the server's NODE_ENV. Deriving them from
 // NODE_ENV marked the cookie `Secure` while the app was being served over
-// plain HTTP — the Tauri shell against http://localhost:3000, or a phone
-// opening a LAN IP — and browsers silently discard `Secure` cookies received
+// plain HTTP â€” the Tauri shell against http://localhost:3000, or a phone
+// opening a LAN IP â€” and browsers silently discard `Secure` cookies received
 // over http. Login then returned 200 with no session stored, so the app
 // bounced straight back to /login and "login doesn't redirect".
 // `trust proxy` is enabled, so req.secure already honours X-Forwarded-Proto.
@@ -67,6 +67,12 @@ function sendUserPayload(user) {
         postingStreak:  user.postingStreak || 0,
         longestStreak:  user.longestStreak || 0,
         achievements:   user.achievements || [],
+        // Gem balance and Pro state. `isPro` is computed server-side from
+        // proUntil rather than stored, so a client can never hold a stale
+        // "I am Pro" flag after the subscription lapses.
+        gems:           user.gems || 0,
+        isPro:          isProUserDoc(user),
+        proUntil:       user.proUntil || null,
         defaultTheme:   user.defaultTheme || "default",
         hasPin:         !!user.pinHash,
         needsSetup: !user.username,
@@ -228,7 +234,7 @@ router.post("/verify-pin", async (req, res) => {
     }
 });
 
-// POST /set-pin  — create or change the login PIN (requires current PIN when one is set)
+// POST /set-pin  â€” create or change the login PIN (requires current PIN when one is set)
 router.post("/set-pin", verifyToken, async (req, res) => {
     try {
         const { pin, currentPin } = req.body;
@@ -260,7 +266,7 @@ router.post("/set-pin", verifyToken, async (req, res) => {
     }
 });
 
-// POST /forgot-pin  — verify OTP for the account, then set a new PIN and log in
+// POST /forgot-pin  â€” verify OTP for the account, then set a new PIN and log in
 router.post("/forgot-pin", async (req, res) => {
     try {
         const { email, code, pin } = req.body;
@@ -418,6 +424,7 @@ router.patch("/profile", verifyToken, async (req, res) => {
                 username: user.username, bio: user.bio,
                 avatarColor: user.avatarColor, avatarUrl: user.avatarUrl || "",
                 isVerified: user.isVerified || false, isAdmin: user.isAdmin || false,
+                isPro: isProUserDoc(user),
                 roles: (user.roles || []).map((r) => ({ id: r._id.toString(), name: r.name, badge: r.badge, color: r.color })),
                 language: user.language || "en",
                 autoTranslate: user.autoTranslate || false,

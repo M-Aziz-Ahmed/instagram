@@ -130,7 +130,7 @@ function SearchResults({ query, onClear, onHashtag }) {
                                     </div>
                                     <div className="flex items-center gap-1.5 min-w-0">
                                         <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{u.username}</span>
-                                        <UserBadges isVerified={u.isVerified} isAdmin={u.isAdmin} roles={u.roles || []} size="sm" />
+                                        <UserBadges isPro={u.isPro} isVerified={u.isVerified} isAdmin={u.isAdmin} roles={u.roles || []} size="sm" />
                                     </div>
                                 </Link>
                             ))}
@@ -258,8 +258,14 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
     // Fetch ads once on mount. We ask for more than we can place so consecutive
     // slots get *different* creatives when several are configured, and drop
     // anything that can only render an empty box.
+    //
+    // `slot=feed` scopes this to creatives an admin has assigned to the social
+    // feed. The endpoint used to accept an unplaced request, which was fine when
+    // the feed was the only surface - now that ads are targeted, an unplaced
+    // request would be ambiguous, and the server treats it as "unassigned ads
+    // only" to keep a typo from dumping another surface's ads here.
     useEffect(() => {
-        fetch("/api/ads?limit=20", { cache: "no-store" })
+        fetch("/api/ads?slot=feed&limit=20", { cache: "no-store" })
             .then((r) => r.ok ? r.json() : [])
             .then((data) => {
                 if (!Array.isArray(data)) return;

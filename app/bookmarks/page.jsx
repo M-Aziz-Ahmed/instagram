@@ -1,18 +1,15 @@
-import BookmarksNoSSR from "@/components/Feed/BookmarksNoSSR";
+import { redirect } from "next/navigation";
 
 export const metadata = {
-  title: 'Bookmarks',
-  description: 'View your saved posts and content on AnonTweet. Keep track of anonymous posts you want to revisit.',
-  openGraph: {
-    title: 'Your Bookmarks - AnonTweet',
-    description: 'Your saved anonymous posts and content',
-  },
-  robots: {
-    index: false, // Don't index personal bookmarks
-    follow: true,
-  },
+    title: "Saved posts",
+    robots: { index: false, follow: true },
 };
 
+/**
+ * Saved posts now live in the "Posts" tab of `/me/saved`, alongside saved
+ * anime and manga. This route stays so old bookmarks, shared links and the
+ * sitemap entry keep resolving.
+ */
 export default function BookmarksPage() {
-    return <BookmarksNoSSR />;
+    redirect("/me/saved?tab=posts");
 }

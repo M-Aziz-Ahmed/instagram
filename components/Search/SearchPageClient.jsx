@@ -183,7 +183,7 @@ export default function SearchPageClient() {
                                     </div>
                                     <div className="flex items-center gap-1.5 min-w-0">
                                         <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{u.username}</span>
-                                        <UserBadges isVerified={u.isVerified} isAdmin={u.isAdmin} roles={u.roles || []} size="sm" />
+                                        <UserBadges isPro={u.isPro} isVerified={u.isVerified} isAdmin={u.isAdmin} roles={u.roles || []} size="sm" />
                                     </div>
                                 </Link>
                             ))}

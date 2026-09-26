@@ -3,6 +3,7 @@ const GroupChat = require("../models/groupChat");
 const GroupMessage = require("../models/groupMessage");
 const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
+const { isProUserDoc } = require("../lib/economy");
 const { resolveLinkPreview } = require("../utils/linkPreview");
 
 const router = express.Router();
@@ -19,7 +20,7 @@ router.get("/", verifyToken, async (req, res) => {
         const allMembernames = [...new Set(groups.flatMap((g) => g.members.map((m) => m.username)))];
         const users = allMembernames.length > 0
             ? await User.find({ username: { $in: allMembernames } })
-                .select("username avatarUrl isVerified isAdmin roles")
+                .select("username avatarUrl isVerified isAdmin roles proUntil")
                 .populate("roles", "name badge color").lean()
             : [];
 
@@ -29,6 +30,8 @@ router.get("/", verifyToken, async (req, res) => {
                 avatarUrl: u.avatarUrl || "",
                 isVerified: u.isVerified || false,
                 isAdmin: u.isAdmin || false,
+                isPro: isProUserDoc(u),
+                isPro: isProUserDoc(u),
                 roles: (u.roles || []).map((r) => ({ id: r._id?.toString() ?? "", name: r.name ?? "", badge: r.badge ?? "", color: r.color ?? "" })),
             };
         });
@@ -94,7 +97,7 @@ router.get("/:id", verifyToken, async (req, res) => {
 
         const memberNames = group.members.map((m) => m.username);
         const users = await User.find({ username: { $in: memberNames } })
-            .select("username avatarUrl isVerified isAdmin roles")
+            .select("username avatarUrl isVerified isAdmin roles proUntil")
             .populate("roles", "name badge color").lean();
 
         const userMap = {};
@@ -103,6 +106,8 @@ router.get("/:id", verifyToken, async (req, res) => {
                 avatarUrl: u.avatarUrl || "",
                 isVerified: u.isVerified || false,
                 isAdmin: u.isAdmin || false,
+                isPro: isProUserDoc(u),
+                isPro: isProUserDoc(u),
                 roles: (u.roles || []).map((r) => ({ id: r._id?.toString() ?? "", name: r.name ?? "", badge: r.badge ?? "", color: r.color ?? "" })),
             };
         });
@@ -253,7 +258,7 @@ router.get("/:id/messages", verifyToken, async (req, res) => {
         const senderNames = [...new Set(sliced.map((m) => m.sender))];
         const users = senderNames.length > 0
             ? await User.find({ username: { $in: senderNames } })
-                .select("username avatarUrl isVerified isAdmin roles")
+                .select("username avatarUrl isVerified isAdmin roles proUntil")
                 .populate("roles", "name badge color").lean()
             : [];
 
@@ -263,6 +268,8 @@ router.get("/:id/messages", verifyToken, async (req, res) => {
                 avatarUrl: u.avatarUrl || "",
                 isVerified: u.isVerified || false,
                 isAdmin: u.isAdmin || false,
+                isPro: isProUserDoc(u),
+                isPro: isProUserDoc(u),
                 roles: (u.roles || []).map((r) => ({ id: r._id?.toString() ?? "", name: r.name ?? "", badge: r.badge ?? "", color: r.color ?? "" })),
             };
         });
@@ -322,7 +329,7 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
         await group.save();
 
         const userDoc = await User.findOne({ username: sender })
-            .select("username avatarUrl isVerified isAdmin roles")
+            .select("username avatarUrl isVerified isAdmin roles proUntil")
             .populate("roles", "name badge color").lean();
 
         const author = userDoc ? {
@@ -339,7 +346,7 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
     }
 });
 
-// PATCH /:id/messages — unified action dispatcher (read, react, delete)
+// PATCH /:id/messages â€” unified action dispatcher (read, react, delete)
 router.patch("/:id/messages", async (req, res) => {
     try {
         const { id } = req.params;

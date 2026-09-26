@@ -136,18 +136,18 @@ function LogoutIcon() {
     );
 }
 
-function EntertainmentIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 0v.375" />
-        </svg>
-    );
-}
-
 function MovieHubIcon() {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.75 12 3m0 0 8.25 6.75M12 3v18m0-18 8.25 6.75M12 12 3.75 18.75M12 12l8.25 6.75" />
+        </svg>
+    );
+}
+
+function ReelsIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5 20.47 5.78a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25h11.24Z" />
         </svg>
     );
 }
@@ -184,6 +184,14 @@ function SearchIcon() {
     );
 }
 
+function CompassIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0 0a8.949 8.949 0 0 0 4.951-1.488A3.987 3.987 0 0 0 13 16h-2a3.987 3.987 0 0 0-3.951 3.512A8.949 8.949 0 0 0 12 21Zm3-11a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+        </svg>
+    );
+}
+
 function SectionHeader({ label }) {
     const { collapsed } = useSidebar();
     if (collapsed) return <div className="h-4" />;
@@ -209,10 +217,11 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
         return pathname.startsWith(path);
     };
 
-    // Legacy category routes are still listed: they redirect into /watch, but
-    // keeping them means a stale link (or a cached back-navigation) still
-    // highlights the right section instead of showing nothing active.
-    const entertainmentRoutes = ["/games", "/chess", "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman", "/reactionduel", "/game2048", "/minesweeper", "/sudoku", "/movies", "/anime", "/manga", "/kdramas", "/seasons", "/cdramas", "/cartoons", "/channels", "/live-tv", "/leaderboard"];
+    // Games, the legacy media category routes and the leaderboard are no longer
+    // top-level entries — they all live under Watch / Discover. The Movie Hub
+    // row lights up for the old paths too, so a stale link still highlights
+    // the right section instead of showing nothing active.
+    const watchRoutes = ["/watch", "/entertainment", "/movies", "/anime", "/manga", "/kdramas", "/seasons", "/cdramas", "/cartoons", "/channels", "/live-tv"];
 
     const handleLogout = async () => {
         if (onClose) onClose();
@@ -281,7 +290,7 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-1.5">
                                             <p className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">@{user?.username}</p>
-                                            <UserBadges isVerified={user?.isVerified} isAdmin={user?.isAdmin} roles={user?.roles || []} size="sm" />
+                                            <UserBadges isPro={user?.isPro} isVerified={user?.isVerified} isAdmin={user?.isAdmin} roles={user?.roles || []} size="sm" />
                                         </div>
                                         {user?.bio && (
                                             <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{user.bio}</p>
@@ -362,24 +371,17 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                                 onClick={handleNavClick}
                             />
                             <NavItem
-                                href="/browser"
-                                icon={<BrowserIcon />}
-                                label="Browser"
-                                active={isActive("/browser")}
-                                onClick={handleNavClick}
-                            />
-                            <NavItem
                                 href="/watch"
                                 icon={<MovieHubIcon />}
                                 label="Movie Hub"
-                                active={isActive("/watch")}
+                                active={watchRoutes.some((r) => isActive(r))}
                                 onClick={handleNavClick}
                             />
                             <NavItem
-                                href="/entertainment"
-                                icon={<EntertainmentIcon />}
-                                label="Entertainment"
-                                active={entertainmentRoutes.some((r) => isActive(r))}
+                                href="/reels"
+                                icon={<ReelsIcon />}
+                                label="Reels"
+                                active={isActive("/reels")}
                                 onClick={handleNavClick}
                             />
                             <NavItem
@@ -394,6 +396,13 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                         {/* DISCOVER */}
                         <SectionHeader label="Discover" />
                         <div className="space-y-1">
+                            <NavItem
+                                href="/explore"
+                                icon={<CompassIcon />}
+                                label="Explore"
+                                active={isActive("/explore")}
+                                onClick={handleNavClick}
+                            />
                             <NavItem
                                 href="/search"
                                 icon={<SearchIcon />}
@@ -421,21 +430,17 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                                 onClick={handleNavClick}
                             />
                             <NavItem
-                                href="/bookmarks"
+                                href="/me/saved"
                                 icon={<BookmarkIcon />}
-                                label="Bookmarks"
-                                active={isActive("/bookmarks")}
+                                label="Saved"
+                                active={isActive("/me/saved") || isActive("/bookmarks") || isActive("/library")}
                                 onClick={handleNavClick}
                             />
                             <NavItem
-                                href="/library"
-                                icon={
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
-                                    </svg>
-                                }
-                                label="Library"
-                                active={isActive("/library")}
+                                href="/me/tools"
+                                icon={<BrowserIcon />}
+                                label="Tools"
+                                active={isActive("/me/tools") || isActive("/browser")}
                                 onClick={handleNavClick}
                             />
                             {user?.isAdmin && (
@@ -482,8 +487,7 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                             onClick={() => { 
                                 setShowMutedWords(true); 
                                 if (onClose) onClose(); 
-                            }}
-                            className={`w-full flex items-center ${collapsed ? "justify-center gap-0 px-2" : "gap-3 px-4"} py-3 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/60 hover:text-gray-900 dark:hover:text-gray-100 transition-colors min-h-[48px] ${collapsed ? "" : "text-left"}`}
+                            }}                            className={`w-full flex items-center ${collapsed ? "justify-center gap-0 px-2" : "gap-3 px-4"} py-3 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/60 hover:text-gray-900 dark:hover:text-gray-100 transition-colors min-h-[48px] ${collapsed ? "" : "text-left"}`}
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 shrink-0">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />

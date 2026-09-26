@@ -21,7 +21,7 @@ const TABS = [
         key: "social",
         label: "Social",
         href: "/social",
-        routes: ["/social", "/post", "/search", "/trending", "/communities", "/bookmarks"],
+        routes: ["/social", "/post", "/search", "/trending", "/explore", "/communities"],
         icon: (active) => (
             <svg xmlns="http://www.w3.org/2000/svg" fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={active ? 2 : 1.8} stroke="currentColor" className="w-6 h-6">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
@@ -30,28 +30,17 @@ const TABS = [
         ),
     },
     {
-        key: "browser",
-        label: "Browser",
-        href: "/browser",
-        routes: ["/browser"],
-        icon: (active) => (
-            <svg xmlns="http://www.w3.org/2000/svg" fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={active ? 2 : 1.8} stroke="currentColor" className="w-6 h-6">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
-            </svg>
-        ),
-    },
-    {
-        key: "entertainment",
-        label: "Entertainment",
-        href: "/entertainment",
+        key: "watch",
+        label: "Watch",
+        href: "/watch",
         routes: [
-            "/entertainment", "/movies", "/anime", "/manga", "/kdramas", "/seasons", "/cdramas", "/cartoons", "/channels", "/live-tv",
+            "/watch", "/entertainment", "/movies", "/anime", "/manga", "/kdramas", "/seasons", "/cdramas", "/cartoons", "/channels", "/live-tv",
             "/games", "/chess", "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman",
             "/reactionduel", "/game2048", "/minesweeper", "/sudoku", "/leaderboard",
         ],
         icon: (active) => (
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={active ? 2 : 1.8} stroke="currentColor" className="w-6 h-6">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6.429 9.75 2.25 12l4.179 2.25m0-4.5 5.571 3 5.571-3m-11.142 0L2.25 7.5 12 2.25l9.75 5.25-4.179 2.25m0 0L21.75 12l-4.179 2.25m0 0 4.179 2.25L12 21.75 2.25 16.5l4.179-2.25m11.142 0-5.571 3-5.571-3" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.429 6.429 2.25 9.75l4.179 2.25m0-4.5 5.571 3 5.571-3m-11.142 0L2.25 7.5 12 2.25l9.75 5.25-4.179 2.25m0 0L21.75 12l-4.179 2.25m0 0 4.179 2.25L12 21.75 2.25 16.5l4.179-2.25m11.142 0-5.571 3-5.571-3" />
             </svg>
         ),
     },
@@ -59,7 +48,7 @@ const TABS = [
         key: "me",
         label: "Me",
         href: "/me",
-        routes: ["/me", "/profile", "/library", "/referrals", "/download", "/admin", "/analytics", "/invite"],
+        routes: ["/me", "/profile", "/me/saved", "/bookmarks", "/library", "/referrals", "/download", "/admin", "/analytics", "/invite"],
         profile: true,
         icon: (active) => (
             <svg xmlns="http://www.w3.org/2000/svg" fill={active ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={active ? 2 : 1.8} stroke="currentColor" className="w-6 h-6">
@@ -69,7 +58,7 @@ const TABS = [
     },
     {
         key: "education",
-        label: "Education",
+        label: "Learn",
         href: "/education",
         routes: ["/education"],
         icon: (active) => (

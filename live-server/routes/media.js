@@ -29,29 +29,13 @@ function normalizeType(type) {
 const MediaBookmark = require("../models/mediaBookmark");
 const User = require("../models/user");
 
-function optionalAuth(req, res, next) {
-    const token = req.headers.authorization?.replace("Bearer ", "") || req.cookies?.af_session;
-    if (!token) return next();
-    try {
-        const jwt = require("jsonwebtoken");
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
-        req.userId = decoded.userId;
-    } catch {}
-    next();
-}
-
-function requireAuth(req, res, next) {
-    const token = req.headers.authorization?.replace("Bearer ", "") || req.cookies?.af_session;
-    if (!token) return res.status(401).json({ error: "Unauthorized" });
-    try {
-        const jwt = require("jsonwebtoken");
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
-        req.userId = decoded.userId;
-    } catch {
-        return res.status(401).json({ error: "Invalid token" });
-    }
-    next();
-}
+// Shared auth middleware. This file used to define its own `optionalAuth` and
+// `requireAuth` that were byte-for-byte the same intent but verified with a
+// hardcoded `process.env.JWT_SECRET || "your-secret-key"`, so with JWT_SECRET
+// unset these media routes would accept a token signed with a value committed in
+// this repo. Aliased to the old local names so the route table below is
+// unchanged.
+const { optionalAuth, verifyToken: requireAuth } = require("../middleware/auth");
 
 async function getUsername(req) {
     if (!req.userId) return null;

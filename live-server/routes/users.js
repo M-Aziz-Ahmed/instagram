@@ -2,6 +2,7 @@ const express = require("express");
 const User = require("../models/user");
 const Notification = require("../models/notification");
 const { verifyToken, optionalAuth } = require("../middleware/auth");
+const { isProUserDoc } = require("../lib/economy");
 
 const router = express.Router();
 
@@ -32,6 +33,38 @@ router.get("/online", async (req, res) => {
     } catch (error) {
         console.error("Failed to get online statuses:", error);
         return res.status(500).json({ error: "Failed to get online statuses" });
+    }
+});
+
+// GET /me/permissions
+// The Next.js layer owns a few features that the live server does not host
+// (the in-app web browser is the big one) and therefore cannot use the
+// requirePermission middleware directly. This endpoint lets those handlers ask
+// what the caller is allowed to do instead of duplicating role resolution.
+router.get("/me/permissions", verifyToken, async (req, res) => {
+    try {
+        const user = await User.findById(req.userId)
+            .select("isAdmin roles")
+            .populate("roles", "permissions name badge color")
+            .lean();
+
+        if (!user) return res.status(401).json({ error: "User not found" });
+
+        const permissions = new Set();
+        for (const role of user.roles || []) {
+            for (const p of role.permissions || []) permissions.add(p);
+        }
+
+        return res.json({
+            isAdmin: !!user.isAdmin,
+            permissions: [...permissions],
+            roles: (user.roles || []).map((r) => ({
+                name: r.name, badge: r.badge, color: r.color,
+            })),
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
     }
 });
 
@@ -148,9 +181,12 @@ router.get("/:username", async (req, res) => {
             bio: user.bio,
             avatarColor: user.avatarColor,
             avatarUrl: user.avatarUrl || "",
-            isVerified: user.isVerified || false,
-            isAdmin: user.isAdmin || false,
-            isPrivate: user.isPrivate || false,
+        isVerified: user.isVerified || false,
+        isAdmin: user.isAdmin || false,
+        // Derived from proUntil on every read, so a lapsed subscription can
+        // never leave a stale Pro badge showing.
+        isPro: isProUserDoc(user),
+        isPrivate: user.isPrivate || false,
             roles: (user.roles || []).map((r) => ({
                 id: r._id?.toString() ?? "",
                 name: r.name ?? "",
@@ -494,6 +530,130 @@ router.delete("/:username/muted-words/:word", verifyToken, async (req, res) => {
         user.mutedWords = user.mutedWords.filter((w) => w !== normalized);
         await user.save();
         return res.json({ mutedWords: user.mutedWords });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// ── Blocking & muting accounts ─────────────────────────────────────────────
+// Mute  = soft. Their posts, comments and suggestions disappear from your
+//         surfaces, but you can still follow them and message them.
+// Block = hard. Nothing of theirs is shown, and neither side can DM the other.
+//
+// Both are stored as lowercase usernames so every comparison below is
+// case-insensitive. Route names follow the existing muted-words convention.
+
+// GET /:username/blocks — lists both lists so the settings screen can render
+// muted and blocked accounts from one call.
+router.get("/:username/blocks", verifyToken, async (req, res) => {
+    try {
+        const { username } = req.params;
+        const userDoc = await User.findById(req.userId).select("username");
+        if (userDoc?.username !== username) return res.status(403).json({ error: "Unauthorized" });
+
+        const user = await User.findOne({ username })
+            .select("blockedUsers mutedUsers")
+            .lean();
+        if (!user) return res.status(404).json({ error: "Not found" });
+
+        return res.json({
+            blockedUsers: user.blockedUsers || [],
+            mutedUsers: user.mutedUsers || [],
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// POST /:username/block | /:username/mute
+// The path segment is the *viewer*, matching the muted-words routes above;
+// the account being acted on comes from `target` in the body. We verify the
+// caller's session really is that viewer, so this cannot be used to edit
+// somebody else's block list.
+//
+// Blocking also removes any existing follow edges in both directions and drops
+// the pending follow request, because a blocked account should not keep
+// appearing in the blocker's follower list.
+router.post("/:username/:action(block|mute)", verifyToken, async (req, res) => {
+    try {
+        const { username, action } = req.params;
+        if (action !== "block" && action !== "mute") {
+            return res.status(404).json({ error: "Not found" });
+        }
+
+        const me = await User.findById(req.userId);
+        if (!me) return res.status(401).json({ error: "User not found" });
+        if (me.username !== username) return res.status(403).json({ error: "Unauthorized" });
+
+        const target = String(req.body?.target || "").trim();
+        if (!target) return res.status(400).json({ error: "Target username required" });
+        if (target.toLowerCase() === me.username.toLowerCase()) {
+            return res.status(400).json({ error: "You cannot do that to yourself" });
+        }
+
+        const targetUser = await User.findOne({ username: target }).select("username");
+        if (!targetUser) return res.status(404).json({ error: "User not found" });
+
+        // Store the canonical casing from the DB so later lowercase comparisons
+        // in the feed and message queries line up.
+        const canonical = targetUser.username;
+        const key = canonical.toLowerCase();
+        const field = action === "block" ? "blockedUsers" : "mutedUsers";
+        const otherField = action === "block" ? "mutedUsers" : "blockedUsers";
+
+        if (!me[field].some((u) => u.toLowerCase() === key)) {
+            me[field].push(canonical);
+        }
+        // Muting someone you already blocked (or vice versa) is meaningless:
+        // the stricter action wins.
+        me[otherField] = me[otherField].filter((u) => u.toLowerCase() !== key);
+
+        if (action === "block") {
+            me.following = me.following.filter((u) => u.toLowerCase() !== key);
+            me.followers = me.followers.filter((u) => u.toLowerCase() !== key);
+            me.pendingFollowRequests = me.pendingFollowRequests.filter((u) => u.toLowerCase() !== key);
+
+            // Drop the reverse follow edges too, so the blocked account is not
+            // left following someone who blocked them.
+            await User.updateOne(
+                { username: canonical },
+                { $pull: { following: me.username, followers: me.username } }
+            );
+        }
+
+        await me.save();
+        return res.json({ blockedUsers: me.blockedUsers, mutedUsers: me.mutedUsers });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// DELETE /:username/block | /:username/mute — unblock / unmute.
+router.delete("/:username/:action(block|mute)", verifyToken, async (req, res) => {
+    try {
+        const { username, action } = req.params;
+        if (action !== "block" && action !== "mute") {
+            return res.status(404).json({ error: "Not found" });
+        }
+
+        const me = await User.findById(req.userId);
+        if (!me) return res.status(401).json({ error: "User not found" });
+        if (me.username !== username) return res.status(403).json({ error: "Unauthorized" });
+
+        // Accept the target from either the body or the query string so the
+        // settings screen can unblock straight from a list without extra work.
+        const raw = String(req.body?.target || req.query?.target || "").trim();
+        if (!raw) return res.status(400).json({ error: "Target username required" });
+        const key = raw.toLowerCase();
+
+        const field = action === "block" ? "blockedUsers" : "mutedUsers";
+        me[field] = me[field].filter((u) => String(u).toLowerCase() !== key);
+        await me.save();
+
+        return res.json({ blockedUsers: me.blockedUsers, mutedUsers: me.mutedUsers });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });

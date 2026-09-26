@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import AdSlot from "@/components/shared/AdSlot";
 
 const SUBJECTS = [
     {
@@ -140,6 +141,8 @@ export default function EducationHub() {
                     </p>
                 </div>
             </div>
+
+            <AdSlot slot="education" className="mt-8 px-4 pb-8" />
         </div>
     );
 }

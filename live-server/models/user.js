@@ -21,6 +21,14 @@ const userSchema = new mongoose.Schema({
     bookmarks:   [{ type: String, default: [] }],
     closeFriends: [{ type: String, default: [] }],
     mutedWords:   [{ type: String, default: [] }],
+    // Accounts the user has muted (soft) or blocked (hard). Kept as lowercase
+    // usernames so lookups stay case-insensitive.
+    mutedUsers:   [{ type: String, default: [] }],
+    blockedUsers: [{ type: String, default: [] }],
+    // Last time this user explicitly confirmed they are 18+. Consumed by
+    // middleware/adultGate.js, which re-asks every 30 days. Only ever written
+    // by POST /api/adult-gate/confirm.
+    adultConfirmedAt: { type: Date, default: null },
     language:     { type: String, default: "en" },
     autoTranslate: { type: Boolean, default: false },
     lastActive:   { type: Date, default: Date.now },
@@ -37,6 +45,14 @@ const userSchema = new mongoose.Schema({
     lastPostDate:    { type: String, default: "" },
     longestStreak:   { type: Number, default: 0 },
     achievements:    [{ type: String, default: [] }],
+    // ── Economy ────────────────────────────────────────────────────────────
+    // Gems are the in-app currency. There is no payment provider wired up, so
+    // today they are only ever credited by admins or by in-app rewards; the
+    // balance is still authoritative and every change is written to the
+    // GemTransaction ledger, so adding a real payment provider later only has
+    // to call creditGems() at the point of capture.
+    gems:            { type: Number, default: 0, min: 0 },
+    proUntil:        { type: Date, default: null },
     defaultTheme:    { type: String, enum: ["default", "sunset", "ocean", "forest", "neon", "midnight", "rose", "gold"], default: "default" },
     createdAt:   { type: Date, default: Date.now },
     chessGames:  { type: [{

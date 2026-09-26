@@ -2,6 +2,7 @@ const express = require("express");
 const Notification = require("../models/notification");
 const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
+const { isProUserDoc } = require("../lib/economy");
 
 const router = express.Router();
 
@@ -17,10 +18,12 @@ router.get("/", verifyToken, async (req, res) => {
 
         const fromUsernames = [...new Set(notifs.map((n) => n.fromUser))];
         const users = await User.find({ username: { $in: fromUsernames } })
-            .select("username isVerified isAdmin roles")
+            .select("username isVerified isAdmin roles proUntil")
             .populate("roles", "name badge color").lean();
 
-        const userMap = Object.fromEntries(users.map((u) => [u.username, u]));
+        const userMap = Object.fromEntries(
+            users.map((u) => [u.username, { ...u, isPro: isProUserDoc(u) }])
+        );
 
         const enriched = notifs.map((n) => ({
             ...n,

@@ -41,7 +41,7 @@ function decodeToken(req) {
     try {
         const token = req.cookies?.af_session || req.headers.authorization?.split(" ")[1];
         if (!token) return null;
-        return jwt.verify(token, process.env.JWT_SECRET || "af_secret");
+            return jwt.verify(token, require("./auth").SECRET);
     } catch {
         return null;
     }

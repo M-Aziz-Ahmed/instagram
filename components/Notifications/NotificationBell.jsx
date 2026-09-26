@@ -209,7 +209,7 @@ export default function NotificationBell({ onNavigate }) {
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm text-gray-900 dark:text-gray-100 leading-snug">
                                         <span className="font-semibold">{n.fromUser}</span>
-                                        <UserBadges isVerified={n.fromUserDoc?.isVerified} isAdmin={n.fromUserDoc?.isAdmin} roles={n.fromUserDoc?.roles || []} size="xs" />
+                                        <UserBadges isPro={n.fromUserDoc?.isPro} isVerified={n.fromUserDoc?.isVerified} isAdmin={n.fromUserDoc?.isAdmin} roles={n.fromUserDoc?.roles || []} size="xs" />
                                         {" "}{TYPE_LABEL[n.type] ?? n.type}
                                     </p>
 

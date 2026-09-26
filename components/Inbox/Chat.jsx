@@ -9,6 +9,7 @@ import UserBadges from "@/components/shared/UserBadges";
 import AudioPlayer from "@/components/shared/AudioPlayer";
 import RichText from "@/components/Feed/RichText";
 import LinkPreviewCard from "@/components/shared/LinkPreviewCard";
+import ForwardModal from "./ForwardModal";
 
 const RECALL_WINDOW_MS = 60 * 1000;
 
@@ -115,6 +116,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     const [editingMsgId, setEditingMsgId] = useState(null);
     const [editMsgText, setEditMsgText] = useState("");
     const [activeMenu, setActiveMenu] = useState(null);
+    const [forwardMsg, setForwardMsg] = useState(null);
 
     const isNearBottom = useCallback(() => {
         const el = scrollContainerRef.current;
@@ -665,7 +667,22 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                     <div className="flex items-center gap-1 mb-1 ml-1">
                                         <span className="text-xs text-gray-500 dark:text-gray-400">{msg.sender}</span>
                                         {msg.sender === recipient && (
-                                            <UserBadges isVerified={recipientUser?.isVerified} isAdmin={recipientUser?.isAdmin} roles={recipientUser?.roles || []} size="xs" />
+                                            <UserBadges isPro={recipientUser?.isPro} isVerified={recipientUser?.isVerified} isAdmin={recipientUser?.isAdmin} roles={recipientUser?.roles || []} size="xs" />
+                                        )}
+                                    </div>
+                                )}
+
+                                {msg.forwardedFrom && (
+                                    <div className={`mb-1 px-3 py-1.5 rounded-2xl text-xs border-l-3 ${
+                                        isMine
+                                            ? "bg-blue-600/30 border-blue-300 text-blue-100"
+                                            : "bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-500 text-gray-600 dark:text-gray-300"
+                                    }`}>
+                                        <p className="font-semibold text-[10px] truncate">
+                                            Forwarded from {msg.forwardedFrom.sender}
+                                        </p>
+                                        {msg.forwardedFrom.text && (
+                                            <p className="truncate opacity-70">{msg.forwardedFrom.text}</p>
                                         )}
                                     </div>
                                 )}
@@ -829,6 +846,15 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                                                 Edit
                                                             </button>
                                                             <button
+                                                                onClick={() => { setForwardMsg(msg); setActiveMenu(null); }}
+                                                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                                                                </svg>
+                                                                Forward
+                                                            </button>
+                                                            <button
                                                                 onClick={() => { handleDeleteMessage(msg); setActiveMenu(null); }}
                                                                 className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                                                             >
@@ -844,8 +870,19 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                         </>
                                     )}
                                     {!isMine && (
-                                        <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                                        <span className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500">
                                             {new Date(msg.timeStamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                            {!msg.deleted && (
+                                                <button
+                                                    onClick={() => setForwardMsg(msg)}
+                                                    title="Forward message"
+                                                    className="hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                                                    </svg>
+                                                </button>
+                                            )}
                                         </span>
                                     )}
                                 </div>
@@ -939,6 +976,10 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
 
         {lightboxSrc && (
             <ImageLightbox src={lightboxSrc} alt="Photo" onClose={() => setLightboxSrc(null)} />
+        )}
+
+        {forwardMsg && (
+            <ForwardModal message={forwardMsg} onClose={() => setForwardMsg(null)} />
         )}
         </div>
     );

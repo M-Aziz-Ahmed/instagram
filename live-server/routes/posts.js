@@ -4,9 +4,16 @@ const User = require("../models/user");
 const Notification = require("../models/notification");
 const ContentFilter = require("../models/contentFilter");
 const { verifyToken, optionalAuth, requirePermission } = require("../middleware/auth");
+const { getHiddenUsers, applySenderExclusion, filterComments } = require("../lib/visibility");
+const { isProUserDoc } = require("../lib/economy");
+const { trimComments, removeComment, displayCount } = require("../lib/postComments");
 const { logServer } = require("../logService");
 
 const router = express.Router();
+
+// Upper bound for a single video post. Long enough for a Reel, short enough that
+// a single post cannot be used as free video hosting.
+const MAX_VIDEO_SECONDS = 180;
 
 function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
@@ -142,7 +149,7 @@ async function enrichPosts(posts) {
     let originalPostMap = {};
     if (originalPostIds.length > 0) {
         const originalPosts = await Post.find({ _id: { $in: originalPostIds } })
-            .select("sender text imageUrl imageUrls audioUrl color avatarUrl hashtags mentions visibility theme timeStamp likes reactions comments isRepost originalPostId originalSender repostComment repostCount")
+            .select("sender text imageUrl imageUrls audioUrl videoUrl videoDuration videoWidth videoHeight color avatarUrl hashtags mentions visibility theme timeStamp likes reactions comments isRepost originalPostId originalSender repostComment repostCount")
             .lean();
         originalPosts.forEach((op) => { originalPostMap[op._id.toString()] = op; });
         // Collect usernames from original posts too
@@ -157,7 +164,7 @@ async function enrichPosts(posts) {
     const [users, communities] = await Promise.all([
         allUsernames.size > 0
             ? User.find({ username: { $in: [...allUsernames] } })
-                .select("username avatarUrl isVerified isAdmin roles postingStreak achievements")
+                .select("username avatarUrl isVerified isAdmin roles postingStreak achievements proUntil")
                 .populate("roles", "name badge color")
                 .lean()
             : [],
@@ -174,6 +181,7 @@ async function enrichPosts(posts) {
             avatarUrl:  u.avatarUrl || "",
             isVerified: u.isVerified || false,
             isAdmin:    u.isAdmin || false,
+            isPro:      isProUserDoc(u),
             postingStreak: u.postingStreak || 0,
             achievements: u.achievements || [],
             roles:      (u.roles || []).map((r) => ({
@@ -215,7 +223,7 @@ async function enrichPost(post) {
 
     const [users, community] = await Promise.all([
         User.find({ username: { $in: [...allUsernames] } })
-            .select("username avatarUrl isVerified isAdmin roles postingStreak achievements")
+            .select("username avatarUrl isVerified isAdmin roles postingStreak achievements proUntil")
             .populate("roles", "name badge color")
             .lean(),
         post.communityId
@@ -229,6 +237,7 @@ async function enrichPost(post) {
             avatarUrl:  u.avatarUrl || "",
             isVerified: u.isVerified || false,
             isAdmin:    u.isAdmin || false,
+            isPro:      isProUserDoc(u),
             postingStreak: u.postingStreak || 0,
             achievements: u.achievements || [],
             roles:      (u.roles || []).map((r) => ({
@@ -261,12 +270,17 @@ router.get("/", async (req, res) => {
         let viewerIsAdmin = false;
         let viewerFollowing = [];
         let viewerCloseFriends = [];
+        let hiddenUsers = [];
 
         if (username) {
-            const viewerDoc = await User.findOne({ username }).select("isAdmin following closeFriends").lean();
+            const viewerDoc = await User.findOne({ username }).select("isAdmin following closeFriends blockedUsers mutedUsers").lean();
             viewerIsAdmin = !!viewerDoc?.isAdmin;
             viewerFollowing = viewerDoc?.following || [];
             viewerCloseFriends = viewerDoc?.closeFriends || [];
+            // getHiddenUsers is async — without await this was a Promise, which
+            // made applySenderExclusion's `for (const name of hidden)` throw and
+            // took the whole feed down with a 500.
+            hiddenUsers = await getHiddenUsers(username, viewerDoc);
         }
 
         // Expiry filter (always applied)
@@ -285,6 +299,14 @@ router.get("/", async (req, res) => {
                 return res.json({ posts: [], hasMore: false });
             }
             query.sender = { $in: viewerFollowing };
+        }
+
+        // Reels is the same query with a video filter applied, rather than a
+        // separate endpoint, so block/mute exclusion, expiry, community scope
+        // and pagination stay in exactly one place. `videoUrl` is indexed
+        // partially, so this does not turn into a collection scan.
+        if (feed === "reels") {
+            query.videoUrl = { $type: "string", $ne: "" };
         }
 
         // Community filter
@@ -317,6 +339,11 @@ router.get("/", async (req, res) => {
 
         if (query.$and.length === 0) delete query.$and;
 
+        // Drop posts by accounts the viewer blocked or muted. Applied after the
+        // `sender` clauses above so it merges with a `$in` rather than
+        // replacing it, and before the query runs so pagination stays correct.
+        applySenderExclusion(query, hiddenUsers, username);
+
         // Fetch more posts than needed for smart ranking
         const fetchLimit = Math.min(limit * 3, 150);
         const rawPosts = await Post.find(query, {
@@ -326,6 +353,10 @@ router.get("/", async (req, res) => {
             imageUrl: 1,
             imageUrls: 1,
             audioUrl: 1,
+            videoUrl: 1,
+            videoDuration: 1,
+            videoWidth: 1,
+            videoHeight: 1,
             color: 1,
             avatarUrl: 1,
             hashtags: 1,
@@ -372,7 +403,8 @@ router.get("/", async (req, res) => {
 
             // Engagement: likes + comments + reposts + viewWeight
             const likeCount = (p.likes || []).length;
-            const commentCount = (p.comments || []).length;
+            // commentCount is authoritative; the embedded array is only a window
+            const commentCount = displayCount(p);
             const repostCount = p.repostCount || 0;
             const viewWeight = Math.min((p.viewCount || 0) / 100, 10);
             s += likeCount * 3 + commentCount * 4 + repostCount * 5 + viewWeight;
@@ -399,6 +431,9 @@ router.get("/", async (req, res) => {
         const hasMore = rawPosts.length > limit;
         const posts = await enrichPosts(scored.slice(0, limit));
 
+        // A blocked user's replies are hidden inside other people's threads too.
+        filterComments(posts, hiddenUsers);
+
         return res.json({ posts, hasMore });
     } catch (error) {
         console.error(error);
@@ -409,7 +444,7 @@ router.get("/", async (req, res) => {
 // POST /
 router.post("/", verifyToken, async (req, res) => {
     try {
-        const { text, imageUrl, imageUrls, audioUrl, visibility, poll, theme, scheduledAt, communityId, flair } = req.body;
+        const { text, imageUrl, imageUrls, audioUrl, videoUrl, videoDuration, videoWidth, videoHeight, visibility, poll, theme, scheduledAt, communityId, flair } = req.body;
         const username = req.body.sender || req.session?.userId;
 
         const senderUser = await User.findById(req.userId).select("username avatarUrl suspended defaultTheme").lean();
@@ -438,8 +473,34 @@ router.post("/", verifyToken, async (req, res) => {
         const finalImageUrls = Array.isArray(imageUrls) && imageUrls.length > 0
             ? imageUrls.filter(Boolean).slice(0, 10)
             : (imageUrl ? [imageUrl] : []);
-        if (!sanitizedText && finalImageUrls.length === 0 && !audioUrl) {
-            return res.status(400).json({ error: "Post must have text, an image, or audio" });
+        // Video is validated rather than trusted: only Cloudinary delivery URLs
+        // are accepted, so a post cannot be used to hotlink or embed arbitrary
+        // third-party media (or to smuggle in a non-video URL that the player
+        // would still try to load).
+        let finalVideoUrl = "";
+        let finalVideoDuration = 0;
+        let finalVideoWidth = 0;
+        let finalVideoHeight = 0;
+        if (videoUrl) {
+            const raw = String(videoUrl).trim();
+            let parsed;
+            try {
+                parsed = new URL(raw);
+            } catch {
+                return res.status(400).json({ error: "Invalid video URL" });
+            }
+            const CLOUDINARY_HOSTS = new Set(["res.cloudinary.com", "upload.cloudinary.com"]);
+            if (parsed.protocol !== "https:" || !CLOUDINARY_HOSTS.has(parsed.hostname)) {
+                return res.status(400).json({ error: "Video must be uploaded through Cloudinary" });
+            }
+            finalVideoUrl = raw;
+            finalVideoDuration = Math.max(0, Math.min(Number(videoDuration) || 0, MAX_VIDEO_SECONDS));
+            finalVideoWidth = Math.max(0, Math.min(Number(videoWidth) || 0, 10000));
+            finalVideoHeight = Math.max(0, Math.min(Number(videoHeight) || 0, 10000));
+        }
+
+        if (!sanitizedText && finalImageUrls.length === 0 && !audioUrl && !finalVideoUrl) {
+            return res.status(400).json({ error: "Post must have text, an image, video, or audio" });
         }
 
         const hashtags = extractHashtags(sanitizedText);
@@ -452,6 +513,10 @@ router.post("/", verifyToken, async (req, res) => {
             imageUrl:  finalImageUrls[0] || "",
             imageUrls: finalImageUrls,
             audioUrl:  audioUrl || "",
+            videoUrl:      finalVideoUrl,
+            videoDuration: finalVideoDuration,
+            videoWidth:    finalVideoWidth,
+            videoHeight:   finalVideoHeight,
             sender:   sender.trim(),
             color:    senderUser?.avatarColor || "#3b82f6",
             avatarUrl: senderUser?.avatarUrl || "",
@@ -651,6 +716,8 @@ router.patch("/:id", optionalAuth, async (req, res) => {
                 mentions:  extractMentions(text || ""),
             };
             post.comments.push(comment);
+            post.commentCount = (post.commentCount || 0) + 1;
+            trimComments(post);
 
             if (parentId) {
                 const parentComment = post.comments.find(c => c.commentId === parentId);
@@ -679,14 +746,7 @@ router.patch("/:id", optionalAuth, async (req, res) => {
         }
 
         if (action === "deleteComment") {
-            const comment = post.comments.find(c => c.commentId === commentId);
-            post.comments = post.comments.filter((c) => c.commentId !== commentId && c.parentId !== commentId);
-
-            if (comment?.parentId) {
-                const parentComment = post.comments.find(c => c.commentId === comment.parentId);
-                if (parentComment && parentComment.replies > 0) parentComment.replies -= 1;
-            }
-
+            removeComment(post, commentId);
             await post.save();
             const enriched = await enrichPost(post);
             return res.json(enriched);
@@ -996,6 +1056,8 @@ router.post("/:id/comment", verifyToken, async (req, res) => {
             mentions:  extractMentions(text || ""),
         };
         post.comments.push(comment);
+        post.commentCount = (post.commentCount || 0) + 1;
+        trimComments(post);
 
         if (parentId) {
             const parentComment = post.comments.find((c) => c.commentId === parentId);
@@ -1052,11 +1114,7 @@ router.delete("/:id/comment/:commentId", verifyToken, async (req, res) => {
             return res.status(403).json({ error: "You don't have permission to delete comments" });
         }
 
-        post.comments = post.comments.filter((c) => c.commentId !== commentId && c.parentId !== commentId);
-        if (comment?.parentId) {
-            const parentComment = post.comments.find((c) => c.commentId === comment.parentId);
-            if (parentComment && parentComment.replies > 0) parentComment.replies -= 1;
-        }
+        removeComment(post, commentId);
 
         await post.save();
         return res.json({ ok: true });
@@ -1315,7 +1373,7 @@ router.get("/bookmarks", async (req, res) => {
 
         const [users, originalPosts] = await Promise.all([
             User.find({ username: { $in: authorUsernames } })
-                .select("username avatarUrl isVerified isAdmin roles")
+                .select("username avatarUrl isVerified isAdmin roles proUntil")
                 .populate("roles", "name badge color")
                 .lean(),
             repostOriginalIds.length > 0
@@ -1328,6 +1386,7 @@ router.get("/bookmarks", async (req, res) => {
             userMap[u.username] = {
                 avatarUrl: u.avatarUrl || "", isVerified: u.isVerified || false,
                 isAdmin: u.isAdmin || false,
+                isPro: isProUserDoc(u),
                 roles: (u.roles || []).map((r) => ({
                     id: r._id?.toString() ?? "", name: r.name ?? "", badge: r.badge ?? "", color: r.color ?? "",
                 })),
@@ -1366,6 +1425,23 @@ router.get("/user/:username", async (req, res) => {
         const isSelf = viewer === username;
         const isFollower = userDoc?.followers?.includes(viewer);
         const isAdmin = req.query.admin === "true";
+
+        // A blocked account looks like an empty, non-existent profile: no
+        // posts, and no hint that the profile exists at all.
+        if (viewer && !isSelf) {
+            const hidden = await getHiddenUsers(viewer);
+            if (hidden.includes(String(username).toLowerCase())) {
+                return res.json({
+                    posts: [],
+                    totalLikes: 0,
+                    postCount: 0,
+                    profile: null,
+                    hasMore: false,
+                    nextCursor: null,
+                    notFound: true,
+                });
+            }
+        }
 
         if (isPrivate && !isSelf && !isFollower && !isAdmin) {
             return res.json({
@@ -1415,13 +1491,14 @@ router.get("/user/:username", async (req, res) => {
             const originalPosts = await Post.find({ _id: { $in: repostIds } }).lean();
             const origAuthors = [...new Set(originalPosts.map((p) => p.sender))];
             const origUsers = await User.find({ username: { $in: origAuthors } })
-                .select("username avatarUrl isVerified isAdmin roles")
+                .select("username avatarUrl isVerified isAdmin roles proUntil")
                 .populate("roles", "name badge color").lean();
             const origUserMap = {};
             origUsers.forEach((u) => {
                 origUserMap[u.username] = {
                     avatarUrl: u.avatarUrl || "", isVerified: u.isVerified || false,
                     isAdmin: u.isAdmin || false,
+                    isPro: isProUserDoc(u),
                     roles: (u.roles || []).map((r) => ({
                         id: r._id?.toString() ?? "", name: r.name ?? "", badge: r.badge ?? "", color: r.color ?? "",
                     })),

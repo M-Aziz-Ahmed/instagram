@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BotsPanel from "@/components/Admin/BotsPanel";
 import AdminLogsPanel from "@/components/Admin/AdminLogsPanel";
+import GemsPanel from "@/components/Admin/GemsPanel";
 import SystemPanel from "@/components/Admin/SystemPanel";
 import AnnouncePanel from "@/components/Admin/AnnouncePanel";
 import ReportsPanel from "@/components/Admin/ReportsPanel";
@@ -90,6 +91,10 @@ export default function AdminClient() {
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "ads" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         Ads
                     </button>
+                    <button onClick={() => setTab("gems")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "gems" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        💎 Gems &amp; Pro
+                    </button>
                     <button onClick={() => setTab("logs")}
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "logs" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         Logs
@@ -147,6 +152,7 @@ export default function AdminClient() {
                 {tab === "contentFilter" && <ContentFilterPanel />}
                 {tab === "voice" && <VoicePanel />}
                 {tab === "ads" && <AdsPanel />}
+                {tab === "gems" && <GemsPanel />}
                 {tab === "logs" && <AdminLogsPanel />}
                 {tab === "adult" && <AdultMangaPanel />}
                 {tab === "bots" && <BotsPanel />}
@@ -512,7 +518,7 @@ function UsersPanel() {
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{u.username || "(no username)"}</span>
-                                    <UserBadges isVerified={u.isVerified} isAdmin={u.isAdmin} roles={u.roles} />
+                                    <UserBadges isPro={u.isPro} isVerified={u.isVerified} isAdmin={u.isAdmin} roles={u.roles} />
                                     {u.hasPin && <span className="text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded font-medium">PIN</span>}
                                 </div>
                                 <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{u.email}</p>
@@ -1345,9 +1351,22 @@ function AdsPanel() {
     const emptyAd = {
         title: "", description: "", imageUrl: "", linkUrl: "", ctaText: "Learn More",
         adType: "custom", adsterraCode: "", adsenseSlot: "", adsenseClient: "", adSize: "",
+        slot: "feed",
         startDate: "", endDate: "", isActive: true,
     };
     const [form, setForm] = useState(emptyAd);
+
+    // Placements an ad can be targeted to. Mirrors AD_SLOTS in
+    // live-server/models/ad.js - the server rejects anything outside its own
+    // list, so this is the admin's view of the same set of surfaces.
+    const PLACEMENTS = [
+        { id: "feed", label: "Social feed (/social)" },
+        { id: "reels", label: "Reels (/reels)" },
+        { id: "watch", label: "Movie Hub (/watch)" },
+        { id: "manga", label: "Manga (/manga)" },
+        { id: "education", label: "Education (/education)" },
+        { id: "sidebar", label: "Desktop side rail" },
+    ];
 
     const fetchAds = useCallback(async () => {
         setLoading(true);
@@ -1376,6 +1395,7 @@ function AdsPanel() {
             linkUrl: ad.linkUrl || "", ctaText: ad.ctaText || "Learn More", adType: ad.adType || "custom",
             adsterraCode: ad.adsterraCode || "", adsenseSlot: ad.adsenseSlot || "",
             adsenseClient: ad.adsenseClient || "", adSize: ad.adSize || "",
+            slot: ad.slot || "feed",
             startDate: ad.startDate ? new Date(ad.startDate).toISOString().slice(0, 16) : "",
             endDate: ad.endDate ? new Date(ad.endDate).toISOString().slice(0, 16) : "",
             isActive: ad.isActive !== false,
@@ -1508,6 +1528,19 @@ function AdsPanel() {
                             </button>
                         </div>
                         <div className="p-5 space-y-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Placement</label>
+                                <select value={form.slot} onChange={(e) => setForm({ ...form, slot: e.target.value })}
+                                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors">
+                                    {PLACEMENTS.map((p) => (
+                                        <option key={p.id} value={p.id}>{p.label}</option>
+                                    ))}
+                                </select>
+                                <p className="mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
+                                    Only shows on this page. The feed is where ads used to run, so existing ads
+                                    were backfilled there by <code>tools/assign-ad-slots.mjs</code>.
+                                </p>
+                            </div>
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Ad Type</label>
                                 <div className="flex gap-2">
@@ -1741,6 +1774,91 @@ function LogsPanel() {
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
 function AdultMangaPanel() {
+    // /api/adult-manga is behind middleware/adultGate.js: it needs the
+    // `view_adult` permission (admins have it implicitly) plus a re-confirmed
+    // 18+ acknowledgement every 30 days. Ask before the first request so the
+    // browse grid doesn't just render a wall of failed fetches.
+    //
+    // This is a thin wrapper around <AdultMangaBrowser> on purpose: the gate
+    // needs early returns, and the browser below has its own effects, so
+    // splitting them keeps every hook unconditional.
+    const [gate, setGate] = useState({ state: "checking", permitted: false, confirmed: false });
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch("/api/adult-gate/status", { credentials: "include" });
+                if (!res.ok) throw new Error("status failed");
+                const data = await res.json();
+                if (!cancelled) {
+                    setGate({
+                        state: "ready",
+                        permitted: !!data?.permitted,
+                        confirmed: !!data?.confirmed,
+                    });
+                }
+            } catch {
+                if (!cancelled) setGate({ state: "ready", permitted: false, confirmed: false });
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    const confirmAge = async () => {
+        try {
+            const res = await fetch("/api/adult-gate/confirm", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ confirmed: true }),
+            });
+            if (res.ok) setGate((g) => ({ ...g, confirmed: true }));
+        } catch {}
+    };
+
+    if (gate.state === "checking") {
+        return (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+                <span className="w-4 h-4 rounded-full border-2 border-gray-300 border-t-gray-600 animate-spin" />
+                Checking content access…
+            </div>
+        );
+    }
+
+    if (!gate.permitted) {
+        return (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/40 p-4 text-sm text-amber-800 dark:text-amber-200">
+                <strong className="block mb-1">Adult catalogue disabled</strong>
+                Your account doesn&apos;t hold the <code>view_adult</code> permission, so
+                the MangaDex adult endpoints are closed. Grant it to a role to re-enable.
+            </div>
+        );
+    }
+
+    if (!gate.confirmed) {
+        return (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/40 p-4 text-sm text-amber-800 dark:text-amber-200">
+                <strong className="block mb-1">18+ confirmation required</strong>
+                <p className="mb-3">
+                    These endpoints proxy explicitly-rated material. Access is
+                    re-confirmed every 30 days, and is blocked outright in
+                    certain regions.
+                </p>
+                <button
+                    onClick={confirmAge}
+                    className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium"
+                >
+                    I am 18 or older — continue
+                </button>
+            </div>
+        );
+    }
+
+    return <AdultMangaBrowser />;
+}
+
+function AdultMangaBrowser() {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState([]);
     const [loading, setLoading] = useState(false);
