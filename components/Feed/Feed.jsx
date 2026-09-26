@@ -5,7 +5,7 @@ import Link from "next/link";
 import PostCard from "./PostCard";
 import { PostSkeleton } from "@/components/shared/Skeleton";
 import AdCard from "@/components/shared/AdCard";
-import { prioritizeUnseen, isRenderableAd } from "@/utils/adSession";
+import { isRenderableAd } from "@/utils/adSession";
 import UserBadges from "@/components/shared/UserBadges";
 import { useUser } from "@/context/UserContext";
 import { timeAgo } from "@/utils/timeAgo";
@@ -255,15 +255,15 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
         };
     }, [flushViews]);
 
-    // Fetch ads once on mount. We ask for more than we can place: a creative
-    // only executes once per session, so re-serving the same one to a later
-    // slot left a blank placeholder and burned the impression.
+    // Fetch ads once on mount. We ask for more than we can place so consecutive
+    // slots get *different* creatives when several are configured, and drop
+    // anything that can only render an empty box.
     useEffect(() => {
         fetch("/api/ads?limit=20", { cache: "no-store" })
             .then((r) => r.ok ? r.json() : [])
             .then((data) => {
                 if (!Array.isArray(data)) return;
-                setAds(prioritizeUnseen(data.filter(isRenderableAd)));
+                setAds(data.filter(isRenderableAd));
             })
             .catch(() => {});
     }, []);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { hasRunCreative, markCreativeRun, hasSeenAd, markAdSeen } from "@/utils/adSession";
+import { hasSeenAd, markAdSeen } from "@/utils/adSession";
 import { openAdLink } from "@/utils/popupGuard";
 
 // Ad creatives are arbitrary HTML/JS pasted by an admin. They used to be
@@ -179,75 +179,53 @@ function AdSenseSlot({ ad, onFallbackClick }) {
 
 // ── Adsterra / raw-HTML creative ───────────────────────────────
 //
-// The creative paints, but it does NOT get to navigate. It is loaded through
-// `srcdoc` in a `sandbox="allow-scripts"` iframe, and the sandbox grants an
-// opaque origin with no `allow-popups`, so the browser itself refuses every
-// `window.open`, `top.location` write and form submit coming out of it. That is
-// deliberate: these units are frequently push-notification and social-bar
-// creatives whose whole business model is opening windows on a timer, and with
-// popups permitted they stack up until the tab is unusable.
+// How this is isolated:
 //
-// Consequence: the creative cannot service its own click-through, so we do it.
-// The absolutely-positioned overlay below sits on top of the creative and
-// handles the click — tracking it and opening the landing page ourselves. Same
-// revenue, none of the abuse.
+// The creative is loaded through `srcdoc` in a `sandbox="allow-scripts"` iframe.
+// That sandbox deliberately withholds `allow-same-origin`, `allow-popups`,
+// `allow-top-navigation`, `allow-forms` and `allow-modals`, and an opaque
+// origin means it also has no access to this app's cookies, storage, DOM or the
+// Notification permission. The browser — not our code — is what refuses the
+// popup storm, the notification hijack and the `top.location` redirect that
+// these push/social-bar units otherwise rely on.
+//
+// The creative is deliberately left INTERACTIVE. A standard Adsterra display
+// banner ships its own image and click-through inside the snippet, so covering
+// it with an overlay (as an earlier revision did) served no purpose and left
+// the impression rendering with nothing to click. Clicks are handled by the
+// creative inside its own frame; the sandbox still blocks any window it tries
+// to open.
+//
+// Every slot renders the creative. The previous revision executed it only once
+// per session, which meant that with a single configured ad every slot after
+// the first fell back to an empty placeholder — the sandbox, not the
+// once-per-session flag, is what actually contains these units, so suppressing
+// repeats only cost impressions.
 
-function AdsterraAd({ ad, onTrackClick }) {
+function AdsterraAd({ ad }) {
     const { adsterraCode: code, adSize: size } = ad;
-    // Decide during render from a *read* only, so the value is stable across
-    // StrictMode's double render. Recording the decision is a separate
-    // write-only effect below.
-    const shouldRun = (() => {
-        // Never run a creative while the tab is in the background: those ads
-        // are built to fire on a timer the moment they load.
-        if (typeof document !== "undefined" && document.hidden) return false;
-        return !hasRunCreative(ad);
-    })();
+    if (!code) return <UnavailableAd />;
 
-    useEffect(() => {
-        if (shouldRun) markCreativeRun(ad);
-    }, [shouldRun, ad]);
-
-    const { width, height } = parseSize(size);
-
-    // A creative executes once per session. If the admin has fewer creatives
-    // than the feed has slots, the remaining slots still need to look
-    // deliberate: reusing the creative's own image as a static promo card keeps
-    // the click-through and the impression, with none of the script.
-    if (!shouldRun) {
-        return ad.imageUrl ? (
-            <HouseAd ad={ad} onClick={onTrackClick} />
-        ) : (
-            <UnavailableAd />
-        );
-    }
+    // Prefer the size the snippet itself declares, so the frame can never
+    // clip the creative to a blank box because the two disagreed.
+    const { width, height } = parseSize(size, code);
 
     return (
         <div className="px-4 py-3 text-center">
             <SponsoredLabel />
             <div
-                className="relative mt-2 mx-auto overflow-hidden rounded-xl"
-                style={{ maxWidth: width, height }}
+                className="relative mx-auto mt-2 overflow-hidden rounded-xl"
+                style={{ width: "100%", maxWidth: width, height }}
             >
                 <iframe
-                    title="Sponsored"
-                    className="pointer-events-none absolute inset-0 h-full w-full border-0"
-                    // No allow-popups, no allow-top-navigation, no
-                    // allow-forms, no allow-same-origin. Scripts only, in an
-                    // opaque origin.
+                    title={ad.title ? `Sponsored: ${ad.title}` : "Sponsored"}
+                    className="absolute inset-0 h-full w-full border-0"
                     sandbox="allow-scripts"
                     referrerPolicy="no-referrer"
                     loading="lazy"
-                    srcDoc={adDoc(code)}
+                    scrolling="no"
+                    srcDoc={adDoc(code, width, height)}
                 />
-                {ad.linkUrl && (
-                    <button
-                        type="button"
-                        onClick={() => onTrackClick(ad)}
-                        className="absolute inset-0 w-full cursor-pointer rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                        aria-label={ad.title ? `Sponsored: ${ad.title}` : "Sponsored ad"}
-                    />
-                )}
             </div>
         </div>
     );
@@ -337,19 +315,49 @@ function HouseAd({ ad, onClick }) {
     );
 }
 
-function adDoc(code) {
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;border:0;overflow:hidden;}html,body{overflow:hidden;width:100%;height:100%;font-family:system-ui,sans-serif;}</style></head><body>${code}</body></html>`;
+function adDoc(code, width, height) {
+    return (
+        `<!DOCTYPE html><html><head><meta charset="utf-8">` +
+        // The creative is laid out in an opaque-origin frame with no access to
+        // the parent, so it has to be told how much room it has. Network
+        // inventory and any transparent background are forced out, since
+        // Adsterra's `invoke.js` drops tracking pixels by default and this
+        // position is a display slot, not a performance budget.
+        `<style>html,body{margin:0;padding:0;border:0;width:${width}px;height:${height}px;` +
+        `max-width:100%;overflow:hidden;background:#fff;}` +
+        `body{font-family:system-ui,-apple-system,sans-serif;}` +
+        `iframe{border:0;display:block;max-width:100%;}` +
+        `</style></head><body>${code}</body></html>`
+    );
 }
 
 /**
- * Parse a "300x250" / "728x90" creative size. Falls back to the 300x250
- * median rectangle that most networks default to, and stays responsive on
- * narrow viewports by letting CSS clamp the width.
+ * Resolve the creative's box.
+ *
+ * The snippet itself declares the size (Adsterra's `atOptions` carries
+ * `width` and `height`), so that is read first — the whole class of "size must
+ * match the dashboard" bugs disappears when the frame is sized from the same
+ * source of truth the network uses. An explicit `adSize` on the record wins
+ * when set, which is how an admin overrides a snippet that misreports.
+ *
+ * Falls back to the 300x250 median rectangle, and stays responsive on narrow
+ * viewports by letting CSS clamp the width.
  */
-function parseSize(size) {
-    const m = /^(\d{2,4})\s*[x×*]\s*(\d{2,4})$/i.exec(String(size || "").trim());
-    if (!m) return { width: 300, height: 250 };
-    return { width: Math.min(parseInt(m[1], 10), 970), height: Math.min(parseInt(m[2], 10), 1000) };
+function parseSize(size, code) {
+    const clamp = (w, h) => ({
+        width: Math.min(Math.max(w, 1), 970),
+        height: Math.min(Math.max(h, 1), 1000),
+    });
+
+    const explicit = /^(\d{2,4})\s*[x×*]\s*(\d{2,4})$/i.exec(String(size || "").trim());
+    if (explicit) return clamp(parseInt(explicit[1], 10), parseInt(explicit[2], 10));
+
+    // e.g. 'width' : '300',  'height' : '250'
+    const w = /['"]?width['"]?\s*[:=]\s*['"]?(\d{2,4})/i.exec(String(code || ""));
+    const h = /['"]?height['"]?\s*[:=]\s*['"]?(\d{2,4})/i.exec(String(code || ""));
+    if (w && h) return clamp(parseInt(w[1], 10), parseInt(h[1], 10));
+
+    return { width: 300, height: 250 };
 }
 
 export default function AdCard({ ad }) {
@@ -395,7 +403,7 @@ export default function AdCard({ ad }) {
     }
 
     if (ad.adType === "adsterra" && ad.adsterraCode) {
-        return <AdsterraAd ad={ad} onTrackClick={handleClick} />;
+        return <AdsterraAd ad={ad} />;
     }
 
     // Custom ad

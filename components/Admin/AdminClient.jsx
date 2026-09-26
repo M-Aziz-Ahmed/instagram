@@ -1319,8 +1319,9 @@ function adProblem(ad, adsenseClient) {
 
     if (ad.adType === "adsterra") {
         if (!ad.adsterraCode) return "No Adsterra code set — this ad cannot render anything.";
-        if (!ad.imageUrl && !ad.linkUrl)
-            return "No image or link set, so slots after the first render an empty placeholder.";
+        // No image/link requirement: a standard Adsterra display banner ships
+        // its own creative and click-through inside the snippet, and the frame
+        // is sized from the width/height the snippet declares.
         return null;
     }
 
@@ -1343,7 +1344,7 @@ function AdsPanel() {
 
     const emptyAd = {
         title: "", description: "", imageUrl: "", linkUrl: "", ctaText: "Learn More",
-        adType: "custom", adsterraCode: "", adsenseSlot: "", adsenseClient: "", adSize: "300x250",
+        adType: "custom", adsterraCode: "", adsenseSlot: "", adsenseClient: "", adSize: "",
         startDate: "", endDate: "", isActive: true,
     };
     const [form, setForm] = useState(emptyAd);
@@ -1374,7 +1375,7 @@ function AdsPanel() {
             title: ad.title || "", description: ad.description || "", imageUrl: ad.imageUrl || "",
             linkUrl: ad.linkUrl || "", ctaText: ad.ctaText || "Learn More", adType: ad.adType || "custom",
             adsterraCode: ad.adsterraCode || "", adsenseSlot: ad.adsenseSlot || "",
-            adsenseClient: ad.adsenseClient || "", adSize: ad.adSize || "300x250",
+            adsenseClient: ad.adsenseClient || "", adSize: ad.adSize || "",
             startDate: ad.startDate ? new Date(ad.startDate).toISOString().slice(0, 16) : "",
             endDate: ad.endDate ? new Date(ad.endDate).toISOString().slice(0, 16) : "",
             isActive: ad.isActive !== false,
@@ -1553,11 +1554,11 @@ function AdsPanel() {
                                             className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors resize-none font-mono" placeholder={"<script src=\"...\"></script>"} rows={4} />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Creative size</label>
+                                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Creative size <span className="font-normal opacity-70">(optional)</span></label>
                                         <input value={form.adSize} onChange={(e) => setForm({ ...form, adSize: e.target.value })}
-                                            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors" placeholder="300x250" />
+                                            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors" placeholder="auto (read from the snippet)" />
                                         <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
-                                            Must match the size in your Adsterra dashboard. A mismatch clips the creative to a blank box.
+                                            Leave blank to use the <code className="font-mono">width</code>/<code className="font-mono">height</code> declared in the Adsterra snippet. Set it only to override a snippet that reports the wrong size.
                                         </p>
                                     </div>
                                 </div>

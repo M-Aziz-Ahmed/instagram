@@ -1,12 +1,19 @@
 /**
  * Per-session ad bookkeeping.
  *
- * Lives outside AdCard so the feed can *choose* ads that haven't run yet
- * instead of rendering a slot that the component then blanks out. The old
- * behaviour was: the feed picked an ad, the slot mounted, the creative ran
- * once, and every subsequent render of that slot in the same session drew an
- * empty grey 300x250 box. Users saw holes in the feed and the impressions
- * never fired again, so it cost revenue twice over.
+ * The once-per-creative *execution* guard that used to live here was removed
+ * when Adsterra creatives moved to rendering in every slot. It was originally
+ * there to stop a creative re-executing on React remount and stacking
+ * notification prompts, but the real containment is the `sandbox="allow-scripts"`
+ * opaque-origin frame the creative renders in: that denies it our Notification
+ * permission, our storage, popups and top-level navigation regardless of how
+ * many times it runs. Suppressing repeats on top of that only cost
+ * impressions, and produced the worse bug of a single configured ad leaving
+ * every slot after the first as an empty placeholder.
+ *
+ * What's left is impression dedupe. The feed re-renders on a 60s poll and on
+ * every scroll-driven append, so without this the same ad would re-report an
+ * impression each time its slot happened to reconcile.
  */
 
 const SEEN_ADS_KEY = "at_ads_seen_v1";
@@ -43,40 +50,17 @@ export function markAdSeen(key) {
     writeSeenAds(set);
 }
 
-/** True when this creative has already executed in this tab. */
-export function hasRunCreative(ad) {
-    if (!ad) return false;
-    return hasSeenAd(`run:${ad._id || ad.adsterraCode || ad.adsenseSlot || ad.title}`);
-}
-
-/** Mark a creative as executed. */
-export function markCreativeRun(ad) {
-    if (!ad) return;
-    markAdSeen(`run:${ad._id || ad.adsterraCode || ad.adsenseSlot || ad.title}`);
-}
-
 /**
- * Order `ads` so the ones that haven't run yet come first, preserving the
- * server's own priority order within each group. The feed then walks the
- * result in order, so slot N gets a fresh creative for as long as fresh
- * creatives exist, and only starts recycling once they're exhausted.
+ * True when the ad can actually paint something.
+ *
+ * Filters out config stubs so the feed never spends a slot on an ad that can
+ * only render an empty box. An Adsterra unit is judged purely on having code —
+ * it carries its own image and click-through inside the snippet, so requiring
+ * `imageUrl` here would reject perfectly valid creatives.
  */
-export function prioritizeUnseen(ads) {
-    if (!Array.isArray(ads) || ads.length < 2) return Array.isArray(ads) ? ads : [];
-    const seen = readSeenAds();
-    const fresh = [];
-    const stale = [];
-    for (const ad of ads) {
-        const key = `run:${ad?._id || ad?.adsterraCode || ad?.adsenseSlot || ad?.title}`;
-        (seen.has(key) ? stale : fresh).push(ad);
-    }
-    return fresh.length ? [...fresh, ...stale] : stale;
-}
-
-/** True when the ad can actually paint something (not a config stub). */
 export function isRenderableAd(ad) {
     if (!ad || ad.isActive === false) return false;
-    if (ad.adType === "adsterra") return Boolean(ad.adsterCode || ad.adsterraCode);
+    if (ad.adType === "adsterra") return Boolean(ad.adsterraCode);
     if (ad.adType === "adsense") return Boolean(ad.adsenseSlot);
     return Boolean(ad.imageUrl || ad.title || ad.linkUrl);
 }
