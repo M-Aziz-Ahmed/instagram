@@ -5,8 +5,21 @@ const MediaBookmark = require("../models/mediaBookmark");
 
 const ANILIST_URL = "https://graphql.anilist.co";
 
+// Resolves a local media title to an AniList id so a bookmark can deep-link to
+// the real entry.
+//
+// This was declared twice in this file, and the second (much shorter)
+// declaration hoisted over this one, so the live behaviour was the naive
+// version: it took whatever AniList ranked first for the search string and
+// never checked the title actually matched. A bookmark could therefore be
+// silently retargeted at an unrelated anime or manga. This version fetches
+// several candidates and only accepts one whose title matches.
+//
+// The last-resort branch deliberately does NOT return results[0]. If nothing
+// resembles the requested title, keeping the id we already have is correct;
+// re-pointing the bookmark at an arbitrary first hit is not.
 async function findAnilistId(mediaType, title, fallbackId) {
-    if (!title) return fallbackId;
+    if (!title || !String(title).trim()) return fallbackId;
     try {
         const query = `
             query ($search: String, $type: MediaType) {
@@ -27,20 +40,28 @@ async function findAnilistId(mediaType, title, fallbackId) {
             }),
             timeout: 8000,
         });
+        if (!res.ok) return fallbackId;
         const data = await res.json();
         const results = data.data?.Page?.media || [];
         if (results.length === 0) return fallbackId;
 
-        const normalized = title.toLowerCase().replace(/[^a-z0-9]/g, "");
-        let match = results.find(m => {
-            const t = (m.title.romaji || m.title.english || m.title.native || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-            return t === normalized;
-        });
-        if (!match) match = results.find(m => {
-            const t = (m.title.romaji || m.title.english || m.title.native || "").toLowerCase();
-            return t.includes(title.toLowerCase()) || title.toLowerCase().includes(t);
-        });
-        if (!match) match = results[0];
+        const wanted = String(title).toLowerCase();
+        const normalized = wanted.replace(/[^a-z0-9]/g, "");
+        const titleOf = (m) =>
+            (m.title?.romaji || m.title?.english || m.title?.native || "").toLowerCase();
+
+        // 1. Exact match once punctuation and spacing are ignored, so
+        //    "Re:ZERO" still matches "Re Zero".
+        let match = results.find((m) => titleOf(m).replace(/[^a-z0-9]/g, "") === normalized);
+        // 2. Substring either way round, which catches suffixes like
+        //    "... (Season 2)" that users type into a bookmark.
+        if (!match) {
+            match = results.find((m) => {
+                const t = titleOf(m);
+                return t.includes(wanted) || wanted.includes(t);
+            });
+        }
+        if (!match) return fallbackId;
         return match.id.toString();
     } catch {
         return fallbackId;
@@ -367,23 +388,4 @@ router.post("/check-releases", requireAuth, async (req, res) => {
 });
 
 // Cross-site ID mapping: find AniList ID by title using AniList search
-async function findAnilistId(mediaType, title, fallbackId) {
-    try {
-        const query = mediaType === "anime"
-            ? `query ($search: String) { Media(search: $search, type: ANIME) { id title { romaji english native } } }`
-            : `query ($search: String) { Media(search: $search, type: MANGA) { id title { romaji english native } } }`;
-        const res = await fetch("https://graphql.anilist.co", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "User-Agent": "AnonTweet/1.0" },
-            body: JSON.stringify({ query, variables: { search: title } }),
-            timeout: 8000,
-        });
-        if (!res.ok) return fallbackId;
-        const data = await res.json();
-        const media = data.data?.Media;
-        if (media?.id) return String(media.id);
-    } catch {}
-    return fallbackId;
-}
-
 module.exports = router;

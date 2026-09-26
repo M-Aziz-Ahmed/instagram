@@ -142,16 +142,6 @@ function getTypeGenre(type) {
     return genres[type];
 }
 
-function getTypeQueries(type) {
-    const queries = {
-        kdrama: ["korean drama", "k-drama", "korean series"],
-        cdrama: ["chinese drama", "c-drama", "mandarin series"],
-        cartoon: ["animation", "cartoon", "animated series"],
-        season: ["tv series", "television series"],
-    };
-    return queries[type] || [];
-}
-
 const EMBED_HOSTS = ["vidsrc.to", "vidsrc.in", "vidsrc.su", "vidsrc.me", "2embed.cc"];
 
 function getStreamUrl(mediaType, id, season, episode) {
@@ -186,8 +176,9 @@ router.get("/:type/search", async (req, res) => {
 
         const results = await fetchTVMaze(`/search/shows?q=${encodeURIComponent(q)}`);
 
-        // Filter by type-specific criteria
-        const typeQueries = getTypeQueries(type);
+        // Search: no keyword list means "don't narrow by name", so an empty
+        // fallback is passed rather than the discover default.
+        const typeQueries = getTypeQueries(type, []);
         const typeCountry = getTypeCountry(type);
         const typeGenre = getTypeGenre(type);
 
@@ -195,15 +186,24 @@ router.get("/:type/search", async (req, res) => {
             .filter(r => r.show)
             .filter(r => {
                 const show = r.show;
-                // Filter by type-specific criteria
-                if (type === "movie") return true; // Movies don't have a specific type in TVMaze
+                // Movies aren't in TVMaze's show index at all, so there is
+                // nothing to narrow - the caller has to use another source.
+                if (type === "movie") return true;
+                // Structured signals first: language, network country, genre
+                // and show type are exact, so they always win.
                 if (typeCountry && show.network?.country?.code === typeCountry) return true;
                 if (typeGenre && show.genres?.includes(typeGenre)) return true;
                 if (type === "cartoon" && show.genres?.some(g => g.toLowerCase().includes("animat"))) return true;
                 if (type === "kdrama" && show.language === "Korean") return true;
                 if (type === "cdrama" && (show.language === "Chinese" || show.language === "Mandarin")) return true;
                 if (type === "season" && show.type === "Scripted") return true;
-                return true; // fallback
+                // Fall back to the title keywords. This used to be an
+                // unconditional `return true`, which meant the keyword list
+                // was computed and then thrown away and the endpoint returned
+                // whatever TVMaze ranked first regardless of type.
+                if (typeQueries.length === 0) return true;
+                const name = (show.name || "").toLowerCase();
+                return typeQueries.some(q => name.includes(q));
             })
             .map(r => formatTVMazeShow(r.show, type))
             .slice(0, 20);
@@ -215,15 +215,27 @@ router.get("/:type/search", async (req, res) => {
     }
 });
 
-function getTypeQueries(type) {
+// Media-type keywords used to narrow a TVMaze result set.
+//
+// This used to be declared twice in this file. Both were plain `function`
+// declarations, so the second one hoisted and silently replaced the first
+// module-wide: the /:type/search handler was running against the *discover*
+// variant, which had dropped the hyphenated spellings ("k-drama", "c-drama")
+// that real titles use. Searching for K-dramas silently lost those results.
+// One definition now, holding the union of both spellings.
+//
+// The fallback is a parameter because the two callers want different
+// behaviour: search falls back to no filter at all, while discover still needs
+// something to browse when a type has no keyword list.
+function getTypeQueries(type, fallback = ["tv series"]) {
     const queries = {
-        movie: ["movie", "film", "cinema"],
-        kdrama: ["korean drama", "kdrama", "korean series"],
-        cdrama: ["chinese drama", "cdrama", "chinese series", "mandarin drama"],
+        movie:   ["movie", "film", "cinema"],
+        kdrama:  ["korean drama", "k-drama", "kdrama", "korean series"],
+        cdrama:  ["chinese drama", "c-drama", "cdrama", "chinese series", "mandarin series", "mandarin drama"],
         cartoon: ["animation", "cartoon", "animated series", "kids animation"],
-        season: ["series", "tv series", "tv show", "television"],
+        season:  ["series", "tv series", "tv show", "television", "television series"],
     };
-    return queries[type] || ["tv series"];
+    return queries[type] || fallback;
 }
 
 function getTypeCountry(type) {
