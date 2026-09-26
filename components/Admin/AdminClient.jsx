@@ -1306,7 +1306,8 @@ function AdsPanel() {
 
     const emptyAd = {
         title: "", description: "", imageUrl: "", linkUrl: "", ctaText: "Learn More",
-        adType: "custom", adsterraCode: "", adsenseSlot: "", startDate: "", endDate: "", isActive: true,
+        adType: "custom", adsterraCode: "", adsenseSlot: "", adsenseClient: "", adSize: "300x250",
+        startDate: "", endDate: "", isActive: true,
     };
     const [form, setForm] = useState(emptyAd);
 
@@ -1327,6 +1328,7 @@ function AdsPanel() {
             title: ad.title || "", description: ad.description || "", imageUrl: ad.imageUrl || "",
             linkUrl: ad.linkUrl || "", ctaText: ad.ctaText || "Learn More", adType: ad.adType || "custom",
             adsterraCode: ad.adsterraCode || "", adsenseSlot: ad.adsenseSlot || "",
+            adsenseClient: ad.adsenseClient || "", adSize: ad.adSize || "300x250",
             startDate: ad.startDate ? new Date(ad.startDate).toISOString().slice(0, 16) : "",
             endDate: ad.endDate ? new Date(ad.endDate).toISOString().slice(0, 16) : "",
             isActive: ad.isActive !== false,
@@ -1486,17 +1488,37 @@ function AdsPanel() {
                                 </div>
                             </div>
                             {form.adType === "adsterra" && (
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Adsterra Code (HTML)</label>
-                                    <textarea value={form.adsterraCode} onChange={(e) => setForm({ ...form, adsterraCode: e.target.value })}
-                                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors resize-none font-mono" placeholder={"<script src=\"...\"></script>"} rows={4} />
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Adsterra Code (HTML)</label>
+                                        <textarea value={form.adsterraCode} onChange={(e) => setForm({ ...form, adsterraCode: e.target.value })}
+                                            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors resize-none font-mono" placeholder={"<script src=\"...\"></script>"} rows={4} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Creative size</label>
+                                        <input value={form.adSize} onChange={(e) => setForm({ ...form, adSize: e.target.value })}
+                                            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors" placeholder="300x250" />
+                                        <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                                            Must match the size in your Adsterra dashboard. A mismatch clips the creative to a blank box.
+                                        </p>
+                                    </div>
                                 </div>
                             )}
                             {form.adType === "adsense" && (
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">AdSense Slot ID</label>
-                                    <input value={form.adsenseSlot} onChange={(e) => setForm({ ...form, adsenseSlot: e.target.value })}
-                                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors" placeholder="1234567890" />
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">AdSense Slot ID</label>
+                                        <input value={form.adsenseSlot} onChange={(e) => setForm({ ...form, adsenseSlot: e.target.value })}
+                                            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors" placeholder="1234567890" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Publisher ID <span className="font-normal opacity-70">(optional)</span></label>
+                                        <input value={form.adsenseClient} onChange={(e) => setForm({ ...form, adsenseClient: e.target.value })}
+                                            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 transition-colors" placeholder="ca-pub-0000000000000000" />
+                                        <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                                            Leave blank to use <code className="font-mono">NEXT_PUBLIC_ADSENSE_CLIENT</code>. Ad slots stay invisible without a valid publisher ID.
+                                        </p>
+                                    </div>
                                 </div>
                             )}
                             <div className="grid grid-cols-2 gap-3">

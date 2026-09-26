@@ -144,6 +144,14 @@ function EntertainmentIcon() {
     );
 }
 
+function MovieHubIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.75 12 3m0 0 8.25 6.75M12 3v18m0-18 8.25 6.75M12 12 3.75 18.75M12 12l8.25 6.75" />
+        </svg>
+    );
+}
+
 function EducationIcon() {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
@@ -201,6 +209,9 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
         return pathname.startsWith(path);
     };
 
+    // Legacy category routes are still listed: they redirect into /watch, but
+    // keeping them means a stale link (or a cached back-navigation) still
+    // highlights the right section instead of showing nothing active.
     const entertainmentRoutes = ["/games", "/chess", "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman", "/reactionduel", "/game2048", "/minesweeper", "/sudoku", "/movies", "/anime", "/manga", "/kdramas", "/seasons", "/cdramas", "/cartoons", "/channels", "/live-tv", "/leaderboard"];
 
     const handleLogout = async () => {
@@ -355,6 +366,13 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                                 icon={<BrowserIcon />}
                                 label="Browser"
                                 active={isActive("/browser")}
+                                onClick={handleNavClick}
+                            />
+                            <NavItem
+                                href="/watch"
+                                icon={<MovieHubIcon />}
+                                label="Movie Hub"
+                                active={isActive("/watch")}
                                 onClick={handleNavClick}
                             />
                             <NavItem

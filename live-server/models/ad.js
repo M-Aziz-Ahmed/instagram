@@ -8,6 +8,13 @@ const adSchema = new mongoose.Schema({
     adType:      { type: String, enum: ["custom", "adsense", "adsterra"], default: "custom" },
     adsterraCode:{ type: String, default: "" },
     adsenseSlot: { type: String, default: "" },
+    // Optional per-ad publisher id, for rotating between AdSense accounts.
+    // Falls back to NEXT_PUBLIC_ADSENSE_CLIENT when empty.
+    adsenseClient: { type: String, default: "" },
+    // Explicit creative size for iframe creatives, e.g. "300x250" or "728x90".
+    // Most networks default to 300x250, but native/push-bar units need their
+    // real dimensions or the creative gets clipped to an empty box.
+    adSize:      { type: String, default: "" },
     ctaText:     { type: String, default: "Learn More" },
     position:    { type: Number, default: 0 },
     startDate:   { type: Date, default: null },

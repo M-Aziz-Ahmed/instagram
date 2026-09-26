@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import Hls from "hls.js";
 
 function toProxy(url, headers) {
@@ -23,7 +23,21 @@ function sortQuality(a, b) {
     return score(b) - score(a);
 }
 
-export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev, autoPlay = true, sources, subtitles, headers }) {
+const EMBED_PATTERN = /vidsrc\.|2embed|\/embed\//i;
+
+export default function MediaPlayer({
+    src,
+    title,
+    poster,
+    onBack,
+    onNext,
+    onPrev,
+    autoPlay = true,
+    sources,
+    subtitles,
+    headers,
+    embedUrls,
+}) {
     const videoRef = useRef(null);
     const containerRef = useRef(null);
     const hlsRef = useRef(null);
@@ -34,13 +48,13 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
     const [fullscreen, setFullscreen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [showControls, setShowControls] = useState(true);
+    const [controlsIdle, setControlsIdle] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [sourceIndex, setSourceIndex] = useState(0);
     const [subIndex, setSubIndex] = useState(0);
     const [showSettings, setShowSettings] = useState(false);
-    const [iframeIndex, setIframeIndex] = useState(0);
-    const [iframeFailed, setIframeFailed] = useState(false);
+    const [embedIndex, setEmbedIndex] = useState(0);
+    const [hovering, setHovering] = useState(false);
 
     const sourceList = useMemo(() => {
         if (Array.isArray(sources) && sources.length > 0) return [...sources].sort(sortQuality);
@@ -49,20 +63,80 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
 
     const subtitleList = useMemo(() => (Array.isArray(subtitles) ? subtitles : null), [subtitles]);
 
-    const isIframeSrc = src && (src.includes("vidsrc.xyz") || src.includes("embed"));
+    // The caller hands us a primary embed plus a list of mirrors. Previously
+    // only `src` was read and `embedUrls` was silently discarded, so a dead
+    // mirror had nowhere to fall back to — the user got a frozen "media
+    // unavailable" frame and a Back button. Now every mirror is reachable.
+    const embedList = useMemo(() => {
+        const list = [];
+        const push = (u) => {
+            if (u && !list.includes(u)) list.push(u);
+        };
+        (Array.isArray(embedUrls) ? embedUrls : []).forEach(push);
+        if (src && EMBED_PATTERN.test(src)) push(src);
+        return list;
+    }, [embedUrls, src]);
+
+    const isEmbed = embedList.length > 0 && (!src || EMBED_PATTERN.test(src));
+    const activeEmbed = isEmbed ? embedList[Math.min(embedIndex, embedList.length - 1)] : null;
 
     const activeSource = sourceList && sourceList.length > 0 ? sourceList[Math.min(sourceIndex, sourceList.length - 1)] : null;
     const activeSrc = activeSource ? activeSource.url : src;
 
     // Build player source (proxied when a Referer is required)
     const playerSrc = useMemo(() => {
-        if (!activeSrc || activeSrc.includes("vidsrc.xyz") || activeSrc.includes("embed")) return activeSrc || "";
+        if (!activeSrc || EMBED_PATTERN.test(activeSrc)) return activeSrc || "";
         return toProxy(activeSrc, headers);
     }, [activeSrc, headers]);
 
+    // Reset per-source UI when the title or episode changes. This is React's
+    // documented "adjust state during render" pattern: setting state while
+    // rendering re-runs the component immediately without committing a frame,
+    // so the player never renders once with the new URL and the old source
+    // index. An effect here would paint that mismatched frame first.
+    const [lastSrc, setLastSrc] = useState(src);
+    if (src !== lastSrc) {
+        setLastSrc(src);
+        setSourceIndex(0);
+        setEmbedIndex(0);
+        setError("");
+    }
+
+    // ── Embed watchdog ──────────────────────────────────────────
+    // A cross-origin embed gives us no way to inspect its document: `onLoad`
+    // fires just as happily for an error page as for a playing video. So we
+    // can't claim failure — but we also shouldn't leave the user staring at a
+    // dead frame forever. After a grace period we offer the escape hatches
+    // (another mirror, a new tab, back) without interrupting playback.
+    // Keyed by URL rather than a boolean so switching servers clears it for
+    // free.
+    const [stalledEmbed, setStalledEmbed] = useState(null);
+    useEffect(() => {
+        if (!isEmbed) return;
+        const id = setTimeout(() => setStalledEmbed(activeEmbed), 7000);
+        return () => clearTimeout(id);
+    }, [isEmbed, activeEmbed]);
+
+    const embedStalled = isEmbed && stalledEmbed === activeEmbed;
+
+    const nextEmbed = useCallback(() => {
+        setEmbedStalled(false);
+        setEmbedIndex((i) => (i + 1) % embedList.length);
+    }, [embedList.length]);
+
+    const switchSource = useCallback(() => {
+        setError("");
+        setLoading(true);
+        if (sourceList && sourceList.length > 1) {
+            setSourceIndex((i) => (i + 1) % sourceList.length);
+        } else if (embedList.length > 1) {
+            nextEmbed();
+        }
+    }, [sourceList, embedList.length, nextEmbed]);
+
     // (Re)initialise video / HLS whenever the active source changes
     useEffect(() => {
-        if (!playerSrc) return;
+        if (!playerSrc || isEmbed) return;
         const video = videoRef.current;
         if (!video) return;
 
@@ -78,11 +152,11 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
 
         if (playerSrc.endsWith(".m3u8") || playerSrc.includes(".m3u8")) {
             if (Hls.isSupported()) {
-                const hls = new Hls({ 
-                    enableWorker: true, 
+                const hls = new Hls({
+                    enableWorker: true,
                     lowLatencyMode: true,
                     retryDelay: 1000,
-                    maxRetryDelay: 5000,
+                    maxDelay: 5000,
                     maxMaxRetryDelay: 10000,
                     maxLoadTimeout: 20000,
                     maxRetry: 3,
@@ -95,15 +169,16 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
                     if (autoPlay) video.play().catch(() => {});
                 });
                 hls.on(Hls.Events.ERROR, (_e, data) => {
-                    if (data.fatal) {
-                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                            hls.startLoad();
-                        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                            hls.recoverMediaError();
-                        } else {
-                            setError("Playback error - try another source");
-                            setLoading(false);
-                        }
+                    if (!data.fatal) return;
+                    if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                        // Recoverable in place: the manifest usually just needs
+                        // another pass at the origin.
+                        hls.startLoad();
+                    } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                        hls.recoverMediaError();
+                    } else {
+                        setError("This server couldn't play the video.");
+                        setLoading(false);
                     }
                 });
                 return cleanup;
@@ -123,7 +198,7 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
                 if (autoPlay) video.play().catch(() => {});
             };
             const onError = () => {
-                setError("Failed to load video - try another source");
+                setError("This server couldn't play the video.");
                 setLoading(false);
             };
             video.addEventListener("loadeddata", onData);
@@ -133,7 +208,7 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
                 video.removeEventListener("error", onError);
             };
         }
-    }, [playerSrc, autoPlay]);
+    }, [playerSrc, autoPlay, isEmbed]);
 
     // Apply subtitle selection to the <track> elements
     useEffect(() => {
@@ -166,6 +241,35 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
         return () => { video.removeEventListener("timeupdate", onTime); };
     }, []);
 
+    // Auto-hide the control bar during playback. Without this it sits over the
+    // video permanently and covers the bottom of the frame — the single most
+    // obvious "this is a prototype" tell in a video player.
+    //
+    // The state write happens inside a timer, not in the effect body, and
+    // visibility is derived at render time (paused or hovered always wins), so
+    // pausing never needs a compensating effect.
+    useEffect(() => {
+        if (!playing) return;
+        let timer;
+        const arm = () => {
+            clearTimeout(timer);
+            setControlsIdle(false);
+            timer = setTimeout(() => setControlsIdle(true), 2800);
+        };
+        arm();
+        const el = containerRef.current;
+        el?.addEventListener("mousemove", arm);
+        el?.addEventListener("touchstart", arm);
+        return () => {
+            clearTimeout(timer);
+            el?.removeEventListener("mousemove", arm);
+            el?.removeEventListener("touchstart", arm);
+        };
+    }, [playing]);
+
+    // Paused or hovered → always show. Only a playing, untouched player hides.
+    const showControls = hovering || !playing || !controlsIdle;
+
     const togglePlay = () => { const v = videoRef.current; if (!v) return; v.paused ? v.play() : v.pause(); };
     const toggleFs = () => {
         const el = containerRef.current;
@@ -185,66 +289,134 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
         : "";
 
     if (error) {
+        const canSwitch = (sourceList && sourceList.length > 1) || embedList.length > 1;
         return (
-            <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-6 text-center">
-                <p className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>
-                {sourceList && sourceList.length > 1 && (
-                    <button onClick={() => { setSourceIndex((i) => (i + 1) % sourceList.length); setError(""); }} className="mb-2 mr-2 px-4 py-2 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-xl text-sm font-medium hover:bg-blue-200 dark:hover:bg-blue-900/60 transition-colors">
-                        Try another server
+            <div className="surface p-8 text-center">
+                <div className="mx-auto mb-4 h-12 w-12 rounded-2xl bg-red-500/10 text-red-500 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-6 w-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                    </svg>
+                </div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Playback unavailable</h3>
+                <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400 max-w-sm mx-auto">{error}</p>
+                <div className="mt-5 flex items-center justify-center gap-2 flex-wrap">
+                    {canSwitch && (
+                        <button onClick={switchSource} className="btn-primary px-5 py-2.5 text-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                            </svg>
+                            Try another server
+                        </button>
+                    )}
+                    <button onClick={onBack} className="btn-secondary px-5 py-2.5 text-sm">
+                        ← Back
                     </button>
-                )}
-                <button onClick={onBack} className="px-4 py-2 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded-xl text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors">
-                    ← Back
-                </button>
+                </div>
             </div>
         );
     }
 
-    if (isIframeSrc) {
+    if (isEmbed) {
         return (
-            <div ref={containerRef} className="relative bg-gray-900 rounded-xl overflow-hidden">
-                <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
-                    <iframe
-                        src={src}
-                        title={title}
-                        className="absolute inset-0 w-full h-full border-0"
-                        allowFullScreen
-                        allow="autoplay; fullscreen; picture-in-picture"
-                    />
+            <div>
+                <div ref={containerRef} className="relative bg-black rounded-2xl overflow-hidden border border-[var(--border-subtle)]">
+                    <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
+                        <iframe
+                            key={activeEmbed}
+                            src={activeEmbed}
+                            title={title}
+                            className="absolute inset-0 w-full h-full border-0"
+                            allowFullScreen
+                            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                            // Mirrors like vidsrc are third-party and were
+                            // unsandboxed, which let them call window.open on a
+                            // timer — the "ads popping before the video plays"
+                            // behaviour. The sandbox keeps playback working
+                            // (scripts + same-origin for its own player +
+                            // presentation for fullscreen) while the browser
+                            // refuses every navigation, popup and form submit
+                            // originating inside the frame.
+                            sandbox="allow-scripts allow-same-origin allow-presentation"
+                            referrerPolicy="origin-when-cross-origin"
+                        />
+                    </div>
+                    <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
+                        <button onClick={onBack} className="p-2 bg-black/70 text-white rounded-full hover:bg-black/90 transition-colors backdrop-blur" title="Back" aria-label="Back">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                            </svg>
+                        </button>
+                        {embedList.length > 1 && (
+                            <span className="px-2.5 py-1.5 rounded-full bg-black/70 text-white/80 text-[11px] font-semibold tabular-nums backdrop-blur">
+                                Server {embedIndex + 1}/{embedList.length}
+                            </span>
+                        )}
+                    </div>
                 </div>
-                <div className="absolute top-3 left-3 z-10">
-                    <button onClick={onBack} className="p-2 bg-black/60 text-white rounded-full hover:bg-black/80 transition-colors" title="Back">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                        </svg>
-                    </button>
-                </div>
+
+                {/* Non-blocking recovery affordance. Only appears if the embed
+                    hasn't been interacted with, so it never interrupts a video
+                    that is playing fine. */}
+                {embedStalled && (
+                    <div className="mt-3 surface px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <p className="text-xs text-gray-600 dark:text-gray-400 flex-1 min-w-[200px]">
+                            Not playing? This mirror may be down for this title.
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <button onClick={nextEmbed} className="btn-secondary px-3.5 py-2 text-xs">
+                                Next server
+                            </button>
+                            <a
+                                href={activeEmbed}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn-secondary px-3.5 py-2 text-xs"
+                            >
+                                Open in new tab
+                            </a>
+                            <button onClick={onBack} className="btn-ghost px-3.5 py-2 text-xs">
+                                ← Back
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }
 
     return (
-        <div ref={containerRef} className="relative bg-gray-900 rounded-xl overflow-hidden" onMouseEnter={() => setShowControls(true)} onMouseLeave={() => setShowControls(false)}>
-            <video
-                ref={videoRef}
-                className="w-full h-auto"
-                poster={poster}
-                playsInline
-                onClick={togglePlay}
-                onDoubleClick={toggleFs}
-            >
-                {subtitleList && subtitleList.map((s, i) => (
-                    <track
-                        key={`${s.url}-${i}`}
-                        src={toProxy(s.url, headers)}
-                        kind="subtitles"
-                        label={s.lang || "Subtitles"}
-                        srcLang={i === 0 ? "en" : undefined}
-                        default={i === 0 && subIndex === 1}
-                    />
-                ))}
-            </video>
-            {loading && <div className="absolute inset-0 flex items-center justify-center bg-black/50"><div className="w-10 h-10 border-3 border-white/30 border-t-white rounded-full animate-spin" /></div>}
+        <div
+            ref={containerRef}
+            className="relative bg-black rounded-2xl overflow-hidden border border-[var(--border-subtle)] group"
+            onMouseEnter={() => setHovering(true)}
+            onMouseLeave={() => setHovering(false)}
+        >
+            <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
+                <video
+                    ref={videoRef}
+                    className="absolute inset-0 w-full h-full object-contain"
+                    poster={poster}
+                    playsInline
+                    onClick={togglePlay}
+                    onDoubleClick={toggleFs}
+                >
+                    {subtitleList && subtitleList.map((s, i) => (
+                        <track
+                            key={`${s.url}-${i}`}
+                            src={toProxy(s.url, headers)}
+                            kind="subtitles"
+                            label={s.lang || "Subtitles"}
+                            srcLang={i === 0 ? "en" : undefined}
+                            default={i === 0 && subIndex === 1}
+                        />
+                    ))}
+                </video>
+            </div>
+            {loading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-[2px]">
+                    <div className="h-10 w-10 rounded-full border-[3px] border-white/30 border-t-white animate-spin" />
+                </div>
+            )}
 
             {showControls && (
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-3 pb-4">
@@ -255,10 +427,10 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
                             max={100}
                             value={(progress / (duration || 1)) * 100}
                             onChange={handleSeek}
-                            className="flex-1 h-1.5 accent-blue-500 cursor-pointer"
+                            className="flex-1 h-1.5 accent-[var(--brand-500)] cursor-pointer"
                             aria-label="Seek"
                         />
-                        <span className="text-xs text-white/80 font-mono w-20 text-right">{formatTime(currentTime)} / {formatTime(duration)}</span>
+                        <span className="text-xs text-white/80 font-mono w-20 text-right tabular-nums">{formatTime(currentTime)} / {formatTime(duration)}</span>
                     </div>
                     <div className="flex items-center gap-3">
                         {onPrev && <button onClick={onPrev} className="p-1.5 text-white/80 hover:text-white transition-colors" title="Previous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0l7.5-7.5M3 12h18" /></svg></button>}
@@ -287,7 +459,7 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
                                                         <button
                                                             key={`${s.url}-${i}`}
                                                             onClick={() => { setSourceIndex(i); setShowSettings(false); }}
-                                                            className={`w-full text-left text-xs px-2 py-1.5 rounded-lg transition-colors ${i === sourceIndex ? "bg-blue-600 text-white" : "text-gray-200 hover:bg-gray-800"}`}
+                                                            className={`w-full text-left text-xs px-2 py-1.5 rounded-lg transition-colors ${i === sourceIndex ? "bg-[var(--brand-600)] text-white" : "text-gray-200 hover:bg-gray-800"}`}
                                                         >
                                                             {s.server || "server"}{s.quality && s.quality !== "auto" ? ` · ${s.quality}` : ""}
                                                         </button>
@@ -302,7 +474,7 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
                                                         <button
                                                             key={label + i}
                                                             onClick={() => { setSubIndex(i); setShowSettings(false); }}
-                                                            className={`w-full text-left text-xs px-2 py-1.5 rounded-lg transition-colors ${i === subIndex ? "bg-blue-600 text-white" : "text-gray-200 hover:bg-gray-800"}`}
+                                                            className={`w-full text-left text-xs px-2 py-1.5 rounded-lg transition-colors ${i === subIndex ? "bg-[var(--brand-600)] text-white" : "text-gray-200 hover:bg-gray-800"}`}
                                                         >
                                                             {label}
                                                         </button>
@@ -314,7 +486,7 @@ export default function MediaPlayer({ src, title, poster, onBack, onNext, onPrev
                                 )}
                             </div>
                         )}
-                        <input type="range" min={0} max={1} step={0.1} value={volume} onChange={handleVol} className="w-24 h-1.5 accent-blue-500 cursor-pointer" aria-label="Volume" />
+                        <input type="range" min={0} max={1} step={0.1} value={volume} onChange={handleVol} className="w-24 h-1.5 accent-[var(--brand-500)] cursor-pointer" aria-label="Volume" />
                         <button onClick={toggleFs} className="p-1.5 text-white/80 hover:text-white transition-colors" title={fullscreen ? "Exit fullscreen" : "Fullscreen"}>
                             {fullscreen ? (
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>

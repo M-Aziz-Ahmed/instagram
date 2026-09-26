@@ -1,21 +1,7 @@
-import { Suspense } from "react";
-import MediaPage from "@/components/Media/MediaPage";
-import { MediaSource, getMediaSource } from "@/live-server/utils/mediaSources";
+import { redirectToHubTab } from "@/components/Media/redirectToHubTab";
 
-export const dynamic = "force-dynamic";
-
-const mediaType = "season";
-const config = getMediaSource(mediaType);
-
-export const metadata = {
-  title: `${config.emoji} ${config.label} - AnonTweet`,
-  description: `Watch ${config.label.toLowerCase()} for free on AnonTweet`,
-};
-
-export default function Seasons() {
-  return (
-    <Suspense>
-      <MediaPage mediaType={mediaType} config={config} />
-    </Suspense>
-  );
+// Merged into the Movie Hub. Kept as a route so existing links, bookmarks and
+// the sidebar/bottom-nav entries keep resolving to the right category.
+export default async function LegacyCategory({ searchParams }) {
+    return redirectToHubTab("series", searchParams);
 }

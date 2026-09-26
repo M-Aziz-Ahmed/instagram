@@ -8,7 +8,7 @@ import MediaBookmarkButton from "@/components/shared/MediaBookmarkButton";
 
 const fmtNum = (n) => (n == null ? "?" : n.toLocaleString());
 
-export default function LiveTVPage() {
+export default function LiveTVPage({ embedded = false }) {
     const [query, setQuery] = useState("");
     const [channels, setChannels] = useState([]);
     const [filteredChannels, setFilteredChannels] = useState([]);
@@ -127,32 +127,48 @@ export default function LiveTVPage() {
     };
 
     return (
-        <div className="min-h-dvh bg-white dark:bg-gray-950">
-            <header className="sticky top-0 z-20 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-200 dark:border-gray-800">
-                <div className="max-w-6xl mx-auto px-3 sm:px-4 h-12 sm:h-14 flex items-center gap-3">
-                    {view !== "grid" && (
-                        <button onClick={handleBack} className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 p-1 -ml-1 shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                            </svg>
-                        </button>
-                    )}
-                    <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-lg">📺</span>
-                        <h1 className="font-black text-lg text-gray-900 dark:text-gray-100">Live TV</h1>
-                    </div>
+        <div className={embedded ? "" : "min-h-dvh app-bg"}>
+            {embedded ? (
+                <div className="flex items-center gap-2 mb-4">
                     <div className="flex-1 max-w-lg">
                         <input
                             type="text"
                             placeholder="Search channels..."
                             value={query}
                             onChange={(e) => handleSearchChange(e.target.value)}
-                            className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-400"
+                            aria-label="Search channels"
+                            className="input"
                         />
                     </div>
                     <ImportDataButton size="sm" onSuccess={() => window.location.reload()} />
                 </div>
-            </header>
+            ) : (
+                <header className="app-header">
+                    <div className="max-w-6xl mx-auto px-3 sm:px-4 h-12 sm:h-14 flex items-center gap-3">
+                        {view !== "grid" && (
+                            <button onClick={handleBack} className="btn-ghost p-1.5 -ml-1 shrink-0" aria-label="Back">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                                </svg>
+                            </button>
+                        )}
+                        <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-lg">📺</span>
+                            <h1 className="app-title text-lg text-gray-900 dark:text-gray-100">Live TV</h1>
+                        </div>
+                        <div className="flex-1 max-w-lg">
+                            <input
+                                type="text"
+                                placeholder="Search channels..."
+                                value={query}
+                                onChange={(e) => handleSearchChange(e.target.value)}
+                                className="input"
+                            />
+                        </div>
+                        <ImportDataButton size="sm" onSuccess={() => window.location.reload()} />
+                    </div>
+                </header>
+            )}
 
             <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4">
                 {/* Player View */}
@@ -274,11 +290,13 @@ export default function LiveTVPage() {
                 )}
             </div>
 
-            <div className="max-w-6xl mx-auto px-4 py-6 text-center border-t border-gray-100 dark:border-gray-800 mt-8">
-                <p className="text-xs text-gray-400 dark:text-gray-500">
-                    Live TV channels from <a href="https://github.com/iptv-org/iptv" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">iptv-org</a>
-                </p>
-            </div>
+            {!embedded && (
+                <div className="max-w-6xl mx-auto px-4 py-6 text-center border-t border-gray-100 dark:border-gray-800 mt-8">
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                        Live TV channels from <a href="https://github.com/iptv-org/iptv" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">iptv-org</a>
+                    </p>
+                </div>
+            )}
         </div>
     );
 }

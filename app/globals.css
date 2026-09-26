@@ -5,6 +5,55 @@
 :root {
   --font-sans: var(--font-geist-sans);
   color-scheme: light dark;
+
+  /* ── Brand ───────────────────────────────────────────────
+     One source of truth for the accent ramp. Every surface,
+     button, chip and tab in the app derives its colour from
+     these tokens, so a rebrand is a single edit here instead
+     of a sweep through ~200 components. */
+  --brand-50: #eef4ff;
+  --brand-100: #dbe6ff;
+  --brand-200: #bed2ff;
+  --brand-300: #91b3ff;
+  --brand-400: #5d8bff;
+  --brand-500: #3b63f6;
+  --brand-600: #2544eb;
+  --brand-700: #1d33d8;
+  --brand-800: #1e2caf;
+  --brand-900: #1e2a8a;
+
+  /* Signature gradient for hero art, logo marks and CTAs. */
+  --brand-gradient: linear-gradient(
+    135deg,
+    #6366f1 0%,
+    #8b5cf6 45%,
+    #d946ef 100%
+  );
+
+  /* Elevation ramp — subtle, tinted with the brand hue rather
+     than neutral grey so dark mode doesn't look muddy. */
+  --surface: #ffffff;
+  --surface-sunken: #f7f8fb;
+  --surface-raised: #ffffff;
+  --border-subtle: #e8eaf0;
+  --border-strong: #d3d7e2;
+
+  --ring-brand: color-mix(in oklab, var(--brand-500) 45%, transparent);
+  --shadow-card: 0 1px 2px rgba(16, 22, 48, 0.04), 0 1px 3px rgba(16, 22, 48, 0.06);
+  --shadow-lift: 0 8px 24px -8px rgba(16, 22, 48, 0.18), 0 2px 6px rgba(16, 22, 48, 0.06);
+  --shadow-pop: 0 16px 48px -12px rgba(16, 22, 48, 0.28);
+}
+
+.dark {
+  --surface: #0a0c14;
+  --surface-sunken: #070910;
+  --surface-raised: #12151f;
+  --border-subtle: #1e2230;
+  --border-strong: #2b3142;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lift: 0 8px 24px -8px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 16px 48px -12px rgba(0, 0, 0, 0.8);
 }
 
 * {
@@ -190,4 +239,329 @@ main {
 }
 .animate-fade-up {
   animation: fade-up 0.2s ease-out;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Design system primitives
+   Small, composable classes for the recurring surfaces. They exist
+   so a card looks identical in the feed, the movie hub and the
+   library instead of each screen re-deriving its own utilities.
+   ──────────────────────────────────────────────────────────────── */
+
+@layer components {
+  /* Page scaffolding: header + centred content column */
+  .app-bg {
+    background: var(--surface);
+    color: var(--foreground, inherit);
+  }
+  .app-sunken {
+    background: var(--surface-sunken);
+  }
+
+  .app-header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    backdrop-filter: saturate(180%) blur(12px);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .app-title {
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  /* Eyebrow / section label above a grid */
+  .section-eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--brand-500);
+  }
+
+  /* Base card: the workhorse surface */
+  .surface {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Interactive card: lifts and tints on hover/focus-within */
+  .surface-interactive {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    box-shadow: var(--shadow-card);
+    transition:
+      transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 0.18s ease,
+      border-color 0.18s ease;
+    will-change: transform;
+  }
+  .surface-interactive:hover,
+  .surface-interactive:focus-within {
+    transform: translateY(-3px);
+    border-color: color-mix(in srgb, var(--brand-500) 45%, var(--border-subtle));
+    box-shadow: var(--shadow-lift);
+  }
+  .surface-interactive:active {
+    transform: translateY(-1px) scale(0.995);
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 650;
+    line-height: 1;
+    white-space: nowrap;
+    border-radius: 12px;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.1s ease;
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 650;
+    line-height: 1;
+    white-space: nowrap;
+    border-radius: 12px;
+    color: #fff;
+    background: var(--brand-600);
+    box-shadow: 0 1px 2px rgba(16, 22, 48, 0.18);
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.1s ease;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--brand-700);
+  }
+  .btn-primary:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .btn-brand-gradient {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 650;
+    line-height: 1;
+    white-space: nowrap;
+    border-radius: 12px;
+    color: #fff;
+    background: var(--brand-gradient);
+    box-shadow: 0 6px 18px -6px color-mix(in oklab, var(--brand-600) 65%, transparent);
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.1s ease,
+      filter 0.15s ease;
+  }
+  .btn-brand-gradient:hover:not(:disabled) {
+    filter: brightness(1.07);
+  }
+  .btn-brand-gradient:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 650;
+    line-height: 1;
+    white-space: nowrap;
+    border-radius: 12px;
+    color: inherit;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.1s ease;
+  }
+  .btn-secondary:hover:not(:disabled) {
+    border-color: var(--brand-400);
+    color: var(--brand-600);
+  }
+  .btn-secondary:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 650;
+    line-height: 1;
+    white-space: nowrap;
+    border-radius: 12px;
+    color: inherit;
+    background: transparent;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.1s ease;
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--brand-500) 10%, transparent);
+  }
+  .btn-ghost:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  /* Filter chip / pill (genres, sub-dub, period pickers) */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--foreground, inherit);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .chip:hover {
+    border-color: var(--brand-400);
+    color: var(--brand-600);
+  }
+  .chip[aria-pressed="true"],
+  .chip[data-active="true"] {
+    color: #fff;
+    background: var(--brand-600);
+    border-color: var(--brand-600);
+  }
+
+  /* Form controls */
+  .input {
+    width: 100%;
+    padding: 9px 14px;
+    border-radius: 999px;
+    font-size: 14px;
+    color: inherit;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-subtle);
+    outline: none;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .input::placeholder {
+    color: color-mix(in srgb, currentColor 45%, transparent);
+  }
+  .input:focus {
+    border-color: var(--brand-400);
+    box-shadow: 0 0 0 3px var(--ring-brand);
+  }
+
+  /* Small uppercase label above a value */
+  .meta-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: color-mix(in srgb, currentColor 60%, transparent);
+  }
+
+  /* Gradient text for hero headings */
+  .text-brand-gradient {
+    background: var(--brand-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Poster tile ratio + the zoom-on-hover used across media grids */
+  .poster-tile {
+    position: relative;
+    overflow: hidden;
+    border-radius: 14px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-subtle);
+    aspect-ratio: 2 / 3;
+  }
+  .poster-tile img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .group:hover .poster-tile img,
+  .poster-tile:hover img {
+    transform: scale(1.06);
+  }
+  .poster-tile::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.72) 0%, transparent 55%);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  .group:hover .poster-tile::after,
+  .poster-tile:hover::after {
+    opacity: 1;
+  }
+
+  /* Skeleton base */
+  .skeleton {
+    border-radius: 10px;
+    background: var(--surface-sunken);
+    position: relative;
+    overflow: hidden;
+  }
+}
+
+/* Respect users who don't want motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .surface-interactive:hover,
+  .surface-interactive:focus-within {
+    transform: none;
+  }
 }

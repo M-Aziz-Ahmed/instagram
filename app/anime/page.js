@@ -1,15 +1,7 @@
-import { Suspense } from "react";
-import AnimePage from "@/components/Anime/AnimePage";
+import { redirectToHubTab } from "@/components/Media/redirectToHubTab";
 
-export const metadata = {
-  title: "Anime - AnonTweet",
-  description: "Watch anime for free on AnonTweet",
-};
-
-export default function Anime() {
-  return (
-    <Suspense>
-      <AnimePage />
-    </Suspense>
-  );
+// Merged into the Movie Hub. Kept as a route so existing links, bookmarks and
+// the sidebar/bottom-nav entries keep resolving to the right category.
+export default async function LegacyCategory({ searchParams }) {
+    return redirectToHubTab("anime", searchParams);
 }
