@@ -30,6 +30,29 @@ import { openAdLink } from "@/utils/popupGuard";
 // real library once per page and pushes a real ad request per slot.
 
 let adsenseLoader = null;
+// Runtime publisher id, fetched once. See /api/ads/config — this exists so the
+// live server can supply the id without the frontend being rebuilt.
+let adsenseClientPromise = null;
+
+function resolveBuildTimeClient() {
+    return (
+        (typeof process !== "undefined" && process.env.NEXT_PUBLIC_ADSENSE_CLIENT) || ""
+    );
+}
+
+function getRuntimeClient() {
+    if (adsenseClientPromise) return adsenseClientPromise;
+    const buildTime = resolveBuildTimeClient();
+    if (buildTime) {
+        adsenseClientPromise = Promise.resolve(buildTime);
+        return adsenseClientPromise;
+    }
+    adsenseClientPromise = fetch("/api/ads/config", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d?.adsenseClient || "")
+        .catch(() => "");
+    return adsenseClientPromise;
+}
 
 function loadAdSense(client) {
     if (typeof window === "undefined") return Promise.resolve(false);
@@ -53,19 +76,26 @@ function loadAdSense(client) {
     return adsenseLoader;
 }
 
-function AdSenseSlot({ ad }) {
+function AdSenseSlot({ ad, onFallbackClick }) {
     const insRef = useRef(null);
     const [status, setStatus] = useState("loading"); // loading | ready | failed
+    const [client, setClient] = useState(ad.adsenseClient || resolveBuildTimeClient());
 
     // A publisher id can be pinned per-ad (useful when rotating between
-    // accounts); otherwise fall back to the site-wide build-time value.
-    const client =
-        ad.adsenseClient ||
-        (typeof process !== "undefined" ? process.env.NEXT_PUBLIC_ADSENSE_CLIENT : "") ||
-        "";
-    // Without a publisher id there is nothing to request, so the slot is
-    // unfillable by definition and we don't mount a loader for it.
-    const unconfigured = !client;
+    // accounts); otherwise fall back to the site-wide value, fetched from the
+    // live server so it can be configured without a frontend rebuild.
+    // The per-ad value is already the initial state, so there is nothing to
+    // write when it's present.
+    useEffect(() => {
+        if (ad.adsenseClient) return;
+        let cancelled = false;
+        getRuntimeClient().then((c) => {
+            if (!cancelled) setClient(c);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [ad.adsenseClient]);
 
     useEffect(() => {
         if (!client) return;
@@ -116,10 +146,19 @@ function AdSenseSlot({ ad }) {
         };
     }, [status]);
 
-    // Unconfigured publisher id or no fill: the slot is genuinely empty, so it
-    // renders the quiet placeholder rather than a zero-height element.
-    if (unconfigured || status === "failed") {
-        return <UnavailableAd />;
+    // No publisher id, or a request that came back empty. The slot can't paint
+    // a creative, but it can still earn: if the ad carries artwork we fall back
+    // to the static promo card so the impression and the click are kept. Only a
+    // genuinely artless ad drops to the bare placeholder.
+    if (!client || status === "failed") {
+        if (process.env.NODE_ENV !== "production") {
+            console.warn(
+                !client
+                    ? `[AdCard] Ad "${ad.title}" is an AdSense unit but no publisher id is configured. Set ADSENSE_CLIENT on the live server, NEXT_PUBLIC_ADSENSE_CLIENT in the frontend env, or fill in Publisher ID on the ad.`
+                    : `[AdCard] Ad "${ad.title}" (slot ${ad.adsenseSlot}) requested no creative. AdSense will not serve a slot with no fill.`,
+            );
+        }
+        return ad.imageUrl ? <HouseAd ad={ad} onClick={onFallbackClick} /> : <UnavailableAd />;
     }
 
     return (
@@ -352,7 +391,7 @@ export default function AdCard({ ad }) {
     };
 
     if (ad.adType === "adsense" && ad.adsenseSlot) {
-        return <AdSenseSlot ad={ad} />;
+        return <AdSenseSlot ad={ad} onFallbackClick={handleClick} />;
     }
 
     if (ad.adType === "adsterra" && ad.adsterraCode) {

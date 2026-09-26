@@ -1296,6 +1296,39 @@ function ContentFilterPanel() {
 /*  Ads Panel                                                                 */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * Why this ad would not paint, or null if it looks renderable.
+ *
+ * Every ad type has a silent failure mode: a custom ad with no artwork, an
+ * AdSense unit with no publisher id or no fill, an Adsterra unit whose creative
+ * only runs once per session. The feed shows a placeholder in all of those
+ * cases, which from the outside is indistinguishable from "the ad is broken".
+ * Surfacing the reason next to the ad is the difference between a five-second
+ * fix and an afternoon.
+ */
+function adProblem(ad, adsenseClient) {
+    if (!ad) return null;
+    const hasClient = Boolean(ad.adsenseClient || adsenseClient);
+
+    if (ad.adType === "adsense") {
+        if (!ad.adsenseSlot) return "No slot ID set — this ad cannot request anything.";
+        if (!hasClient)
+            return "No AdSense publisher ID configured. Set one on this ad, or ADSENSE_CLIENT on the live server.";
+        return null;
+    }
+
+    if (ad.adType === "adsterra") {
+        if (!ad.adsterraCode) return "No Adsterra code set — this ad cannot render anything.";
+        if (!ad.imageUrl && !ad.linkUrl)
+            return "No image or link set, so slots after the first render an empty placeholder.";
+        return null;
+    }
+
+    if (!ad.imageUrl && !ad.linkUrl && !ad.title)
+        return "Nothing to show: add an image, a link, or a title.";
+    return null;
+}
+
 function AdsPanel() {
     const { showToast } = useToast();
     const [ads, setAds] = useState([]);
@@ -1303,6 +1336,10 @@ function AdsPanel() {
     const [editingAd, setEditingAd] = useState(null);
     const [showForm, setShowForm] = useState(false);
     const [saving, setSaving] = useState(false);
+    // Live publisher id the server is advertising to the client. Fetched so the
+    // list can tell an admin *why* an AdSense ad isn't rendering, instead of
+    // leaving them to guess from an empty slot on /social.
+    const [adsenseClient, setAdsenseClient] = useState("");
 
     const emptyAd = {
         title: "", description: "", imageUrl: "", linkUrl: "", ctaText: "Learn More",
@@ -1321,6 +1358,15 @@ function AdsPanel() {
     }, []);
 
     useEffect(() => { fetchAds(); }, [fetchAds]);
+
+    useEffect(() => {
+        let cancelled = false;
+        fetch("/api/ads/config", { cache: "no-store" })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => { if (!cancelled) setAdsenseClient(d?.adsenseClient || ""); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
 
     const openCreate = () => { setForm(emptyAd); setEditingAd(null); setShowForm(true); };
     const openEdit = (ad) => {
@@ -1422,6 +1468,18 @@ function AdsPanel() {
                                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                                         {ad.linkUrl || "No link"}{ad.impressions ? ` · ${ad.impressions} views` : ""}{ad.clicks ? ` · ${ad.clicks} clicks` : ""}
                                     </p>
+                                    {(() => {
+                                        const problem = adProblem(ad, adsenseClient);
+                                        if (!problem) return null;
+                                        return (
+                                            <p className="mt-1 flex items-start gap-1 text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="mt-px h-3 w-3 shrink-0">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                                                </svg>
+                                                {problem}
+                                            </p>
+                                        );
+                                    })()}
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">
                                     <button onClick={() => toggleActive(ad)}

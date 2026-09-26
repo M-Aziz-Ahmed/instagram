@@ -3,6 +3,25 @@ const Ad = require("../models/ad");
 
 const router = express.Router();
 
+// GET /config
+// Publishes the AdSense publisher id to the client at request time.
+//
+// This used to be read only from NEXT_PUBLIC_ADSENSE_CLIENT, which is inlined
+// into the client bundle at *build* time. That meant the only way to configure
+// it was a full rebuild + redeploy of the frontend, so an admin who added an
+// AdSense ad saw an empty slot with no way to tell why. Reading a plain
+// (non-NEXT_PUBLIC) server env var here means the live server can be
+// reconfigured on its own.
+//
+// A publisher id is not a secret — it ships in every page AdSense serves — so
+// this is safe to expose without auth.
+router.get("/config", (req, res) => {
+    return res.json({
+        adsenseClient:
+            process.env.ADSENSE_CLIENT || process.env.NEXT_PUBLIC_ADSENSE_CLIENT || "",
+    });
+});
+
 // GET /
 router.get("/", async (req, res) => {
     try {
