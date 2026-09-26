@@ -208,7 +208,7 @@ router.get("/ads", requireAdmin, async (req, res) => {
 // POST /ads
 router.post("/ads", requireAdmin, async (req, res) => {
     try {
-        const { title, description, imageUrl, linkUrl, adType, adsterraCode, adsenseSlot, ctaText, startDate, endDate, isActive } = req.body;
+        const { title, description, imageUrl, linkUrl, adType, adsterraCode, adsenseSlot, adsenseClient, adSize, ctaText, startDate, endDate, isActive } = req.body;
         if (!title?.trim()) return res.status(400).json({ error: "Title required" });
 
         const ad = await Ad.create({
@@ -219,6 +219,8 @@ router.post("/ads", requireAdmin, async (req, res) => {
             adType: adType || "custom",
             adsterraCode: adsterraCode || "",
             adsenseSlot: adsenseSlot || "",
+            adsenseClient: adsenseClient || "",
+            adSize: adSize || "",
             ctaText: ctaText || "Learn More",
             startDate: startDate || null,
             endDate: endDate || null,
@@ -265,7 +267,7 @@ router.delete("/ads", requireAdmin, async (req, res) => {
 router.patch("/ads/:id", requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, imageUrl, linkUrl, adType, adsterraCode, adsenseSlot, ctaText, startDate, endDate, isActive } = req.body;
+        const { title, description, imageUrl, linkUrl, adType, adsterraCode, adsenseSlot, adsenseClient, adSize, ctaText, startDate, endDate, isActive } = req.body;
 
         const ad = await Ad.findByIdAndUpdate(id, {
             ...(title !== undefined && { title: title.trim().slice(0, 100) }),
@@ -275,6 +277,8 @@ router.patch("/ads/:id", requireAdmin, async (req, res) => {
             ...(adType !== undefined && { adType }),
             ...(adsterraCode !== undefined && { adsterraCode }),
             ...(adsenseSlot !== undefined && { adsenseSlot }),
+            ...(adsenseClient !== undefined && { adsenseClient }),
+            ...(adSize !== undefined && { adSize }),
             ...(ctaText !== undefined && { ctaText }),
             ...(startDate !== undefined && { startDate: startDate || null }),
             ...(endDate !== undefined && { endDate: endDate || null }),

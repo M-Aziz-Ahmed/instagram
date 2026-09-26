@@ -5,6 +5,7 @@ import Link from "next/link";
 import PostCard from "./PostCard";
 import { PostSkeleton } from "@/components/shared/Skeleton";
 import AdCard from "@/components/shared/AdCard";
+import { prioritizeUnseen, isRenderableAd } from "@/utils/adSession";
 import UserBadges from "@/components/shared/UserBadges";
 import { useUser } from "@/context/UserContext";
 import { timeAgo } from "@/utils/timeAgo";
@@ -254,11 +255,16 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
         };
     }, [flushViews]);
 
-    // Fetch ads once on mount
+    // Fetch ads once on mount. We ask for more than we can place: a creative
+    // only executes once per session, so re-serving the same one to a later
+    // slot left a blank placeholder and burned the impression.
     useEffect(() => {
-        fetch("/api/ads?limit=5", { cache: "no-store" })
+        fetch("/api/ads?limit=20", { cache: "no-store" })
             .then((r) => r.ok ? r.json() : [])
-            .then((data) => { if (Array.isArray(data)) setAds(data); })
+            .then((data) => {
+                if (!Array.isArray(data)) return;
+                setAds(prioritizeUnseen(data.filter(isRenderableAd)));
+            })
             .catch(() => {});
     }, []);
 
@@ -280,7 +286,10 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             items.push({ type: "post", data: post });
             if (post?._id) lastPostId = post._id;
             if ((i + 1) % AD_INTERVAL === 0 && ads.length > 0 && adCount < MAX_AD_SLOTS) {
-                const ad = ads[Math.floor(i / AD_INTERVAL) % ads.length];
+                // Walk `ads` in order rather than computing an index: `ads` is
+                // already ordered fresh-creatives-first, and every slot gets a
+                // different ad until that pool runs dry.
+                const ad = ads[adCount % ads.length];
                 // Anchor the slot to the post it follows, not to its ordinal
                 // position. Ordinal keys renumbered on every prepend/delete and
                 // remounted the slot, which re-ran the creative. Anchoring to

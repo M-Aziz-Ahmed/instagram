@@ -1,15 +1,7 @@
-import { Suspense } from "react";
-import LiveTVPage from "@/components/LiveTV/LiveTVPage";
+import { redirectToHubTab } from "@/components/Media/redirectToHubTab";
 
-export const metadata = {
-  title: "📺 Live TV - AnonTweet",
-  description: "Watch live TV channels for free on AnonTweet",
-};
-
-export default function LiveTV() {
-  return (
-    <Suspense>
-      <LiveTVPage />
-    </Suspense>
-  );
+// Merged into the Movie Hub. Kept as a route so existing links, bookmarks and
+// the sidebar/bottom-nav entries keep resolving to the right category.
+export default async function LegacyCategory({ searchParams }) {
+    return redirectToHubTab("live-tv", searchParams);
 }

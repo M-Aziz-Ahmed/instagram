@@ -322,7 +322,7 @@ function EpisodeList({ episodes, currentId, onSelect }) {
 
 // ─── AnimePage ────────────────────────────────────────────────────────────────
 
-export default function AnimePage() {
+export default function AnimePage({ embedded = false }) {
     const searchParams = useSearchParams();
     const initialId = searchParams.get("id");
     const initialEp = searchParams.get("ep");
@@ -536,20 +536,9 @@ export default function AnimePage() {
     const view = streamUrl ? "player" : selected ? "detail" : "grid";
 
     return (
-        <div className="min-h-dvh bg-white dark:bg-gray-950">
-            <header className="sticky top-0 z-20 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-200 dark:border-gray-800">
-                <div className="max-w-6xl mx-auto px-3 sm:px-4 h-12 sm:h-14 flex items-center gap-3">
-                    {view !== "grid" && (
-                        <button onClick={handleBack} className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 p-1 -ml-1 shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                            </svg>
-                        </button>
-                    )}
-                    <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-lg">🎬</span>
-                        <h1 className="font-black text-lg text-gray-900 dark:text-gray-100">Anime</h1>
-                    </div>
+        <div className={embedded ? "" : "min-h-dvh app-bg"}>
+            {embedded ? (
+                <div className="flex items-center gap-2 mb-4">
                     <div className="flex-1 max-w-lg">
                         <input
                             type="text"
@@ -557,12 +546,40 @@ export default function AnimePage() {
                             value={query}
                             onChange={(e) => handleSearchChange(e.target.value)}
                             onKeyDown={(e) => { if (e.key === "Enter" && query.trim()) doSearch(query, 1, false); }}
-                            className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-400"
+                            aria-label="Search anime"
+                            className="input"
                         />
                     </div>
                     <ImportDataButton size="sm" />
                 </div>
-            </header>
+            ) : (
+                <header className="app-header">
+                    <div className="max-w-6xl mx-auto px-3 sm:px-4 h-12 sm:h-14 flex items-center gap-3">
+                        {view !== "grid" && (
+                            <button onClick={handleBack} className="btn-ghost p-1.5 -ml-1 shrink-0" aria-label="Back">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                                </svg>
+                            </button>
+                        )}
+                        <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-lg">🎬</span>
+                            <h1 className="app-title text-lg text-gray-900 dark:text-gray-100">Anime</h1>
+                        </div>
+                        <div className="flex-1 max-w-lg">
+                            <input
+                                type="text"
+                                placeholder="Search anime..."
+                                value={query}
+                                onChange={(e) => handleSearchChange(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === "Enter" && query.trim()) doSearch(query, 1, false); }}
+                                className="input"
+                            />
+                        </div>
+                        <ImportDataButton size="sm" />
+                    </div>
+                </header>
+            )}
 
             <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4">
                 {/* ── Player ── */}
@@ -746,12 +763,14 @@ export default function AnimePage() {
                 )}
             </div>
 
-            <div className="max-w-6xl mx-auto px-4 py-6 text-center border-t border-gray-100 dark:border-gray-800 mt-8">
-                <p className="text-xs text-gray-400 dark:text-gray-500">
-                    Free anime streaming powered by community.{" "}
-                    <a href="https://www.crunchyroll.com" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Watch ad-free on Crunchyroll</a>
-                </p>
-            </div>
+            {!embedded && (
+                <div className="max-w-6xl mx-auto px-4 py-6 text-center border-t border-gray-100 dark:border-gray-800 mt-8">
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                        Free anime streaming powered by community.{" "}
+                        <a href="https://www.crunchyroll.com" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Watch ad-free on Crunchyroll</a>
+                    </p>
+                </div>
+            )}
         </div>
     );
 }

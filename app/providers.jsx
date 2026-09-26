@@ -14,10 +14,17 @@ import AutoUpdater from "@/components/Updates/AutoUpdater";
 import TauriDesktopDiagnostics from "@/components/Tauri/TauriDesktopDiagnostics";
 import { useEffect } from "react";
 import { installLogInterceptor } from "@/utils/logInterceptor";
+import { installPopupGuard } from "@/utils/popupGuard";
 
 export default function Providers({ children }) {
     useEffect(() => {
         installLogInterceptor();
+    }, []);
+
+    // Must run before any ad creative or video embed loads, otherwise the first
+    // few popups get through while the page is still hydrating.
+    useEffect(() => {
+        installPopupGuard();
     }, []);
 
     useEffect(() => {
