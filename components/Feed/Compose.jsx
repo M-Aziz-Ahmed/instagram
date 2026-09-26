@@ -406,7 +406,15 @@ export default function Compose({ onPosted }) {
                             {showGif && (
                                 <div className="absolute bottom-full left-0 mb-2 z-30 max-h-[50dvh]">
                                     <GifPicker
-                                        onSelect={(url) => { setPreview(url); setShowGif(false); }}
+                                        onSelect={(url) => {
+                                            // GIFs live in the same `previews`
+                                            // list as picked images; the submit
+                                            // path distinguishes them by their
+                                            // giphy URL. `setPreview` never
+                                            // existed, so picking a GIF threw.
+                                            setPreviews(prev => (prev.length < 10 ? [...prev, url] : prev));
+                                            setShowGif(false);
+                                        }}
                                         onClose={() => setShowGif(false)}
                                     />
                                 </div>

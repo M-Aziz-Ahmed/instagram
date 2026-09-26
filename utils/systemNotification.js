@@ -87,7 +87,7 @@ function buildClickTarget(url) {
  * custom in-app window). Clicks navigate the app to `opts.url`.
  */
 export async function showBackgroundNotification(title, opts = {}) {
-    const { body = "", url = "/", icon = "/icon-192.svg", tag = "" } = opts;
+    const { body = "", url = "/", icon = "/icon-192.png", tag = "" } = opts;
 
     if (!isNotificationSupported()) return false;
 

@@ -129,10 +129,11 @@ export default function AdminAnalytics() {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="lg:col-span-2 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5">
                             <h3 className="font-bold text-sm text-gray-900 dark:text-gray-100 mb-1">Users around the globe</h3>
-                            <p className="text-xs text-gray-400 mb-2">Rotate, zoom, hover the dots to see country-level events</p>
+                            <p className="text-xs text-gray-400 mb-2">Scroll or use +/− to drill from countries → states/regions → cities &amp; towns. Double-click to dive into a spot.</p>
                             <Globe
                                 countries={(locations?.countries || []).filter((c) => c.lat != null && c.lon != null).map((c) => ({ code: c.code, name: c.name, count: c.count, lat: c.lat, lon: c.lon }))}
-                                cities={(locations?.cities || []).filter((c) => c.lat != null && c.lon != null).map((c) => ({ code: c.code, name: c.city || c.name, country: c.country, count: c.count, lat: c.lat, lon: c.lon }))}
+                                regions={(locations?.regions || []).filter((c) => c.lat != null && c.lon != null).map((c) => ({ code: c.code, name: c.name, country: c.country, count: c.count, lat: c.lat, lon: c.lon }))}
+                                cities={(locations?.cities || []).filter((c) => c.lat != null && c.lon != null).map((c) => ({ code: c.code, name: c.city || c.name, region: c.region, country: c.country, count: c.count, lat: c.lat, lon: c.lon }))}
                                 width={640}
                                 height={430}
                             />

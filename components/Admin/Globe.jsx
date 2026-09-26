@@ -2,9 +2,14 @@
 
 // Dependency-free interactive 3D globe on <canvas>.
 //   • Drag to spin (yaw) and tilt (pitch) — full 360° view.
-//   • Scroll to zoom; zooming in switches from COUNTRY dots to the CITY dots
-//     around the view centre (the data only has country + city granularity).
-//   • ⏸ button stops the auto-rotation, ▶ resumes it; the ⟲ resets the view.
+//   • Scroll / +− to zoom; the projection radius actually scales with zoom, so
+//     zooming in moves you from whole-world → country → state/region →
+//     city/town, revealing progressively smaller places.
+//   • ⏸ stops the auto-rotation, ▶ resumes it; ⟲ resets the view.
+//
+// Dot selection is tiered by zoom, and culling is done by projecting candidates
+// and testing them against the canvas rect — not by approximating a
+// centre/window in degrees — so what you see is exactly what is on screen.
 import { useCallback, useEffect, useRef, useState } from "react";
 import WORLD_RINGS from "./worldData";
 
@@ -12,12 +17,21 @@ const DEG = Math.PI / 180;
 const TILT = -22;
 const LAND = "rgba(108, 122, 137, 0.55)";
 const GRID = "rgba(148, 163, 184, 0.16)";
+
 const ZOOM_MIN = 0.7;
-const ZOOM_MAX = 8;
-const Z_CITIES = 1.5; // zoom level where city dots replace country dots
-// Below a place's event-count drops under this zoom-dependent floor it is
-// hidden, so zooming in progressively reveals smaller towns (Google-Maps-like).
-const minVisibleCount = (z) => Math.max(1, Math.round(48 / (z * z)));
+const ZOOM_MAX = 40;   // deep enough to isolate a single town
+const Z_REGIONS = 1.6; // zoom at which country dots give way to state/region dots
+const Z_CITIES = 4.5;  // zoom at which region dots give way to city/town dots
+
+// Zoom bands. A place is drawn once the zoom is deep enough to read it, and
+// hidden again past ZOOM_BAND_MAX so the view doesn't turn into confetti.
+const ZOOM_BAND_MAX = 14;
+// Below a place's event count drops under this zoom-dependent floor it is
+// hidden, so zooming in progressively reveals smaller towns.
+const minVisibleCount = (z) => Math.max(1, Math.round(60 / (z * z)));
+// Cap on dots actually drawn per frame; keeps the canvas cheap regardless of
+// how many distinct places exist.
+const MAX_DOTS = 420;
 
 function toVec(lon, lat) {
     const phi = (lon * Math.PI) / 180;
@@ -37,17 +51,43 @@ function rot(v, yaw, pitch) {
     return { x, y: v.y * cp - z1 * sp, z: v.y * sp + z1 * cp };
 }
 
+// Forward projection onto the canvas. `r` is the *scaled* sphere radius — this
+// is the value zoom multiplies. Passing the canvas centre as the radius (as
+// this used to) made the globe a fixed size, so zoom only ever grew the dots.
+function project(lon, lat, yaw, pitch, cx, cy, r) {
+    const v = rot(toVec(lon, lat), yaw, pitch);
+    if (v.z <= 0.02) return null;
+    return { sx: cx + v.x * r, sy: cy - v.y * r, z: v.z };
+}
+
+// Inverse projection: which lon/lat lands on this canvas point? Used to centre
+// the view (double-click) and to label the current focus.
+function unproject(sx, sy, yaw, pitch, cx, cy, r) {
+    const ux = (sx - cx) / r;
+    const uy = (cy - sy) / r;
+    const d = 1 - ux * ux - uy * uy;
+    if (d <= 0) return null; // outside the sphere's silhouette
+    const uz = Math.sqrt(d);
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    const cyf = Math.cos(yaw), syf = Math.sin(yaw);
+    const y = cp * uy + sp * uz;
+    const z1 = -sp * uy + cp * uz;
+    const x = ux * cyf - z1 * syf;
+    const z = z1 * cyf + ux * syf;
+    return {
+        lon: Math.atan2(x, z) / DEG,
+        lat: Math.asin(Math.max(-1, Math.min(1, y))) / DEG,
+    };
+}
+
 function clampDeg(v, lo, hi) {
     let d = ((v + 180) % 360 + 360) % 360 - 180;
     return Math.max(lo, Math.min(hi, d));
 }
 
-function wrapDelta(lon, cLon) {
-    return ((lon - cLon + 180 + 360) % 360) - 180;
-}
-
 export default function Globe({
     countries = [],
+    regions = [],
     cities = [],
     width = 600,
     height = 420,
@@ -71,12 +111,6 @@ export default function Globe({
     // pauseable helicopter torque… just so the loop knows whether to spin
     const ROT_PER_FRAME = (Math.PI * 2) / (75 * 60); // full turn ~75s at 60fps
 
-    const project = useCallback((lon, lat, yaw, pitch, r) => {
-        const v = rot(toVec(lon, lat), yaw, pitch);
-        if (v.z <= 0.02) return null;
-        return { sx: r + v.x * r, sy: r - v.y * r, z: v.z };
-    }, []);
-
     const draw = useCallback(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -93,20 +127,28 @@ export default function Globe({
 
         const s = stateRef.current;
         const z = s.zoom;
-        const R = (Math.min(cw, ch) / 2) * 0.92 * z;
-        const yaw = s.yaw;
-        const pitch = s.pitchDeg * DEG;
         const cx = cw / 2;
         const cy = ch / 2;
+        // The sphere radius the zoom level maps to. At z=1 the globe fits the
+        // shorter axis; deeper zooms grow it past the viewport, which is what
+        // makes zooming in actually feel like moving closer.
+        const baseR = (Math.min(cw, ch) / 2) * 0.92;
+        const R = baseR * z;
+        const yaw = s.yaw;
+        const pitch = s.pitchDeg * DEG;
+        // Once the sphere is much larger than the viewport its silhouette is
+        // off-screen, so the decorative ring/limb would be meaningless.
+        const wholeGlobeInView = R * 1.04 <= Math.min(cw, ch) / 2;
 
-        // orbit ring hint
-        ctx.setLineDash([3, 7]);
-        ctx.strokeStyle = "rgba(59,130,246,0.22)";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(cx, cy, R + 8, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
+        if (wholeGlobeInView) {
+            ctx.setLineDash([3, 7]);
+            ctx.strokeStyle = "rgba(59,130,246,0.22)";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(cx, cy, R + 8, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
 
         // graticule
         ctx.strokeStyle = GRID;
@@ -115,7 +157,7 @@ export default function Globe({
             ctx.beginPath();
             let pen = false;
             for (let lon = -180; lon <= 180; lon += 6) {
-                const p = project(lon, lat, yaw, pitch, cx);
+                const p = project(lon, lat, yaw, pitch, cx, cy, R);
                 if (p) { if (!pen) { ctx.moveTo(p.sx, p.sy); pen = true; } else ctx.lineTo(p.sx, p.sy); }
                 else pen = false;
             }
@@ -125,95 +167,103 @@ export default function Globe({
             ctx.beginPath();
             let pen = false;
             for (let lat = -90; lat <= 90; lat += 4) {
-                const p = project(lon, lat, yaw, pitch, cx);
+                const p = project(lon, lat, yaw, pitch, cx, cy, R);
                 if (p) { if (!pen) { ctx.moveTo(p.sx, p.sy); pen = true; } else ctx.lineTo(p.sx, p.sy); }
                 else pen = false;
             }
             ctx.stroke();
         }
 
-        // landmasses (front-facing polylines); thicken a little when zoomed
-        ctx.strokeStyle = LAND;
-        ctx.lineWidth = 1.25 + Math.min(0.9, z * 0.12);
-        ctx.lineJoin = "round";
-        for (const ring of WORLD_RINGS) {
-            ctx.beginPath();
-            let pen = false;
-            for (const [lon, lat] of ring) {
-                const p = project(lon, lat, yaw, pitch, cx);
-                if (p) { if (!pen) { ctx.moveTo(p.sx, p.sy); pen = true; } else ctx.lineTo(p.sx, p.sy); }
-                else pen = false;
+        // landmasses (front-facing polylines); thin out when deeply zoomed so
+        // the coastline doesn't drown the dots.
+        if (z < ZOOM_BAND_MAX) {
+            ctx.strokeStyle = LAND;
+            ctx.lineWidth = 1.25 + Math.min(0.9, z * 0.12);
+            ctx.lineJoin = "round";
+            const step = z > 3 ? 3 : 1; // sub-sample the rings when zoomed in
+            for (const ring of WORLD_RINGS) {
+                ctx.beginPath();
+                let pen = false;
+                for (let i = 0; i < ring.length; i += step) {
+                    const [lon, lat] = ring[i];
+                    const p = project(lon, lat, yaw, pitch, cx, cy, R);
+                    if (p) { if (!pen) { ctx.moveTo(p.sx, p.sy); pen = true; } else ctx.lineTo(p.sx, p.sy); }
+                    else pen = false;
+                }
+                ctx.stroke();
             }
-            ctx.stroke();
         }
 
-        // Which dots do we draw? Zoomed out → countries; zoomed in → the
-        // cities/towns nearest to the view centre, revealing smaller places
-        // the deeper you zoom.
-        const zoomed = z >= Z_CITIES;
-        let list;
-        if (zoomed) {
-            const cLon = clampDeg((yaw / DEG) * -1, -180, 180);
-            const cLat = clampDeg(s.pitchDeg, -90, 90);
-            const halfLon = 110 / z;
-            const halfLat = 70 / z;
-            const minCount = minVisibleCount(z);
-            list = cities
-                .filter((c) => c.lat != null && c.lon != null && (c.count || 1) >= minCount)
-                .filter((c) => Math.abs(wrapDelta(c.lon, cLon)) <= halfLon && Math.abs(c.lat - cLat) <= halfLat)
-                .slice(0, 420);
-        } else {
-            list = countries;
+        // Which tier of place do we draw? Zoomed out → countries, then
+        // states/regions, then cities/towns. Each tier only holds places big
+        // enough to be meaningful at that zoom.
+        const tier = z >= Z_CITIES ? "city" : z >= Z_REGIONS ? "region" : "country";
+        const source = tier === "city" ? cities : tier === "region" ? regions : countries;
+        const minCount = tier === "country" ? 1 : minVisibleCount(z);
+
+        // Cull by projecting: keep anything that actually lands on screen.
+        // This is exact, so dots never vanish from a region they belong to and
+        // the "cities" count in the footer always matches what is drawn.
+        const candidates = [];
+        for (const pt of source || []) {
+            if (typeof pt?.lat !== "number" || typeof pt?.lon !== "number") continue;
+            if (tier !== "country" && (pt.count || 1) < minCount) continue;
+            const p = project(pt.lon, pt.lat, yaw, pitch, cx, cy, R);
+            if (!p) continue;
+            if (p.sx < -40 || p.sx > cw + 40 || p.sy < -40 || p.sy > ch + 40) continue;
+            candidates.push({ pt, sx: p.sx, sy: p.sy, z: p.z });
         }
 
+        // Biggest first, then keep the cap — so when there are more places than
+        // we can draw, the ones that survive are the ones that matter.
+        candidates.sort((a, b) => (b.pt.count || 1) - (a.pt.count || 1));
+        const shown = candidates.slice(0, MAX_DOTS);
+
+        const col = tier === "country" ? "88, 204, 2" : tier === "region" ? "168, 85, 247" : "59, 130, 246";
+        const baseR0 = tier === "country" ? 2 : tier === "region" ? 1.8 : 1.6;
+        const spanR = tier === "country" ? 5.5 : tier === "region" ? 4 : 3.4;
+        // Keep dots a readable size on screen as we zoom, rather than letting
+        // them balloon with the sphere.
+        const sizeK = Math.max(0.85, Math.min(2.2, Math.pow(z, 0.22)));
+
+        const maxCount = Math.max(1, ...shown.map((c) => c.pt.count || 1));
         const saved = [];
-        if (list.length) {
-            const maxCount = Math.max(1, ...list.map((p) => p.count || 1));
-            const sizeK = zoomed ? Math.min(2.5, z / 1.5) : Math.min(1.25, z);
-            for (const pt of list) {
-                if (typeof pt.lat !== "number" || typeof pt.lon !== "number") continue;
-                const p = project(pt.lon, pt.lat, yaw, pitch, cx);
-                if (!p) continue;
-                const rr = (zoomed
-                    ? 1.6 + Math.sqrt(pt.count / maxCount) * 3.4
-                    : 2 + Math.sqrt(pt.count / maxCount) * 5.5) * sizeK;
-                const alpha = zoomed ? 0.5 + (pt.count / maxCount) * 0.5 : 0.45 + (pt.count / maxCount) * 0.55;
-                const col = zoomed ? "59, 130, 246" : "88, 204, 2";
+        for (const c of shown) {
+            const { pt, sx, sy } = c;
+            const rr = (baseR0 + Math.sqrt((pt.count || 1) / maxCount) * spanR) * sizeK;
+            // Fade with depth so the far side of the sphere recedes.
+            const alpha = (tier === "country" ? 0.45 : 0.55) + (Math.sqrt((pt.count || 1) / maxCount)) * (tier === "country" ? 0.5 : 0.4);
+            const depth = 0.35 + 0.65 * c.z;
 
-                ctx.beginPath();
-                ctx.arc(p.sx, p.sy, rr + 4, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(${col}, ${alpha * 0.18})`;
-                ctx.fill();
+            ctx.beginPath();
+            ctx.arc(sx, sy, rr + 4, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${col}, ${alpha * 0.18 * depth})`;
+            ctx.fill();
 
-                ctx.beginPath();
-                ctx.arc(p.sx, p.sy, rr, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(${col}, ${alpha})`;
-                ctx.fill();
+            ctx.beginPath();
+            ctx.arc(sx, sy, rr, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${col}, ${Math.min(1, alpha * depth)})`;
+            ctx.fill();
 
-                ctx.beginPath();
-                ctx.arc(p.sx, p.sy, rr * 0.45, 0, Math.PI * 2);
-                ctx.fillStyle = "#ffffff";
-                ctx.fill();
+            ctx.beginPath();
+            ctx.arc(sx, sy, rr * 0.45, 0, Math.PI * 2);
+            ctx.fillStyle = "#ffffff";
+            ctx.fill();
 
-                saved.push({
-                    code: pt.code,
-                    name: zoomed ? pt.name || pt.city || pt.label : pt.name,
-                    sub: zoomed ? pt.country : "",
-                    count: pt.count || 1,
-                    sx: p.sx,
-                    sy: p.sy,
-                    r: rr,
-                });
-            }
+            saved.push({
+                code: pt.code,
+                name: tier === "city" ? pt.name || pt.city || pt.label : pt.name,
+                sub: tier === "city" ? [pt.region, pt.country].filter(Boolean).join(", ") : tier === "region" ? pt.country || "" : "",
+                count: pt.count || 1,
+                sx, sy, r: rr,
+            });
         }
 
-        // city/town labels at deeper zoom levels (most visited first)
-        if (zoomed && z >= 2.4) {
-            const labelMin = Math.max(1, Math.round(28 / z));
-            const labelShown = saved
-                .filter((d) => (d.count || 1) >= labelMin)
-                .slice(0, 45);
-            ctx.font = `${10 + Math.min(3, (z - 2.4))}px ui-sans-serif, system-ui, sans-serif`;
+        // place labels at the deeper tiers (most visited first)
+        if (tier !== "country" && z >= (tier === "city" ? 2.4 : 1.15)) {
+            const labelMin = Math.max(1, Math.round(30 / z));
+            const labelShown = saved.filter((d) => (d.count || 1) >= labelMin).slice(0, 45);
+            ctx.font = `${10 + Math.min(4, z * 0.18)}px ui-sans-serif, system-ui, sans-serif`;
             ctx.textAlign = "center";
             for (const d of labelShown) {
                 const lab = (d.name || d.code || "").slice(0, 20);
@@ -221,7 +271,8 @@ export default function Globe({
                 ctx.beginPath();
                 ctx.fillStyle = "rgba(15,23,42,0.72)";
                 const tw = ctx.measureText(lab).width;
-                ctx.roundRect ? ctx.roundRect(d.sx - tw / 2 - 3, d.sy + d.r + 2, tw + 6, 13, 3) : ctx.rect(d.sx - tw / 2 - 3, d.sy + d.r + 2, tw + 6, 13);
+                if (ctx.roundRect) ctx.roundRect(d.sx - tw / 2 - 3, d.sy + d.r + 2, tw + 6, 13, 3);
+                else ctx.rect(d.sx - tw / 2 - 3, d.sy + d.r + 2, tw + 6, 13);
                 ctx.fill();
                 ctx.fillStyle = "#dbeafe";
                 ctx.fillText(lab, d.sx, d.sy + d.r + 12);
@@ -234,20 +285,19 @@ export default function Globe({
         if (ptr) {
             hit = saved.find((dot) => Math.hypot(dot.sx - ptr.x, dot.sy - ptr.y) <= Math.max(12, dot.r + 8)) || null;
         }
-        const prev = s.hover;
-        if ((prev == null && hit != null) || (prev != null && hit == null) || (prev && hit && (prev.code !== hit.code || prev.name !== hit.name || prev.sub !== hit.sub))) {
-            s.hover = hit;
-        }
+        s.hover = hit;
 
         // inner shadow at the limb for depth
-        const grad = ctx.createRadialGradient(cx, cy, R * 0.55, cx, cy, R * 1.02);
-        grad.addColorStop(0, "rgba(0,0,0,0)");
-        grad.addColorStop(1, "rgba(0,0,0,0.07)");
-        ctx.beginPath();
-        ctx.arc(cx, cy, R * 1.02, 0, Math.PI * 2);
-        ctx.fillStyle = grad;
-        ctx.fill();
-    }, [project, countries, cities, width, height]);
+        if (wholeGlobeInView) {
+            const grad = ctx.createRadialGradient(cx, cy, R * 0.55, cx, cy, R * 1.02);
+            grad.addColorStop(0, "rgba(0,0,0,0)");
+            grad.addColorStop(1, "rgba(0,0,0,0.07)");
+            ctx.beginPath();
+            ctx.arc(cx, cy, R * 1.02, 0, Math.PI * 2);
+            ctx.fillStyle = grad;
+            ctx.fill();
+        }
+    }, [countries, regions, cities, width, height]);
 
     useEffect(() => {
         let raf;
@@ -308,8 +358,8 @@ export default function Globe({
         stateRef.current.hover = null;
     };
     const zoomToPointer = (e) => {
-        // Invert the current projection to find the spot under the cursor,
-        // then re-centre on it and zoom in (Google-Maps-style double-click).
+        // Invert the projection to find the spot under the cursor, re-centre on
+        // it and dive in (Google-Maps-style double-click).
         const s = stateRef.current;
         const rect = e.currentTarget.getBoundingClientRect();
         const cw = rect.width || width;
@@ -317,29 +367,20 @@ export default function Globe({
         const R = (Math.min(cw, ch) / 2) * 0.92 * s.zoom;
         const cx = cw / 2;
         const cy = ch / 2;
-        const ux = (e.clientX - rect.left - cx) / R;
-        const uy = (cy - (e.clientY - rect.top)) / R;
-        if (ux * ux + uy * uy > 1) {
+        const hit = unproject(e.clientX - rect.left, e.clientY - rect.top, s.yaw, s.pitchDeg * DEG, cx, cy, R);
+        if (!hit) {
             if (s.zoom >= ZOOM_MAX) resetView();
             return;
         }
-        const uz = Math.sqrt(1 - ux * ux - uy * uy);
-        const cp = Math.cos(s.pitchDeg * DEG), sp = Math.sin(s.pitchDeg * DEG);
-        const cyf = Math.cos(s.yaw), syf = Math.sin(s.yaw);
-        const yp = cp * uy + sp * uz;
-        const z1 = -sp * uy + cp * uz;
-        const vx = ux * cyf - z1 * syf;
-        const vz = z1 * cyf + ux * syf;
-        const latP = Math.asin(Math.max(-1, Math.min(1, yp))) / DEG;
-        const lonP = Math.atan2(vx, vz) / DEG;
-        s.yaw = -lonP * DEG;
-        s.pitchDeg = clampDeg(latP, -85, 85);
+        s.yaw = -hit.lon * DEG;
+        s.pitchDeg = clampDeg(hit.lat, -85, 85);
         setZoomS(Math.min(ZOOM_MAX, s.zoom * 1.65));
         setHover(null);
         s.hover = null;
     };
 
-    const zoomedMode = zoom >= Z_CITIES;
+    const tier = zoom >= Z_CITIES ? "city" : zoom >= Z_REGIONS ? "region" : "country";
+    const tierCount = tier === "city" ? (cities || []).length : tier === "region" ? (regions || []).length : (countries || []).length;
 
     return (
         <div className="relative select-none" style={{ width, height }}>
@@ -392,15 +433,15 @@ export default function Globe({
                     aria-label="Reset view"
                     className="w-9 h-9 rounded-xl bg-white/90 dark:bg-gray-900/90 backdrop-blur border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-center text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-800 transition-colors"
                 >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v6h6M20 20v-6h-6M4 10a8 8 0 0 1 13.66-4.66M20 14a8 8 0 0 1-13.66 4.66" /></svg>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4v6h6M20 20v-6h-6M4 10a8 8 0 0 1 13.66-4.66M20 14a8 8 0 0 1-13.66 4.66" /></svg>
                 </button>
             </div>
 
             {/* mode hint */}
             <div className="absolute bottom-2 left-3 text-[11px] text-gray-400 dark:text-gray-500 font-medium">
-                {zoomedMode
-                    ? `🔎 zoom ${zoom.toFixed(2)} — smallest places ≥ ${minVisibleCount(zoom)} events · ${(cities || []).length} cities/towns`
-                    : `🌍 country dots · ${(countries || []).length} countries · zoom ${zoom.toFixed(2)}`}
+                {tier === "country" && `🌍 countries · ${tierCount} with data · zoom ${zoom.toFixed(2)}`}
+                {tier === "region" && `🗺️ states / regions · ${tierCount} · ≥ ${minVisibleCount(zoom)} events · zoom ${zoom.toFixed(2)}`}
+                {tier === "city" && `📍 cities / towns · ${tierCount} · ≥ ${minVisibleCount(zoom)} events · zoom ${zoom.toFixed(2)}`}
                 <span className="hidden sm:inline"> · drag to spin</span>
                 <span className="hidden md:inline"> · scroll or +/− to zoom · double-click to dive in</span>
             </div>
@@ -414,11 +455,15 @@ export default function Globe({
                     style={{ left: Math.max(4, Math.min(96, (hover.sx / Math.max(1, width)) * 100)) + "%", top: Math.max(8, (hover.sy / Math.max(1, height)) * 100) + "%" }}
                 >
                     <p className="text-xs font-bold text-gray-900 dark:text-gray-100">
-                        {hover.name} <span className={zoomedMode ? "text-[#3b82f6]" : "text-[#58cc02]"}>{hover.count}</span>
+                        {hover.name}{" "}
+                        <span className={tier === "country" ? "text-[#58cc02]" : tier === "region" ? "text-purple-500" : "text-[#3b82f6]"}>
+                            {hover.count}
+                        </span>
                     </p>
                     <p className="text-[10px] text-gray-400">
-                        {hover.sub ? `${hover.sub} · ` : ""}{hover.count === 1 ? "event" : "events"}
-                        {zoomedMode && hover.sub ? " · zoom out for country dots" : ""}
+                        {hover.sub ? `${hover.sub} · ` : ""}
+                        {hover.count === 1 ? "event" : "events"}
+                        {tier === "city" && hover.sub ? " · zoom out for regions" : ""}
                     </p>
                 </div>
             )}

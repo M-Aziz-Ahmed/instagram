@@ -65,7 +65,7 @@ async function sendPushNotification({ recipientUsername, type, fromUser, text, u
             if (!subs.length) {
                 console.warn(`[PUSH] No web subscription for ${recipientUsername} (${type})`);
             }
-            const payload = JSON.stringify({ title, body, icon: "/icon-192.svg", badge: "/icon-192.svg", url: link, type, tag });
+            const payload = JSON.stringify({ title, body, icon: "/icon-192.png", badge: "/icon-192.png", url: link, type, tag });
             for (const sub of subs) {
                 try {
                     await webPush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload);
@@ -144,7 +144,7 @@ function titleFor(type, fromUser) {
  * @param {Object} opts { title, body, url, type }
  */
 async function broadcastPush({ title, body, url, type }) {
-    const payload = JSON.stringify({ title, body, icon: "/icon-192.svg", badge: "/icon-192.svg", url: url || "/", type: type || "announcement", tag: "announcement" });
+    const payload = JSON.stringify({ title, body, icon: "/icon-192.png", badge: "/icon-192.png", url: url || "/", type: type || "announcement", tag: "announcement" });
     let webOk = 0, webTotal = 0, fcmOk = 0, fcmTotal = 0;
 
     if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {

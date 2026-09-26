@@ -46,13 +46,8 @@
             width: 44px;
             height: 44px;
             border-radius: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-            color: #fff;
-            font-size: 20px;
-            font-weight: 800;
+            object-fit: contain;
+            background: #fff;
         }
 
         .toast .content {
@@ -106,7 +101,7 @@
 </head>
 <body>
     <div class="toast" id="toast">
-        <div class="logo">A</div>
+        <img class="logo" src="logo.png" alt="" />
         <div class="content">
             <div class="title" id="title">AnonTweet</div>
             <div class="body" id="body"></div>

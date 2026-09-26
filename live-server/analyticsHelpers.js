@@ -144,43 +144,56 @@ function deviceBreakdown(events) {
     };
 }
 
-function locationBreakdown(events) {
-    const countries = new Map(); // code -> {count, name, lat, lon}
-    const cities = new Map(); // code:city -> {count, name, country, lat, lon}
+// Shape the $group output of the /analytics/locations roll-ups into the flat
+// records the globe consumes. Kept here (rather than inline in the route) so
+// the field mapping is unit-testable — a wrong field name here silently blanks
+// a whole tier of the map.
+function mapCountryRollup(r) {
+    return {
+        code: r._id,
+        name: r.name || r._id,
+        count: r.count,
+        lat: r.lat ?? null,
+        lon: r.lon ?? null,
+    };
+}
 
-    for (const ev of events) {
-        const loc = ev.location || {};
-        const code = (loc.countryCode || "").toUpperCase();
-        if (!code) continue;
+function mapRegionRollup(r) {
+    return {
+        code: `${r._id.country}:${r._id.region || ""}`,
+        name: r.name || r._id.region || "",
+        country: r.country || r._id.country || "",
+        countryCode: r._id.country || "",
+        count: r.count,
+        lat: r.lat ?? null,
+        lon: r.lon ?? null,
+    };
+}
 
-        if (!countries.has(code)) {
-            countries.set(code, { code, name: loc.country || code, count: 0, lat: loc.lat, lon: loc.lon });
-        }
-        countries.get(code).count++;
+function mapCityRollup(r) {
+    return {
+        code: `${r._id.country}:${r._id.region || ""}:${r._id.city || ""}`,
+        name: r.name || r._id.city || "",
+        city: r.name || r._id.city || "",
+        region: r.region || r._id.region || "",
+        country: r.countryName || r._id.country || "",
+        countryCode: r._id.country || "",
+        count: r.count,
+        lat: r.lat ?? null,
+        lon: r.lon ?? null,
+    };
+}
 
-        const cityKey = `${code}:${loc.city || ""}`;
-        if (loc.city) {
-            if (!cities.has(cityKey)) {
-                cities.set(cityKey, { code, city: loc.city, country: loc.country || code, count: 0, lat: loc.lat, lon: loc.lon });
-            }
-            cities.get(cityKey).count++;
-        }
-    }
-
-    const countryList = [...countries.values()].sort((a, b) => b.count - a.count);
-    // Keep enough cities for the globe's town-level drill-down; the dashboard
-    // tables slice their own top-N from this list afterwards.
-    const cityList = [...cities.values()].sort((a, b) => b.count - a.count).slice(0, 400);
-
-    // Resolve missing country coords from the first city that has them.
+// Countries only get coordinates from the city-level geo lookup, so a country
+// row can arrive without them. Backfill from the first city that has a fix.
+function backfillCountryCoords(countryList, cityList) {
     for (const c of countryList) {
-        if ((c.lat == null || c.lon == null)) {
-            const hit = cityList.find((ct) => ct.code === c.code && ct.lat != null && ct.lon != null);
+        if (c.lat == null || c.lon == null) {
+            const hit = cityList.find((ct) => ct.countryCode === c.code && ct.lat != null && ct.lon != null);
             if (hit) { c.lat = hit.lat; c.lon = hit.lon; }
         }
     }
-
-    return { countries: countryList, cities: cityList, totalLocated: events.reduce((n, e) => n + (e.location?.countryCode ? 1 : 0), 0) };
+    return countryList;
 }
 
 function growthPercent(current, previous) {
@@ -191,5 +204,6 @@ function growthPercent(current, previous) {
 module.exports = {
     pad, dayKey, bucketKey, buckets, labelForKey,
     bucketCounts, bucketDistinct, toSeries,
-    deviceBreakdown, locationBreakdown, growthPercent,
+    deviceBreakdown, growthPercent,
+    mapCountryRollup, mapRegionRollup, mapCityRollup, backfillCountryCoords,
 };

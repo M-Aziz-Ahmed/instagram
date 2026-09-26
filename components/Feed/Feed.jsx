@@ -10,6 +10,9 @@ import { useUser } from "@/context/UserContext";
 import { timeAgo } from "@/utils/timeAgo";
 
 const PAGE_SIZE = 5;
+// Upper bound on the in-memory feed. Keeps a long-lived tab from growing an
+// unbounded post list (and an unbounded number of ad slots) via the 60s prepend.
+const MAX_FEED_POSTS = 300;
 
 function SearchResults({ query, onClear, onHashtag }) {
     const [users, setUsers]             = useState([]);
@@ -260,16 +263,30 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
     }, []);
 
     const AD_INTERVAL = 5;
+    // Hard ceiling on how many ad slots a single feed render may contain.
+    // The feed grows with every 60s prepend and every scroll-driven append, so
+    // without a cap the number of live ad slots — and the number of ad
+    // executions on the page — grew without bound.
+    const MAX_AD_SLOTS = 6;
 
     const insertAds = useCallback((postsList) => {
         if (postsList.length === 0) return postsList;
 
         const items = [];
         let adCount = 0;
+        let lastPostId = "";
         for (let i = 0; i < postsList.length; i++) {
-            items.push({ type: "post", data: postsList[i] });
-            if ((i + 1) % AD_INTERVAL === 0 && ads.length > 0) {
-                items.push({ type: "ad", data: ads[Math.floor(i / AD_INTERVAL) % ads.length], adKey: adCount });
+            const post = postsList[i];
+            items.push({ type: "post", data: post });
+            if (post?._id) lastPostId = post._id;
+            if ((i + 1) % AD_INTERVAL === 0 && ads.length > 0 && adCount < MAX_AD_SLOTS) {
+                const ad = ads[Math.floor(i / AD_INTERVAL) % ads.length];
+                // Anchor the slot to the post it follows, not to its ordinal
+                // position. Ordinal keys renumbered on every prepend/delete and
+                // remounted the slot, which re-ran the creative. Anchoring to
+                // the preceding post id keeps a slot's identity stable while
+                // posts are added above or removed from it.
+                items.push({ type: "ad", data: ad, adKey: `${lastPostId}:${ad._id}` });
                 adCount++;
             }
         }
@@ -406,7 +423,10 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                         const ids = new Set(prev.map((p) => p._id));
                         const fresh = data.posts.filter((p) => p && p._id && !ids.has(p._id));
                         if (fresh.length === 0) return prev;
-                        return [...fresh, ...prev];
+                        // Cap the buffer. Prepending without ever trimming meant
+                        // a tab left open grew an unbounded post list — and an
+                        // unbounded number of ad slots with it.
+                        return [...fresh, ...prev].slice(0, MAX_FEED_POSTS);
                     });
                 })
                 .catch(() => {});

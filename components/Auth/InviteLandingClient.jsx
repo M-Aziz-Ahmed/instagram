@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { getRedirectTarget, withRedirect } from "@/utils/redirect";
+import BrandLogo from "@/components/common/BrandLogo";
 
 export default function InviteLandingClient({ inviteCode }) {
     const { user, ready } = useUser();
@@ -54,7 +55,7 @@ export default function InviteLandingClient({ inviteCode }) {
     return (
         <div className="min-h-dvh bg-white dark:bg-gray-950 flex flex-col">
             <div className="border-b border-gray-100 dark:border-gray-800 px-6 py-4">
-                <span className="font-black text-xl tracking-tight text-gray-900 dark:text-gray-100">AnonTweet</span>
+                <BrandLogo />
             </div>
 
             <div className="flex-1 flex items-center justify-center px-6 py-12">

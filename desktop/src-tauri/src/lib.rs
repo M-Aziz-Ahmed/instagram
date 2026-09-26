@@ -51,7 +51,7 @@ fn navigate_to_url(app: &tauri::AppHandle, url_str: &str) {
 
 // ─── Toast state ──────────────────────────────────────────────────────────────
 
-struct ToastNotification { id: u32, url: String }
+struct ToastNotification { id: u32, title: String, body: String, url: String }
 
 struct ToastState {
     counter: Mutex<u32>,
@@ -71,15 +71,33 @@ struct BrowserState {
 
 // ─── Toast commands ───────────────────────────────────────────────────────────
 
+/// Cap on simultaneously visible toast windows. A burst of notifications used
+/// to open one always-on-top window per call, with no queue and no dedupe, so a
+/// misbehaving producer (e.g. an ad creative re-arming on a timer) could stack
+/// an unbounded number of windows on top of the user's screen.
+const MAX_VISIBLE_TOASTS: usize = 3;
+
+/// How close two toasts must be in content to count as a duplicate. Bursts
+/// repeat the same message, so this collapses them instead of stacking them.
+fn toast_is_duplicate(existing: &[ToastNotification], title: &str, body: &str) -> bool {
+    existing.iter().any(|t| t.title == title && t.body == body)
+}
+
 #[tauri::command]
 fn show_toast(app: tauri::AppHandle, title: String, body: String, url: String) -> Result<(), String> {
+    // Collapse an identical toast that is already on screen.
+    {
+        let state: tauri::State<'_, Arc<ToastState>> = app.state();
+        let toasts = state.active_toasts.lock().unwrap();
+        if toast_is_duplicate(&toasts, &title, &body) { return Ok(()); }
+    }
+
     let id = {
         let state: tauri::State<'_, Arc<ToastState>> = app.state();
         let mut counter = state.counter.lock().unwrap();
         *counter += 1;
         *counter
     };
-    { let state: tauri::State<'_, Arc<ToastState>> = app.state(); let mut toasts = state.active_toasts.lock().unwrap(); toasts.push(ToastNotification { id, url: url.clone() }); }
 
     let win_label = format!("toast-{id}");
     let data = serde_json::json!({ "id": id, "title": title, "body": body });
@@ -91,6 +109,19 @@ fn show_toast(app: tauri::AppHandle, title: String, body: String, url: String) -
         .resizable(false).decorations(false).always_on_top(true).skip_taskbar(true).focused(false)
         .initialization_script(&init_script)
         .build().map_err(|e| e.to_string())?;
+
+    {
+        let state: tauri::State<'_, Arc<ToastState>> = app.state();
+        let mut toasts = state.active_toasts.lock().unwrap();
+        toasts.push(ToastNotification { id, title: title.clone(), body: body.clone(), url: url.clone() });
+        // Over the cap: retire the oldest so the stack stays bounded.
+        while toasts.len() > MAX_VISIBLE_TOASTS {
+            let oldest = toasts.remove(0);
+            if let Some(w) = app.get_webview_window(&format!("toast-{}", oldest.id)) {
+                let _ = w.close();
+            }
+        }
+    }
 
     if let Some(monitor) = app.primary_monitor().ok().flatten() {
         let ms = monitor.size();
