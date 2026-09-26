@@ -322,11 +322,29 @@ function EpisodeList({ episodes, currentId, onSelect }) {
 
 // ─── AnimePage ────────────────────────────────────────────────────────────────
 
-export default function AnimePage({ embedded = false }) {
+export default function AnimePage({ embedded = false, basePath = "/anime", baseQuery = "" }) {
     const searchParams = useSearchParams();
     const initialId = searchParams.get("id");
     const initialEp = searchParams.get("ep");
     const didInit = useRef(false);
+
+    // Every URL write goes through here. Inside the Movie Hub the page must
+    // address itself as /watch?tab=anime — writing the legacy "/anime?id=.."
+    // leaves the address bar pointing at a route that is now a server-side
+    // redirect, which desyncs Next's router from window.location and makes the
+    // next client navigation resolve against the wrong tree.
+    const pushLocation = useCallback(
+        (params) => {
+            if (typeof window === "undefined") return;
+            const search = new URLSearchParams(baseQuery);
+            for (const [k, v] of Object.entries(params)) {
+                if (v !== undefined && v !== null && v !== "") search.set(k, String(v));
+            }
+            const qs = search.toString();
+            window.history.pushState({}, "", qs ? `${basePath}?${qs}` : basePath);
+        },
+        [basePath, baseQuery],
+    );
 
     const [query, setQuery] = useState("");
     const [results, setResults] = useState([]);
@@ -459,7 +477,7 @@ export default function AnimePage({ embedded = false }) {
         setStreamUrl("");
         setStreamSources([]);
         setLoadingEpisodes(true);
-        window.history.pushState({}, "", `/anime?id=${item.id}`);
+        pushLocation({ id: item.id });
         try {
             const res = await fetch(`/api/anime/info/${encodeURIComponent(item.id)}`);
             const data = await res.json();
@@ -482,7 +500,7 @@ export default function AnimePage({ embedded = false }) {
         setStreamUrl("");
         setStreamSources([]);
         setStreamTitle(`Episode ${ep.number}${ep.title ? " - " + ep.title : ""}`);
-        if (selected?.id) window.history.pushState({}, "", `/anime?id=${selected.id}&ep=${ep.id}`);
+        pushLocation({ id: selected?.id, ep: ep.id });
         try {
             const res = await fetch(`/api/anime/watch/${encodeURIComponent(ep.id)}?subOrDub=${subOrDub}`);
             const data = await res.json();
@@ -524,11 +542,11 @@ export default function AnimePage({ embedded = false }) {
             setStreamUrl("");
             setStreamSources([]);
             setCurrentEp(null);
-            if (selected?.id) window.history.pushState({}, "", `/anime?id=${selected.id}`);
+            pushLocation({ id: selected?.id });
         } else if (selected) {
             setSelected(null);
             setEpisodes([]);
-            window.history.pushState({}, "", "/anime");
+            pushLocation({});
             requestAnimationFrame(() => window.scrollTo(0, scrollRef.current));
         }
     };

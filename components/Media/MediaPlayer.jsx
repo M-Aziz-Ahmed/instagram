@@ -63,10 +63,11 @@ export default function MediaPlayer({
 
     const subtitleList = useMemo(() => (Array.isArray(subtitles) ? subtitles : null), [subtitles]);
 
+    // ── Embed mirrors ───────────────────────────────────────────
     // The caller hands us a primary embed plus a list of mirrors. Previously
     // only `src` was read and `embedUrls` was silently discarded, so a dead
-    // mirror had nowhere to fall back to — the user got a frozen "media
-    // unavailable" frame and a Back button. Now every mirror is reachable.
+    // mirror had nowhere to fall back to. The mirrors are now selectable in the
+    // hand-off card below.
     const embedList = useMemo(() => {
         const list = [];
         const push = (u) => {
@@ -102,25 +103,7 @@ export default function MediaPlayer({
         setError("");
     }
 
-    // ── Embed watchdog ──────────────────────────────────────────
-    // A cross-origin embed gives us no way to inspect its document: `onLoad`
-    // fires just as happily for an error page as for a playing video. So we
-    // can't claim failure — but we also shouldn't leave the user staring at a
-    // dead frame forever. After a grace period we offer the escape hatches
-    // (another mirror, a new tab, back) without interrupting playback.
-    // Keyed by URL rather than a boolean so switching servers clears it for
-    // free.
-    const [stalledEmbed, setStalledEmbed] = useState(null);
-    useEffect(() => {
-        if (!isEmbed) return;
-        const id = setTimeout(() => setStalledEmbed(activeEmbed), 7000);
-        return () => clearTimeout(id);
-    }, [isEmbed, activeEmbed]);
-
-    const embedStalled = isEmbed && stalledEmbed === activeEmbed;
-
     const nextEmbed = useCallback(() => {
-        setEmbedStalled(false);
         setEmbedIndex((i) => (i + 1) % embedList.length);
     }, [embedList.length]);
 
@@ -316,70 +299,79 @@ export default function MediaPlayer({
         );
     }
 
+    // ── Partner hand-off ─────────────────────────────────────────
+    // The mirror embeds (vidsrc, 2embed) cannot be sandboxed: they detect the
+    // `sandbox` attribute and refuse with "This content can't be embedded in a
+    // sandboxed frame". Unsandboxed, they are also the source of the popup
+    // storm — they call `window.open` on a timer from inside their own
+    // cross-origin realm, which no amount of code on our side can intercept
+    // and which a sandbox (the only real control) makes them reject outright.
+    //
+    // So the fallback does not embed. It hands the title to the provider in a
+    // new tab, which is a single user-initiated navigation the browser permits
+    // and the popup blocker understands. In-app playback is what the primary
+    // provider path (real HLS/DASH sources through /api/media-proxy) is for,
+    // and that path is unaffected.
     if (isEmbed) {
         return (
-            <div>
-                <div ref={containerRef} className="relative bg-black rounded-2xl overflow-hidden border border-[var(--border-subtle)]">
-                    <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
-                        <iframe
-                            key={activeEmbed}
-                            src={activeEmbed}
-                            title={title}
-                            className="absolute inset-0 w-full h-full border-0"
-                            allowFullScreen
-                            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-                            // Mirrors like vidsrc are third-party and were
-                            // unsandboxed, which let them call window.open on a
-                            // timer — the "ads popping before the video plays"
-                            // behaviour. The sandbox keeps playback working
-                            // (scripts + same-origin for its own player +
-                            // presentation for fullscreen) while the browser
-                            // refuses every navigation, popup and form submit
-                            // originating inside the frame.
-                            sandbox="allow-scripts allow-same-origin allow-presentation"
-                            referrerPolicy="origin-when-cross-origin"
-                        />
-                    </div>
-                    <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
-                        <button onClick={onBack} className="p-2 bg-black/70 text-white rounded-full hover:bg-black/90 transition-colors backdrop-blur" title="Back" aria-label="Back">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            <div className="surface overflow-hidden">
+                <div className="relative w-full app-sunken border-b border-[var(--border-subtle)]" style={{ paddingTop: "42%" }}>
+                    {poster ? (
+                        <>
+                            <img
+                                src={poster}
+                                alt=""
+                                className="absolute inset-0 w-full h-full object-cover opacity-40 blur-[2px] scale-105"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/20" />
+                        </>
+                    ) : (
+                        <div className="absolute inset-0 bg-gradient-to-br from-[var(--brand-600)] to-fuchsia-700 opacity-90" />
+                    )}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                        <span className="grid h-14 w-14 place-items-center rounded-full bg-white/95 text-gray-900 shadow-xl">
+                            <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6 ml-0.5">
+                                <path d="M8 5v14l11-7z" />
                             </svg>
-                        </button>
-                        {embedList.length > 1 && (
-                            <span className="px-2.5 py-1.5 rounded-full bg-black/70 text-white/80 text-[11px] font-semibold tabular-nums backdrop-blur">
-                                Server {embedIndex + 1}/{embedList.length}
-                            </span>
-                        )}
+                        </span>
+                        <div>
+                            <p className="text-sm font-bold text-white drop-shadow-sm">
+                                {title || "Continue watching"}
+                            </p>
+                            <p className="mt-0.5 text-xs text-white/80">
+                                Plays on our streaming partner
+                            </p>
+                        </div>
                     </div>
                 </div>
 
-                {/* Non-blocking recovery affordance. Only appears if the embed
-                    hasn't been interacted with, so it never interrupts a video
-                    that is playing fine. */}
-                {embedStalled && (
-                    <div className="mt-3 surface px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-                        <p className="text-xs text-gray-600 dark:text-gray-400 flex-1 min-w-[200px]">
-                            Not playing? This mirror may be down for this title.
-                        </p>
-                        <div className="flex items-center gap-2">
-                            <button onClick={nextEmbed} className="btn-secondary px-3.5 py-2 text-xs">
-                                Next server
+                <div className="p-5 sm:p-6">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 max-w-lg mx-auto text-center">
+                        This title isn&rsquo;t available on our own servers yet, so it
+                        opens on our partner&rsquo;s player in a new tab.
+                    </p>
+                    <div className="mt-5 flex items-center justify-center gap-2 flex-wrap">
+                        <a
+                            href={activeEmbed}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-brand-gradient px-5 py-2.5 text-sm"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                            </svg>
+                            Open player
+                        </a>
+                        {embedList.length > 1 && (
+                            <button onClick={nextEmbed} className="btn-secondary px-4 py-2.5 text-sm">
+                                Next mirror
                             </button>
-                            <a
-                                href={activeEmbed}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn-secondary px-3.5 py-2 text-xs"
-                            >
-                                Open in new tab
-                            </a>
-                            <button onClick={onBack} className="btn-ghost px-3.5 py-2 text-xs">
-                                ← Back
-                            </button>
-                        </div>
+                        )}
+                        <button onClick={onBack} className="btn-ghost px-4 py-2.5 text-sm">
+                            ← Back
+                        </button>
                     </div>
-                )}
+                </div>
             </div>
         );
     }

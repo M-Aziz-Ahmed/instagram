@@ -44,6 +44,7 @@ export default function MediaPage({
     config,
     embedded = false,
     baseQuery = "",
+    basePath: basePathProp,
 }) {
     const { label, emoji, apiRoute, streamSource } = config;
     const [query, setQuery] = useState("");
@@ -95,7 +96,7 @@ export default function MediaPage({
 
     // Inside the hub this component is one tab of a larger page, so it must
     // not own the URL prefix or render its own chrome.
-    const basePath = embedded ? "/watch" : `/${route}`;
+    const basePath = basePathProp || (embedded ? "/watch" : `/${route}`);
     const pushLocation = useCallback(
         (params) => {
             const search = new URLSearchParams(embedded ? baseQuery : "");

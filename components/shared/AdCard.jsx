@@ -116,16 +116,10 @@ function AdSenseSlot({ ad }) {
         };
     }, [status]);
 
+    // Unconfigured publisher id or no fill: the slot is genuinely empty, so it
+    // renders the quiet placeholder rather than a zero-height element.
     if (unconfigured || status === "failed") {
-        return (
-            <UnavailableAd
-                reason={
-                    unconfigured
-                        ? "No AdSense publisher ID configured."
-                        : "This ad slot has no fill."
-                }
-            />
-        );
+        return <UnavailableAd />;
     }
 
     return (
@@ -177,7 +171,17 @@ function AdsterraAd({ ad, onTrackClick }) {
 
     const { width, height } = parseSize(size);
 
-    if (!shouldRun) return <UnavailableAd reason="Ad already shown in this session." />;
+    // A creative executes once per session. If the admin has fewer creatives
+    // than the feed has slots, the remaining slots still need to look
+    // deliberate: reusing the creative's own image as a static promo card keeps
+    // the click-through and the impression, with none of the script.
+    if (!shouldRun) {
+        return ad.imageUrl ? (
+            <HouseAd ad={ad} onClick={onTrackClick} />
+        ) : (
+            <UnavailableAd />
+        );
+    }
 
     return (
         <div className="px-4 py-3 text-center">
@@ -223,16 +227,72 @@ function SponsoredLabel() {
 }
 
 /**
- * Shown when a slot has nothing to paint. A flat grey rectangle reads as a
- * broken image, so this is a deliberately quiet, honest placeholder: it keeps
- * the layout stable and labels the gap rather than pretending to be content.
+ * Shown when a slot has nothing to paint.
+ *
+ * This used to surface a diagnostic string ("Ad already shown in this
+ * session"), which read like a bug report to users. A flat grey rectangle
+ * reads as a broken image, and a sentence explaining the ad machinery reads as
+ * an error. So the gap is filled with a quiet branded card instead: honest
+ * about being an ad, deliberate about the space it occupies.
  */
-function UnavailableAd({ reason }) {
+function UnavailableAd() {
     return (
         <div className="px-4 py-3">
             <SponsoredLabel />
-            <div className="mt-2 mx-auto max-w-[300px] rounded-xl border border-dashed border-gray-300 dark:border-gray-700 px-4 py-5 text-center">
-                <p className="text-[11px] text-gray-400 dark:text-gray-500 leading-relaxed">{reason}</p>
+            <div
+                className="mt-2 mx-auto max-w-[300px] rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-raised)] px-4 py-5 text-center"
+                aria-hidden="true"
+            >
+                <div className="mx-auto mb-2.5 h-9 w-9 rounded-xl bg-[var(--brand-gradient)] opacity-90" />
+                <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                    Advertisement
+                </p>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Static promo card. Used for a creative that has already run this session but
+ * has artwork: the image and the click-through still work, only the script is
+ * withheld. Keeps every slot monetised without re-running a creative that has
+ * already had its one execution.
+ */
+function HouseAd({ ad, onClick }) {
+    return (
+        <div className="px-4 py-4">
+            <SponsoredLabel />
+            <div
+                role="link"
+                tabIndex={0}
+                onClick={onClick}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onClick(e);
+                    }
+                }}
+                className="group mt-2 block cursor-pointer overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-raised)] transition-colors hover:border-[var(--brand-400)]"
+            >
+                {ad.imageUrl && (
+                    <img src={ad.imageUrl} alt={ad.title} className="h-48 w-full object-cover" loading="lazy" />
+                )}
+                <div className="p-3.5">
+                    <h4 className="text-sm font-bold text-gray-900 dark:text-gray-100">{ad.title}</h4>
+                    {ad.description && (
+                        <p className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">
+                            {ad.description}
+                        </p>
+                    )}
+                    {ad.linkUrl && (
+                        <span className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand-600)] transition-all group-hover:gap-1.5 dark:text-[var(--brand-300)]">
+                            {ad.ctaText || "Learn More"}
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-3 w-3">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                            </svg>
+                        </span>
+                    )}
+                </div>
             </div>
         </div>
     );

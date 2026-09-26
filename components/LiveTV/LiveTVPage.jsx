@@ -8,7 +8,7 @@ import MediaBookmarkButton from "@/components/shared/MediaBookmarkButton";
 
 const fmtNum = (n) => (n == null ? "?" : n.toLocaleString());
 
-export default function LiveTVPage({ embedded = false }) {
+export default function LiveTVPage({ embedded = false, basePath = "/live-tv", baseQuery = "" }) {
     const [query, setQuery] = useState("");
     const [channels, setChannels] = useState([]);
     const [filteredChannels, setFilteredChannels] = useState([]);
@@ -24,6 +24,23 @@ export default function LiveTVPage({ embedded = false }) {
     const searchParams = useSearchParams();
     const initialId = searchParams.get("id");
     const didInit = useRef(false);
+
+    // Routed through one helper so the page can address itself as
+    // /watch?tab=live-tv when it's a tab of the Movie Hub, instead of writing
+    // the legacy "/live-tv" path and desyncing Next's router from the address
+    // bar on the next navigation.
+    const pushLocation = useCallback(
+        (params) => {
+            if (typeof window === "undefined") return;
+            const search = new URLSearchParams(baseQuery);
+            for (const [k, v] of Object.entries(params)) {
+                if (v !== undefined && v !== null && v !== "") search.set(k, String(v));
+            }
+            const qs = search.toString();
+            window.history.pushState({}, "", qs ? `${basePath}?${qs}` : basePath);
+        },
+        [basePath, baseQuery],
+    );
 
     const fetchChannels = useCallback(async () => {
         const res = await fetch("/api/media/iptv/playlist");
@@ -70,8 +87,8 @@ export default function LiveTVPage({ embedded = false }) {
         setStreamSubtitles([]);
         setStreamHeaders(null);
         setStreamEmbedUrls([]);
-        window.history.pushState({}, "", `/live-tv?id=${item.id}`);
-    }, []);
+        pushLocation({ id: item.id });
+    }, [pushLocation]);
 
     useEffect(() => {
         if (!initialId || didInit.current) return;
@@ -106,10 +123,10 @@ export default function LiveTVPage({ embedded = false }) {
             setStreamSubtitles([]);
             setStreamHeaders(null);
             setStreamEmbedUrls([]);
-            if (selected?.id) window.history.pushState({}, "", `/live-tv?id=${selected.id}`);
+            pushLocation({ id: selected?.id });
         } else if (selected) {
             setSelected(null);
-            window.history.pushState({}, "", "/live-tv");
+            pushLocation({});
         }
     };
 

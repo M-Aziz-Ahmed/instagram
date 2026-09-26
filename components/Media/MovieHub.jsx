@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Tabs, { PanelSkeleton } from "@/components/ui/Tabs";
+import Tabs from "@/components/ui/Tabs";
 import MediaPage from "@/components/Media/MediaPage";
 import AnimePage from "@/components/Anime/AnimePage";
 import LiveTVPage from "@/components/LiveTV/LiveTVPage";
@@ -35,19 +35,6 @@ export default function MovieHub() {
     const tabParam = searchParams.get("tab");
     const activeTab = isHubTab(tabParam) ? tabParam : DEFAULT_HUB_TAB;
     const tab = getHubTab(activeTab);
-
-    // Children mount asynchronously (three different page components, one of
-    // which is a 750-line module). Rendering a skeleton for the first paint
-    // avoids a flash of empty content on every navigation into the hub.
-    const [ready, setReady] = useState(false);
-    const shellRef = useRef(null);
-
-    useEffect(() => {
-        // One frame after the header paints, so the skeleton never fights the
-        // header for layout.
-        const id = requestAnimationFrame(() => setReady(true));
-        return () => cancelAnimationFrame(id);
-    }, []);
 
     const handleTabChange = useCallback(
         (next) => {
@@ -87,26 +74,37 @@ export default function MovieHub() {
                 </div>
             </div>
 
-            <main className="max-w-7xl mx-auto px-3 sm:px-5 py-5 sm:py-7" ref={shellRef}>
-                {!ready ? (
-                    <PanelSkeleton count={16} />
-                ) : (
-                    <TabPanel key={activeTab} tab={tab} />
-                )}
+            {/* The panel renders on the server, not behind a mount gate. An
+                earlier version deferred it one animation frame to dodge a
+                layout flash, which cost a skeleton on every load and made the
+                whole hub client-only — wrong for a public page that needs to be
+                indexable and shareable. Each child already owns its loading
+                state. */}
+            <main className="max-w-7xl mx-auto px-3 sm:px-5 py-5 sm:py-7">
+                <TabPanel key={activeTab} tab={tab} />
             </main>
         </div>
     );
 }
 
 function TabPanel({ tab }) {
-    if (tab.kind === "anime") return <AnimePage embedded />;
-    if (tab.kind === "live-tv") return <LiveTVPage embedded />;
+    // Each child must address itself as /watch?tab=<id> — not as its old
+    // standalone path — or the address bar ends up pointing at a route that is
+    // now a server-side redirect, and the next client navigation resolves
+    // against the wrong tree.
+    if (tab.kind === "anime") {
+        return <AnimePage embedded basePath="/watch" baseQuery={`tab=${tab.id}`} />;
+    }
+    if (tab.kind === "live-tv") {
+        return <LiveTVPage embedded basePath="/watch" baseQuery={`tab=${tab.id}`} />;
+    }
     return (
         <MediaPage
             key={tab.id}
             mediaType={tab.mediaType}
             config={getMediaSource(tab.mediaType)}
             embedded
+            basePath="/watch"
             baseQuery={`tab=${tab.id}`}
         />
     );

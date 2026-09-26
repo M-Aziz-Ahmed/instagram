@@ -21,6 +21,11 @@ const PUBLIC_PATHS = [
     "/seasons",
     "/cdramas",
     "/cartoons",
+    // Movie Hub — the merged watch surface. Must be public for the same reason
+    // the category routes above are: the legacy paths redirect here, so a
+    // logged-out visitor following /anime or /cartoons would otherwise be bounced
+    // to /login on arrival.
+    "/watch",
     "/library",
     "/api/auth",
     "/api/posts",
