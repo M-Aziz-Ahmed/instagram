@@ -9,11 +9,11 @@
     "darwin-aarch64": [
       "AnonTweet_0.2.9_aarch64.dmg"
     ],
+    "windows-x86_64": [
+      "AnonTweet_0.2.38_x64-setup.exe"
+    ],
     "darwin-x86_64": [
       "AnonTweet_0.2.9_x64.dmg"
-    ],
-    "windows-x86_64": [
-      "AnonTweet_0.2.36_x64-setup.exe"
     ]
   }
 }
