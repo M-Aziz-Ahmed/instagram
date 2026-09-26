@@ -26,6 +26,13 @@ const VALID_PERMISSIONS = [
     // GDPR Art. 8 / the UK's Age Appropriate Design Code, and it will be
     // rejected outright by the mainstream ad networks. Off by default.
     "view_adult",
+    // Direct video upload is the most expensive capability the site has - it
+    // burns Cloudinary storage and egress that never comes back, so it is not
+    // open to everyone. Anyone without this can still post video as a link to
+    // YouTube/Facebook/Instagram/TikTok/Reddit, which costs nothing and still
+    // renders in the feed and in /reels. See lib/videoLinks.js.
+    // Deliberately NOT in the "normal" seed role.
+    "upload_video",
 ];
 
 const roleSchema = new mongoose.Schema({

@@ -14,6 +14,7 @@ import RepostButton from "./RepostButton";
 import VoiceRecorder from "@/components/shared/VoiceRecorder";
 import AudioPlayer from "@/components/shared/AudioPlayer";
 import VideoPlayer from "@/components/shared/VideoPlayer";
+import VideoLinkCard from "@/components/shared/VideoLinkCard";
 import EmojiPicker from "@/components/shared/EmojiPicker";
 import GifPicker from "@/components/shared/GifPicker";
 import PollCard from "./PollCard";
@@ -1329,6 +1330,16 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                 width={post.videoWidth}
                                 height={post.videoHeight}
                             />
+                        </div>
+                    )}
+
+                    {/* A video hosted on another platform, linked from the post
+                        text. Mutually exclusive with an upload in practice, but
+                        both guards are here so a post carrying both never
+                        renders two players stacked on each other. */}
+                    {!post.videoUrl && post.linkPreview?.videoId && (
+                        <div className="mt-3">
+                            <VideoLinkCard link={post.linkPreview} />
                         </div>
                     )}
 

@@ -7,6 +7,8 @@ const { verifyToken, optionalAuth, requirePermission } = require("../middleware/
 const { getHiddenUsers, applySenderExclusion, filterComments } = require("../lib/visibility");
 const { isProUserDoc } = require("../lib/economy");
 const { requireFeature } = require("../lib/featureFlags");
+const { extractVideoLinks } = require("../lib/videoLinks");
+const { canUploadVideo } = require("../lib/videoUpload");
 const { trimComments, removeComment, displayCount } = require("../lib/postComments");
 const { logServer } = require("../logService");
 
@@ -73,20 +75,20 @@ async function getUserPermissions(userId) {
 }
 
 const ACHIEVEMENTS = [
-    { id: "first_post",     name: "First Post",     icon: "ðŸŽ‰", description: "Created your first post",           check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 1 },
-    { id: "posts_10",       name: "Active Voice",    icon: "ðŸ”Š", description: "Created 10 posts",                  check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 10 },
-    { id: "posts_50",       name: "Power Poster",   icon: "ðŸ’ª", description: "Created 50 posts",                  check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 50 },
-    { id: "posts_100",      name: "Century Club",   icon: "ðŸ’¯", description: "Created 100 posts",                 check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 100 },
-    { id: "streak_3",       name: "On Fire",         icon: "ðŸ”¥", description: "3-day posting streak",              check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 3; } },
-    { id: "streak_7",       name: "Week Warrior",   icon: "âš”ï¸", description: "7-day posting streak",              check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 7; } },
-    { id: "streak_30",      name: "Unstoppable",    icon: "ðŸ†", description: "30-day posting streak",             check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 30; } },
-    { id: "liked_10",       name: "Crowd Pleaser",  icon: "â¤ï¸", description: "Received 10 likes total",           check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return (result[0]?.total || 0) >= 10; } },
-    { id: "liked_100",      name: "Fan Favorite",   icon: "ðŸ˜", description: "Received 100 likes total",          check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return (result[0]?.total || 0) >= 100; } },
-    { id: "comment_10",     name: "Conversationalist", icon: "ðŸ’¬", description: "Left 10 comments",              check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { isRemoved: { $ne: true } } }, { $unwind: "$comments" }, { $match: { "comments.sender": username } }, { $count: "total" }]); return (result[0]?.total || 0) >= 10; } },
-    { id: "views_1000",     name: "Influencer",      icon: "ðŸ‘ï¸", description: "Posts received 1,000 views",       check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $group: { _id: null, total: { $sum: "$viewCount" } } }]); return (result[0]?.total || 0) >= 1000; } },
-    { id: "views_10000",    name: "Viral",           icon: "ðŸŒŸ", description: "Posts received 10,000 views",      check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $group: { _id: null, total: { $sum: "$viewCount" } } }]); return (result[0]?.total || 0) >= 10000; } },
-    { id: "bookmarked_10",  name: "Saved",           icon: "ðŸ”–", description: "Your posts were bookmarked 10 times", check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return false; } },
-    { id: "repost_5",       name: "Amplifier",       icon: "ðŸ”„", description: "Posts were reposted 5 times",       check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const count = await Post.countDocuments({ originalSender: username, isRemoved: { $ne: true } }); return count >= 5; } },
+    { id: "first_post",     name: "First Post",     icon: "ÃƒÂ°Ã…Â¸Ã…Â½Ã¢â‚¬Â°", description: "Created your first post",           check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 1 },
+    { id: "posts_10",       name: "Active Voice",    icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ…Â ", description: "Created 10 posts",                  check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 10 },
+    { id: "posts_50",       name: "Power Poster",   icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Âª", description: "Created 50 posts",                  check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 50 },
+    { id: "posts_100",      name: "Century Club",   icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â¯", description: "Created 100 posts",                 check: async (userId) => (await Post.countDocuments({ sender: (await User.findById(userId).select("username").lean())?.username, isRemoved: { $ne: true } })) >= 100 },
+    { id: "streak_3",       name: "On Fire",         icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â¥", description: "3-day posting streak",              check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 3; } },
+    { id: "streak_7",       name: "Week Warrior",   icon: "ÃƒÂ¢Ã…Â¡Ã¢â‚¬ÂÃƒÂ¯Ã‚Â¸Ã‚Â", description: "7-day posting streak",              check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 7; } },
+    { id: "streak_30",      name: "Unstoppable",    icon: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â ", description: "30-day posting streak",             check: async (userId) => { const u = await User.findById(userId).select("postingStreak").lean(); return (u?.postingStreak || 0) >= 30; } },
+    { id: "liked_10",       name: "Crowd Pleaser",  icon: "ÃƒÂ¢Ã‚ÂÃ‚Â¤ÃƒÂ¯Ã‚Â¸Ã‚Â", description: "Received 10 likes total",           check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return (result[0]?.total || 0) >= 10; } },
+    { id: "liked_100",      name: "Fan Favorite",   icon: "ÃƒÂ°Ã…Â¸Ã‹Å“Ã‚Â", description: "Received 100 likes total",          check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return (result[0]?.total || 0) >= 100; } },
+    { id: "comment_10",     name: "Conversationalist", icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â¬", description: "Left 10 comments",              check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { isRemoved: { $ne: true } } }, { $unwind: "$comments" }, { $match: { "comments.sender": username } }, { $count: "total" }]); return (result[0]?.total || 0) >= 10; } },
+    { id: "views_1000",     name: "Influencer",      icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬ËœÃ‚ÂÃƒÂ¯Ã‚Â¸Ã‚Â", description: "Posts received 1,000 views",       check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $group: { _id: null, total: { $sum: "$viewCount" } } }]); return (result[0]?.total || 0) >= 1000; } },
+    { id: "views_10000",    name: "Viral",           icon: "ÃƒÂ°Ã…Â¸Ã…â€™Ã…Â¸", description: "Posts received 10,000 views",      check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $group: { _id: null, total: { $sum: "$viewCount" } } }]); return (result[0]?.total || 0) >= 10000; } },
+    { id: "bookmarked_10",  name: "Saved",           icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬â€œ", description: "Your posts were bookmarked 10 times", check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const result = await Post.aggregate([{ $match: { sender: username, isRemoved: { $ne: true } } }, { $project: { count: { $size: "$likes" } } }, { $group: { _id: null, total: { $sum: "$count" } } }]); return false; } },
+    { id: "repost_5",       name: "Amplifier",       icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ¢â‚¬Å¾", description: "Posts were reposted 5 times",       check: async (userId) => { const username = (await User.findById(userId).select("username").lean())?.username; const count = await Post.countDocuments({ originalSender: username, isRemoved: { $ne: true } }); return count >= 5; } },
 ];
 
 async function updateStreak(userId) {
@@ -150,7 +152,7 @@ async function enrichPosts(posts) {
     let originalPostMap = {};
     if (originalPostIds.length > 0) {
         const originalPosts = await Post.find({ _id: { $in: originalPostIds } })
-            .select("sender text imageUrl imageUrls audioUrl videoUrl videoDuration videoWidth videoHeight color avatarUrl hashtags mentions visibility theme timeStamp likes reactions comments isRepost originalPostId originalSender repostComment repostCount")
+            .select("sender text imageUrl imageUrls audioUrl videoUrl videoDuration videoWidth videoHeight linkPreview color avatarUrl hashtags mentions visibility theme timeStamp likes reactions comments isRepost originalPostId originalSender repostComment repostCount")
             .lean();
         originalPosts.forEach((op) => { originalPostMap[op._id.toString()] = op; });
         // Collect usernames from original posts too
@@ -278,7 +280,7 @@ router.get("/", async (req, res) => {
             viewerIsAdmin = !!viewerDoc?.isAdmin;
             viewerFollowing = viewerDoc?.following || [];
             viewerCloseFriends = viewerDoc?.closeFriends || [];
-            // getHiddenUsers is async â€” without await this was a Promise, which
+            // getHiddenUsers is async ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â without await this was a Promise, which
             // made applySenderExclusion's `for (const name of hidden)` throw and
             // took the whole feed down with a 500.
             hiddenUsers = await getHiddenUsers(username, viewerDoc);
@@ -304,10 +306,21 @@ router.get("/", async (req, res) => {
 
         // Reels is the same query with a video filter applied, rather than a
         // separate endpoint, so block/mute exclusion, expiry, community scope
-        // and pagination stay in exactly one place. `videoUrl` is indexed
-        // partially, so this does not turn into a collection scan.
+        // and pagination stay in exactly one place.
+        //
+        // "Video" means either a file uploaded to Cloudinary *or* a recognised
+        // link to a clip on YouTube/Facebook/Instagram/TikTok/Reddit. Both are
+        // backed by a partial index, so this stays an index scan rather than a
+        // collection scan. Without the second clause a user without the
+        // upload_video permission could not appear in reels at all, which
+        // would make the link path pointless.
         if (feed === "reels") {
-            query.videoUrl = { $type: "string", $ne: "" };
+            query.$and.push({
+                $or: [
+                    { videoUrl: { $type: "string", $ne: "" } },
+                    { "linkPreview.videoId": { $type: "string", $ne: "" } },
+                ],
+            });
         }
 
         // Community filter
@@ -448,7 +461,7 @@ router.post("/", verifyToken, requireFeature("posting"), async (req, res) => {
         const { text, imageUrl, imageUrls, audioUrl, videoUrl, videoDuration, videoWidth, videoHeight, visibility, poll, theme, scheduledAt, communityId, flair } = req.body;
         const username = req.body.sender || req.session?.userId;
 
-        const senderUser = await User.findById(req.userId).select("username avatarUrl suspended defaultTheme").lean();
+        const senderUser = await User.findById(req.userId).select("username avatarUrl suspended defaultTheme videoUploadAllowed").lean();
         const sender = senderUser?.username || username;
         if (!sender?.trim()) {
             return res.status(400).json({ error: "Sender is required" });
@@ -482,7 +495,42 @@ router.post("/", verifyToken, requireFeature("posting"), async (req, res) => {
         let finalVideoDuration = 0;
         let finalVideoWidth = 0;
         let finalVideoHeight = 0;
+
+        // A recognised video link in the text. Computed before the video block
+        // so the "post must have something" check below can accept a link as
+        // content, and so the same value is used for the feed and /reels.
+        const linkedVideos = extractVideoLinks(sanitizedText);
+        const linkPreview = linkedVideos[0]
+            ? {
+                platform: linkedVideos[0].platform,
+                platformLabel: linkedVideos[0].platformLabel,
+                videoId: linkedVideos[0].videoId,
+                url: linkedVideos[0].url,
+                embedUrl: linkedVideos[0].embedUrl,
+                thumbnail: linkedVideos[0].thumbnail,
+            }
+            : { platform: "", platformLabel: "", videoId: "", url: "", embedUrl: "", thumbnail: "" };
+
         if (videoUrl) {
+            // Gate before validating the URL, so a user without the permission
+            // gets the explanatory 403 rather than a confusing "must be
+            // uploaded through Cloudinary" for a URL the client built from an
+            // upload it was never allowed to make.
+            //
+            // Reuses the permissions already resolved above for `create_post`
+            // rather than querying the user again; only the per-user grant needs
+            // the extra field, which senderUser already has.
+            if (!canUploadVideo({
+                isAdmin,
+                permissions,
+                videoUploadAllowed: senderUser?.videoUploadAllowed,
+            })) {
+                return res.status(403).json({
+                    error: "Direct video upload is not enabled for your account",
+                    feature: "upload_video",
+                    alternative: "link",
+                });
+            }
             const raw = String(videoUrl).trim();
             let parsed;
             try {
@@ -500,7 +548,7 @@ router.post("/", verifyToken, requireFeature("posting"), async (req, res) => {
             finalVideoHeight = Math.max(0, Math.min(Number(videoHeight) || 0, 10000));
         }
 
-        if (!sanitizedText && finalImageUrls.length === 0 && !audioUrl && !finalVideoUrl) {
+        if (!sanitizedText && finalImageUrls.length === 0 && !audioUrl && !finalVideoUrl && !linkPreview.videoId) {
             return res.status(400).json({ error: "Post must have text, an image, video, or audio" });
         }
 
@@ -518,6 +566,7 @@ router.post("/", verifyToken, requireFeature("posting"), async (req, res) => {
             videoDuration: finalVideoDuration,
             videoWidth:    finalVideoWidth,
             videoHeight:   finalVideoHeight,
+            linkPreview:   linkPreview,
             sender:   sender.trim(),
             color:    senderUser?.avatarColor || "#3b82f6",
             avatarUrl: senderUser?.avatarUrl || "",
@@ -619,7 +668,7 @@ router.delete("/:id", verifyToken, async (req, res) => {
     }
 });
 
-// PUT /:id â€” edit post
+// PUT /:id ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â edit post
 router.put("/:id", verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
@@ -664,7 +713,7 @@ router.put("/:id", verifyToken, async (req, res) => {
     }
 });
 
-// PATCH /:id  â€” unified action dispatcher (mirrors Next.js API route)
+// PATCH /:id  ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â unified action dispatcher (mirrors Next.js API route)
 router.patch("/:id", optionalAuth, async (req, res) => {
     try {
         const { id } = req.params;
@@ -1548,7 +1597,7 @@ router.get("/user/:username", async (req, res) => {
     }
 });
 
-// POST /:id/view â€” increment view count (rate-limited by client)
+// POST /:id/view ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â increment view count (rate-limited by client)
 router.post("/:id/view", async (req, res) => {
     try {
         const { id } = req.params;
@@ -1560,12 +1609,12 @@ router.post("/:id/view", async (req, res) => {
     }
 });
 
-// GET /achievements/list â€” all possible achievements
+// GET /achievements/list ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â all possible achievements
 router.get("/achievements/list", async (req, res) => {
     return res.json(ACHIEVEMENTS.map((a) => ({ id: a.id, name: a.name, icon: a.icon, description: a.description })));
 });
 
-// GET /scheduled/mine â€” list my scheduled posts
+// GET /scheduled/mine ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â list my scheduled posts
 router.get("/scheduled/mine", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId).select("username").lean();
@@ -1578,7 +1627,7 @@ router.get("/scheduled/mine", verifyToken, async (req, res) => {
     }
 });
 
-// DELETE /scheduled/:id â€” cancel a scheduled post
+// DELETE /scheduled/:id ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â cancel a scheduled post
 router.delete("/scheduled/:id", verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
@@ -1592,7 +1641,7 @@ router.delete("/scheduled/:id", verifyToken, async (req, res) => {
     }
 });
 
-// GET /user-stats â€” stats for the logged-in user
+// GET /user-stats ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â stats for the logged-in user
 router.get("/user-stats", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId).select("username postingStreak longestStreak achievements defaultTheme").lean();
@@ -1630,7 +1679,7 @@ router.get("/user-stats", verifyToken, async (req, res) => {
     }
 });
 
-// PATCH /default-theme â€” set user's default post theme
+// PATCH /default-theme ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â set user's default post theme
 router.patch("/default-theme", verifyToken, async (req, res) => {
     try {
         const { theme } = req.body;
@@ -1665,7 +1714,7 @@ async function publishScheduledPosts() {
     }
 }
 
-// â”€â”€ Voting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Voting ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
 router.post("/:id/vote", verifyToken, async (req, res) => {
     try {

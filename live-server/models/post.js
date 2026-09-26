@@ -42,6 +42,23 @@ const postSchema = new mongoose.Schema({
     videoDuration: { type: Number, default: 0 },
     videoWidth:    { type: Number, default: 0 },
     videoHeight:   { type: Number, default: 0 },
+    // A video hosted elsewhere (YouTube, Facebook, Instagram, TikTok, Reddit)
+    // that the author linked to. This is the path available to people without
+    // the upload_video permission, and it is also what /reels treats as video
+    // content, so a linked clip still surfaces as a reel.
+    //
+    // Stored as a structured record rather than re-parsed from the text on
+    // every read: the platform decides the embed URL and the id, and both are
+    // fiddly enough that deriving them at render time would be a per-request
+    // cost and a second place for the parsing rules to drift.
+    linkPreview:   {
+        platform:     { type: String, default: "" },
+        platformLabel:{ type: String, default: "" },
+        videoId:      { type: String, default: "" },
+        url:          { type: String, default: "" },
+        embedUrl:     { type: String, default: "" },
+        thumbnail:    { type: String, default: "" },
+    },
     sender:    { type: String, required: true },
     color:     { type: String, default: "#3b82f6" },
     avatarUrl: { type: String, default: "" },
@@ -114,8 +131,12 @@ postSchema.index({ timeStamp: -1, isRemoved: 1, expiresAt: 1 });
 postSchema.index({ communityId: 1, timeStamp: -1 });
 postSchema.index({ communityId: 1, score: -1 });
 postSchema.index({ communityId: 1, flair: 1, timeStamp: -1 });
-// Partial index backing the /reels feed: only video posts are indexed, so it
+// Partial indexes backing the /reels feed: only video content is indexed, so it
 // stays small no matter how much text/image content the site accumulates.
+// Two are needed rather than one combined index, because a partialFilter can
+// only reference fields the query actually filters on, and the reels query
+// tests `videoUrl` for uploads and `linkPreview.videoId` for linked clips.
 postSchema.index({ timeStamp: -1 }, { partialFilterExpression: { videoUrl: { $type: "string", $ne: "" } } });
+postSchema.index({ timeStamp: -1 }, { partialFilterExpression: { "linkPreview.videoId": { $type: "string", $ne: "" } } });
 
 module.exports = mongoose.models.Post || mongoose.model("Post", postSchema);

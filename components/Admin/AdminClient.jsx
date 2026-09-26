@@ -448,6 +448,33 @@ function UsersPanel() {
         }
     };
 
+    const toggleVideoUpload = async (userId, value) => {
+        setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, videoUploadAllowed: value } : u));
+        try {
+            const res = await fetch("/api/admin/users", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId, videoUploadAllowed: value }),
+            });
+            if (!res.ok) {
+                const d = await res.json().catch(() => ({}));
+                showToast(d.error || "Failed to update", "error");
+                refresh();
+                return;
+            }
+            showToast(
+                value
+                    ? "Video upload granted - they can now upload directly"
+                    : "Per-user grant removed (a role grant would still allow it)",
+                "success",
+            );
+        } catch (e) {
+            console.error(e);
+            showToast("Failed to update user", "error");
+            refresh();
+        }
+    };
+
     const handleCreateUser = async (e) => {
         e.preventDefault();
         if (!createEmail.trim() || !createPin.trim() || !createUser.trim() || creating) return;
@@ -553,6 +580,24 @@ function UsersPanel() {
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
                                         <circle cx="12" cy="12" r="5" fill={u.liveStreamAllowed ? "currentColor" : "none"} />
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11" />
+                                    </svg>
+                                </button>
+
+                                {/* Per-user video upload grant. This is an *allow*,
+                                    not a ban: turning it off does not stop someone
+                                    whose role carries `upload_video`, and does not
+                                    affect an admin. The tooltip says so, because
+                                    silently failing to revoke would be worse than
+                                    not offering the control. */}
+                                <button onClick={() => toggleVideoUpload(u.id, !u.videoUploadAllowed)}
+                                    title={
+                                        u.videoUploadAllowed
+                                            ? "Remove this user's direct video upload grant"
+                                            : "Let this user upload video directly (otherwise they can post links)"
+                                    }
+                                    className={`p-1.5 rounded-lg transition-colors ${u.videoUploadAllowed ? "text-blue-500 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30" : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H15.75Z" />
                                     </svg>
                                 </button>
 
@@ -832,6 +877,9 @@ const PERMISSION_LABELS = {
     use_voice_chat: "Use Voice Chat",
     use_live_stream: "Use Live Stream",
     access_entertainment: "Access Entertainment",
+    use_browser: "Use In-App Browser",
+    view_adult: "View Adult Content",
+    upload_video: "Upload Video",
 };
 
 const PERMISSION_GROUPS = {
@@ -840,6 +888,11 @@ const PERMISSION_GROUPS = {
     "Moderation": ["moderate_posts", "manage_content_filter"],
     "Admin": ["manage_users", "manage_roles"],
     "Features": ["use_voice_chat", "use_live_stream", "access_entertainment"],
+    // Off by default and deliberately absent from the "normal" seed role:
+    // direct video upload is the most expensive capability the site has. Users
+    // without it can still post video as a link to YouTube/TikTok/Instagram/
+    // Facebook/Reddit, which renders inline and still counts as a reel.
+    "Media (opt-in)": ["upload_video"],
 };
 
 function PermissionsPanel() {

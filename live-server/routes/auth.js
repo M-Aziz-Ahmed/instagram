@@ -5,6 +5,7 @@ const OTP = require("../models/otp");
 const User = require("../models/user");
 const { verifyToken, SECRET } = require("../middleware/auth");
 const { isProUserDoc } = require("../lib/economy");
+const { canUploadVideo } = require("../lib/videoUpload");
 const { logAuth } = require("../logService");
 const { isValidPin, hashPin, verifyPin } = require("../utils/pin");
 
@@ -63,6 +64,9 @@ function sendUserPayload(user) {
         language:        user.language || "en",
         autoTranslate:   user.autoTranslate || false,
         liveStreamAllowed: user.liveStreamAllowed || false,
+        // Resolved with the same helper the upload gate uses, so the client and
+        // the server never disagree about who may upload.
+        canUploadVideo: canUploadVideo(user),
         voiceChatBanned:   user.voiceChatBanned || false,
         postingStreak:  user.postingStreak || 0,
         longestStreak:  user.longestStreak || 0,

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useUser } from "@/context/UserContext";
 import VideoPlayer from "@/components/shared/VideoPlayer";
+import VideoLinkCard from "@/components/shared/VideoLinkCard";
 import AdSlot from "@/components/shared/AdSlot";
 import { timeAgo } from "@/utils/timeAgo";
 import { trackImpression } from "@/utils/postAnalytics";
@@ -145,14 +146,36 @@ export default function ReelsClient() {
                         key={reel._id}
                         className="h-full w-full snap-start snap-always flex items-center justify-center relative"
                     >
-                        <VideoPlayer
-                            src={reel.videoUrl}
-                            duration={reel.videoDuration}
-                            width={reel.videoWidth}
-                            height={reel.videoHeight}
-                            mode="reel"
-                            className="h-full w-full"
-                        />
+                        {/* Reels carries two kinds of video: a file uploaded to
+                            Cloudinary, and a clip linked from YouTube/TikTok/
+                            Instagram/Facebook/Reddit. Both are reels, because
+                            the whole point of the upload permission is that
+                            restricting uploads must not restrict appearing in
+                            reels. A linked reel starts as a poster and is
+                            played in place - the observer-driven autoplay path
+                            belongs to VideoPlayer and does not apply to a
+                            third-party iframe, which we will not autoplay. */}
+                        {reel.videoUrl ? (
+                            <VideoPlayer
+                                src={reel.videoUrl}
+                                duration={reel.videoDuration}
+                                width={reel.videoWidth}
+                                height={reel.videoHeight}
+                                mode="reel"
+                                className="h-full w-full"
+                            />
+                        ) : reel.linkPreview?.videoId ? (
+                            <div className="h-full w-full flex items-center justify-center p-4">
+                                <div className="w-full max-w-md">
+                                    <VideoLinkCard link={reel.linkPreview} />
+                                    {reel.text && (
+                                        <p className="mt-3 text-center text-sm text-white/90 line-clamp-3">
+                                            {reel.text}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        ) : null}
 
                         <div className="absolute left-0 right-0 bottom-0 p-4 pb-8 bg-gradient-to-t from-black/85 via-black/40 to-transparent pointer-events-none">
                             <div className="flex items-center gap-2 mb-1.5">

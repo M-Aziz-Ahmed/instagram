@@ -12,6 +12,10 @@ const userSchema = new mongoose.Schema({
     pinHash:     { type: String, default: null },
     pinChangedAt: { type: Date, default: null },
     liveStreamAllowed: { type: Boolean, default: false },
+    // Explicit per-person grant for direct video upload, for trusted users who
+    // should not need a whole role. Never set to false to *revoke* - a role
+    // grant or isAdmin still allows uploading. See lib/videoUpload.js.
+    videoUploadAllowed: { type: Boolean, default: false },
     voiceChatBanned:   { type: Boolean, default: false },
     voiceChatBannedUntil: { type: Date, default: null },
     voiceChatBannedReason: { type: String, default: "" },

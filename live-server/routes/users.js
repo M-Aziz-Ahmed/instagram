@@ -3,6 +3,7 @@ const User = require("../models/user");
 const Notification = require("../models/notification");
 const { verifyToken, optionalAuth } = require("../middleware/auth");
 const { isProUserDoc } = require("../lib/economy");
+const { canUploadVideo } = require("../lib/videoUpload");
 
 const router = express.Router();
 
@@ -44,7 +45,7 @@ router.get("/online", async (req, res) => {
 router.get("/me/permissions", verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.userId)
-            .select("isAdmin roles")
+            .select("isAdmin videoUploadAllowed roles")
             .populate("roles", "permissions name badge color")
             .lean();
 
@@ -58,6 +59,11 @@ router.get("/me/permissions", verifyToken, async (req, res) => {
         return res.json({
             isAdmin: !!user.isAdmin,
             permissions: [...permissions],
+            // Resolved server-side with the same helper the upload gate uses, so
+            // the client can grey out the video button for exactly the people
+            // the API would reject. It is a hint, not the enforcement - POST
+            // /api/posts re-checks regardless of what the client believed.
+            canUploadVideo: canUploadVideo(user),
             roles: (user.roles || []).map((r) => ({
                 name: r.name, badge: r.badge, color: r.color,
             })),
@@ -97,7 +103,7 @@ router.get("/active", async (req, res) => {
     }
 });
 
-// POST /active (update) — supports both /active?username=X and /:username/active
+// POST /active (update) â€” supports both /active?username=X and /:username/active
 router.post("/active", optionalAuth, async (req, res) => {
     try {
         const username = req.params.username || req.query.username;
@@ -272,7 +278,7 @@ router.post("/:username/follow", verifyToken, async (req, res) => {
     }
 });
 
-// POST /:username/follow/accept — accept a follow request
+// POST /:username/follow/accept â€” accept a follow request
 router.post("/:username/follow/accept", verifyToken, async (req, res) => {
     try {
         const { username } = req.params;
@@ -310,7 +316,7 @@ router.post("/:username/follow/accept", verifyToken, async (req, res) => {
     }
 });
 
-// POST /:username/follow/deny — deny a follow request
+// POST /:username/follow/deny â€” deny a follow request
 router.post("/:username/follow/deny", verifyToken, async (req, res) => {
     try {
         const { username } = req.params;
@@ -333,7 +339,7 @@ router.post("/:username/follow/deny", verifyToken, async (req, res) => {
     }
 });
 
-// GET /:username/follow-requests — list pending follow requests
+// GET /:username/follow-requests â€” list pending follow requests
 router.get("/:username/follow-requests", verifyToken, async (req, res) => {
     try {
         const { username } = req.params;
@@ -358,7 +364,7 @@ router.get("/:username/follow-requests", verifyToken, async (req, res) => {
     }
 });
 
-// PATCH /:username/privacy — toggle private account
+// PATCH /:username/privacy â€” toggle private account
 router.patch("/:username/privacy", verifyToken, async (req, res) => {
     try {
         const { username } = req.params;
@@ -489,7 +495,7 @@ router.post("/:username/muted-words", verifyToken, async (req, res) => {
     }
 });
 
-// PATCH /:username/muted-words — add or remove
+// PATCH /:username/muted-words â€” add or remove
 router.patch("/:username/muted-words", verifyToken, async (req, res) => {
     try {
         const { username } = req.params;
@@ -536,7 +542,7 @@ router.delete("/:username/muted-words/:word", verifyToken, async (req, res) => {
     }
 });
 
-// ── Blocking & muting accounts ─────────────────────────────────────────────
+// â”€â”€ Blocking & muting accounts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Mute  = soft. Their posts, comments and suggestions disappear from your
 //         surfaces, but you can still follow them and message them.
 // Block = hard. Nothing of theirs is shown, and neither side can DM the other.
@@ -544,7 +550,7 @@ router.delete("/:username/muted-words/:word", verifyToken, async (req, res) => {
 // Both are stored as lowercase usernames so every comparison below is
 // case-insensitive. Route names follow the existing muted-words convention.
 
-// GET /:username/blocks — lists both lists so the settings screen can render
+// GET /:username/blocks â€” lists both lists so the settings screen can render
 // muted and blocked accounts from one call.
 router.get("/:username/blocks", verifyToken, async (req, res) => {
     try {
@@ -631,7 +637,7 @@ router.post("/:username/:action(block|mute)", verifyToken, async (req, res) => {
     }
 });
 
-// DELETE /:username/block | /:username/mute — unblock / unmute.
+// DELETE /:username/block | /:username/mute â€” unblock / unmute.
 router.delete("/:username/:action(block|mute)", verifyToken, async (req, res) => {
     try {
         const { username, action } = req.params;

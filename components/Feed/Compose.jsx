@@ -14,6 +14,12 @@ const UPLOAD_PRESET  = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
 export default function Compose({ onPosted }) {
     const { user } = useUser();
+// Whether this account may upload video directly. Sent by /api/auth/me as
+// `canUploadVideo`, resolved server-side by the same helper that gates
+// POST /api/posts, so the two can't disagree. Defaults to false: someone who
+// cannot upload should be offered the link route rather than a button that
+// fails at submit time.
+const canUploadVideo = user?.canUploadVideo === true;
     const { showToast } = useToast();
     const [text, setText]                 = useState("");
     const [imageFiles, setImageFiles]     = useState([]);
@@ -575,9 +581,24 @@ export default function Compose({ onPosted }) {
                                 </svg>
                             </button>
                             <button
-                                onClick={() => videoRef.current?.click()}
+                                onClick={() => {
+                                    // Guarded here for a clear message, but the
+                                    // server re-checks on POST /api/posts - this
+                                    // is a courtesy, not the enforcement.
+                                    if (!canUploadVideo) {
+                                        setVideoError(
+                                            "Uploading video isn't enabled on your account. You can still post a YouTube, TikTok, Instagram, Facebook or Reddit link and it will play inline.",
+                                        );
+                                        return;
+                                    }
+                                    videoRef.current?.click();
+                                }}
                                 aria-label="Add video"
-                                title="Add a video (max 3 minutes)"
+                                title={
+                                    canUploadVideo
+                                        ? "Add a video (max 3 minutes)"
+                                        : "Video upload is limited on this account — post a link instead"
+                                }
                                 disabled={!user || posting || !!video || hasMedia || !!audioUrl}
                                 className="p-1.5 sm:p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors disabled:opacity-40"
                             >
@@ -586,6 +607,11 @@ export default function Compose({ onPosted }) {
                                     <path strokeLinecap="round" strokeLinejoin="round"
                                         d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H15.75Z" />
                                 </svg>
+                                {!canUploadVideo && (
+                                    // Small lock so the disabled state reads as
+                                    // "not your account" rather than "broken".
+                                    <span className="absolute -bottom-0.5 -right-0.5 block h-1.5 w-1.5 rounded-full bg-amber-400" />
+                                )}
                             </button>
                             <VoiceRecorder
                                 onRecorded={(url) => setAudioUrl(url)}

@@ -238,6 +238,7 @@ router.get("/users", requireAdmin, async (req, res) => {
             isAdmin:    u.isAdmin || false,
             isPro:      isProUserDoc(u),
             liveStreamAllowed: u.liveStreamAllowed || false,
+            videoUploadAllowed: u.videoUploadAllowed || false,
             voiceChatBanned: u.voiceChatBanned || false,
             voiceChatBannedUntil: u.voiceChatBannedUntil || null,
             voiceChatBannedReason: u.voiceChatBannedReason || "",
@@ -256,13 +257,17 @@ router.get("/users", requireAdmin, async (req, res) => {
 // PATCH /users
 router.patch("/users", requireAdmin, async (req, res) => {
     try {
-        const { userId, isVerified, isAdmin: makeAdmin, liveStreamAllowed, voiceChatBanned, voiceChatBannedUntil, voiceChatBannedReason, addRole, removeRole } = req.body;
+        const { userId, isVerified, isAdmin: makeAdmin, liveStreamAllowed, videoUploadAllowed, voiceChatBanned, voiceChatBannedUntil, voiceChatBannedReason, addRole, removeRole } = req.body;
         if (!userId) return res.status(400).json({ error: "userId required" });
 
         const update = {};
         if (isVerified !== undefined) update.isVerified = isVerified;
         if (makeAdmin !== undefined) update.isAdmin = makeAdmin;
         if (liveStreamAllowed !== undefined) update.liveStreamAllowed = liveStreamAllowed;
+        // Explicit per-user grant for direct video upload. This only ever adds
+        // capability - it is not a ban, so an admin turning it off will not
+        // strip a role that already carries `upload_video`.
+        if (videoUploadAllowed !== undefined) update.videoUploadAllowed = !!videoUploadAllowed;
         if (voiceChatBanned !== undefined) update.voiceChatBanned = voiceChatBanned;
         if (voiceChatBannedUntil !== undefined) update.voiceChatBannedUntil = voiceChatBannedUntil;
         if (voiceChatBannedReason !== undefined) update.voiceChatBannedReason = voiceChatBannedReason;
@@ -388,6 +393,10 @@ router.post("/roles/seed-normal", requireAdmin, async (req, res) => {
                     "create_comment", "delete_own_comment",
                     "react", "bookmark", "repost",
                     "use_voice_chat", "use_live_stream", "access_entertainment",
+                    // No `upload_video`: it is opt-in only. Adding it here would
+                    // hand direct video upload to every seeded user, which is the
+                    // cost this permission exists to prevent. Grant it to a
+                    // trusted role, or per-user from the Users panel.
                 ],
             });
         }
