@@ -1,4 +1,4 @@
-const { initWarEraTracker } = require("./warera-tracker");
+const { initWarEraTracker } = require("./scripts/warera-tracker");
 require("dotenv").config();
 require("./logBuffer");
 const { logAuth, logUser, logServer, logDatabase, logGame, logChat, logFrontend, logModeration, logSystem } = require("./logService");
