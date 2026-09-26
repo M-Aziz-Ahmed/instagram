@@ -30,6 +30,11 @@ export default function MeHub() {
     const { user, logout } = useUser();
     const router = useRouter();
     const [showSettings, setShowSettings] = useState(false);
+    const [updateHint, setUpdateHint] = useState("");
+    // The updater only exists inside the Tauri shell. Checking here rather than
+    // branching on the userAgent keeps the row honest on web and mobile.
+    const isDesktop =
+        typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
     const handleLogout = async () => {
         try {
@@ -110,6 +115,20 @@ export default function MeHub() {
                 <div className="bg-white dark:bg-gray-900 mb-3 rounded-2xl mx-4 overflow-hidden">
                     <Item icon="🎁" label="Referrals" href="/referrals" />
                     <Item icon="📥" label="Download App" href="/download" />
+                    {/* Desktop only. The updater already checks on launch and
+                        every 30 min; this forces one on demand so a stalled or
+                        failing check is visible instead of silent. */}
+                    {isDesktop && (
+                        <Item
+                            icon="🔄"
+                            label="Check for Updates"
+                            onClick={() => {
+                                setUpdateHint("Checking for updates…");
+                                window.dispatchEvent(new CustomEvent("anon:check-update"));
+                                setTimeout(() => setUpdateHint(""), 4000);
+                            }}
+                        />
+                    )}
                     <Item icon="⚙️" label="Settings" onClick={() => setShowSettings(true)} />
                     {user?.isAdmin && (
                         <Item icon="🛡️" label="Admin" href="/admin" />
@@ -127,6 +146,12 @@ export default function MeHub() {
             </div>
 
             {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+
+            {updateHint && (
+                <div className="fixed bottom-5 left-1/2 z-[70] -translate-x-1/2 rounded-full bg-gray-900 px-4 py-2.5 text-xs font-semibold text-white shadow-2xl animate-fade-up">
+                    {updateHint}
+                </div>
+            )}
         </div>
     );
 }

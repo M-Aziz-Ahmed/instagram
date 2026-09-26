@@ -25,6 +25,12 @@ function sortQuality(a, b) {
 
 const EMBED_PATTERN = /vidsrc\.|2embed|\/embed\//i;
 
+// Focus losses within POPUP_WINDOW ms needed before we treat an embed as
+// abusive. Two is enough to catch a popunder pair without punishing a user who
+// alt-tabs; three is the safety margin we settle on.
+const POPUP_BUDGET = 3;
+const POPUP_WINDOW = 10000;
+
 export default function MediaPlayer({
     src,
     title,
@@ -103,9 +109,50 @@ export default function MediaPlayer({
         setError("");
     }
 
+    /**
+     * Popup-storm detection.
+     *
+     * The mirror embeds cannot be sandboxed — they detect the `sandbox`
+     * attribute and refuse to render ("This content can't be embedded in a
+     * sandboxed frame"). Leaving the frame unsandboxed is what lets them call
+     * `window.open` from their own cross-origin realm, which no code in this
+     * document can intercept. The `sandbox` attribute is the only web-platform
+     * control for that, and the provider rejects it.
+     *
+     * So instead of blocking the popups, we watch for them. Every window a
+     * popup steals triggers a `blur` on this document, so a burst of focus
+     * losses means the frame is misbehaving. After POPUP_BUDGET of them we
+     * unmount the frame and fall back to the hand-off card — the popups stop
+     * because the offending document is gone, and the user keeps a working
+     * "Open in new tab" button. Playback is untouched in the normal case, where
+     * the mirror just plays the video.
+     */
+    const [embedDemoted, setEmbedDemoted] = useState(false);
+    const popupEvents = useRef([]);
+
+    useEffect(() => {
+        if (!isEmbed || embedDemoted) return;
+        const onBlur = () => {
+            const now = Date.now();
+            // Sliding window: only bursts count, so a user alt-tabbing a couple
+            // of times over a long session never trips this.
+            popupEvents.current = [...popupEvents.current, now].filter((t) => now - t < POPUP_WINDOW);
+            if (popupEvents.current.length >= POPUP_BUDGET) {
+                setEmbedDemoted(true);
+            }
+        };
+        window.addEventListener("blur", onBlur);
+        return () => window.removeEventListener("blur", onBlur);
+    }, [isEmbed, embedDemoted, activeEmbed]);
+
     const nextEmbed = useCallback(() => {
         setEmbedIndex((i) => (i + 1) % embedList.length);
+        // Re-arming here matters: a mirror swap is a fresh start, so the user
+        // gets a clean budget of focus events before we demote again.
+        setEmbedDemoted(false);
+        popupEvents.current = [];
     }, [embedList.length]);
+
 
     const switchSource = useCallback(() => {
         setError("");
@@ -299,77 +346,144 @@ export default function MediaPlayer({
         );
     }
 
-    // ── Partner hand-off ─────────────────────────────────────────
-    // The mirror embeds (vidsrc, 2embed) cannot be sandboxed: they detect the
-    // `sandbox` attribute and refuse with "This content can't be embedded in a
-    // sandboxed frame". Unsandboxed, they are also the source of the popup
-    // storm — they call `window.open` on a timer from inside their own
-    // cross-origin realm, which no amount of code on our side can intercept
-    // and which a sandbox (the only real control) makes them reject outright.
+    // ── Mirror embed ─────────────────────────────────────────────
+    // Plays in-page by default, because for cartoons, series and channels this
+    // mirror is the *only* source there is — the primary provider path only
+    // covers dramas and movies. Sending these to a hand-off card by default
+    // meant losing in-app playback entirely.
     //
-    // So the fallback does not embed. It hands the title to the provider in a
-    // new tab, which is a single user-initiated navigation the browser permits
-    // and the popup blocker understands. In-app playback is what the primary
-    // provider path (real HLS/DASH sources through /api/media-proxy) is for,
-    // and that path is unaffected.
+    // It cannot be sandboxed (the provider refuses), so popups are handled by
+    // detection rather than prevention: a burst of focus losses unmounts the
+    // frame and demotes to the hand-off card. See the popup-storm effect above.
     if (isEmbed) {
-        return (
-            <div className="surface overflow-hidden">
-                <div className="relative w-full app-sunken border-b border-[var(--border-subtle)]" style={{ paddingTop: "42%" }}>
-                    {poster ? (
-                        <>
-                            <img
-                                src={poster}
-                                alt=""
-                                className="absolute inset-0 w-full h-full object-cover opacity-40 blur-[2px] scale-105"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/20" />
-                        </>
-                    ) : (
-                        <div className="absolute inset-0 bg-gradient-to-br from-[var(--brand-600)] to-fuchsia-700 opacity-90" />
-                    )}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-                        <span className="grid h-14 w-14 place-items-center rounded-full bg-white/95 text-gray-900 shadow-xl">
-                            <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6 ml-0.5">
-                                <path d="M8 5v14l11-7z" />
+        if (embedDemoted) {
+            return (
+                <div className="surface overflow-hidden">
+                    <div className="relative w-full app-sunken border-b border-[var(--border-subtle)]" style={{ paddingTop: "38%" }}>
+                        {poster ? (
+                            <>
+                                <img
+                                    src={poster}
+                                    alt=""
+                                    className="absolute inset-0 h-full w-full scale-105 object-cover opacity-40 blur-[2px]"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/75 to-black/25" />
+                            </>
+                        ) : (
+                            <div className="absolute inset-0 bg-gradient-to-br from-[var(--brand-600)] to-fuchsia-700 opacity-90" />
+                        )}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                            <span className="grid h-14 w-14 place-items-center rounded-full bg-white/95 text-gray-900 shadow-xl">
+                                <svg viewBox="0 0 24 24" fill="currentColor" className="ml-0.5 h-6 w-6">
+                                    <path d="M8 5v14l11-7z" />
+                                </svg>
+                            </span>
+                            <div>
+                                <p className="text-sm font-bold text-white drop-shadow-sm">
+                                    {title || "Continue watching"}
+                                </p>
+                                <p className="mt-0.5 text-xs text-white/80">Plays on our streaming partner</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-5 sm:p-6">
+                        <div className="mx-auto mb-4 flex max-w-lg items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-left">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
                             </svg>
-                        </span>
-                        <div>
-                            <p className="text-sm font-bold text-white drop-shadow-sm">
-                                {title || "Continue watching"}
+                            <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-300">
+                                This player kept opening new tabs, so we stopped loading it
+                                here. Open it in a new tab instead, or try another mirror.
                             </p>
-                            <p className="mt-0.5 text-xs text-white/80">
-                                Plays on our streaming partner
-                            </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                            <a
+                                href={activeEmbed}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn-brand-gradient px-5 py-2.5 text-sm"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                                </svg>
+                                Open in new tab
+                            </a>
+                            {embedList.length > 1 && (
+                                <button onClick={nextEmbed} className="btn-secondary px-4 py-2.5 text-sm">
+                                    Try another mirror
+                                </button>
+                            )}
+                            <button onClick={onBack} className="btn-ghost px-4 py-2.5 text-sm">
+                                ← Back
+                            </button>
                         </div>
                     </div>
                 </div>
+            );
+        }
 
-                <div className="p-5 sm:p-6">
-                    <p className="text-sm text-gray-600 dark:text-gray-400 max-w-lg mx-auto text-center">
-                        This title isn&rsquo;t available on our own servers yet, so it
-                        opens on our partner&rsquo;s player in a new tab.
+        return (
+            <div>
+                <div className="relative overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-black">
+                    <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
+                        <iframe
+                            key={activeEmbed}
+                            src={activeEmbed}
+                            title={title || "Video player"}
+                            className="absolute inset-0 h-full w-full border-0"
+                            allowFullScreen
+                            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                            referrerPolicy="origin-when-cross-origin"
+                        />
+                    </div>
+                    <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
+                        <button
+                            onClick={onBack}
+                            className="rounded-full bg-black/70 p-2 text-white backdrop-blur transition-colors hover:bg-black/90"
+                            title="Back"
+                            aria-label="Back"
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                            </svg>
+                        </button>
+                        {embedList.length > 1 && (
+                            <span className="rounded-full bg-black/70 px-2.5 py-1.5 text-[11px] font-semibold tabular-nums text-white/80 backdrop-blur">
+                                Mirror {embedIndex + 1}/{embedList.length}
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                {/* Escape hatches. The "open in a new tab" link is also the
+                    fastest route out if a mirror misbehaves, so it doesn't wait
+                    for the demotion threshold. */}
+                <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500">
+                        Powered by a streaming partner. Popups?{" "}
+                        <button
+                            onClick={() => setEmbedDemoted(true)}
+                            className="font-semibold text-[var(--brand-600)] underline-offset-2 hover:underline dark:text-[var(--brand-300)]"
+                        >
+                            Stop loading it here
+                        </button>
                     </p>
-                    <div className="mt-5 flex items-center justify-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                        {embedList.length > 1 && (
+                            <button onClick={nextEmbed} className="btn-ghost px-3 py-1.5 text-[11px]">
+                                Next mirror
+                            </button>
+                        )}
                         <a
                             href={activeEmbed}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="btn-brand-gradient px-5 py-2.5 text-sm"
+                            className="btn-ghost px-3 py-1.5 text-[11px]"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-                            </svg>
-                            Open player
+                            Open in new tab
                         </a>
-                        {embedList.length > 1 && (
-                            <button onClick={nextEmbed} className="btn-secondary px-4 py-2.5 text-sm">
-                                Next mirror
-                            </button>
-                        )}
-                        <button onClick={onBack} className="btn-ghost px-4 py-2.5 text-sm">
-                            ← Back
-                        </button>
                     </div>
                 </div>
             </div>
