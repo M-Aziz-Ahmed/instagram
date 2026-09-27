@@ -12,7 +12,12 @@ function rcToSquare(row, col) {
 }
 
 function parseFEN(fen) {
-    if (!fen) return [];
+    // A missing FEN used to return `[]`, so `displayBoard.map(...)` emitted zero
+    // squares and the user saw an empty area with no explanation at all. The
+    // malformed-FEN branches below already return a valid empty board for the
+    // same reason; a falsy FEN is just the most degenerate form of malformed and
+    // should take the same path.
+    if (!fen) return Array.from({ length: 8 }, () => Array(8).fill(null));
     const rows = fen.split(" ")[0].split("/");
     // A truncated or malformed FEN used to make `rows[r]` undefined for some r,
     // and `for (const ch of rows[r])` then threw inside render - which white-screened
@@ -259,7 +264,31 @@ export default function ChessBoard({
                     ))}
                 </div>
 
-                <div ref={boardRef} className="relative" style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}>
+                {/* `flex-1 min-w-0` is load-bearing, not cosmetic.
+
+                    This element is a flex item of the `.flex` row above, and it
+                    has no width of its own. Its only child is the 8x8 grid, which
+                    asks for `width: 100%`. That percentage has to resolve
+                    against a definite parent width — and here it did not, so the
+                    chain became circular (grid 100% -> this div's width -> the
+                    grid's max-content width) and collapsed to 0. `aspect-ratio: 1`
+                    then made the height 0 too, and the user got a completely blank
+                    page: all 64 squares and all 32 pieces were in the DOM, just
+                    inside a 0x0 box.
+
+                    The regression came from the piece size changing from a
+                    definite `60`px to a percentage: that 60px was the only
+                    definite length anywhere in the subtree, so it was the only
+                    thing giving the board an intrinsic width. The sibling boards
+                    (Checkers, Reversi) survive the same percentage technique
+                    because they sit inside a `w-full max-w-[520px]` wrapper;
+                    this one did not.
+
+                    `flex-1` gives the box a real width from the flex parent (which
+                    descends from a definite `w-full` / `lg:max-w-[700px]`), and
+                    `min-w-0` stops the flex `min-width: auto` automatic minimum
+                    from re-introducing a floor from the unsized inner <svg>. */}
+                <div ref={boardRef} className="relative flex-1 min-w-0" style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}>
                     <div className="grid grid-cols-8 grid-rows-8" style={{ aspectRatio: "1", width: "100%" }}>
                         {displayBoard.map((row, ri) =>
                             row.map((piece, ci) => {

@@ -19,6 +19,15 @@ import SettingsPanel from "@/components/Admin/SettingsPanel";
 import SecurityPanel from "@/components/Admin/SecurityPanel";
 import InvitesPanel from "@/components/Admin/InvitesPanel";
 import LivePanel from "@/components/Admin/LivePanel";
+// The three content-safety panels. `ContentFilterPanelV2` supersedes the inline
+// `ContentFilterPanel` that used to live in this file: it exposes the matching
+// rules (whole-word matching is the fix for a filtered word bleeding into
+// unrelated words), an allowlist, a live test box, bulk/preset word management,
+// per-surface scope and link policy. `MediaSafetyPanel` covers image/video
+// screening, and `SafetyOpsPanel` covers user risk, data health and compliance.
+import ContentFilterPanelV2 from "@/components/Admin/ContentFilterPanelV2";
+import MediaSafetyPanel from "@/components/Admin/MediaSafetyPanel";
+import SafetyOpsPanel from "@/components/Admin/SafetyOpsPanel";
 
 const EMOJI_PRESETS = ["⭐","🛡️","👑","💎","🔥","🎯","🏆","🎨","🧪","🤖","💡","🌟"];
 
@@ -83,6 +92,14 @@ export default function AdminClient() {
                     <button onClick={() => setTab("contentFilter")}
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "contentFilter" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         Content Filter
+                    </button>
+                    <button onClick={() => setTab("mediaSafety")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "mediaSafety" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        Media Safety
+                    </button>
+                    <button onClick={() => setTab("safetyOps")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "safetyOps" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        User Safety
                     </button>
                     <button onClick={() => setTab("voice")}
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "voice" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
@@ -154,7 +171,9 @@ export default function AdminClient() {
                 {tab === "roles" && <RolesPanel />}
                 {tab === "permissions" && <PermissionsPanel />}
                 {tab === "moderation" && <ModerationPanel />}
-                {tab === "contentFilter" && <ContentFilterPanel />}
+                {tab === "contentFilter" && <ContentFilterPanelV2 />}
+                {tab === "mediaSafety" && <MediaSafetyPanel />}
+                {tab === "safetyOps" && <SafetyOpsPanel />}
                 {tab === "voice" && <VoicePanel />}
                 {tab === "ads" && <AdsPanel />}
                 {tab === "gems" && <GemsPanel />}

@@ -9,6 +9,9 @@ const SiteSetting = require("../models/siteSettings");
 const { getFlags, invalidate: invalidateFlags } = require("../lib/featureFlags");
 const Post = require("../models/post");
 const ContentFilter = require("../models/contentFilter");
+const textFilter = require("../lib/textFilter");
+const mediaModeration = require("../lib/mediaModeration");
+const toxicMatch = require("../lib/toxicMatch");
 const ModerationLog = require("../models/moderationLog");
 const Community = require("../models/community");
 const AnalyticsEvent = require("../models/analyticsEvent");
@@ -964,48 +967,323 @@ router.post("/moderation/restore", requirePermission("moderate_posts"), async (r
     }
 });
 
-// GET /content-filter â€” get content filter settings
+// GET /content-filter — get content filter settings
 router.get("/content-filter", requireAdmin, async (req, res) => {
     try {
-        let filter = await ContentFilter.findOne({}).lean();
-        if (!filter) {
-            filter = await ContentFilter.create({ toxicWords: [], nudityKeywords: [], blockNudity: true, blurToxicWords: true });
-            filter = filter.toObject();
-        }
-        return res.json({
-            toxicWords: filter.toxicWords || [],
-            nudityKeywords: filter.nudityKeywords || [],
-            blockNudity: filter.blockNudity !== false,
-            blurToxicWords: filter.blurToxicWords !== false,
-        });
+        const filter = await ContentFilter.load();
+        return res.json(publicFilterShape(filter));
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });
     }
 });
 
-// PATCH /content-filter â€” update content filter settings
+/**
+ * Every key the admin UI can read or write. Built from the schema so the two can
+ * never drift, and used for BOTH the GET response and the PATCH whitelist.
+ *
+ * The old PATCH hard-coded four keys and did `Object.assign(filter, update)`.
+ * Because the schema is `strict: true`, any field added here but not declared in
+ * models/contentFilter.js would be silently dropped while still returning HTTP
+ * 200 — a save that reports success and persists nothing. `sanitiseFilterPatch`
+ * therefore validates against this same list.
+ */
+function publicFilterShape(filter) {
+    const doc = filter && typeof filter.toObject === "function" ? filter.toObject() : filter || {};
+    return {
+        toxicWords: doc.toxicWords || [],
+        nudityKeywords: doc.nudityKeywords || [],
+        allowedWords: doc.allowedWords || [],
+        blockNudity: doc.blockNudity !== false,
+        blurToxicWords: doc.blurToxicWords !== false,
+        matchOptions: {
+            wholeWord: doc.matchOptions?.wholeWord !== false,
+            leetspeak: doc.matchOptions?.leetspeak === true,
+            caseSensitive: doc.matchOptions?.caseSensitive === true,
+            minLength: doc.matchOptions?.minLength ?? 0,
+        },
+        textScope: { ...(doc.textScope || {}) },
+        mediaModeration: { ...(doc.mediaModeration || {}) },
+        links: { ...(doc.links || {}) },
+        autoAction: { ...(doc.autoAction || {}) },
+        updatedAt: doc.updatedAt || null,
+        updatedBy: doc.updatedBy || "",
+    };
+}
+
+const STRING_ARRAY_FIELDS = ["toxicWords", "nudityKeywords", "allowedWords"];
+const BOOLEAN_FIELDS = ["blockNudity", "blurToxicWords"];
+
+/**
+ * Coerce a PATCH body into a safe partial update.
+ *
+ * Deep-merges the nested objects rather than replacing them, so saving one
+ * toggle does not blank out the rest of `mediaModeration`. Returns
+ * `{ update, rejected }` — `rejected` names anything refused, so the UI can tell
+ * the admin rather than silently ignoring them.
+ */
+function sanitiseFilterPatch(body) {
+    const update = {};
+    const rejected = [];
+
+    for (const field of STRING_ARRAY_FIELDS) {
+        if (body[field] === undefined) continue;
+        if (!Array.isArray(body[field])) {
+            rejected.push(`${field} must be an array`);
+            continue;
+        }
+        update[field] = body[field]
+            .map((w) => String(w ?? "").trim())
+            .filter(Boolean)
+            .slice(0, 5000);
+    }
+
+    for (const field of BOOLEAN_FIELDS) {
+        if (body[field] === undefined) continue;
+        if (typeof body[field] !== "boolean") {
+            rejected.push(`${field} must be a boolean`);
+            continue;
+        }
+        update[field] = body[field];
+    }
+
+    // Nested sections, each with its own allowlist of scalar fields.
+    const SECTIONS = {
+        matchOptions: {
+            wholeWord: "boolean",
+            leetspeak: "boolean",
+            caseSensitive: "boolean",
+            minLength: "clampedNumber",
+        },
+        textScope: null, // all booleans, derived from the schema below
+        mediaModeration: {
+            enabled: "boolean",
+            provider: "enum:cloudinary,google,aws,none",
+            threshold: "clampedNumber01",
+            action: "enum:block,flag,blur",
+            failureMode: "enum:closed,open",
+            requireCloudinaryHost: "boolean",
+            destroyOnReject: "boolean",
+            cacheResults: "boolean",
+            cacheTtlHours: "clampedNumber",
+        },
+        links: {
+            blockAllLinks: "boolean",
+            blockPhishingPatterns: "boolean",
+        },
+        autoAction: {
+            autoHideFlaggedPosts: "boolean",
+            suspendAfterOffences: "clampedNumber",
+            offenceWindowHours: "clampedNumber",
+            suspendHours: "clampedNumber",
+        },
+    };
+
+    // Sections whose every field is a boolean. `textScope` has no non-boolean
+    // fields; `mediaModeration` does (provider/threshold/action/failureMode), so
+    // it is validated by its rules table above like any other mixed section.
+    const ALL_BOOLEAN_SECTIONS = new Set(["textScope"]);
+
+    for (const [section, rules] of Object.entries(SECTIONS)) {
+        if (body[section] === undefined) continue;
+        const incoming = body[section];
+        if (typeof incoming !== "object" || incoming === null || Array.isArray(incoming)) {
+            rejected.push(`${section} must be an object`);
+            continue;
+        }
+        const sectionUpdate = {};
+
+        if (ALL_BOOLEAN_SECTIONS.has(section)) {
+            for (const [key, value] of Object.entries(incoming)) {
+                if (typeof value !== "boolean") {
+                    rejected.push(`${section}.${key} must be a boolean`);
+                    continue;
+                }
+                sectionUpdate[key] = value;
+            }
+            continue;
+        }
+
+        for (const [key, value] of Object.entries(incoming)) {
+            // `mediaModeration.scope` is a nested map of booleans.
+            if (key === "scope" && section === "mediaModeration") {
+                if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+                    const scopeUpdate = {};
+                    for (const [sk, sv] of Object.entries(value)) {
+                        if (typeof sv === "boolean") scopeUpdate[sk] = sv;
+                        else rejected.push(`mediaModeration.scope.${sk} must be a boolean`);
+                    }
+                    if (Object.keys(scopeUpdate).length) sectionUpdate.scope = scopeUpdate;
+                } else {
+                    rejected.push("mediaModeration.scope must be an object");
+                }
+                continue;
+            }
+
+            const rule = rules[key];
+            if (!rule) {
+                // Previously this silently ignored unknown keys, which is how a
+                // typo in the UI looked like a successful save.
+                rejected.push(`${section}.${key} is not a recognised setting`);
+                continue;
+            }
+            if (rule === "boolean") {
+                if (typeof value !== "boolean") { rejected.push(`${section}.${key} must be a boolean`); continue; }
+                sectionUpdate[key] = value;
+            } else if (rule === "clampedNumber") {
+                const n = Number(value);
+                if (!Number.isFinite(n) || n < 0) { rejected.push(`${section}.${key} must be a non-negative number`); continue; }
+                sectionUpdate[key] = n;
+            } else if (rule === "clampedNumber01") {
+                const n = Number(value);
+                if (!Number.isFinite(n) || n < 0 || n > 1) { rejected.push(`${section}.${key} must be between 0 and 1`); continue; }
+                sectionUpdate[key] = n;
+            } else if (rule.startsWith("enum:")) {
+                const allowed = rule.slice(5).split(",");
+                if (!allowed.includes(String(value))) {
+                    rejected.push(`${section}.${key} must be one of: ${allowed.join(", ")}`);
+                    continue;
+                }
+                sectionUpdate[key] = String(value);
+            }
+        }
+        if (Object.keys(sectionUpdate).length) update[section] = sectionUpdate;
+    }
+
+    // Domain lists live inside `links` but are arrays, not booleans.
+    if (body.links && typeof body.links === "object") {
+        for (const field of ["blockedDomains", "allowedDomains"]) {
+            if (body.links[field] === undefined) continue;
+            if (!Array.isArray(body.links[field])) {
+                rejected.push(`links.${field} must be an array`);
+                continue;
+            }
+            update.links = update.links || {};
+            update.links[field] = body.links[field]
+                .map((d) => String(d ?? "").trim().toLowerCase())
+                .filter(Boolean)
+                .slice(0, 5000);
+        }
+    }
+
+    return { update, rejected };
+}
+
+// PATCH /content-filter — update content filter settings
 router.patch("/content-filter", requireAdmin, async (req, res) => {
     try {
-        const { toxicWords, nudityKeywords, blockNudity, blurToxicWords } = req.body;
-        const update = { updatedAt: new Date() };
-        if (Array.isArray(toxicWords)) update.toxicWords = toxicWords;
-        if (Array.isArray(nudityKeywords)) update.nudityKeywords = nudityKeywords;
-        if (typeof blockNudity === "boolean") update.blockNudity = blockNudity;
-        if (typeof blurToxicWords === "boolean") update.blurToxicWords = blurToxicWords;
-
-        let filter = await ContentFilter.findOne({});
-        if (!filter) {
-            filter = await ContentFilter.create(update);
-        } else {
-            Object.assign(filter, update);
-            await filter.save();
+        const { update, rejected } = sanitiseFilterPatch(req.body || {});
+        if (rejected.length) {
+            return res.status(400).json({ error: "Invalid content filter update", rejected });
+        }
+        if (Object.keys(update).length === 0) {
+            return res.status(400).json({ error: "Nothing to update" });
         }
 
+        const filter = await ContentFilter.load();
+        // Deep-merge the nested sections so a partial patch (one toggle) does not
+        // discard the other keys in the same section.
+        for (const [key, value] of Object.entries(update)) {
+            if (
+                value && typeof value === "object" && !Array.isArray(value) &&
+                filter[key] && typeof filter[key] === "object" && !Array.isArray(filter[key])
+            ) {
+                filter[key] = { ...filter[key].toObject?.() ?? filter[key], ...value };
+            } else {
+                filter[key] = value;
+            }
+        }
+        filter.updatedAt = new Date();
+        filter.updatedBy = req.admin?.username || req.user?.username || "admin";
+        await filter.save();
+
+        // The hot caches in textFilter/mediaModeration hold up to 15s of the old
+        // config, so an admin disabling the filter would appear to do nothing
+        // for a few seconds and then start blocking everything.
+        textFilter.invalidateCache();
+        mediaModeration.clearVerdictCache();
+
+        return res.json(publicFilterShape(filter));
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// POST /content-filter/test — dry-run text through the real matcher.
+// This is what makes the filter tunable: an admin can confirm that "ass" now
+// leaves "assistant" alone before saving a change that would block real posts.
+router.post("/content-filter/test", requireAdmin, async (req, res) => {
+    try {
+        const { text = "", useLiveConfig = true, list = "nudityKeywords" } = req.body || {};
+        if (!["nudityKeywords", "toxicWords"].includes(list)) {
+            return res.status(400).json({ error: 'list must be "nudityKeywords" or "toxicWords"' });
+        }
+        const filter = useLiveConfig ? await ContentFilter.load() : null;
+        const doc = filter ? (typeof filter.toObject === "function" ? filter.toObject() : filter) : {};
+
+        // `list` matters: the reported bug was a word in the BLUR list blurring
+        // the wrong text, and this endpoint only ever checked the BLOCK list. An
+        // admin who added "ass" to Toxic Words and pasted "assistant" here would
+        // have been told the text passes — which reads as the fix not working.
+        const keywords = Array.isArray(doc[list]) ? doc[list] : [];
+        const options = doc.matchOptions || { wholeWord: true };
+        const allowlist = Array.isArray(doc.allowedWords) ? doc.allowedWords : [];
+
+        const value = String(text).slice(0, 5000);
+        const rawMatches = toxicMatch.findMatches(value, keywords, options);
+        const matches = allowlist.length
+            ? toxicMatch.filterAllowed(value, rawMatches, allowlist)
+            : rawMatches;
+
+        return res.json({
+            list,
+            matches: matches.map((m) => ({ word: m.word, start: m.start, end: m.end })),
+            wouldBlock: matches.length > 0,
+            segments: toxicMatch.segmentByMatches(value, keywords, { ...options, allowlist }),
+            totalMatches: matches.length,
+            config: {
+                wholeWord: options.wholeWord !== false,
+                leetspeak: options.leetspeak === true,
+                caseSensitive: options.caseSensitive === true,
+                minLength: options.minLength ?? 0,
+                keywordCount: keywords.length,
+                allowlistCount: allowlist.length,
+                surfaceEnabled: doc.textScope?.posts !== false,
+            },
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// GET /content-filter/public — the list the client blurs against.
+// No auth in Express, but the Next proxy still requires a session cookie for
+// /api/admin/* (see proxy.js PUBLIC_PATHS), so this is not truly anonymous.
+router.get("/content-filter/public", async (req, res) => {
+    try {
+        const filter = await ContentFilter.findById("singleton").lean();
+        if (!filter) {
+            return res.json({
+                toxicWords: [],
+                allowedWords: [],
+                matchOptions: { wholeWord: true },
+                blurToxicWords: true,
+            });
+        }
         return res.json({
             toxicWords: filter.toxicWords || [],
-            nudityKeywords: filter.nudityKeywords || [],
-            blockNudity: filter.blockNudity !== false,
+            allowedWords: filter.allowedWords || [],
+            // The client MUST use the same matching rules as the server,
+            // otherwise a word the server blocks is shown unblurred, or vice
+            // versa — a filter that is only cosmetic on one side.
+            matchOptions: {
+                wholeWord: filter.matchOptions?.wholeWord !== false,
+                leetspeak: filter.matchOptions?.leetspeak === true,
+                caseSensitive: filter.matchOptions?.caseSensitive === true,
+                minLength: filter.matchOptions?.minLength ?? 0,
+            },
             blurToxicWords: filter.blurToxicWords !== false,
         });
     } catch (error) {
@@ -1014,16 +1292,50 @@ router.patch("/content-filter", requireAdmin, async (req, res) => {
     }
 });
 
-// GET /content-filter/public â€” public endpoint for client-side toxic word blurring (no auth required)
-router.get("/content-filter/public", async (req, res) => {
+// GET /content-filter/stats — hit counts per configured term, so the admin can
+// see which entries are actually firing and prune the ones that only cause
+// false positives.
+router.get("/content-filter/stats", requireAdmin, async (req, res) => {
     try {
-        let filter = await ContentFilter.findOne({}).lean();
-        if (!filter) {
-            return res.json({ toxicWords: [], blurToxicWords: true });
+        const filter = await ContentFilter.load();
+        const doc = typeof filter.toObject === "function" ? filter.toObject() : filter;
+        const options = doc.matchOptions || { wholeWord: true };
+        const allowlist = doc.allowedWords || [];
+
+        // One pass over recent content rather than a query per term.
+        const since = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+        const recent = await Post.find({ timeStamp: { $gte: since } })
+            .select("text comments.text")
+            .lean()
+            .limit(2000);
+
+        const counts = {};
+        const bump = (word) => { counts[word] = (counts[word] || 0) + 1; };
+
+        for (const post of recent) {
+            const haystacks = [post.text];
+            if (Array.isArray(post.comments)) for (const c of post.comments) haystacks.push(c.text);
+            for (const h of haystacks) {
+                if (!h) continue;
+                const found = allowlist.length
+                    ? toxicMatch.filterAllowed(h, toxicMatch.findMatches(h, doc.toxicWords || [], options), allowlist)
+                    : toxicMatch.findMatches(h, doc.toxicWords || [], options);
+                for (const m of found) bump(m.word.toLowerCase());
+            }
         }
+
+        const entries = (doc.toxicWords || []).map((word) => ({
+            word,
+            hits: counts[String(word).toLowerCase()] || 0,
+        }));
+        entries.sort((a, b) => b.hits - a.hits);
+
         return res.json({
-            toxicWords: filter.toxicWords || [],
-            blurToxicWords: filter.blurToxicWords !== false,
+            entries,
+            totalHits: entries.reduce((n, e) => n + e.hits, 0),
+            postsScanned: recent.length,
+            windowDays: 30,
+            unusedEntries: entries.filter((e) => e.hits === 0).map((e) => e.word),
         });
     } catch (error) {
         console.error(error);

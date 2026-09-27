@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { segmentByMatches } from "@/utils/toxicMatch";
 
 const EMOJI_SHORTCODES = {
     ":smile:": "😄", ":grin:": "😁", ":laughing:": "😆", ":blush:": "😊", ":smiley:": "😃",
@@ -58,17 +59,29 @@ const EMOJI_SHORTCODES = {
     ":ring:": "💍", ":purse:": "👛", ":handbag:": "👜", ":eyeglasses:": "👓",
 };
 
-let cachedToxicWords = null;
+// Module-level cache so the list is fetched once per page load rather than once
+// per rendered comment. `cachedConfig` holds the words AND the match options,
+// because the matching rules are admin-configurable and the client has to agree
+// with the server on them.
+let cachedConfig = null;
 let toxicFetchPromise = null;
 
-function fetchToxicWords() {
+const EMPTY_FILTER = { words: [], allowlist: [], options: { wholeWord: true } };
+
+function fetchToxicConfig() {
     if (toxicFetchPromise) return toxicFetchPromise;
     toxicFetchPromise = fetch("/api/admin/content-filter/public")
         .then((r) => r.ok ? r.json() : null)
         .catch(() => null)
         .then((data) => {
-            cachedToxicWords = data?.toxicWords?.length && data?.blurToxicWords ? data.toxicWords.map((w) => w.toLowerCase()) : [];
-            return cachedToxicWords;
+            cachedConfig = data?.toxicWords?.length && data?.blurToxicWords
+                ? {
+                    words: data.toxicWords,
+                    allowlist: data.allowedWords || [],
+                    options: data.matchOptions || { wholeWord: true },
+                }
+                : EMPTY_FILTER;
+            return cachedConfig;
         });
     return toxicFetchPromise;
 }
@@ -122,11 +135,11 @@ function ToxicSegment({ text }) {
     // reachable by keyboard and screen reader too, not just by a synthetic
     // touch event.
     const [revealed, setRevealed] = useState(() => new Set());
-    const [toxicWords, setToxicWords] = useState(cachedToxicWords || []);
+    const [config, setConfig] = useState(cachedConfig || EMPTY_FILTER);
 
     useEffect(() => {
-        if (cachedToxicWords === null) {
-            fetchToxicWords().then(setToxicWords);
+        if (cachedConfig === null) {
+            fetchToxicConfig().then(setConfig);
         }
     }, []);
 
@@ -139,10 +152,17 @@ function ToxicSegment({ text }) {
         });
     };
 
-    if (toxicWords.length === 0) return <span>{text}</span>;
+    if (!config.words.length) return <span>{text}</span>;
 
-    const pattern = new RegExp(`(${toxicWords.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
-    const segments = text.split(pattern);
+    // `segmentByMatches` replaces the old `text.split(/(ass|...)/gi)`
+    // tokenizer, which had no word boundaries and therefore blurred "ass"
+    // *inside* "assistant", "classes" and "pass" — and because `split` with a
+    // capture group emits the match as its own element, only that fragment was
+    // blurred, so the user saw a partly legible word rather than a clean filter.
+    const segments = segmentByMatches(text, config.words, {
+        ...config.options,
+        allowlist: config.allowlist,
+    });
 
     return (
         <span
@@ -154,9 +174,8 @@ function ToxicSegment({ text }) {
             onPointerLeave={(e) => { if (e.pointerType === "mouse") setHovered(false); }}
         >
             {segments.map((seg, i) => {
-                if (!seg) return null;
-                const isToxic = toxicWords.some((w) => seg.toLowerCase() === w);
-                if (isToxic) {
+                if (!seg.text) return null;
+                if (seg.toxic) {
                     const isRevealed = hovered || revealed.has(i);
                     return (
                         <button
@@ -174,11 +193,11 @@ function ToxicSegment({ text }) {
                             }`}
                             title={isRevealed ? "Tap to hide" : "Tap to reveal"}
                         >
-                            {seg}
+                            {seg.text}
                         </button>
                     );
                 }
-                return <span key={i}>{seg}</span>;
+                return <span key={i}>{seg.text}</span>;
             })}
         </span>
     );

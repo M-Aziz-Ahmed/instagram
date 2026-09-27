@@ -5,6 +5,8 @@ const Notification = require("../models/notification");
 const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
 const { getBlockedUsers } = require("../lib/visibility");
+const { rejectIfBlocked } = require("../lib/textFilter");
+const { enforceMedia } = require("../lib/mediaModeration");
 
 const router = express.Router();
 
@@ -85,6 +87,22 @@ router.post("/", verifyToken, async (req, res) => {
         if (!sender) return res.status(400).json({ error: "Sender required" });
         if (!text?.trim() && !providedUrl) {
             return res.status(400).json({ error: "Story must have text or image" });
+        }
+
+        // Stories are the most public surface in the app and expire in 24h, which
+        // made them an attractive place to post unfiltered content: it was
+        // invisible to moderators and gone by the time anyone looked. Both the
+        // text and the image are screened before the story is written.
+        if (await rejectIfBlocked(text, "story", res)) return;
+
+        if (providedUrl) {
+            const storyMedia = await enforceMedia([providedUrl], {
+                surface: "story",
+                message: "This image was blocked by the automated media filter.",
+            });
+            if (!storyMedia.ok) {
+                return res.status(400).json({ error: storyMedia.message, filtered: true, reason: storyMedia.error });
+            }
         }
 
         const story = await Story.create({

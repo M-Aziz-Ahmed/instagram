@@ -603,7 +603,26 @@ export default function ChessGameClient({ gameId }) {
     };
 
     const getResultIcon = () => {
-        if (!game) return null;
+    if (!game) {
+        // Reached when the fetch resolved but returned no game, with `error` null
+        // and `loadedGameId` already set. Both earlier branches were skipped, so
+        // this used to `return null` and render a completely blank page — the one
+        // failure mode with no diagnostic whatsoever. Show the same card instead.
+        return (
+            <div className="flex items-center justify-center h-96 px-4">
+                <div className="text-center">
+                    <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center mx-auto mb-3">
+                        <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">This game could not be loaded</p>
+                    <a href="/chess" className="text-xs text-blue-500 hover:underline">Back to lobby</a>
+                </div>
+            </div>
+        );
+    }
+
         const { status, winner } = game;
         if (status === "checkmate" || status === "resigned" || status === "timeout") {
             if (winner === user?.username) return "\uD83C\uDFC6";

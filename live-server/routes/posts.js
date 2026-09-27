@@ -2,7 +2,6 @@ const express = require("express");
 const Post = require("../models/post");
 const User = require("../models/user");
 const Notification = require("../models/notification");
-const ContentFilter = require("../models/contentFilter");
 const { verifyToken, optionalAuth, requirePermission } = require("../middleware/auth");
 const { getHiddenUsers, applySenderExclusion, filterComments } = require("../lib/visibility");
 const { isProUserDoc } = require("../lib/economy");
@@ -40,16 +39,13 @@ function extractHashtags(text) {
 // second copy that could drift.
 const { extractMentions } = require("../lib/mentions");
 
-async function checkNudity(text) {
-    try {
-        const filter = await ContentFilter.findOne({}).lean();
-        if (!filter || !filter.blockNudity) return false;
-        const lower = (text || "").toLowerCase();
-        return (filter.nudityKeywords || []).some((kw) => lower.includes(kw.toLowerCase()));
-    } catch {
-        return false;
-    }
-}
+// Text + media filtering used to be an inline `checkNudity()` here that matched
+// with `String.includes` — so the keyword "ass" rejected a post containing
+// "assistant" — and that was only ever called on 3 of this file's write paths.
+// It now lives in lib/textFilter.js and lib/mediaModeration.js and is applied to
+// every write path, including edits, reposts and comments.
+const { rejectIfBlocked } = require("../lib/textFilter");
+const { enforceMedia, loadSettings: loadContentFilter } = require("../lib/mediaModeration");
 
 const DEFAULT_USER_PERMISSIONS = [
     "create_post", "delete_own_post", "create_comment", "delete_own_comment",
@@ -576,12 +572,27 @@ router.post("/", verifyToken, requireFeature("posting"), async (req, res) => {
             return res.status(400).json({ error: "Text exceeds maximum length of 1000 characters" });
         }
 
-        if (await checkNudity(sanitizedText)) {
-            return res.status(400).json({ error: "Your post contains content that is not allowed" });
-        }
+        const blocked = await rejectIfBlocked(sanitizedText, "post", res);
+        if (blocked) return;
+
+        const filterDoc = await loadContentFilter();
         const finalImageUrls = Array.isArray(imageUrls) && imageUrls.length > 0
             ? imageUrls.filter(Boolean).slice(0, 10)
             : (imageUrl ? [imageUrl] : []);
+
+        // Media is screened BEFORE the post is written. On rejection the assets
+        // are destroyed from Cloudinary, because the bytes were uploaded straight
+        // from the browser with an unsigned preset and are already publicly
+        // fetchable — refusing the database write alone would leave the file
+        // online forever with no record of it anywhere.
+        const mediaVerdict = await enforceMedia(finalImageUrls, {
+            surface: "postImage",
+            filterDoc,
+            message: "This image was blocked by the automated media filter.",
+        });
+        if (!mediaVerdict.ok) {
+            return res.status(400).json({ error: mediaVerdict.message, filtered: true, reason: mediaVerdict.error });
+        }
         // Video is validated rather than trusted: only Cloudinary delivery URLs
         // are accepted, so a post cannot be used to hotlink or embed arbitrary
         // third-party media (or to smuggle in a non-video URL that the player
@@ -641,6 +652,18 @@ router.post("/", verifyToken, requireFeature("posting"), async (req, res) => {
             finalVideoDuration = Math.max(0, Math.min(Number(videoDuration) || 0, MAX_VIDEO_SECONDS));
             finalVideoWidth = Math.max(0, Math.min(Number(videoWidth) || 0, 10000));
             finalVideoHeight = Math.max(0, Math.min(Number(videoHeight) || 0, 10000));
+
+            // Videos carry the same NSFW risk as images and were previously never
+            // inspected at all, so a still frame check was the only place they
+            // could be caught.
+            const videoVerdict = await enforceMedia([raw], {
+                surface: "postVideo",
+                filterDoc,
+                message: "This video was blocked by the automated media filter.",
+            });
+            if (!videoVerdict.ok) {
+                return res.status(400).json({ error: videoVerdict.message, filtered: true, reason: videoVerdict.error });
+            }
         }
 
         if (!sanitizedText && finalImageUrls.length === 0 && !audioUrl && !finalVideoUrl && !linkPreview.videoId) {
@@ -834,6 +857,20 @@ router.put("/:id", verifyToken, async (req, res) => {
             return res.status(400).json({ error: "Text exceeds maximum length of 1000 characters" });
         }
 
+        // Editing bypassed the filter entirely, so a clean post could be edited
+        // into a filtered one and stay published. Checked on the edit path too.
+        if (await rejectIfBlocked(sanitizedText, "postEdit", res)) return;
+
+        if (imageUrl !== undefined && imageUrl) {
+            const editMedia = await enforceMedia([imageUrl], {
+                surface: "postImage",
+                message: "This image was blocked by the automated media filter.",
+            });
+            if (!editMedia.ok) {
+                return res.status(400).json({ error: editMedia.message, filtered: true, reason: editMedia.error });
+            }
+        }
+
         if (sanitizedText) {
             post.text = sanitizedText;
             post.hashtags = extractHashtags(sanitizedText);
@@ -885,8 +922,16 @@ router.patch("/:id", optionalAuth, async (req, res) => {
                 return res.status(400).json({ error: "Comment must have text, an image, or audio" });
             }
 
-            if (hasText && await checkNudity(text)) {
-                return res.status(400).json({ error: "Your comment contains content that is not allowed" });
+            if (await rejectIfBlocked(text, "comment", res)) return;
+
+            if (imageUrl) {
+                const commentMedia = await enforceMedia([imageUrl], {
+                    surface: "commentImage",
+                    message: "This image was blocked by the automated media filter.",
+                });
+                if (!commentMedia.ok) {
+                    return res.status(400).json({ error: commentMedia.message, filtered: true, reason: commentMedia.error });
+                }
             }
 
             const commenter = await User.findOne({ username }).select("username avatarColor avatarUrl isVerified roles").populate("roles", "name badge color").lean();
@@ -952,6 +997,10 @@ router.patch("/:id", optionalAuth, async (req, res) => {
             const comment = post.comments.find(c => c.commentId === commentId);
             if (!comment) return res.status(404).json({ error: "Comment not found" });
             if (comment.sender !== username) return res.status(403).json({ error: "Unauthorized" });
+
+            // Same bypass as post edits: a comment could be laundered by editing
+            // it after the create-time check had passed.
+            if (await rejectIfBlocked(text, "commentEdit", res)) return;
 
             comment.text = text.trim();
             comment.mentions = extractMentions(text, username);
@@ -1229,8 +1278,16 @@ router.post("/:id/comment", verifyToken, requireFeature("comments"), async (req,
             return res.status(400).json({ error: "Comment must have text, an image, or audio" });
         }
 
-        if (hasText && await checkNudity(text)) {
-            return res.status(400).json({ error: "Your comment contains content that is not allowed" });
+        if (await rejectIfBlocked(text, "comment", res)) return;
+
+        if (imageUrl) {
+            const legacyCommentMedia = await enforceMedia([imageUrl], {
+                surface: "commentImage",
+                message: "This image was blocked by the automated media filter.",
+            });
+            if (!legacyCommentMedia.ok) {
+                return res.status(400).json({ error: legacyCommentMedia.message, filtered: true, reason: legacyCommentMedia.error });
+            }
         }
 
         const user = await User.findById(req.userId).select("username avatarColor").lean();
@@ -1458,6 +1515,11 @@ router.post("/:id/repost", verifyToken, async (req, res) => {
         if (existingRepost) return res.status(400).json({ error: "Already reposted" });
 
         const repostComment = comment?.trim() || "";
+
+        // Repost comments were never checked, and the text is rendered as the
+        // repost's own caption in the feed.
+        if (await rejectIfBlocked(repostComment, "repost", res)) return;
+
         const repost = await Post.create({
             text: "",
             sender: username,

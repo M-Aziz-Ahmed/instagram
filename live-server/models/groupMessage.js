@@ -49,4 +49,29 @@ groupMessageSchema.index({ groupId: 1, timeStamp: -1 });
 groupMessageSchema.index({ groupId: 1, readBy: 1 });
 groupMessageSchema.index({ starredBy: 1, timeStamp: -1 });
 
+/**
+ * Model-level content-filter backstop. Group chat had no text moderation, so any
+ * member could post unfiltered content into a room. The check lives on the model
+ * so it cannot be bypassed by a route that forgets it; routes still check first
+ * to return a clean 400.
+ */
+groupMessageSchema.pre("save", async function enforceContentFilter(next) {
+    try {
+        if (this.skipContentFilter) return next();
+        if (this.deleted) return next();
+        const { checkText } = require("../lib/textFilter");
+        const result = await checkText(this.text, "group");
+        if (result.blocked) {
+            const err = new Error("Message contains content that is not allowed");
+            err.statusCode = 400;
+            err.filtered = true;
+            err.matchedTerms = result.matches;
+            return next(err);
+        }
+        return next();
+    } catch (err) {
+        return next(err);
+    }
+});
+
 module.exports = mongoose.models.GroupMessage || mongoose.model("GroupMessage", groupMessageSchema);

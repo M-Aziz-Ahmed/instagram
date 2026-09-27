@@ -53,6 +53,13 @@ const userSchema = new mongoose.Schema({
     suspended:       { type: Boolean, default: false },
     suspendedUntil:  { type: Date, default: null },
     suspendedReason: { type: String, default: "" },
+    // Shadowban: the account works normally for the owner, but its content is
+    // invisible to everyone else. It has to be a declared field — mongoose is
+    // `strict: true`, so an undeclared `isShadowbanned` was silently dropped on
+    // save while the admin route still returned `ok: true` from the just-assigned
+    // in-memory value, making the toggle look like it worked.
+    isShadowbanned:  { type: Boolean, default: false },
+    shadowbanReason: { type: String, default: "" },
     postingStreak:   { type: Number, default: 0 },
     lastPostDate:    { type: String, default: "" },
     longestStreak:   { type: Number, default: 0 },

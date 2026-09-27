@@ -1,5 +1,6 @@
 const express = require("express");
 const Bot = require("../models/bot");
+const { checkText } = require("../lib/textFilter");
 const Post = require("../models/post");
 const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
@@ -241,6 +242,19 @@ router.post("/:id/post-now", verifyToken, async (req, res) => {
         if (!article) return res.status(404).json({ error: `No news found for "${topic}". Try again later.` });
 
         const post = buildPost({ ...article, topic }, bot.style);
+
+        // Bots write straight to the collection, so they never pass through
+        // POST /api/posts and its content check — which meant the bot panel was a
+        // way to publish unfiltered content. Governed by `textScope.bots`, off by
+        // default because news headlines produce false positives.
+        const botText = await checkText(post.text, "bot");
+        if (botText.blocked) {
+            return res.status(400).json({
+                error: "The fetched article was blocked by the content filter",
+                filtered: true,
+                matchedTerms: botText.matches,
+            });
+        }
 
         let botUser = await User.findOne({ username: bot.username });
         if (!botUser) {

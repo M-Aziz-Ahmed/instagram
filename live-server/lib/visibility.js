@@ -140,4 +140,70 @@ function filterComments(posts, hidden) {
     return posts;
 }
 
-module.exports = { getHiddenUsers, getBlockedUsers, applySenderExclusion, filterComments };
+/**
+ * Usernames that are shadowbanned — their content is invisible to everyone
+ * except themselves.
+ *
+ * Cached briefly because this sits on the hot feed read path and a shadowban
+ * does not need to take effect in under a second. An admin can force it
+ * immediately via `invalidateShadowbanCache()` (the admin panel calls it when the
+ * flag is toggled).
+ *
+ * Without this the `isShadowbanned` field was stored but read by nothing, so
+ * toggling it in the admin panel changed the database and the user's behaviour
+ * not at all.
+ */
+let shadowbanCache = { at: 0, users: [] };
+const SHADOWBAN_CACHE_MS = 30000;
+
+function invalidateShadowbanCache() {
+    shadowbanCache = { at: 0, users: [] };
+}
+
+async function getShadowbannedUsers() {
+    if (Date.now() - shadowbanCache.at < SHADOWBAN_CACHE_MS && shadowbanCache.users.length) {
+        return shadowbanCache.users;
+    }
+    try {
+        const mongoose = require("mongoose");
+        const User = mongoose.models.User || mongoose.model("User", new mongoose.Schema({ username: String }));
+        const rows = await User.find({ isShadowbanned: true }).select("username").lean().limit(5000);
+        shadowbanCache = { at: Date.now(), users: rows.map((r) => String(r.username || "").toLowerCase()).filter(Boolean) };
+    } catch {
+        // Fail OPEN. If the shadowban list cannot be read, hiding everyone's
+        // content would be a far worse outage than one shadowbanned post being
+        // briefly visible.
+        shadowbanCache = { at: Date.now(), users: [] };
+    }
+    return shadowbanCache.users;
+}
+
+/**
+ * Apply both the viewer's own hidden list and the global shadowban list to a
+ * query. Replaces a bare `applySenderExclusion(query, hidden, viewer)` call on
+ * read paths, so shadowbanning does not have to be remembered per route.
+ */
+async function applyVisibility(query, hidden, selfUsername) {
+    const shadowbanned = await getShadowbannedUsers();
+    const combined = [...(hidden || [])];
+    for (const name of shadowbanned) {
+        // The viewer's own posts stay visible to the viewer, otherwise a
+        // shadowbanned account would see an empty profile and could not tell
+        // why.
+        if (selfUsername && name === String(selfUsername).toLowerCase()) continue;
+        combined.push(name);
+    }
+    applySenderExclusion(query, combined, selfUsername);
+    return combined;
+}
+
+module.exports = {
+    getHiddenUsers,
+    getBlockedUsers,
+    applySenderExclusion,
+    applyVisibility,
+    getShadowbannedUsers,
+    invalidateShadowbanCache,
+    filterComments,
+};
+

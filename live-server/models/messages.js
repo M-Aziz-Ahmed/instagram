@@ -50,4 +50,40 @@ messagesSchema.index({ recipient: 1, timeStamp: -1 });
 // Backs "my starred messages" without a collection scan.
 messagesSchema.index({ starredBy: 1, timeStamp: -1 });
 
+/**
+ * Defence in depth for the content filter.
+ *
+ * DMs had NO text moderation at all — not on the send route, not on the three
+ * forward paths, nothing. Rather than patch each of those call sites and hope
+ * the next one added remembers, the check lives on the model, so every write
+ * path is covered including ones that do not exist yet.
+ *
+ * Route handlers still check first, so the user gets a clean 400 with the
+ * matched term; this hook is the backstop that makes the filter unbypassable.
+ *
+ * The error carries `statusCode` so a route's generic `catch` can surface 400
+ * rather than 500. `skipContentFilter: true` is the documented escape hatch for
+ * trusted server-to-server writes.
+ */
+messagesSchema.pre("save", async function enforceContentFilter(next) {
+    try {
+        if (this.skipContentFilter) return next();
+        // A soft-deleted message keeps its original text for the tombstone, so
+        // re-checking it would block a delete.
+        if (this.deleted) return next();
+        const { checkText } = require("../lib/textFilter");
+        const result = await checkText(this.text, "dm");
+        if (result.blocked) {
+            const err = new Error("Message contains content that is not allowed");
+            err.statusCode = 400;
+            err.filtered = true;
+            err.matchedTerms = result.matches;
+            return next(err);
+        }
+        return next();
+    } catch (err) {
+        return next(err);
+    }
+});
+
 module.exports = mongoose.models.Message || mongoose.model("Message", messagesSchema);

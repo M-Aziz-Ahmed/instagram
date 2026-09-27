@@ -10,6 +10,8 @@ const { requireFeature } = require("../lib/featureFlags");
 const { logChat } = require("../logService");
 const { sendPushNotification } = require("../push");
 const { resolveLinkPreview } = require("../utils/linkPreview");
+const { rejectIfBlocked } = require("../lib/textFilter");
+const { enforceMedia } = require("../lib/mediaModeration");
 
 const router = express.Router();
 
@@ -295,6 +297,21 @@ router.post("/", verifyToken, requireFeature("dms"), async (req, res) => {
         const { recipientName, recipientDoc } = resolved;
 
         const resolvedPreview = await resolveLinkPreview(text, linkPreview);
+
+        // DMs were entirely unmoderated. The Message model also has a pre-save
+        // hook as a backstop, but checking here means the user gets a clean 400
+        // with the matched term instead of a generic 500 from the hook.
+        if (await rejectIfBlocked(text, "dm", res)) return;
+
+        if (imageUrl) {
+            const dmMedia = await enforceMedia([imageUrl], {
+                surface: "dm",
+                message: "This image was blocked by the automated media filter.",
+            });
+            if (!dmMedia.ok) {
+                return res.status(400).json({ error: dmMedia.message, filtered: true, reason: dmMedia.error });
+            }
+        }
 
         const message = await Message.create({
             text:      text?.trim() || "",

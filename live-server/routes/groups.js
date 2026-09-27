@@ -5,6 +5,8 @@ const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
 const { isProUserDoc } = require("../lib/economy");
 const { resolveLinkPreview } = require("../utils/linkPreview");
+const { rejectIfBlocked } = require("../lib/textFilter");
+const { enforceMedia } = require("../lib/mediaModeration");
 const { extractMentions } = require("../lib/mentions");
 
 const router = express.Router();
@@ -308,6 +310,20 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
         }
 
         const resolvedPreview = await resolveLinkPreview(text, linkPreview);
+
+        // Group chat had no text moderation. The GroupMessage model also carries
+        // a pre-save backstop; checking here gives a clean 400 instead of a 500.
+        if (await rejectIfBlocked(text, "group", res)) return;
+
+        if (imageUrl) {
+            const groupMedia = await enforceMedia([imageUrl], {
+                surface: "group",
+                message: "This image was blocked by the automated media filter.",
+            });
+            if (!groupMedia.ok) {
+                return res.status(400).json({ error: groupMedia.message, filtered: true, reason: groupMedia.error });
+            }
+        }
 
         const msg = await GroupMessage.create({
             groupId: id,
