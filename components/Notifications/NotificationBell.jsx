@@ -191,10 +191,22 @@ export default function NotificationBell({ onNavigate }) {
                                     setOpen(false);
                                     if (n.type === "message") {
                                         router.push(`/inbox?user=${encodeURIComponent(n.fromUser)}`);
+                                    } else if (n.type === "live") {
+                                        // Used to fall through every branch and do
+                                        // nothing at all, so tapping "X is live now"
+                                        // only closed the panel. There is no
+                                        // dedicated live route — the stream itself is
+                                        // launched from the host's story/profile — so
+                                        // that is where this leads.
+                                        router.push(`/profile/${encodeURIComponent(n.fromUser)}`);
                                     } else if (n.type === "follow") {
                                         router.push(`/profile/${encodeURIComponent(n.fromUser)}`);
                                     } else if (n.postId) {
                                         router.push(`/post/${n.postId}`);
+                                    } else if (n.fromUser) {
+                                        // Last resort so an unrecognised type still
+                                        // leads somewhere instead of nowhere.
+                                        router.push(`/profile/${encodeURIComponent(n.fromUser)}`);
                                     }
                                 }}
                                 className={`w-full flex items-start gap-3 px-4 py-3 border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left ${!n.read ? "bg-blue-50/40 dark:bg-blue-900/10" : ""}`}

@@ -181,26 +181,41 @@ function AdSenseSlot({ ad, onFallbackClick }) {
 //
 // How this is isolated:
 //
-// The creative is loaded through `srcdoc` in a `sandbox="allow-scripts"` iframe.
-// That sandbox deliberately withholds `allow-same-origin`, `allow-popups`,
-// `allow-top-navigation`, `allow-forms` and `allow-modals`, and an opaque
-// origin means it also has no access to this app's cookies, storage, DOM or the
-// Notification permission. The browser — not our code — is what refuses the
-// popup storm, the notification hijack and the `top.location` redirect that
-// these push/social-bar units otherwise rely on.
+// The creative is loaded through `srcdoc` in a sandboxed iframe. That sandbox
+// withholds `allow-same-origin`, `allow-top-navigation`, `allow-forms` and
+// `allow-modals`, and an opaque origin means it also has no access to this app's
+// cookies, storage, DOM or the Notification permission. The browser — not our
+// code — is what refuses the popup storm, the notification hijack and the
+// `top.location` redirect that these push/social-bar units otherwise rely on.
+//
+// `allow-popups allow-popups-to-escape-sandbox` is granted, and only that.
+// Without it the sandbox silently swallows every `window.open()`, which is how
+// Adsterra's highest-paying formats (popunder, social bar) monetise: the ad
+// renders, the impression is recorded, and the click earns nothing. The
+// `allow-popups-to-escape-sandbox` half is what lets the new tab run without
+// inheriting this sandbox — without it a popunder lands in a sandboxed page
+// that cannot load the advertiser's site.
+//
+// The one capability that could undo the isolation is deliberately NOT granted:
+// `allow-same-origin`. Handing a frame both `allow-same-origin` and
+// `allow-scripts` lets it reach out and remove its own sandbox attribute, at
+// which point the creative is same-origin with us and the Notification
+// hijack that motivated all of this is back. `allow-popups` does not weaken the
+// frame's own origin, it only governs what the frame may spawn, so the two
+// concerns stay separable.
 //
 // The creative is deliberately left INTERACTIVE. A standard Adsterra display
 // banner ships its own image and click-through inside the snippet, so covering
-// it with an overlay (as an earlier revision did) served no purpose and left
-// the impression rendering with nothing to click. Clicks are handled by the
-// creative inside its own frame; the sandbox still blocks any window it tries
-// to open.
+// it with an overlay (as an earlier revision did) served no purpose and left the
+// impression rendering with nothing to click. Clicks are handled by the
+// creative inside its own frame; the sandbox still blocks any navigation of
+// *this* page.
 //
 // Every slot renders the creative. The previous revision executed it only once
-// per session, which meant that with a single configured ad every slot after
-// the first fell back to an empty placeholder — the sandbox, not the
-// once-per-session flag, is what actually contains these units, so suppressing
-// repeats only cost impressions.
+// per session, which meant that with a single configured ad every slot after the
+// first fell back to an empty placeholder — the sandbox, not the once-per-session
+// flag, is what actually contains these units, so suppressing repeats only cost
+// impressions.
 
 function AdsterraAd({ ad }) {
     const { adsterraCode: code, adSize: size } = ad;
@@ -220,8 +235,16 @@ function AdsterraAd({ ad }) {
                 <iframe
                     title={ad.title ? `Sponsored: ${ad.title}` : "Sponsored"}
                     className="absolute inset-0 h-full w-full border-0"
-                    sandbox="allow-scripts"
-                    referrerPolicy="no-referrer"
+                    sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+                    // Was `no-referrer`, which sent the creative no Referer at all.
+                    // Ad networks gate fill on being able to see where the traffic
+                    // came from, so the combination of that and the opaque origin
+                    // left the slot rendering an empty 300x250 box: the ad was
+                    // fetched, counted as an impression, and never drawn.
+                    // `strict-origin-when-cross-origin` passes the origin and
+                    // nothing more, which is what a normal ad frame sends. The
+                    // full URL is still withheld, and the frame is still opaque.
+                    referrerPolicy="strict-origin-when-cross-origin"
                     // Deliberately NOT loading="lazy". A slot near the top of the
                     // feed is above the fold, and a lazy srcdoc iframe there can
                     // defer its load past the point the user is actually looking,

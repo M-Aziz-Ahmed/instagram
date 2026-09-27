@@ -3024,16 +3024,29 @@ io.on("connection", async (socket) => {
         recipients.forEach(r => {
             io.to(r).emit("call:incoming", { callId, caller, callType, groupId, recipients });
         });
-        // Push notification for recipients who aren't connected (app closed)
+        // Web Push for every recipient, connected or not.
+        //
+        // This used to `return` early when the recipient had a live socket, on
+        // the assumption that a connected client would notify itself. That is
+        // true for a socket that is *connected*, but a connected socket says
+        // nothing about whether the tab is in front of the user: a minimised tab
+        // or one behind another window still has a live socket, and the only
+        // thing it did was call `new Notification()`, which is unreliable and
+        // cannot carry accept/decline actions at all.
+        //
+        // The service worker is now the single authority for ringing an OS
+        // notification, and it tracks per-client visibility precisely, so it
+        // suppresses the notification for someone actively looking at the app
+        // and shows it for everyone else. Pushing unconditionally is what makes
+        // "minimised but running" behave the same as "closed".
         (recipients || []).forEach(r => {
-            const online = io.sockets.adapter.rooms.get(r)?.size > 0;
-            if (online) return;
             sendPushNotification({
                 recipientUsername: r,
                 type: "call_incoming",
                 fromUser: caller,
                 text: `${callType === "video" ? "Video" : "Audio"} call from ${caller}`,
-                url: "/inbox",
+                url: `/inbox?call=${encodeURIComponent(callId)}`,
+                callId,
             });
         });
         // Persist call session
@@ -3339,6 +3352,10 @@ app.use("/api/trending", apiLimiter, require("./routes/trending"));
 app.use("/api/notifications", apiLimiter, require("./routes/notifications"));
 app.use("/api/typing", apiLimiter, require("./routes/typing"));
 app.use("/api/push", apiLimiter, require("./routes/push"));
+// Lets the service worker decline a call from its notification action while the
+// app is closed, and lets a page opened from that notification rebuild the
+// ringing state the socket never replayed. See routes/calls.js.
+app.use("/api/calls", apiLimiter, require("./routes/calls"));
 app.use("/api/ads", apiLimiter, require("./routes/ads"));
 app.use("/api/analytics", apiLimiter, require("./routes/analytics"));
 app.use("/api/app", readLimiter, require("./routes/appConfig"));

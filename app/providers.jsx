@@ -9,6 +9,7 @@ import CallWrapper from "@/components/CallWrapper";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import OnlineStatusTracker from "@/components/OnlineStatusTracker";
 import PushNotificationManager from "@/components/PushNotificationManager";
+import ServiceWorkerBridge from "@/components/Notifications/ServiceWorkerBridge";
 import FcmPushBridge from "@/components/FcmPushBridge";
 import AutoUpdater from "@/components/Updates/AutoUpdater";
 import TauriDesktopDiagnostics from "@/components/Tauri/TauriDesktopDiagnostics";
@@ -30,39 +31,48 @@ export default function Providers({ children }) {
     useEffect(() => {
         if (!('serviceWorker' in navigator)) return;
 
-        function sendVisibility(visible) {
+        // Tell the worker which window is actually in front of the user, on
+        // every real transition and nothing else. It uses this to decide whether
+        // a push needs to become an OS notification at all.
+        //
+        // There is deliberately no heartbeat here. A `setInterval` ping is
+        // throttled to roughly once a minute in a background tab — which is
+        // exactly the tab that most needs to report "I'm hidden" — so a
+        // heartbeat-based signal goes stale precisely when it matters and the
+        // worker starts notifying people who are looking at the app. Real
+        // transitions always fire and cost nothing.
+        function announce(visible) {
             navigator.serviceWorker.controller?.postMessage({
                 type: 'app_visibility',
                 visible,
             });
         }
 
-        const onVisibilityChange = () => {
-            sendVisibility(document.visibilityState === 'visible');
-        };
-        const onFocus = () => sendVisibility(true);
-        const onBlur = () => sendVisibility(false);
+        const onVisibilityChange = () => announce(document.visibilityState === 'visible');
+        const onFocus = () => announce(true);
+        const onBlur = () => announce(false);
+        const onControllerChange = () => announce(document.visibilityState === 'visible');
 
         document.addEventListener('visibilitychange', onVisibilityChange);
         window.addEventListener('focus', onFocus);
         window.addEventListener('blur', onBlur);
+        navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
 
-        // Register SW then send initial visibility once it's controlling the page
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
+        // `updateViaCache: 'none'` matters here. The browser otherwise applies
+        // its own HTTP cache to the worker script, which means a fix to the
+        // notification logic can sit undeployed for up to 24h — the symptom
+        // being a push that arrives with no accept/decline buttons because the
+        // page is running a stale worker.
+        navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => {});
         navigator.serviceWorker.ready.then(() => {
-            sendVisibility(document.visibilityState === 'visible');
+            announce(document.visibilityState === 'visible');
         });
-
-        // Heartbeat every 5s so SW always knows client is alive
-        const heartbeat = setInterval(() => {
-            navigator.serviceWorker.controller?.postMessage({ type: 'heartbeat' });
-        }, 5000);
 
         return () => {
             document.removeEventListener('visibilitychange', onVisibilityChange);
             window.removeEventListener('focus', onFocus);
             window.removeEventListener('blur', onBlur);
-            clearInterval(heartbeat);
+            navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
         };
     }, []);
 
@@ -78,6 +88,7 @@ export default function Providers({ children }) {
                                 </CallWrapper>
                                 <OnlineStatusTracker />
                                 <PushNotificationManager />
+                                <ServiceWorkerBridge />
                                 <FcmPushBridge />
                                 <AutoUpdater />
                                 <TauriDesktopDiagnostics />

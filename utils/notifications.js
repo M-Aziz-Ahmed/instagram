@@ -43,6 +43,29 @@ export async function getPushSubscription() {
     return reg.pushManager.getSubscription();
 }
 
+/**
+ * True when the service worker is already the thing raising OS notifications
+ * for this user.
+ *
+ * Callers that also hold a live socket use this to avoid raising a second,
+ * worse notification for the same event. The page-side path can only ever
+ * produce a plain notification — `new Notification()` has no way to express
+ * accept/decline actions — so when a push subscription exists the worker is
+ * strictly better and the page should stay quiet.
+ *
+ * Deliberately checks for a real subscription rather than mere support: a
+ * browser can support PushManager and still have no subscription, and in that
+ * case the worker will never fire and the page-side notification is the only
+ * delivery that will happen.
+ */
+export async function hasActivePushSubscription() {
+    try {
+        return Boolean(await getPushSubscription());
+    } catch {
+        return false;
+    }
+}
+
 async function savePushSubscription(subscription) {
     try {
         await fetch("/api/push/subscribe", {

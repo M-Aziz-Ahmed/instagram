@@ -5,6 +5,7 @@ import { useUser } from "./UserContext";
 import { ICE_SERVERS } from "@/utils/iceServers";
 import { startIncomingRing, startOutgoingRing, stopRing, unlockCallAudio } from "@/utils/callSound";
 import { showBackgroundNotification } from "@/utils/systemNotification";
+import { hasActivePushSubscription } from "@/utils/notifications";
 
 const CallContext = createContext(null);
 
@@ -28,6 +29,10 @@ export function CallProvider({ children, socket }) {
     const pendingOfferRef = useRef(null); // { callId, from, sdp }
     // Buffered ICE candidates for a peer connection that doesn't exist yet
     const candidateBufferRef = useRef({}); // { from: [candidate] }
+    // callIds already rebuilt from the server, so a re-render or a second route
+    // into the same call cannot re-arm the ring tone over the top of the user
+    // having already declined it.
+    const hydratedCallRef = useRef(null);
 
     // Keep ref in sync
     useEffect(() => { callStateRef.current = callState; }, [callState]);
@@ -303,6 +308,92 @@ export function CallProvider({ children, socket }) {
         cleanup();
     }, [socket, cleanup]);
 
+    // Enter the ringing state for an incoming call, from either delivery path.
+    //
+    // The page-side OS notification is only raised when the service worker is
+    // not already handling it. When a push subscription exists the worker
+    // raises the notification itself — with accept/decline actions, which
+    // `new Notification()` cannot express at all — so doing it here too would
+    // put two notifications on screen for one call. The `call_<callId>` tag is
+    // shared deliberately: a tag makes the platform replace rather than stack,
+    // so even if both fire the user sees one.
+    const beginRinging = useCallback((call, { notify = true } = {}) => {
+        if (callStateRef.current) return; // Already in a call
+        setCallState({
+            callId: call.callId,
+            type: call.type || (call.groupId ? "group" : "1:1"),
+            callType: call.callType,
+            caller: call.caller,
+            recipients: call.recipients || [],
+            status: "ringing",
+        });
+        if (notify) {
+            hasActivePushSubscription().then((swHandlesIt) => {
+                if (swHandlesIt) return;
+                showBackgroundNotification(`Incoming ${call.callType === "video" ? "video" : "audio"} call`, {
+                    body: `${call.caller} is calling you`,
+                    url: `/inbox?call=${encodeURIComponent(call.callId)}`,
+                    tag: `call_${call.callId}`,
+                });
+            });
+        }
+        // Auto-reject after 30 seconds
+        if (ringTimeout.current) clearTimeout(ringTimeout.current);
+        ringTimeout.current = setTimeout(() => {
+            if (callStateRef.current?.status === "ringing") {
+                rejectCall();
+            }
+        }, 30000);
+    }, [rejectCall]);
+
+    // Rebuild ringing state for a call the user opened from its notification.
+    //
+    // `call:incoming` is a live socket event and socket.io does not replay it to
+    // a client that was disconnected when it was emitted. So for an offline
+    // callee the push was the only delivery, and clicking it landed on a page
+    // that had never heard of the call: no ringing UI, and both acceptCall and
+    // rejectCall return early because they require callStateRef to already hold
+    // the callId. The call was unanswerable. The push now carries ?call=<id>
+    // and the state is read back from the server, which is the one place that
+    // remembers it.
+    const hydrateCallFromUrl = useCallback(async () => {
+        if (!user?.username) return;
+        if (callStateRef.current) return; // already in a call
+
+        let callId = "";
+        try {
+            callId = new URLSearchParams(window.location.search).get("call") || "";
+        } catch {
+            return;
+        }
+        if (!callId) return;
+        if (hydratedCallRef.current === callId) return;
+        hydratedCallRef.current = callId;
+
+        try {
+            const res = await fetch(`/api/calls/${encodeURIComponent(callId)}`, { cache: "no-store" });
+            if (!res.ok) return;
+            const call = await res.json();
+            // `actionable` is false once the call was cancelled, ended or timed
+            // out while the notification sat in the tray. Re-ringing a dead call
+            // is worse than showing nothing.
+            if (!call?.actionable || call.isCaller) return;
+            beginRinging(call, { notify: false });
+        } catch {
+            // Leave the marker set: retrying a call we cannot read would spin.
+        }
+    }, [user?.username, beginRinging]);
+
+    // Runs on mount (covers the service worker opening a fresh window straight
+    // at /inbox?call=...) and again on every client-side route the service
+    // worker asks for, which is the path taken when a window was already open.
+    useEffect(() => {
+        hydrateCallFromUrl();
+        const onNavigate = () => { hydrateCallFromUrl(); };
+        window.addEventListener("sw:navigate", onNavigate);
+        return () => window.removeEventListener("sw:navigate", onNavigate);
+    }, [hydrateCallFromUrl]);
+
     const endCall = useCallback(() => {
         const cs = callStateRef.current;
         if (cs && socket) {
@@ -377,27 +468,13 @@ export function CallProvider({ children, socket }) {
         if (!socket) return;
 
         const handleIncoming = (data) => {
-            if (callStateRef.current) return; // Already in a call
-            setCallState({
+            beginRinging({
                 callId: data.callId,
                 type: data.groupId ? "group" : "1:1",
                 callType: data.callType,
                 caller: data.caller,
                 recipients: data.recipients || [],
-                status: "ringing",
             });
-            // OS notification when the app is in the background (no VAPID needed)
-            showBackgroundNotification(`Incoming ${data.callType === "video" ? "video" : "audio"} call`, {
-                body: `${data.caller} is calling you`,
-                url: "/inbox",
-                tag: `call_${data.callId}`,
-            });
-            // Auto-reject after 30 seconds
-            ringTimeout.current = setTimeout(() => {
-                if (callStateRef.current?.status === "ringing") {
-                    rejectCall();
-                }
-            }, 30000);
         };
 
         const handleSignal = async (data) => {
@@ -551,7 +628,7 @@ export function CallProvider({ children, socket }) {
             socket.off("call:mute", handleMute);
             socket.off("call:video-toggle", handleVideoToggle);
         };
-    }, [socket, user?.username, getLocalStream, createPeerConnection, cleanup, rejectCall]);
+    }, [socket, user?.username, getLocalStream, createPeerConnection, cleanup, rejectCall, beginRinging]);
 
     // Cleanup on unmount
     useEffect(() => {

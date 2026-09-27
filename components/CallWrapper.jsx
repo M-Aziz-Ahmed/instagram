@@ -6,6 +6,7 @@ import CallModal from "@/components/Inbox/CallModal";
 import { useUser } from "@/context/UserContext";
 import { getActiveChat } from "@/utils/activeChat";
 import { showBackgroundNotification, isTauri } from "@/utils/systemNotification";
+import { hasActivePushSubscription } from "@/utils/notifications";
 
 function CallSocketProvider({ children }) {
     const { user } = useUser();
@@ -35,8 +36,18 @@ function CallSocketProvider({ children }) {
                 sock.on("disconnect", () => {});
                 sock.on("connect_error", () => {});
 
-                // Real-time DM notifications for background/closed-look app
-                // (delivered over the socket — no Web Push / VAPID needed).
+                // Real-time DM notifications for a background/closed app.
+                //
+                // This socket event is the *only* delivery for a connected
+                // client, and it is what covers a minimised tab: the server
+                // skips nothing here, so both this and the web push arrive, and
+                // they share a `dm_<from>` tag so the platform replaces one with
+                // the other instead of stacking both.
+                //
+                // It is skipped entirely when a push subscription exists, since
+                // the service worker then raises the notification itself and can
+                // do it with the right tag and click target. See
+                // hasActivePushSubscription.
                 sock.on("message:new", (data) => {
                     if (!data?.from) return;
                     // On desktop we rely on native tray notifications regardless
@@ -44,10 +55,13 @@ function CallSocketProvider({ children }) {
                     // page is actually in the background.
                     if (!isTauri() && typeof document !== "undefined" && !document.hidden) return;
                     if (getActiveChat() === data.from) return;
-                    showBackgroundNotification(`${data.from} sent you a message`, {
-                        body: data.body || "",
-                        url: `/inbox?user=${encodeURIComponent(data.from)}`,
-                        tag: `dm_${data.from}`,
+                    hasActivePushSubscription().then((swHandlesIt) => {
+                        if (swHandlesIt) return;
+                        showBackgroundNotification(`${data.from} sent you a message`, {
+                            body: data.body || "",
+                            url: `/inbox?user=${encodeURIComponent(data.from)}`,
+                            tag: `dm_${data.from}`,
+                        });
                     });
                 });
             } catch {}

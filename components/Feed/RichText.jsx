@@ -93,7 +93,25 @@ function parseShortcodes(text) {
 }
 
 const EMOJI_REGEX_STR = Object.keys(EMOJI_SHORTCODES).map(k => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
-const FULL_REGEX = new RegExp(`(#[a-zA-Z0-9_]+|@[a-zA-Z0-9_]+|${EMOJI_REGEX_STR})`, "g");
+
+// URLs are matched ahead of hashtags so that the `#section` in
+// `https://example.com/page#section` stays inside the link instead of being
+// split out into a hashtag button pointing at a tag that does not exist.
+//
+// The character class stops at whitespace and the quote/angle characters that
+// delimit an attribute, so text pasted from a browser or a chat client cannot
+// swallow surrounding markup into the href.
+const URL_REGEX_STR = "https?:\\/\\/[^\\s<>\"'`]+\\u2026";
+
+// Only http(s). A bare "example.com" is far more likely to be prose than a
+// link, and auto-linking it would mangle ordinary sentences.
+const URL_ONLY = /^https?:\/\/\S+$/i;
+
+// A link at the end of a sentence almost always has the sentence's punctuation
+// stuck to it, and that punctuation is not part of the URL.
+const URL_TRAILING_PUNCT = /[.,;:!?)\]}]+$/;
+
+const FULL_REGEX = new RegExp(`(${URL_REGEX_STR}|#[a-zA-Z0-9_]+|@[a-zA-Z0-9_]+|${EMOJI_REGEX_STR})`, "g");
 
 function ToxicSegment({ text }) {
     const [hovered, setHovered] = useState(false);
@@ -174,6 +192,33 @@ export default function RichText({ text, onHashtag, className = "", toxicWords =
                 }
                 if (EMOJI_SHORTCODES[part]) {
                     return <span key={i} className="text-base leading-none">{EMOJI_SHORTCODES[part]}</span>;
+                }
+                if (URL_ONLY.test(part)) {
+                    // Links used to fall through to the bare <span> below, which
+                    // rendered them as inert text: not clickable, not styled as a
+                    // link, and impossible to open. A post whose whole content is
+                    // a video URL showed a dead string with no way to follow it.
+                    const href = part.replace(URL_TRAILING_PUNCT, "");
+                    const trailing = part.slice(href.length);
+                    if (!href) return <span key={i}>{part}</span>;
+                    return (
+                        <span key={i}>
+                            <a
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer nofollow"
+                                // The post card is itself clickable, so without
+                                // this, following a link would also fire the
+                                // card's navigation and land the user somewhere
+                                // they did not ask for.
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-blue-500 hover:text-blue-600 hover:underline break-all"
+                            >
+                                {href}
+                            </a>
+                            {trailing}
+                        </span>
+                    );
                 }
                 if (toxicWords && part.length > 0) {
                     return <ToxicSegment key={i} text={part} />;

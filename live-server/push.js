@@ -45,14 +45,27 @@ if (fcmConfig) {
  * @param {string} opts.fromUser
  * @param {string} [opts.text]
  * @param {string} [opts.url]
+ * @param {string} [opts.callId] - required for call_incoming so the notification
+ *   can offer accept/decline and so a page opened from it can rebuild state.
  */
-async function sendPushNotification({ recipientUsername, type, fromUser, text, url }) {
+async function sendPushNotification({ recipientUsername, type, fromUser, text, url, callId }) {
     if (!recipientUsername) return;
 
     const title = titleFor(type, fromUser);
     const body = text || "";
     const link = url || "/";
-    const tag = type === "message" ? `dm_${fromUser}` : type === "call_incoming" ? `call_${fromUser}` : undefined;
+    // One notification per conversation, not per message: a tag makes the
+    // platform replace the previous notification instead of stacking them.
+    //
+    // Calls are keyed on the callId, not the caller, so two calls from the same
+    // person cannot overwrite each other. The page-side path in
+    // CallContext.jsx uses this same key, which is what stops a minimised tab
+    // showing a duplicate of the notification the service worker just raised.
+    const tag = type === "message"
+        ? `dm_${fromUser}`
+        : type === "call_incoming"
+            ? `call_${callId || fromUser}`
+            : undefined;
 
     let anyChannel = false;
 
@@ -65,7 +78,7 @@ async function sendPushNotification({ recipientUsername, type, fromUser, text, u
             if (!subs.length) {
                 console.warn(`[PUSH] No web subscription for ${recipientUsername} (${type})`);
             }
-            const payload = JSON.stringify({ title, body, icon: "/icon-192.png", badge: "/icon-192.png", url: link, type, tag });
+            const payload = JSON.stringify({ title, body, icon: "/icon-192.png", badge: "/icon-192.png", url: link, type, tag, callId: callId || "" });
             for (const sub of subs) {
                 try {
                     await webPush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload);
@@ -85,7 +98,7 @@ async function sendPushNotification({ recipientUsername, type, fromUser, text, u
     // 2) Native FCM (Capacitor app) — works when the mobile app is closed/killed.
     if (messaging) {
         anyChannel = true;
-        await sendFcmPush({ recipientUsername, title, body, type, url: link });
+        await sendFcmPush({ recipientUsername, title, body, type, url: link, callId });
     }
 
     if (!anyChannel) {
@@ -93,7 +106,7 @@ async function sendPushNotification({ recipientUsername, type, fromUser, text, u
     }
 }
 
-async function sendFcmPush({ recipientUsername, title, body, type, url }) {
+async function sendFcmPush({ recipientUsername, title, body, type, url, callId }) {
     try {
         const tokens = await FcmToken.find({ username: recipientUsername }).select("token platform").lean();
         if (!tokens.length) return;
@@ -101,7 +114,9 @@ async function sendFcmPush({ recipientUsername, title, body, type, url }) {
         const result = await messaging.messaging().sendEachForMulticast({
             tokens: tokens.map(t => t.token),
             notification: { title, body },
-            data: { type, url, title, body },
+            // FCM data values must all be strings, and the native shell reads
+            // `callId` to raise its own accept/decline affordance.
+            data: { type, url, title, body, callId: callId || "" },
             android: { priority: "high" },
             apns: { payload: { aps: { sound: "default", contentAvailable: true } } },
         });

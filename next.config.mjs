@@ -32,6 +32,24 @@ export default (phase, { defaultConfig }) => {
         },
         allowedDevOrigins: ['39.62.217.128','0.0.0.0','dad-phrases-removable-car.trycloudflare.com'],
         productionBrowserSourceMaps: true,
+        async headers() {
+            return [
+                {
+                    // The service worker carries the push, notificationclick and
+                    // notificationaction handlers, so a cached copy of this file
+                    // is a cached copy of the notification behaviour. Left to the
+                    // default HTTP caching, a deploy of a fix to it can take up to
+                    // 24h to reach a browser, which is indistinguishable from the
+                    // fix not working. `no-store` plus the `updateViaCache: 'none'`
+                    // registration in app/providers.jsx close that gap.
+                    source: "/sw.js",
+                    headers: [
+                        { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+                        { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+                    ],
+                },
+            ];
+        },
         async rewrites() {
             return {
                 beforeFiles: [
