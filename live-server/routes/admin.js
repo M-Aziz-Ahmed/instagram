@@ -253,7 +253,7 @@ router.get("/users", requireAdmin, async (req, res) => {
         })));
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -303,7 +303,7 @@ router.patch("/users", requireAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -352,7 +352,7 @@ router.get("/roles", requireAdmin, async (req, res) => {
         return res.json(roles.map((r) => ({ id: r._id.toString(), name: r.name, badge: r.badge, color: r.color, permissions: r.permissions || [] })));
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -365,7 +365,7 @@ router.post("/roles", requireAdmin, async (req, res) => {
         return res.status(201).json({ id: role._id.toString(), name: role.name, badge: role.badge, color: role.color });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -378,7 +378,7 @@ router.delete("/roles", requireAdmin, async (req, res) => {
         return res.json({ ok: true });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -416,7 +416,7 @@ router.post("/roles/seed-normal", requireAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -427,7 +427,7 @@ router.get("/ads", requireAdmin, async (req, res) => {
         return res.json(ads);
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -475,7 +475,7 @@ router.patch("/ads", requireAdmin, async (req, res) => {
         return res.json(ad);
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -488,7 +488,7 @@ router.delete("/ads", requireAdmin, async (req, res) => {
         return res.json({ ok: true });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -520,7 +520,7 @@ router.patch("/ads/:id", requireAdmin, async (req, res) => {
         return res.json(ad);
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -532,7 +532,7 @@ router.delete("/ads/:id", requireAdmin, async (req, res) => {
         return res.json({ ok: true });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -550,7 +550,7 @@ router.post("/ads/:id/track", async (req, res) => {
         return res.json({ ok: true });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -831,7 +831,7 @@ router.get("/logs", requireAdmin, (req, res) => {
         return res.json(logs);
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -853,7 +853,7 @@ router.patch("/roles/:id/permissions", requireAdmin, async (req, res) => {
         return res.json({ id: role._id.toString(), name: role.name, badge: role.badge, color: role.color, permissions: role.permissions });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -874,7 +874,7 @@ router.get("/moderation", requireAdmin, async (req, res) => {
         })));
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -895,7 +895,7 @@ router.get("/moderation/flagged", requireAdmin, async (req, res) => {
         })));
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -929,7 +929,7 @@ router.post("/moderation/remove", requirePermission("moderate_posts"), async (re
         return res.json({ ok: true });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -963,7 +963,7 @@ router.post("/moderation/restore", requirePermission("moderate_posts"), async (r
         return res.json({ ok: true });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -974,7 +974,7 @@ router.get("/content-filter", requireAdmin, async (req, res) => {
         return res.json(publicFilterShape(filter));
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -1206,7 +1206,7 @@ router.patch("/content-filter", requireAdmin, async (req, res) => {
         return res.json(publicFilterShape(filter));
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -1254,7 +1254,7 @@ router.post("/content-filter/test", requireAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -1263,7 +1263,7 @@ router.post("/content-filter/test", requireAdmin, async (req, res) => {
 // /api/admin/* (see proxy.js PUBLIC_PATHS), so this is not truly anonymous.
 router.get("/content-filter/public", async (req, res) => {
     try {
-        const filter = await ContentFilter.findById("singleton").lean();
+        const filter = await ContentFilter.loadLean();
         if (!filter) {
             return res.json({
                 toxicWords: [],
@@ -1288,7 +1288,7 @@ router.get("/content-filter/public", async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -1339,7 +1339,7 @@ router.get("/content-filter/stats", requireAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -1398,7 +1398,7 @@ router.patch("/users/:id/suspend", requireAdmin, async (req, res) => {
         return res.json({ ok: true, suspended: user.suspended });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -1423,7 +1423,7 @@ router.get("/communities", requireAdmin, async (req, res) => {
         return res.json({ communities, total });
     } catch (error) {
         console.error("Admin communities error:", error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -1436,7 +1436,7 @@ router.delete("/communities/:id", requireAdmin, async (req, res) => {
         return res.json({ ok: true });
     } catch (error) {
         console.error("Admin community delete error:", error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -1469,7 +1469,7 @@ router.patch("/communities/:id", requireAdmin, async (req, res) => {
         return res.json(community);
     } catch (error) {
         console.error("Admin community update error:", error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 

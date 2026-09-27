@@ -135,24 +135,58 @@ const contentFilterSchema = new mongoose.Schema(
 );
 
 /**
- * Fixed `_id` so the document is a true singleton. The admin routes read it with
- * `findOne({})` and auto-create it on first GET, and two concurrent GETs could
- * otherwise both insert, leaving `findOne({})` to return an arbitrary one of
- * several documents with no error anywhere. With a fixed id the loser gets a
- * duplicate-key error, which the route handles by re-reading.
+ * The singleton is identified by a `key` STRING, not by a fixed `_id`.
+ *
+ * A previous version used `findById("singleton")`. That throws
+ * `CastError: Cast to ObjectId failed for value "singleton"` — mongoose casts
+ * `_id` to an ObjectId, so the string never became a query. Every endpoint that
+ * loaded the config returned HTTP 500 and the admin page showed "the server
+ * caught an exception and returned no detail". `node --check` passes on that
+ * code and requiring the module works fine; only executing the query fails, and
+ * only against a live database. `contentSafety.test.mjs` now asserts the query
+ * casts.
+ *
+ * A String field also avoids the migration trap a fixed `_id` would create: the
+ * original code auto-created this document with `findOne({})` and a random
+ * `_id`, so a real deployment already has a document that no `findById` could
+ * ever match. `load()` adopts that document rather than inserting a second one,
+ * which would make `findOne({})` return an arbitrary document and silently hide
+ * the admin's existing word lists.
  */
-const SINGLETON_ID = "singleton";
+const SINGLETON_KEY = "singleton";
 
+contentFilterSchema.index({ key: 1 }, { unique: true, sparse: true });
+
+/** Read the singleton as a plain object (no document hydration). */
+contentFilterSchema.statics.loadLean = async function loadLean() {
+    const doc = await this.findOne({ key: SINGLETON_KEY }).lean();
+    if (doc) return doc;
+    const legacy = await this.findOne({ key: { $exists: false } }).sort({ updatedAt: 1 }).lean();
+    if (legacy) return legacy;
+    return null;
+};
+
+/** Read (and if necessary create/adopt) the singleton as a document. */
 contentFilterSchema.statics.load = async function load() {
-    const existing = await this.findById(SINGLETON_ID);
+    const existing = await this.findOne({ key: SINGLETON_KEY });
     if (existing) return existing;
+
+    // Adopt a pre-migration document instead of creating a second one.
+    const legacy = await this.findOne({ key: { $exists: false } }).sort({ updatedAt: 1 });
+    if (legacy) {
+        legacy.key = SINGLETON_KEY;
+        await legacy.save();
+        return legacy;
+    }
+
     try {
-        return await this.create({ _id: SINGLETON_ID });
+        return await this.create({ key: SINGLETON_KEY });
     } catch {
-        // Lost the race; the winner's document is the real one.
-        return this.findById(SINGLETON_ID);
+        // Lost the race against a concurrent request; the winner's document is
+        // the real one.
+        return this.findOne({ key: SINGLETON_KEY });
     }
 };
 
 module.exports = mongoose.models.ContentFilter || mongoose.model("ContentFilter", contentFilterSchema);
-module.exports.SINGLETON_ID = SINGLETON_ID;
+module.exports.SINGLETON_KEY = SINGLETON_KEY;

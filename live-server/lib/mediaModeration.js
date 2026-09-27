@@ -351,8 +351,7 @@ function resolveSettings(mm) {
 
 async function loadSettings() {
     try {
-        const filter = await ContentFilter.findById("singleton").lean();
-        return filter || null;
+        return await ContentFilter.loadLean();
     } catch {
         return null;
     }

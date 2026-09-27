@@ -95,7 +95,7 @@ router.get("/provider-status", requireAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -120,7 +120,7 @@ router.post("/test", requireAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -156,7 +156,7 @@ router.post("/test-text", requireAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -173,7 +173,7 @@ router.get("/queue", requireAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -216,7 +216,7 @@ router.post("/queue/resolve", requirePermission("moderate_posts"), async (req, r
         return res.json({ ok: true, decision, url });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -247,7 +247,7 @@ router.get("/stats", requireAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -322,7 +322,7 @@ router.post("/scan", requirePermission("moderate_posts"), async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -339,7 +339,7 @@ router.get("/links", requireAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -370,7 +370,7 @@ router.post("/links/check", requireAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 
@@ -402,7 +402,7 @@ router.get("/orphans", requirePermission("moderate_posts"), async (req, res) => 
         });
     } catch (error) {
         console.error(error);
-        return res.status(500).json({ error: "Failed" });
+        return res.status(500).json({ error: "Failed", detail: error.message });
     }
 });
 

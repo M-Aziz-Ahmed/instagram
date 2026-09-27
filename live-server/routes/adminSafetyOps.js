@@ -491,7 +491,11 @@ router.get("/ttl-health", requireAdmin, async (req, res) => {
         });
 
         // Scheduled posts that will never publish because their time has passed.
-        const stale = await Post.countDocuments({ scheduledAt: { $exists: true, $lt: new Date() }, published: { $ne: true } });
+        // `published` is deliberately NOT in the predicate: it is not a field on
+        // the Post schema, so mongoose's strictQuery would silently strip it and
+        // leave a query that looks filtered but is not. Every post carrying a
+        // past `scheduledAt` is by definition still unpublished.
+        const stale = await Post.countDocuments({ scheduledAt: { $exists: true, $ne: null, $lt: new Date() } });
         rows.push({
             collection: "posts(scheduled)",
             documents: stale,

@@ -26,12 +26,13 @@ const CACHE_MS = 15000;
 async function getFilterDoc() {
     if (cached.doc && Date.now() - cached.at < CACHE_MS) return cached.doc;
     try {
-        const doc = await ContentFilter.findById("singleton").lean();
+        const doc = await ContentFilter.loadLean();
         cached = { at: Date.now(), doc: doc || null };
         return cached.doc;
     } catch {
         // Fail CLOSED on a read error. The old code returned "not blocked", which
         // meant a transient Mongo blip silently disabled moderation entirely.
+        cached = { at: Date.now(), doc: null };
         return null;
     }
 }

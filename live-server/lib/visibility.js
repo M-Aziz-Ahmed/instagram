@@ -166,7 +166,15 @@ async function getShadowbannedUsers() {
     }
     try {
         const mongoose = require("mongoose");
-        const User = mongoose.models.User || mongoose.model("User", new mongoose.Schema({ username: String }));
+        const User = mongoose.models.User;
+        // Never register a throwaway model here. `mongoose.model("User", ...)`
+        // would register an empty-schema User under the same name, and any later
+        // `require("../models/user")` would then get that stub instead of the real
+        // schema — a nasty, order-dependent corruption. Fail open instead.
+        if (!User) {
+            shadowbanCache = { at: Date.now(), users: [] };
+            return shadowbanCache.users;
+        }
         const rows = await User.find({ isShadowbanned: true }).select("username").lean().limit(5000);
         shadowbanCache = { at: Date.now(), users: rows.map((r) => String(r.username || "").toLowerCase()).filter(Boolean) };
     } catch {

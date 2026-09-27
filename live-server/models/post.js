@@ -96,6 +96,10 @@ const postSchema = new mongoose.Schema({
     removedBy:     { type: String, default: null },
     removedReason: { type: String, default: "" },
     removedAt:     { type: Date, default: null },
+    // Set by the GDPR anonymise endpoint when the original author was erased.
+    // It has to be declared: the schema is strict, so the assignment was being
+    // dropped on save and the flag read as "marked" while nothing was stored.
+    isAnonymised:  { type: Boolean, default: false },
     expiresAt:     { type: Date, default: null },
     visibility:    { type: String, enum: ["public", "closeFriends"], default: "public" },
     theme: {

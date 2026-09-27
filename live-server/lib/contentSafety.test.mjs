@@ -302,6 +302,78 @@ await test("clearing the verdict cache does not throw", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Singleton lookup — the bug that made the whole admin page 500.
+//
+// `ContentFilter.findById("singleton")` throws
+// `CastError: Cast to ObjectId failed for value "singleton"`, because mongoose
+// casts `_id` to an ObjectId. `node --check` passes, `require()` succeeds, and
+// the only failure happens when the query is EXECUTED against a database — so
+// none of the normal checks caught it, and every content-filter endpoint
+// returned HTTP 500 with no detail in the body.
+//
+// `Query.prototype.cast()` runs the same schema casting the driver would, and
+// needs no connection, so this class of bug is caught here.
+// ─────────────────────────────────────────────────────────────────────────────
+await test("singleton lookups cast cleanly against the real schema", () => {
+    const ContentFilterModel = require("../models/contentFilter.js");
+
+    const probe = (build) => {
+        const q = build();
+        q.cast(ContentFilterModel);
+    };
+
+    // The queries `load()` and `loadLean()` actually issue.
+    probe(() => ContentFilterModel.findOne({ key: "singleton" }));
+    probe(() => ContentFilterModel.findOne({ key: { $exists: false } }).sort({ updatedAt: 1 }));
+
+    assert.equal(typeof ContentFilterModel.load, "function", "load() static missing");
+    assert.equal(typeof ContentFilterModel.loadLean, "function", "loadLean() static missing");
+    assert.equal(ContentFilterModel.SINGLETON_KEY, "singleton");
+});
+
+await test("findById('singleton') remains a CastError (documents the regression)", () => {
+    const ContentFilterModel = require("../models/contentFilter.js");
+    let threw = null;
+    try {
+        ContentFilterModel.findById("singleton").cast(ContentFilterModel);
+    } catch (e) {
+        threw = e;
+    }
+    assert.ok(threw, "expected a cast failure for findById('singleton')");
+    assert.match(threw.message, /Cast to ObjectId failed/);
+});
+
+await test("no source file still calls findById('singleton')", () => {
+    const { readFileSync } = require("node:fs");
+    const { join, dirname } = require("node:path");
+    const { fileURLToPath } = require("node:url");
+    const files = [
+        "../routes/admin.js",
+        "../routes/adminSafetyOps.js",
+        "../routes/adminContentSafety.js",
+        "../lib/textFilter.js",
+        "../lib/mediaModeration.js",
+    ];
+    for (const rel of files) {
+        const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), rel), "utf8");
+        assert.ok(
+            !/findById\(\s*["']singleton["']\s*\)/.test(src),
+            `${rel} still calls findById("singleton"), which throws a CastError at runtime`
+        );
+    }
+});
+
+await test("textFilter and mediaModeration survive a filter-read failure", async () => {
+    // Both must degrade to a safe default rather than throwing, because a
+    // transient Mongo error on the config read used to surface as a 500 on the
+    // admin page instead of an empty-but-working filter.
+    const textFilter = require("./textFilter.js");
+    const { screenMediaUrl } = require("./mediaModeration.js");
+    assert.equal(typeof textFilter.checkText, "function");
+    assert.equal(typeof screenMediaUrl, "function");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 for (const f of failures) console.log("FAIL  " + f);
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) {
