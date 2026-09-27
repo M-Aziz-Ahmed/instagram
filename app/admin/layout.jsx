@@ -12,6 +12,9 @@ export const dynamic = "force-dynamic";
 const NAV = [
     { href: "/admin", label: "Dashboard", icon: "📊" },
     { href: "/admin/analytics", label: "Analytics", icon: "📈" },
+    { href: "/admin/insights", label: "Insights", icon: "🔍" },
+    { href: "/admin/network", label: "Network", icon: "🕸" },
+    { href: "/admin/games", label: "Games", icon: "♟" },
     { href: "/admin/manage", label: "Manage", icon: "🛠" },
     { href: "/admin/settings", label: "Settings", icon: "⚙️" },
 ];

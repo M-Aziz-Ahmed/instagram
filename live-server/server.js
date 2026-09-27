@@ -3835,10 +3835,13 @@ app.use("/api/track", readLimiter, require("./routes/events"));
 // `username` binding, so it would have thrown if it ever had been wired up.
 // Nothing in the client called it; the real feed is served by /api/posts.
 app.use("/api/users", apiLimiter, require("./routes/users"));
-// Mounted BEFORE the general /api/admin router so the more specific prefix wins
+// Mounted BEFORE the general /api/admin router so the more specific prefixes win
 // regardless of what the catch-all router does with unmatched paths.
 app.use("/api/admin/content-safety", apiLimiter, require("./routes/adminContentSafety"));
 app.use("/api/admin/safety-ops", apiLimiter, require("./routes/adminSafetyOps"));
+app.use("/api/admin/insights", apiLimiter, require("./routes/adminInsights"));
+app.use("/api/admin/network", apiLimiter, require("./routes/adminNetwork"));
+app.use("/api/admin/games", apiLimiter, require("./routes/adminGames"));
 app.use("/api/admin", apiLimiter, require("./routes/admin"));
 app.use("/api/admin", apiLimiter, require("./routes/adminPower"));
 app.use("/api/admin/system-logs", apiLimiter, require("./routes/systemLogs"));
