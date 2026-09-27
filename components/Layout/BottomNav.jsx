@@ -35,7 +35,9 @@ const TABS = [
         href: "/watch",
         routes: [
             "/watch", "/entertainment", "/movies", "/anime", "/manga", "/kdramas", "/seasons", "/cdramas", "/cartoons", "/channels", "/live-tv",
-            "/games", "/chess", "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman",
+            // /chess and /games moved to their own tab below; leaving them here
+            // meant the Watch tab highlighted on a chess page it cannot open.
+            "/connect4", "/tictactoe", "/checkers", "/reversi", "/battleship", "/hangman",
             "/reactionduel", "/game2048", "/minesweeper", "/sudoku", "/leaderboard",
         ],
         icon: (active) => (
@@ -45,7 +47,22 @@ const TABS = [
         ),
     },
     {
-        key: "me",
+        key: "chess",
+            label: "Chess",
+            href: "/chess",
+            // Chess used to be listed in the Watch tab's `routes`, which meant the
+            // Watch tab lit up on /chess but its href is /watch — so tapping it
+            // could never open chess. It is a top-level app now.
+            routes: ["/chess", "/games"],
+            icon: (active) => (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={active ? 2.2 : 1.8} stroke="currentColor" className="w-6 h-6">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5c-1.5-1.2-3-1.5-3-3a1.28 1.28 0 0 1 2.25-.84L12 5.25l.75-1.59A1.28 1.28 0 0 1 15 4.5c0 1.5-1.5 1.8-3 3Zm0 0V18m-2.25-6h4.5M9.75 18h4.5" />
+                </svg>
+            ),
+        },
+        {
+            key: "me",
         label: "Me",
         href: "/me",
         routes: ["/me", "/profile", "/me/saved", "/bookmarks", "/library", "/referrals", "/download", "/admin", "/analytics", "/invite"],

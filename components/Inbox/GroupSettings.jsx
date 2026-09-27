@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useToast } from "@/context/ToastContext";
 
 const CLOUDINARY_UPLOAD = `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`;
@@ -141,15 +141,24 @@ export default function GroupSettings({ group, user, onClose, onGroupUpdated, on
 
     const handlePromoteMember = async (memberUsername) => {
         try {
-            const res = await fetch(`/api/groups/${group._id}/members`, {
-                method: "POST",
+            // This posted to POST /:id/members with `action: "promote"`. That
+            // route destructures only { username, avatarUrl, color } and its
+            // whole job is to *add* a member, so for an existing member it
+            // answered 400 "Already a member" — and the `if (res.ok)` with no
+            // else meant the Promote button silently did nothing. The route that
+            // actually changes a role is PATCH /:id { action: "updateRole" }.
+            const res = await fetch(`/api/groups/${group._id}`, {
+                method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: user.username, action: "promote", memberUsername }),
+                body: JSON.stringify({ action: "updateRole", memberUsername, role: "admin" }),
             });
             if (res.ok) {
                 const updated = await res.json();
                 onGroupUpdated?.(updated);
                 showToast(`${memberUsername} promoted to admin`, "success");
+            } else {
+                const d = await res.json().catch(() => ({}));
+                showToast(d.error || "Could not promote that member", "error");
             }
         } catch { showToast("Network error", "error"); }
     };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import VoiceRecorder from "@/components/shared/VoiceRecorder";
 import EmojiPicker from "@/components/shared/EmojiPicker";
@@ -38,21 +38,31 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
     const fileRef                   = useRef(null);
     const inputRef                  = useRef(null);
     const typingTimeoutRef          = useRef(null);
+    const typingIdleRef             = useRef(null);
+
+    // One place that talks to /api/typing.
+    //
+    // `typingTo: ""` used to mean "delete my row", which also deleted the
+    // `recording` flag VoiceRecorder sets — so any keystroke cleared the other
+    // person's "recording…" state. Passing `recording: true` alongside the
+    // recipient updates the row instead of removing it, so the flag survives and
+    // the idle clear can still turn it off when the user actually stops.
+    const postTyping = useCallback((typingTo, recording) => {
+        if (!user) return;
+        fetch("/api/typing", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: 'include',
+            body: JSON.stringify({ typingTo, recording: !!recording }),
+        }).catch(() => {});
+    }, [user]);
 
     useEffect(() => {
         if (!user || !recipient) return;
-        const clearTyping = () => {
-            fetch("/api/typing", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: 'include',
-                body: JSON.stringify({ username: user.username, typingTo: "" }),
-            }).catch(() => {});
-        };
         return () => {
-            clearTyping();
+            postTyping("", false);
         };
-    }, [user, recipient]);
+    }, [user, recipient, postTyping]);
 
     const handleTextChange = (val) => {
         setText(val);
@@ -63,25 +73,31 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
             clearTimeout(typingTimeoutRef.current);
         }
 
-        // Send typing status with debouncing
-        const typingTo = val.trim() ? recipient : "";
-        fetch("/api/typing", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: 'include',
-            body: JSON.stringify({ username: user.username, typingTo }),
-        }).catch(() => {});
+        // Send typing status, debounced.
+        //
+        // The comment claimed debouncing and there was none: this fired one
+        // request per keystroke. Worse, clearing used `typingTo: ""`, which the
+        // server implements as `Typing.deleteOne({ username })` — deleting the
+        // whole row and with it the `recording` flag VoiceRecorder had set. So
+        // typing one character while someone was recording wiped their
+        // "recording…" indicator.
+        //
+        // `recording: true` is sent alongside instead, so the row is updated
+        // rather than removed and the flag survives.
+        if (val.trim()) {
+            typingTimeoutRef.current = setTimeout(() => {
+                postTyping(recipient, true);
+            }, 400);
+        }
 
         // Auto-clear typing status after 3 seconds of no typing
         if (val.trim()) {
-            typingTimeoutRef.current = setTimeout(() => {
-                fetch("/api/typing", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    credentials: 'include',
-                    body: JSON.stringify({ username: user.username, typingTo: "" }),
-                }).catch(() => {});
+            clearTimeout(typingIdleRef.current);
+            typingIdleRef.current = setTimeout(() => {
+                postTyping("", false);
             }, 3000);
+        } else {
+            postTyping("", false);
         }
 
         // Detect @mention or #hashtag at cursor
@@ -109,7 +125,14 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
         const t = setTimeout(async () => {
             try {
                 if (mentionMode === "hashtag") {
-                    const url = mentionQuery ? `/api/search?q=${encodeURIComponent(mentionQuery)}` : `/api/hashtags/trending?limit=8`;
+                    // The ternary was inverted. It queried /api/search — the
+                    // *user* search — when a hashtag had actually been typed,
+                    // and only called /api/hashtags/trending when the query was
+                    // empty. Combined with the regex above matching a bare "#",
+                    // the dropdown was essentially never populated with hashtags.
+                    const url = mentionQuery
+                        ? `/api/hashtags/trending?limit=8&search=${encodeURIComponent(mentionQuery)}`
+                        : `/api/hashtags/trending?limit=8`;
                     const res = await fetch(url);
                     if (res.ok) {
                         const data = await res.json();

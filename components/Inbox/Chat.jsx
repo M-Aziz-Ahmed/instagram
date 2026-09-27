@@ -135,19 +135,60 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         return elapsed < RECALL_WINDOW_MS;
     }, [username]);
 
+    const handleStar = useCallback(async (msg) => {
+        // Optimistic: the row re-renders from the local copy and the server is the
+        // authority. Rolls back on failure so the star cannot get stuck on.
+        const wasStarred = !!msg.starredBy?.includes(username);
+        setMessages(prev => prev.map(m => (
+            m._id === msg._id
+                ? {
+                    ...m,
+                    starredBy: wasStarred
+                        ? m.starredBy.filter(u => u !== username)
+                        : [...(m.starredBy || []), username],
+                }
+                : m
+        )));
+        try {
+            const res = await fetch("/api/messages", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ action: "star", messageId: msg._id }),
+            });
+            if (!res.ok) throw new Error("star failed");
+        } catch {
+            setMessages(prev => prev.map(m => (
+                m._id === msg._id
+                    ? {
+                        ...m,
+                        starredBy: wasStarred
+                            ? [...new Set([...(m.starredBy || []), username])]
+                            : m.starredBy.filter(u => u !== username),
+                    }
+                    : m
+            )));
+            showToast("Could not update star", "error");
+        }
+    }, [username, showToast]);
+
     const handleRecall = useCallback(async (msg) => {
         if (!confirm("Recall this message?")) return;
         try {
-            const res = await fetch("/api/messages", {
+            // This called `DELETE /api/messages` with the id in the body, but no
+            // such route exists — only `DELETE /api/messages/:id`. So recall
+            // always 404'd, `res.json()` then threw on the HTML error body, and
+            // the user always saw "Failed to recall message". The button, the
+            // 60s window and canRecall were all dead UI.
+            const res = await fetch(`/api/messages/${encodeURIComponent(msg._id)}`, {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ messageId: msg._id, username }),
             });
             if (res.ok) {
                 setMessages((prev) => prev.filter((m) => m._id !== msg._id));
                 showToast("Message recalled", "success");
             } else {
-                const data = await res.json();
+                const data = await res.json().catch(() => ({}));
                 showToast(data.error || "Failed to recall", "error");
             }
         } catch {
@@ -809,6 +850,30 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                             )}
                                         </button>
                                     )}
+                                    {/* Star. Per-user, so the same message can be
+                                        starred by one reader and not another. */}
+                                    <button
+                                        onClick={() => handleStar(msg)}
+                                        disabled={msg._sending || !msg._id}
+                                        className={`p-1 rounded-full transition-colors disabled:opacity-40 ${
+                                            msg.starredBy?.includes(username)
+                                                ? "text-yellow-500"
+                                                : "text-gray-400 dark:text-gray-500 hover:text-yellow-500 opacity-60 hover:opacity-100"
+                                        }`}
+                                        aria-label={msg.starredBy?.includes(username) ? "Unstar message" : "Star message"}
+                                        title={msg.starredBy?.includes(username) ? "Unstar" : "Star"}
+                                    >
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 24 24"
+                                            fill={msg.starredBy?.includes(username) ? "currentColor" : "none"}
+                                            strokeWidth={1.8}
+                                            stroke="currentColor"
+                                            className="w-3.5 h-3.5"
+                                        >
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.5a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.563.563 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.563.563 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+                                        </svg>
+                                    </button>
                                     {isMine && (
                                         <>
                                             <span className="text-[10px] text-gray-400 dark:text-gray-500">

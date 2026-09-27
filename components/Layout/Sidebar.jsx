@@ -160,6 +160,15 @@ function EducationIcon() {
     );
 }
 
+function ChessIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5c-1.5-1.2-3-1.5-3-3a1.28 1.28 0 0 1 2.25-.84L12 5.25l.75-1.59A1.28 1.28 0 0 1 15 4.5c0 1.5-1.5 1.8-3 3Zm0 0V18m-2.25-6h4.5M9.75 18h4.5" />
+        </svg>
+    );
+}
+
 function TrendingIcon() {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
@@ -389,6 +398,17 @@ export default function Sidebar({ open, onClose, unreadCount = 0 }) {
                                 icon={<EducationIcon />}
                                 label="Education"
                                 active={isActive("/education")}
+                                onClick={handleNavClick}
+                            />
+                            {/* Chess had no entry in any nav surface. It was
+                                reachable only as Explore -> Games -> Chess, and
+                                /games itself had no link either. It is its own
+                                top-level app, not part of the media hub. */}
+                            <NavItem
+                                href="/chess"
+                                icon={<ChessIcon />}
+                                label="Chess"
+                                active={isActive("/chess") || isActive("/games")}
                                 onClick={handleNavClick}
                             />
                         </div>

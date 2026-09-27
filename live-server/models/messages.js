@@ -33,6 +33,10 @@ const messagesSchema = new mongoose.Schema({
         default: null,
     },
     editedAt: { type: Date, default: null },
+    // Messages the reader has starred, for jumping back to them. A plain
+    // username array so "is this starred" is a single `includes`, and so two
+    // people starring the same message never collide.
+    starredBy: { type: [String], default: [] },
     deleted:  { type: Boolean, default: false },
     timeStamp: { type: Date, default: Date.now },
     isRead:    { type: Boolean, default: false },
@@ -43,5 +47,7 @@ messagesSchema.index({ sender: 1, recipient: 1, timeStamp: -1 });
 messagesSchema.index({ recipient: 1, isRead: 1 });
 messagesSchema.index({ sender: 1, timeStamp: -1 });
 messagesSchema.index({ recipient: 1, timeStamp: -1 });
+// Backs "my starred messages" without a collection scan.
+messagesSchema.index({ starredBy: 1, timeStamp: -1 });
 
 module.exports = mongoose.models.Message || mongoose.model("Message", messagesSchema);

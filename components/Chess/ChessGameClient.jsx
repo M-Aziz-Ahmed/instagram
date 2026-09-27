@@ -215,10 +215,17 @@ export default function ChessGameClient({ gameId }) {
 
         s.on("chess:move", (data) => {
             if (data.move) {
-                const isCapture = data.move.flags?.includes("c") || data.move.captured;
+                const isCapture = data.move.flags?.includes("c") || data.move.captured
+                    // chess.js flags an en-passant capture as "e", not "c", so
+                    // without this it played the plain move sound.
+                    || data.move.flags?.includes("e");
                 const isCastle = data.move.san?.includes("O-O") || data.move.san?.includes("0-0");
                 const isPromotionMove = data.move.promotion;
-                const isCheck = data.status === "active" && (data.fen?.includes(" K ") || data.fen?.includes(" k "));
+                // A FEN's piece-placement field has no spaces around piece
+                // letters ("4k3/8/..."), so the old `fen.includes(" K ")` test
+                // could never match and the check sound was dead code. The `+`
+                // suffix in SAN is the actual check marker.
+                const isCheck = data.status === "active" && /\+/.test(data.move.san || "");
 
                 if (data.status === "checkmate") {
                     playCheckmateSound();
@@ -284,6 +291,12 @@ export default function ChessGameClient({ gameId }) {
         s.on("chess:error", ({ message }) => {
             setError(message);
             setTimeout(() => setError(null), 3000);
+            // Unstick the engine indicator. `aiThinking` was only ever cleared by
+            // a chess:move, so a single rejected move (an illegal one, a race
+            // with the clock, a server error) left it true for the rest of the
+            // session — and Take Back plus the separator are both gated on it, so
+            // one mistake permanently removed them from the board.
+            setAiThinking(false);
         });
 
         return () => {
@@ -527,13 +540,24 @@ export default function ChessGameClient({ gameId }) {
 
     if (!game) return null;
 
-    const opponent = myColor === "w" ? game.black : game.white;
-    const me = myColor === "w" ? game.white : game.black;
+    const isAIMode = game.mode === "ai";
+    // A game that has not been joined yet has an empty black.username. In AI mode
+    // that is permanent, so falling back to "Waiting..." labelled the engine
+    // "Waiting..." for the whole game.
+    const nameOf = (side) => side?.username || (isAIMode && side === game.black ? "Computer" : "") || "Waiting...";
+
+    // A spectator has no colour, so the previous `myColor === "w" ? …` chain gave
+    // them `myColor = null` and therefore `bottomColor = null` — which read
+    // `timers[null]` (undefined) and rendered Black's clock as 0:00, and assigned
+    // them game.black so the review panel reported them as the losing side.
+    // Spectators view from White's seat by default.
+    const seatColor = myColor || "w";
+    const opponent = seatColor === "w" ? game.black : game.white;
+    const me = seatColor === "w" ? game.white : game.black;
     const topPlayer = isFlipped ? me : opponent;
     const bottomPlayer = isFlipped ? opponent : me;
-    const topColor = isFlipped ? myColor : (myColor === "w" ? "b" : "w");
-    const bottomColor = isFlipped ? (myColor === "w" ? "b" : "w") : myColor;
-    const isAIMode = game.mode === "ai";
+    const topColor = isFlipped ? seatColor : (seatColor === "w" ? "b" : "w");
+    const bottomColor = isFlipped ? (seatColor === "w" ? "b" : "w") : seatColor;
     const hasMoveReview = game.moves && game.moves.length > 0;
 
     return (
@@ -586,7 +610,7 @@ export default function ChessGameClient({ gameId }) {
                         time={timers[topColor]}
                         isActive={game.turn === topColor}
                         isLow={timers[topColor] < 30}
-                        label={topPlayer?.username || "Waiting..."}
+                        label={nameOf(topPlayer)}
                         player={topPlayer}
                     />
 
@@ -613,7 +637,7 @@ export default function ChessGameClient({ gameId }) {
                         time={timers[bottomColor]}
                         isActive={game.turn === bottomColor}
                         isLow={timers[bottomColor] < 30}
-                        label={bottomPlayer?.username || "Waiting..."}
+                        label={nameOf(bottomPlayer)}
                         player={bottomPlayer}
                     />
 

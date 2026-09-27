@@ -1879,6 +1879,31 @@ io.on("connection", async (socket) => {
     });
 
     // ── Chess Socket Events ───────────────────────────────────────
+    //
+    // Every mutating handler below re-derives the caller's role from the
+    // database for the game named in the payload, rather than trusting
+    // `socket.data.chessRole`.
+    //
+    // That field is set by chess:join-game and describes the *last game this
+    // socket joined* — it is per-socket, not per-game. Trusting it let a socket
+    // that had joined game A as a player resign, force a draw, or move in game
+    // B, which it had never joined, simply by putting B's id in the payload.
+    // `assertChessPlayer` is the single place that closes that.
+    const chessRoleFor = async (game, username) => {
+        if (!game) return null;
+        if (game.white?.username === username || game.black?.username === username) return "player";
+        return "spectator";
+    };
+
+    const assertChessPlayer = async (socket, gameId, username) => {
+        const game = await ChessGame.findById(gameId);
+        if (!game) return { error: "Game not found" };
+        if ((await chessRoleFor(game, username)) !== "player") {
+            return { error: "You are not a player in this game" };
+        }
+        return { game };
+    };
+
     socket.on("chess:join-game", async ({ gameId }) => {
         socket.join(`chess:${gameId}`);
         socket.data.chessGameId = gameId;
@@ -1897,7 +1922,14 @@ io.on("connection", async (socket) => {
                     }
                 }
             }
-        } catch (e) {}
+        } catch (e) {
+            // Previously `catch (e) {}`: a transient Mongo failure, or an invalid
+            // ObjectId CastError, left the role pinned at the "spectator" default
+            // for the rest of the socket's life. The player then hit "Spectators
+            // cannot make moves" on a game they were actually playing, with no
+            // way to recover except reloading. Log it so this is visible.
+            console.error(`[CHESS] join-game lookup failed for ${gameId}:`, e.message);
+        }
 
         console.log(`[CHESS] ${username} joined game room ${gameId} as ${socket.data.chessRole}`);
         logGame("chess_joined", { username, gameId, message: `${username} joined chess game` });
@@ -1906,16 +1938,21 @@ io.on("connection", async (socket) => {
     socket.on("chess:leave-game", ({ gameId }) => {
         socket.leave(`chess:${gameId}`);
         socket.data.chessGameId = null;
+        socket.data.chessRole = null;
     });
 
     socket.on("chess:make-move", async ({ gameId, from, to, promotion }) => {
         try {
+            const auth = await assertChessPlayer(socket, gameId, username);
+            if (auth.error) {
+                return socket.emit("chess:error", { message: auth.error });
+            }
             if (socket.data.chessRole === "spectator") {
                 return socket.emit("chess:error", { message: "Spectators cannot make moves" });
             }
 
-            const game = await ChessGame.findById(gameId);
-            if (!game || game.status !== "active") {
+            const game = auth.game;
+            if (game.status !== "active") {
                 return socket.emit("chess:error", { message: "Game not active" });
             }
 
@@ -2223,10 +2260,84 @@ io.on("connection", async (socket) => {
                 } else {
                     timers.black = Math.max(0, timers.black - elapsed);
                 }
+
+                // The flag actually falls here.
+                //
+                // This handler used to only echo the recomputed timers back. The
+                // only place `status: "timeout"` was ever set was inside the
+                // *move* handler, after the move had already been applied — so a
+                // player could sit at 0:00 indefinitely and keep playing, and
+                // the client never received a game-over event at all. The client
+                // emits time-sync precisely when a local clock hits zero, which
+                // makes this the one place the server is reliably told the time
+                // is up.
+                const loserIsWhite = timers.white <= 0;
+                const loserIsBlack = timers.black <= 0;
+                if (loserIsWhite || loserIsBlack) {
+                    const loserColor = loserIsWhite ? "w" : "b";
+                    const winnerName = loserColor === "w"
+                        ? (game.black?.username || "Computer")
+                        : game.white?.username;
+                    game.timers = timers;
+                    game.timerLastTick = new Date();
+                    game.status = "timeout";
+                    game.result = loserColor === "w" ? "0-1" : "1-0";
+                    game.resultReason = `${winnerName} won on time`;
+                    game.winner = winnerName;
+                    await game.save();
+                    io.to(`chess:${gameId}`).emit("chess:game-over", {
+                        gameId,
+                        status: "timeout",
+                        result: game.result,
+                        resultReason: game.resultReason,
+                        winner: winnerName,
+                    });
+                    return;
+                }
+
                 socket.emit("chess:time-sync", { gameId, timers });
             }
         } catch (err) {
             console.error("[CHESS] Time sync error:", err.message);
+        }
+    });
+
+    // A player closing the tab mid-game left the game `active` forever, so the
+    // opponent sat watching a dead board until the 24h document TTL removed it.
+    // The clock is the authority: if the opponent's time is gone, the game is
+    // over regardless of whether anyone is still connected.
+    socket.on("disconnect", async () => {
+        const gameId = socket.data?.chessGameId;
+        if (!gameId || !username) return;
+        try {
+            const game = await ChessGame.findById(gameId);
+            if (!game || game.status !== "active") return;
+            if (game.white?.username !== username && game.black?.username !== username) return;
+            if (game.mode === "ai") return; // the engine is not a socket
+            const elapsed = game.timerLastTick
+                ? (Date.now() - new Date(game.timerLastTick).getTime()) / 1000
+                : 0;
+            const mover = game.turn === "w" ? "white" : "black";
+            if (game.timers[mover] - elapsed > 0) return; // still time left; not our call
+            const winnerName = mover === "white"
+                ? (game.black?.username || "")
+                : game.white?.username;
+            game.status = "abandoned";
+            game.result = mover === "white" ? "0-1" : "1-0";
+            game.resultReason = "Opponent disconnected";
+            game.winner = winnerName;
+            // No endedAt: the schema has no such field and mongoose strict mode
+            // would drop it silently. `resultReason` carries the reason.
+            await game.save();
+            io.to(`chess:${gameId}`).emit("chess:game-over", {
+                gameId,
+                status: "abandoned",
+                result: game.result,
+                resultReason: game.resultReason,
+                winner: winnerName,
+            });
+        } catch (err) {
+            console.error("[CHESS] disconnect handling error:", err.message);
         }
     });
 
@@ -3360,7 +3471,13 @@ app.use("/api/ads", apiLimiter, require("./routes/ads"));
 app.use("/api/analytics", apiLimiter, require("./routes/analytics"));
 app.use("/api/app", readLimiter, require("./routes/appConfig"));
 app.use("/api/reports", readLimiter, require("./routes/reports"));
-app.use("/api/chess/history", apiLimiter, require("./routes/chess"));
+// Mounted at /api/chess, NOT /api/chess/history. The router itself defines
+// "/history", so the old mount made the effective paths /api/chess/history/history
+// and every client call to /api/chess/history 404'd. The POST that records a
+// finished game therefore never ran (its .catch swallowed the 404), so
+// user.chessGames stayed permanently empty and the entire lobby history /
+// W-L-D panel rendered nothing — the feature looked present and was dead.
+app.use("/api/chess", apiLimiter, require("./routes/chess"));
 app.use("/api/debug", require("./routes/debug"));
 app.use("/api/live", apiLimiter, require("./routes/live"));
 app.use("/api/translate", apiLimiter, require("./routes/translate"));

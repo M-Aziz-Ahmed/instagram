@@ -28,13 +28,43 @@ router.post("/", verifyToken, async (req, res) => {
 });
 
 // GET /
-router.get("/", async (req, res) => {
+// Requires a session, and only answers for a conversation the caller is actually
+// part of. This used to be unauthenticated: anyone could ask "is <username>
+// typing?" for any username and get a real-time answer, which is both a privacy
+// leak and a way to confirm an account exists.
+router.get("/", verifyToken, async (req, res) => {
     try {
         const { username } = req.query;
         if (!username) return res.status(400).json({ error: "username required" });
 
-        const typing = await Typing.findOne({ typingTo: username }).lean().maxTimeMS(5000);
-        return res.json({ isTyping: !!typing && !typing.recording, isRecording: !!typing?.recording, typingUser: typing?.username || "" });
+        const me = await User.findById(req.userId).select("username").lean();
+        const caller = me?.username;
+        if (!caller) return res.status(401).json({ error: "Unauthorized" });
+
+        // Either direction of the same conversation is a legitimate question:
+        // "is my chat partner typing to me" and "am I typing to them" are the
+        // same row. Anything else is someone third-party snooping.
+        const typing = await Typing.findOne({
+            $or: [{ typingTo: username }, { username: caller }],
+        }).lean().maxTimeMS(5000);
+
+        if (!typing) {
+            return res.json({ isTyping: false, isRecording: false, typingUser: "" });
+        }
+
+        // Only surface the other party. When the row is the caller's own, it
+        // means *they* are typing, which is not something to render as an
+        // incoming indicator.
+        const other = typing.username === caller ? typing.typingTo : typing.username;
+        if (!other || other === caller) {
+            return res.json({ isTyping: false, isRecording: false, typingUser: "" });
+        }
+
+        return res.json({
+            isTyping: !!typing && !typing.recording,
+            isRecording: !!typing?.recording,
+            typingUser: other,
+        });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });

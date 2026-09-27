@@ -29,6 +29,14 @@ const userSchema = new mongoose.Schema({
     // usernames so lookups stay case-insensitive.
     mutedUsers:   [{ type: String, default: [] }],
     blockedUsers: [{ type: String, default: [] }],
+    // Conversations set aside. Kept as "<username>" for DMs, lowercased, so a
+    // lookup stays case-insensitive. Archived threads are hidden from the list
+    // but keep receiving messages, so nothing is ever silently lost.
+    archivedChats: [{ type: String, default: [] }],
+    // Muted conversations: hidden from the list and excluded from the unread
+    // badge, but still delivered. Distinct from mutedUsers, which is about a
+    // person rather than a thread.
+    mutedChats: [{ type: String, default: [] }],
     // Last time this user explicitly confirmed they are 18+. Consumed by
     // middleware/adultGate.js, which re-asks every 30 days. Only ever written
     // by POST /api/adult-gate/confirm.

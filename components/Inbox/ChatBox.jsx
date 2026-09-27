@@ -8,10 +8,12 @@ import Input from "./Input";
 import ProfileSetup from "@/components/ProfileSetup";
 import UserBadges from "@/components/shared/UserBadges";
 import { useOnlineStatus, getLastSeenText } from "@/utils/useOnlineStatus";
+import { useToast } from "@/context/ToastContext";
 
-export default function ChatBox({ onBack, recipient, recipientUser }) {
+export default function ChatBox({ onBack, recipient, recipientUser, archived = false, muted = false, onConversationChange }) {
     const { user, ready } = useUser();
     const { startCall } = useCall();
+    const { showToast } = useToast();
     const [pendingMessage, setPendingMessage] = useState(null);
     const [replyingTo, setReplyingTo]         = useState(null);
     const [editingProfile, setEditingProfile] = useState(false);
@@ -19,6 +21,49 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
     const [isTyping, setIsTyping] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [recipientOnlineStatus, setRecipientOnlineStatus] = useState(null);
+    const [showOptions, setShowOptions] = useState(false);
+
+    // Archive / mute / starred-messages. All three change what the *reader*
+    // sees, never what is delivered.
+    const runOption = async (action) => {
+        setShowOptions(false);
+        if (!recipient) return;
+        if (action === "viewStarred") {
+            const res = await fetch("/api/messages/starred", { credentials: "include" });
+            if (res.ok) {
+                const list = await res.json();
+                showToast(
+                    list.length
+                        ? `You have ${list.length} starred message${list.length === 1 ? "" : "s"}`
+                        : "No starred messages yet — tap the star on any message",
+                    "info"
+                );
+            }
+            return;
+        }
+        try {
+            const res = await fetch("/api/messages/conversation", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ with: recipient, action }),
+            });
+            if (res.ok) {
+                onConversationChange?.(action);
+                showToast(
+                    action === "archive" ? "Chat archived"
+                        : action === "unarchive" ? "Chat unarchived"
+                        : action === "mute" ? "Chat muted"
+                        : "Chat unmuted",
+                    "success"
+                );
+            } else {
+                showToast("Could not update that chat", "error");
+            }
+        } catch {
+            showToast("Network error", "error");
+        }
+    };
 
     // Track current user's online status
     useOnlineStatus(user?.username);
@@ -182,13 +227,66 @@ export default function ChatBox({ onBack, recipient, recipientUser }) {
                         </svg>
                     </button>
 
-                    <button aria-label="Info" className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                            strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 md:w-6 md:h-6">
-                            <path strokeLinecap="round" strokeLinejoin="round"
-                                d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0zm-9-3.75h.008v.008H12V8.25z" />
-                        </svg>
-                    </button>
+                    {/* Was a dead button: no onClick, no title, rendered as
+                        "Info" beside two working call buttons. It is now the
+                        conversation menu — archive and mute had no affordance
+                        anywhere in the app. */}
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowOptions((v) => !v)}
+                            aria-label="Conversation options"
+                            aria-expanded={showOptions}
+                            title="Conversation options"
+                            className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 md:w-6 md:h-6">
+                                <path strokeLinecap="round" strokeLinejoin="round"
+                                    d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0zm-9-3.75h.008v.008H12V8.25z" />
+                            </svg>
+                        </button>
+
+                        {showOptions && (
+                            <>
+                                <button
+                                    className="fixed inset-0 z-40 cursor-default"
+                                    aria-hidden="true"
+                                    tabIndex={-1}
+                                    onClick={() => setShowOptions(false)}
+                                />
+                                <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg py-1 animate-scale-in">
+                                    <button
+                                        onClick={() => runOption("viewStarred")}
+                                        className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 shrink-0 text-yellow-500">
+                                            <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clipRule="evenodd" />
+                                        </svg>
+                                        Starred messages
+                                    </button>
+                                    <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+                                    <button
+                                        onClick={() => runOption(archived ? "unarchive" : "archive")}
+                                        className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 shrink-0">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5-.625 11.632a.75.75 0 0 0 0 1.268l20.875 4.132a.75.75 0 0 0 .693-1.264L21.75 7.5M20.25 7.5H3.75" />
+                                        </svg>
+                                        {archived ? "Unarchive chat" : "Archive chat"}
+                                    </button>
+                                    <button
+                                        onClick={() => runOption(muted ? "unmute" : "mute")}
+                                        className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 shrink-0">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25 2.25m-2.25 0-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                                        </svg>
+                                        {muted ? "Unmute chat" : "Mute chat"}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
             </header>
 

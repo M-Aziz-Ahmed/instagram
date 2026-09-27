@@ -12,6 +12,8 @@ import LinkPreviewCard from "@/components/shared/LinkPreviewCard";
 import VoiceRecorder from "@/components/shared/VoiceRecorder";
 import GroupSettings from "./GroupSettings";
 import { timeAgo } from "@/utils/timeAgo";
+import { translateItem } from "@/utils/translateApi";
+import { languageName } from "@/utils/languages";
 
 const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
@@ -25,7 +27,7 @@ const REACTIONS = [
     { type: "angry", emoji: "😠" },
 ];
 
-function GroupMessageBubble({ msg, user, onReact, onDelete, onReply, onHashtag }) {
+function GroupMessageBubble({ msg, user, onReact, onDelete, onReply, onHashtag, onTranslate, onStar, onEdit, translations, translatingId, translateTargetName, editing, editText, setEditText, onSaveEdit, onCancelEdit }) {
     const [showReactions, setShowReactions] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [lightbox, setLightbox] = useState(false);
@@ -78,23 +80,62 @@ function GroupMessageBubble({ msg, user, onReact, onDelete, onReply, onHashtag }
                             : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-md"
                     }`}
                 >
-                    {msg.text && (
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                            <RichText text={msg.text} onHashtag={onHashtag} />
+                    {msg.deleted ? (
+                        // Groups used to hard-delete the row, so a removed message
+                        // simply vanished. Soft delete keeps a tombstone, matching
+                        // DMs and telling everyone it was removed rather than lost.
+                        <p className={`text-sm italic ${isOwn ? "text-white/60" : "text-gray-400 dark:text-gray-500"}`}>
+                            This message was deleted
                         </p>
+                    ) : (
+                        <>
+                            {msg.text && (
+                                editing ? (
+                                    // Group messages had no edit path at all. Enter
+                                    // saves, Escape cancels, matching the DM.
+                                    <div className="flex flex-col gap-1 min-w-[200px]">
+                                        <input
+                                            type="text"
+                                            value={editText}
+                                            autoFocus
+                                            maxLength={1000}
+                                            onChange={(e) => setEditText(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter") { e.preventDefault(); onSaveEdit(); }
+                                                if (e.key === "Escape") onCancelEdit();
+                                            }}
+                                            className="text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 outline-none focus:border-blue-400 text-gray-900 dark:text-gray-100"
+                                        />
+                                        <div className="flex gap-2 text-[11px] font-semibold">
+                                            <button onClick={onSaveEdit} className="text-blue-500 hover:underline">Save</button>
+                                            <button onClick={onCancelEdit} className="text-gray-400 hover:underline">Cancel</button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                                        <RichText text={msg.text} onHashtag={onHashtag} />
+                                    </p>
+                                )
+                            )}
+                            {translations?.[msg._id] && (
+                                <p className={`mt-1 text-xs italic break-words ${isOwn ? "text-white/70" : "text-gray-500 dark:text-gray-400"}`}>
+                                    {translations[msg._id]}
+                                </p>
+                            )}
+                        </>
                     )}
-                    {msg.audioUrl && !msg.text && !msg.imageUrl && (
+                    {!msg.deleted && msg.audioUrl && !msg.text && !msg.imageUrl && (
                         <div className="max-w-[250px]">
-                            <AudioPlayer src={msg.audioUrl} />
+                            <AudioPlayer src={msg.audioUrl} isMine={isOwn} />
                         </div>
                     )}
-                    {msg.linkPreview && (
+                    {!msg.deleted && msg.linkPreview && (
                         <div className={`mt-1.5 ${msg.text ? "border-t pt-1.5" : ""} ${isOwn ? "border-white/20" : "border-gray-200 dark:border-gray-700"}`}>
                             <LinkPreviewCard preview={msg.linkPreview} small />
                         </div>
                     )}
                 </div>
-                {msg.imageUrl && (
+                {!msg.deleted && msg.imageUrl && (
                     <div className="mt-1 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 max-w-[80vw] sm:max-w-xs cursor-pointer" onClick={() => setLightbox(true)}>
                         <img src={msg.imageUrl} alt="" className="w-full h-auto block" loading="lazy" />
                     </div>
@@ -120,8 +161,46 @@ function GroupMessageBubble({ msg, user, onReact, onDelete, onReply, onHashtag }
                         <span className="text-[10px] text-gray-400 dark:text-gray-500">{totalReactions}</span>
                     )}
                     <button onClick={() => onReply(msg)} className="text-[11px] text-gray-400 hover:text-blue-500 font-medium">Reply</button>
+                    {/* Translate and star, matching the DM affordance. Group chat
+                        had neither, which made a multilingual group unusable. */}
+                    {msg.text && (
+                        <button
+                            onClick={() => onTranslate(msg._id, msg.text)}
+                            className={`text-[11px] transition-colors ${
+                                translations[msg._id]
+                                    ? "text-blue-500"
+                                    : "text-gray-400 hover:text-blue-500"
+                            }`}
+                            title={translations[msg._id] ? "Hide translation" : `Translate to ${translateTargetName}`}
+                        >
+                            {translatingId === msg._id ? "…" : translations[msg._id] ? "Hide" : "Translate"}
+                        </button>
+                    )}
+                    <button
+                        onClick={() => onStar(msg)}
+                        className={`p-1 text-[11px] transition-colors ${
+                            msg.starredBy?.includes(user?.username)
+                                ? "text-yellow-500"
+                                : "text-gray-400 hover:text-yellow-500"
+                        }`}
+                        aria-label={msg.starredBy?.includes(user?.username) ? "Unstar message" : "Star message"}
+                        title={msg.starredBy?.includes(user?.username) ? "Unstar" : "Star"}
+                    >
+                        ★
+                    </button>
+                    {msg.editedAt && (
+                        <span className="text-[10px] text-gray-300 dark:text-gray-600 italic">(edited)</span>
+                    )}
                     {isOwn && (
-                        <button onClick={() => onDelete(msg._id)} className="text-[11px] text-gray-400 hover:text-red-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity">Delete</button>
+                        <>
+                            <button
+                                onClick={() => onEdit(msg)}
+                                className="text-[11px] text-gray-400 hover:text-blue-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                                Edit
+                            </button>
+                            <button onClick={() => onDelete(msg._id)} className="text-[11px] text-gray-400 hover:text-red-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity">Delete</button>
+                        </>
                     )}
                 </div>
             </div>
@@ -147,29 +226,136 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
     const [linkPreview, setLinkPreview] = useState(null);
     const linkUrlRef = useRef(null);
     const [scrollAtBottom, setScrollAtBottom] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [error, setError] = useState("");
+    // Comment-parity features for group chat, which had none of these.
+    const [translations, setTranslations] = useState({});
+    const [translatingId, setTranslatingId] = useState(null);
+    const [editingId, setEditingId] = useState(null);
+    const [editText, setEditText] = useState("");
+    const translateTarget = user?.language || "en";
+    const translateTargetName = languageName(translateTarget);
+
+    const handleTranslate = useCallback(async (id, text) => {
+        setTranslations(prev => {
+            if (prev[id]) {
+                const next = { ...prev };
+                delete next[id];
+                return next;
+            }
+            return prev;
+        });
+        if (translations[id]) return;
+        setTranslatingId(id);
+        const translated = await translateItem(text, translateTarget);
+        setTranslatingId(null);
+        if (translated) setTranslations(prev => ({ ...prev, [id]: translated }));
+    }, [translations, translateTarget]);
+
+    const handleStar = useCallback(async (msg) => {
+        const wasStarred = !!msg.starredBy?.includes(user?.username);
+        const me = user?.username;
+        setMessages(prev => prev.map(m => (
+            m._id === msg._id
+                ? {
+                    ...m,
+                    starredBy: wasStarred
+                        ? m.starredBy.filter(u => u !== me)
+                        : [...(m.starredBy || []), me],
+                }
+                : m
+        )));
+        try {
+            const res = await fetch(`/api/groups/${groupId}/messages`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "star", messageId: msg._id }),
+            });
+            if (!res.ok) throw new Error("star failed");
+        } catch {
+            setMessages(prev => prev.map(m => (
+                m._id === msg._id
+                    ? {
+                        ...m,
+                        starredBy: wasStarred
+                            ? [...new Set([...(m.starredBy || []), me])]
+                            : m.starredBy.filter(u => u !== me),
+                    }
+                    : m
+            )));
+            showToast("Could not update star", "error");
+        }
+    }, [user?.username, groupId, showToast]);
+
+    const beginEdit = useCallback((msg) => {
+        setEditingId(msg._id);
+        setEditText(msg.text || "");
+    }, []);
+
+    const saveEdit = useCallback(async (id) => {
+        const next = editText.trim();
+        if (!next) return;
+        const original = messages.find(m => m._id === id)?.text;
+        setEditingId(null);
+        if (next === original) return;
+        setMessages(prev => prev.map(m => (m._id === id ? { ...m, text: next, editedAt: new Date() } : m)));
+        try {
+            const res = await fetch(`/api/groups/${groupId}/messages`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "edit", messageId: id, text: next }),
+            });
+            if (!res.ok) throw new Error("edit failed");
+        } catch {
+            setMessages(prev => prev.map(m => (m._id === id ? { ...m, text: original, editedAt: null } : m)));
+            showToast("Could not edit that message", "error");
+        }
+    }, [editText, messages, groupId, showToast]);
     const [showSettings, setShowSettings] = useState(false);
     const fileRef = useRef(null);
     const listRef = useRef(null);
     const pollingRef = useRef(null);
+    const loadingMoreRef = useRef(false);
 
     const fetchMessages = useCallback(async (before = null) => {
+        // One page load at a time. Every scroll event in the top band used to
+        // fire its own request, so scrolling up through history could queue
+        // dozens of overlapping fetches, each of which then prepended a page and
+        // moved the list further.
+        if (loadingMoreRef.current) return;
+        loadingMoreRef.current = true;
+        if (before) setLoadingMore(true);
         try {
             const params = new URLSearchParams({ limit: "20" });
             if (before) params.set("before", before);
             const res = await fetch(`/api/groups/${groupId}/messages?${params}`);
-            if (!res.ok) return;
+            if (!res.ok) {
+                // Used to `return` before setLoading(false), so any 403/500 left
+                // the group chat spinning forever.
+                setError("Could not load messages");
+                return;
+            }
             const data = await res.json();
             setMessages(prev => {
-                if (before) {
-                    const existing = new Set(prev.map(m => m._id));
-                    const newMsgs = data.messages.filter(m => !existing.has(m._id));
-                    return [...newMsgs, ...prev];
-                }
-                return data.messages;
+                const existing = new Set(prev.map(m => m._id));
+                // Merge in every case.
+                //
+                // The non-paginated branch used to `return data.messages`,
+                // replacing the list with the newest page. So: scroll up to read
+                // history, wait at most 8 seconds for the poll, and everything
+                // except the newest 20 messages disappeared. The DM view merges
+                // correctly; this now matches.
+                const fresh = (data.messages || []).filter(m => !existing.has(m._id));
+                return fresh.length ? [...fresh, ...prev] : prev;
             });
-            setHasMore(data.hasMore);
-        } catch {}
-        setLoading(false);
+            if (before) setHasMore(data.hasMore);
+        } catch {
+            setError("Network error");
+        } finally {
+            loadingMoreRef.current = false;
+            setLoadingMore(false);
+            setLoading(false);
+        }
     }, [groupId]);
 
     useEffect(() => {
@@ -187,7 +373,10 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
         fetch(`/api/groups/${groupId}/messages`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "read", readBy: user.username }),
+            // No `readBy` in the body: the server now derives the actor from the
+            // session and ignores a client-supplied one, which is what let an
+            // unauthenticated caller mark any group read.
+            body: JSON.stringify({ action: "read" }),
         }).catch(() => {});
     }, [groupId, user?.username, messages.length]);
 
@@ -252,13 +441,20 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
             const res = await fetch(`/api/groups/${groupId}/messages`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: user.username, action: "react", messageId, reactionType }),
+                body: JSON.stringify({ action: "react", messageId, reactionType }),
             });
             if (res.ok) {
                 const updated = await res.json();
                 setMessages(prev => prev.map(m => m._id === messageId ? { ...m, reactions: updated.reactions } : m));
+            } else {
+                // Was `catch {}` with no else, so a rejected reaction (not a
+                // member, message gone) did nothing visible at all.
+                const d = await res.json().catch(() => ({}));
+                showToast(d.error || "Could not react", "error");
             }
-        } catch {}
+        } catch {
+            showToast("Network error", "error");
+        }
     };
 
     const handleDelete = async (messageId) => {
@@ -267,13 +463,24 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
             const res = await fetch(`/api/groups/${groupId}/messages`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: user.username, action: "delete", messageId }),
+                body: JSON.stringify({ action: "delete", messageId }),
             });
             if (res.ok) {
-                setMessages(prev => prev.filter(m => m._id !== messageId));
+                // Soft delete server-side, so the row stays as a tombstone rather
+                // than vanishing. Matches the DM bubble.
+                setMessages(prev => prev.map(m => (
+                    m._id === messageId
+                        ? { ...m, deleted: true, text: "", imageUrl: "", audioUrl: "" }
+                        : m
+                )));
                 showToast("Message deleted", "success");
+            } else {
+                const d = await res.json().catch(() => ({}));
+                showToast(d.error || "Could not delete that message", "error");
             }
-        } catch {}
+        } catch {
+            showToast("Network error", "error");
+        }
     };
 
     const handleFile = async (e) => {
@@ -320,7 +527,11 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
     };
 
     return (
-        <div className="flex flex-col h-full">
+        // `relative` matters: the scroll-to-bottom button below is absolutely
+        // positioned, and without a positioned ancestor here it anchored to
+        // whatever further ancestor happened to be relative — so it floated
+        // somewhere unrelated to the chat pane.
+        <div className="flex flex-col h-full relative">
             {/* Header */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
                 <button onClick={onBack} className="p-2 -ml-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors" aria-label="Back">
@@ -343,9 +554,18 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                     </svg>
                 </button>
-                <button onClick={handleGroupCall} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-blue-500" aria-label="Group call">
+                <button
+                    onClick={handleGroupCall}
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-blue-500"
+                    // This drew a video-camera glyph and labelled itself "Group
+                    // call", but handleGroupCall starts an *audio* call and groups
+                    // have no video option. Both the icon and the label promised
+                    // something that does not exist.
+                    aria-label="Start group audio call"
+                    title="Start group audio call"
+                >
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
                     </svg>
                 </button>
             </div>
@@ -357,6 +577,24 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
                         <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-600 border-t-blue-500 rounded-full animate-spin" />
                     </div>
                 )}
+                {/* A failed load used to leave the spinner running forever with
+                    no way to tell that anything had gone wrong. */}
+                {error && messages.length === 0 && (
+                    <div className="flex flex-col items-center gap-2 py-10 px-4 text-center">
+                        <p className="text-sm text-red-500">{error}</p>
+                        <button
+                            onClick={() => { setError(""); fetchMessages(); }}
+                            className="text-xs font-medium text-blue-500 hover:underline"
+                        >
+                            Try again
+                        </button>
+                    </div>
+                )}
+                {loadingMore && (
+                    <div className="flex items-center justify-center py-3">
+                        <div className="w-4 h-4 border-2 border-gray-300 dark:border-gray-600 border-t-blue-500 rounded-full animate-spin" />
+                    </div>
+                )}
                 {messages.map(msg => (
                     <GroupMessageBubble
                         key={msg._id}
@@ -366,6 +604,17 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
                         onDelete={handleDelete}
                         onReply={setReplyTo}
                         onHashtag={(tag) => window.location.href = `/?tag=${tag}`}
+                        onTranslate={handleTranslate}
+                        onStar={handleStar}
+                        onEdit={beginEdit}
+                        translations={translations}
+                        translatingId={translatingId}
+                        translateTargetName={translateTargetName}
+                        editing={editingId === msg._id}
+                        editText={editText}
+                        setEditText={setEditText}
+                        onSaveEdit={() => saveEdit(msg._id)}
+                        onCancelEdit={() => setEditingId(null)}
                     />
                 ))}
             </div>

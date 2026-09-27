@@ -36,12 +36,9 @@ function extractHashtags(text) {
     return matches ? [...new Set(matches.map((h) => h.slice(1).toLowerCase()))] : [];
 }
 
-function extractMentions(text, sender) {
-    if (!text) return [];
-    const matches = text.match(/@(\w+)/g);
-    if (!matches) return [];
-    return [...new Set(matches.map((m) => m.slice(1).toLowerCase()))].filter((u) => u !== sender);
-}
+// Moved to lib/mentions.js so routes/groups.js can share it rather than keep a
+// second copy that could drift.
+const { extractMentions } = require("../lib/mentions");
 
 async function checkNudity(text) {
     try {

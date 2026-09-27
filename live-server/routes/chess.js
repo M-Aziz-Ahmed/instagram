@@ -1,13 +1,26 @@
 const express = require("express");
 const User = require("../models/user");
+const { verifyToken } = require("../middleware/auth");
 
 const router = express.Router();
 
+// Both routes were unauthenticated and took the username from the query/body,
+// so anyone could read — or, worse, rewrite — any account's chess history,
+// including forging wins. The username now comes from the session.
+//
+// `?username=` is still accepted on GET, but only as a request to view
+// *someone else's* record; writing is always self-only.
+
 // GET /history
-router.get("/history", async (req, res) => {
+router.get("/history", verifyToken, async (req, res) => {
     try {
-        const { username } = req.query;
-        if (!username) return res.status(400).json({ error: "Username required" });
+        const me = await User.findById(req.userId).select("username").lean();
+        const caller = me?.username;
+        if (!caller) return res.status(401).json({ error: "Unauthorized" });
+
+        // Chess history is public-facing (the lobby shows an opponent's record),
+        // so any username may be read. Absent or equal to the caller means self.
+        const username = req.query.username || caller;
 
         const user = await User.findOne({ username }).select("chessGames").lean();
         if (!user) return res.status(404).json({ error: "User not found" });
@@ -37,13 +50,20 @@ router.get("/history", async (req, res) => {
 });
 
 // POST /history
-router.post("/history", async (req, res) => {
+router.post("/history", verifyToken, async (req, res) => {
     try {
-        const { username, gameId, opponent, playerColor, result, resultReason, mode, moves, timeControl, gameStats } = req.body;
+        const { gameId, opponent, playerColor, result, resultReason, mode, moves, timeControl, gameStats } = req.body;
 
-        if (!username || !gameId) {
-            return res.status(400).json({ error: "Username and gameId required" });
+        if (!gameId) {
+            return res.status(400).json({ error: "gameId required" });
         }
+
+        // Self-only. A body-supplied `username` is ignored entirely: it used to
+        // be the whole basis of authorisation, so any caller could append
+        // fabricated results to any account.
+        const me = await User.findById(req.userId).select("username").lean();
+        const username = me?.username;
+        if (!username) return res.status(401).json({ error: "Unauthorized" });
 
         const user = await User.findOne({ username });
         if (!user) return res.status(404).json({ error: "User not found" });

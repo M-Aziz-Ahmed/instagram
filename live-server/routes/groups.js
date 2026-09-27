@@ -5,6 +5,7 @@ const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
 const { isProUserDoc } = require("../lib/economy");
 const { resolveLinkPreview } = require("../utils/linkPreview");
+const { extractMentions } = require("../lib/mentions");
 
 const router = express.Router();
 
@@ -347,15 +348,29 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
 });
 
 // PATCH /:id/messages â€” unified action dispatcher (read, react, delete)
-router.patch("/:id/messages", async (req, res) => {
+router.patch("/:id/messages", verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
-        const { action, readBy, username, messageId, reactionType } = req.body;
+        const { action, messageId, reactionType } = req.body;
 
-        if (action === "read" && readBy) {
+        // Was unauthenticated and read the actor from `req.body.username`, which
+        // meant an unauthenticated caller could pass the name of any member and
+        // delete that member's messages, react as them, or mark the group read.
+        // The actor now comes from the session, and every action is gated on
+        // group membership — without which knowing a group id was enough.
+        const me = await User.findById(req.userId).select("username").lean();
+        const username = me?.username;
+        if (!username) return res.status(401).json({ error: "Unauthorized" });
+
+        const group = await GroupChat.findById(id).select("members").lean();
+        if (!group) return res.status(404).json({ error: "Group not found" });
+        const isMember = (group.members || []).some((m) => (m.username || m) === username);
+        if (!isMember) return res.status(403).json({ error: "Not a member of this group" });
+
+        if (action === "read") {
             await GroupMessage.updateMany(
-                { groupId: id, sender: { $ne: readBy }, readBy: { $ne: readBy } },
-                { $addToSet: { readBy } }
+                { groupId: id, sender: { $ne: username }, readBy: { $ne: username } },
+                { $addToSet: { readBy: username } }
             );
             return res.json({ ok: true });
         }
@@ -365,9 +380,10 @@ router.patch("/:id/messages", async (req, res) => {
             if (!validReactions.includes(reactionType)) {
                 return res.status(400).json({ error: "Invalid reaction" });
             }
-            if (!username) return res.status(400).json({ error: "Username required" });
 
-            const msg = await GroupMessage.findById(messageId);
+            // Scoped to the group in the URL as well as the id, so a message from
+            // another group cannot be reached through this one.
+            const msg = await GroupMessage.findOne({ _id: messageId, groupId: id });
             if (!msg) return res.status(404).json({ error: "Message not found" });
 
             if (!msg.reactions) {
@@ -390,13 +406,50 @@ router.patch("/:id/messages", async (req, res) => {
             return res.json({ reactions: msg.reactions });
         }
 
+        if (action === "star" && messageId) {
+            const msg = await GroupMessage.findOne({ _id: messageId, groupId: id });
+            if (!msg) return res.status(404).json({ error: "Message not found" });
+            msg.starredBy = msg.starredBy || [];
+            const idx = msg.starredBy.indexOf(username);
+            const starred = idx === -1;
+            if (starred) msg.starredBy.push(username);
+            else msg.starredBy.splice(idx, 1);
+            await msg.save();
+            return res.json({ starred });
+        }
+
+        // Group messages had no way to be edited, unlike DMs.
+        if (action === "edit" && messageId) {
+            const text = typeof req.body.text === "string" ? req.body.text.trim() : "";
+            if (!text) return res.status(400).json({ error: "Text required" });
+            if (text.length > 1000) return res.status(400).json({ error: "Message too long" });
+            const msg = await GroupMessage.findOne({ _id: messageId, groupId: id });
+            if (!msg) return res.status(404).json({ error: "Message not found" });
+            if (msg.sender !== username) return res.status(403).json({ error: "Unauthorized" });
+            if (msg.deleted) return res.status(400).json({ error: "Message was deleted" });
+            msg.text = text;
+            msg.mentions = extractMentions(text, username);
+            msg.editedAt = new Date();
+            await msg.save();
+            return res.json({ text: msg.text, editedAt: msg.editedAt });
+        }
+
         if (action === "delete" && messageId) {
-            const msg = await GroupMessage.findById(messageId);
+            const msg = await GroupMessage.findOne({ _id: messageId, groupId: id });
             if (!msg) return res.status(404).json({ error: "Message not found" });
             if (msg.sender !== username) return res.status(403).json({ error: "Unauthorized" });
 
-            await GroupMessage.findByIdAndDelete(messageId);
-            return res.json({ ok: true });
+            // Soft delete, matching DMs. This used to remove the row outright,
+            // which meant the sender's own optimistic bubble disappeared with no
+            // explanation and a failed delete was indistinguishable from a
+            // successful one.
+            if (msg.deleted) return res.json({ ok: true, alreadyDeleted: true });
+            msg.deleted = true;
+            msg.text = "";
+            msg.imageUrl = "";
+            msg.audioUrl = "";
+            await msg.save();
+            return res.json({ ok: true, deleted: true });
         }
 
         return res.status(400).json({ error: "Invalid request" });

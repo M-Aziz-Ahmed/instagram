@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import ChatBox from "./ChatBox";
@@ -38,7 +38,8 @@ export default function InboxClient() {
     // keystroke are ignored by comparison rather than cleared inside an effect.
     const [hitState, setHitState] = useState({ query: "", results: [] });
     const { openSidebar } = useSidebar();
-    const prevTargetRef = useRef(null);
+    const prevUserRef = useRef(null);
+const prevGroupRef = useRef(null);
 
     useEffect(() => {
         if (!user) return;
@@ -61,7 +62,14 @@ export default function InboxClient() {
     }, [user, selectedConvo?.username, selectedGroup?._id]);
 
     const fetchConversations = useCallback(async () => {
-        if (!user?.username) return;
+        if (!user?.username) {
+            // Used to return before the `finally`, so `loading` stayed true
+            // forever and the skeleton never cleared. `ready` can be true with no
+            // user (logged out, or a session error), which is exactly the case
+            // that hung.
+            setLoading(false);
+            return;
+        }
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
         try {
@@ -119,6 +127,14 @@ export default function InboxClient() {
     }, [selectedGroup?._id]);
 
     // Online status polling
+    //
+    // Keyed on the *joined username string*, not on `conversations`. The
+    // conversation poll replaces the array with a new reference every 15s, so
+    // this effect tore down and re-created its 30s interval before it could ever
+    // fire — the interval body was unreachable, and the only thing that actually
+    // ran was `fetchOnline()` on every conversation poll, i.e. double the
+    // intended request rate. Now the interval survives until the roster itself
+    // changes.
     useEffect(() => {
         if (conversations.length === 0) return;
         const usernames = conversations.map(c => c.username).join(",");
@@ -134,12 +150,30 @@ export default function InboxClient() {
         fetchOnline();
         const id = setInterval(fetchOnline, 30000);
         return () => clearInterval(id);
-    }, [conversations]);
+    }, [conversations.map(c => c.username).join(",")]);
+
+    // Keep the open conversation's header in step with the poll.
+    //
+    // `selectedConvo` is captured once — by the deep link, by a search hit, or by
+    // a click — and the 15s poll replaces `conversations` without touching it. So
+    // a thread opened that way kept `user: null` for as long as it stayed open:
+    // no avatar, no badges, no last-seen, even after the list caught up.
+    //
+    // Derived rather than synced with an effect: the fix is a pure read of the
+    // list, and copying it into state on every poll is both an extra render and a
+    // place for the two copies to disagree.
+    const activeConvo = useMemo(() => {
+        if (!selectedConvo?.username) return null;
+        return conversations.find((c) => c.username === selectedConvo.username) || selectedConvo;
+    }, [conversations, selectedConvo]);
 
     // Deep linking
     useEffect(() => {
-        if (targetUser && targetUser !== prevTargetRef.current) {
-            prevTargetRef.current = targetUser;
+        // Two refs, not one. `prevTargetRef` was shared, so a URL carrying both
+        // params (`/inbox?user=a&group=b`) made each branch overwrite the other's
+        // marker and the two fought on every re-run, flipping the open pane.
+        if (targetUser && targetUser !== prevUserRef.current) {
+            prevUserRef.current = targetUser;
             const existing = conversations.find(c => c.username === targetUser);
             if (existing) {
                 queueMicrotask(() => { setSelectedConvo(existing); setSelectedGroup(null); setView("chat"); });
@@ -151,8 +185,8 @@ export default function InboxClient() {
                 });
             }
         }
-        if (targetGroup && targetGroup !== prevTargetRef.current) {
-            prevTargetRef.current = targetGroup;
+        if (targetGroup && targetGroup !== prevGroupRef.current) {
+            prevGroupRef.current = targetGroup;
             const existing = groups.find(g => g._id === targetGroup);
             if (existing) {
                 queueMicrotask(() => { setSelectedGroup(existing); setSelectedConvo(null); setTab("groups"); setView("chat"); });
@@ -182,17 +216,33 @@ export default function InboxClient() {
                 });
                 if (res.ok) {
                     const data = await res.json();
-                    setHitState({ query: q, results: data.results || [] });
+                    setHitState({ query: q, results: data.results || [], failed: false });
+                } else {
+                    setHitState({ query: q, results: [], failed: true });
                 }
-            } catch { /* aborted */ }
+            } catch (e) {
+                // An abort is a superseded query, not a failure — the next effect
+                // run will set the real state.
+                if (e?.name !== "AbortError") {
+                    setHitState({ query: q, results: [], failed: true });
+                }
+            }
         }, 300);
 
         return () => { clearTimeout(id); controller.abort(); };
     }, [searchQuery, tab, user?.username]);
 
     const messageHits = hitState.query === searchQuery.trim() ? hitState.results : [];
+    // `searchingMessages` used to be derived only from `hitState.query`, which is
+    // set *inside* `if (res.ok)`. A 500 or a network error therefore left it
+    // comparing unequal forever, and the list showed a permanent
+    // "Searching messages…" with no results and no empty state. `searchFailed`
+    // records that the request finished without a usable answer.
     const searchingMessages =
-        tab === "dm" && searchQuery.trim().length >= 2 && hitState.query !== searchQuery.trim();
+        tab === "dm" &&
+        searchQuery.trim().length >= 2 &&
+        hitState.query !== searchQuery.trim() &&
+        !hitState.failed;
 
     if (!ready) {
         return (
@@ -226,7 +276,8 @@ export default function InboxClient() {
         setView("list");
         setSelectedConvo(null);
         setSelectedGroup(null);
-        prevTargetRef.current = null;
+        prevUserRef.current = null;
+        prevGroupRef.current = null;
         const url = new URL(window.location.href);
         url.searchParams.delete("user");
         url.searchParams.delete("group");
@@ -370,7 +421,7 @@ export default function InboxClient() {
                                     key={convo.username}
                                     onClick={() => handleSelectConvo(convo)}
                                     className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 active:bg-gray-100 dark:active:bg-gray-700 transition-colors text-left ${
-                                        selectedConvo?.username === convo.username ? "bg-gray-100 dark:bg-gray-800" : ""
+                                        activeConvo?.username === convo.username ? "bg-gray-100 dark:bg-gray-800" : ""
                                     }`}
                                 >
                                     {convo.user?.avatarUrl ? (
@@ -462,10 +513,28 @@ export default function InboxClient() {
                     />
                 ) : (
                     <ChatBox
-                        key={selectedConvo?.username || "none"}
+                        key={activeConvo?.username || "none"}
                         onBack={handleBack}
-                        recipient={selectedConvo?.username}
-                        recipientUser={selectedConvo?.user}
+                        recipient={activeConvo?.username}
+                        recipientUser={activeConvo?.user}
+                        archived={!!activeConvo?.archived}
+                        muted={!!activeConvo?.muted}
+                        onConversationChange={(action) => {
+                            // Reflect the change locally so the menu label flips
+                            // immediately, and so an archived chat can drop out of
+                            // the list without waiting for the next 15s poll.
+                            setConversations(prev => prev.map(c => (
+                                c.username === activeConvo?.username
+                                    ? {
+                                        ...c,
+                                        archived: action === "archive" ? true
+                                            : action === "unarchive" ? false : c.archived,
+                                        muted: action === "mute" ? true
+                                            : action === "unmute" ? false : c.muted,
+                                    }
+                                    : c
+                            )));
+                        }}
                     />
                 )}
             </main>

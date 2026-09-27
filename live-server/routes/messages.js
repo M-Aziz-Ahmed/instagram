@@ -152,11 +152,22 @@ router.get("/", verifyToken, async (req, res) => {
             // conversation list's badge follows the same expiry check as every
             // other surface, with no chance of a stale cached value.
             const userMap = new Map(users.map((u) => [u.username, { ...u, isPro: isProUserDoc(u) }]));
+
+            // Archived and muted conversations stay in the payload, flagged,
+            // rather than being filtered out server-side. The client can then
+            // offer an "Archived" / "Muted" section and the reader can un-archive
+            // something — a list they cannot see is a list they cannot undo.
+            const me = await User.findById(req.userId).select("archivedChats mutedChats").lean().maxTimeMS(5000);
+            const archived = new Set((me?.archivedChats || []).map((c) => String(c).toLowerCase()));
+            const muted = new Set((me?.mutedChats || []).map((c) => String(c).toLowerCase()));
+
             const result = conversations.map((conv) => ({
                 username: conv._id,
                 user: userMap.get(conv._id) || { username: conv._id, avatarUrl: "", color: "#3b82f6", isPro: false },
                 lastMessage: conv.lastMessage,
                 unreadCount: conv.unreadCount,
+                archived: archived.has(String(conv._id).toLowerCase()),
+                muted: muted.has(String(conv._id).toLowerCase()),
             }));
 
             return res.json(result);
@@ -437,15 +448,23 @@ router.post("/forward", verifyToken, async (req, res) => {
     }
 });
 
-router.patch("/", async (req, res) => {
+// Was completely unauthenticated and took the caller's identity from the body,
+// so anyone could mark any conversation read, or react as any user, just by
+// posting their name. Both now require a session and derive the actor from it.
+router.patch("/", verifyToken, async (req, res) => {
     try {
         const { sender, recipient, messageId, action, reactionType } = req.body;
+
+        // The body still names the other party, but never the actor.
+        const me = await User.findById(req.userId).select("username").lean();
+        const username = me?.username;
+        if (!username) return res.status(401).json({ error: "Unauthorized" });
 
         // Mark messages as read when opening a conversation
         if (sender && recipient) {
             await Message.updateMany(
                 { sender: recipient, recipient: sender, isRead: false },
-                { $set: { isRead: true } }
+                { $set: { isRead: true, readAt: new Date() } }
             );
             return res.json({ ok: true });
         }
@@ -456,10 +475,16 @@ router.patch("/", async (req, res) => {
             if (!validReactions.includes(reactionType)) {
                 return res.status(400).json({ error: "Invalid reaction" });
             }
-            if (!sender) return res.status(400).json({ error: "Sender required" });
 
             const msg = await Message.findById(messageId);
             if (!msg) return res.status(404).json({ error: "Message not found" });
+
+            // You can only react to a message you were actually sent or sent
+            // yourself. Without this, any logged-in user could react to (and so
+            // enumerate the existence of) anyone's private message by id.
+            if (msg.sender !== username && msg.recipient !== username) {
+                return res.status(403).json({ error: "Not your message" });
+            }
 
             if (!msg.reactions) {
                 msg.reactions = { like: [], love: [], laugh: [], fire: [], sad: [], angry: [] };
@@ -468,22 +493,105 @@ router.patch("/", async (req, res) => {
             // Remove from all other reaction types
             validReactions.forEach(type => {
                 if (!msg.reactions[type]) msg.reactions[type] = [];
-                const idx = msg.reactions[type].indexOf(sender);
+                const idx = msg.reactions[type].indexOf(username);
                 if (idx !== -1) msg.reactions[type].splice(idx, 1);
             });
 
             // Toggle the selected reaction
             if (!msg.reactions[reactionType]) msg.reactions[reactionType] = [];
-            const idx = msg.reactions[reactionType].indexOf(sender);
+            const idx = msg.reactions[reactionType].indexOf(username);
             if (idx === -1) {
-                msg.reactions[reactionType].push(sender);
+                msg.reactions[reactionType].push(username);
             }
 
             await msg.save();
             return res.json({ reactions: msg.reactions });
         }
 
+        if (action === "star" && messageId) {
+            const msg = await Message.findById(messageId);
+            if (!msg) return res.status(404).json({ error: "Message not found" });
+            if (msg.sender !== username && msg.recipient !== username) {
+                return res.status(403).json({ error: "Not your message" });
+            }
+            msg.starredBy = msg.starredBy || [];
+            const idx = msg.starredBy.indexOf(username);
+            const starred = idx === -1;
+            if (starred) msg.starredBy.push(username);
+            else msg.starredBy.splice(idx, 1);
+            await msg.save();
+            return res.json({ starred });
+        }
+
         return res.status(400).json({ error: "Invalid request" });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// PATCH /conversation
+// Archive or mute a whole thread. Distinct from block/mute-user: this changes
+// only what *you* see, and messages keep arriving either way.
+//
+// Separate route rather than another branch on PATCH "/" because that one keys
+// off `sender`/`recipient` in the body, which is exactly the shape this does not
+// have.
+router.patch("/conversation", verifyToken, async (req, res) => {
+    try {
+        const { with: other, action } = req.body || {};
+        if (!other || (action !== "archive" && action !== "unarchive" && action !== "mute" && action !== "unmute")) {
+            return res.status(400).json({ error: "with and a valid action are required" });
+        }
+
+        const user = await User.findById(req.userId);
+        if (!user) return res.status(404).json({ error: "User not found" });
+        if (user.username === other) {
+            return res.status(400).json({ error: "You cannot archive a chat with yourself" });
+        }
+
+        const field = action === "archive" || action === "unarchive" ? "archivedChats" : "mutedChats";
+        const removing = action.startsWith("un");
+        const key = String(other).toLowerCase();
+        const current = user[field] || [];
+        const present = current.some((c) => String(c).toLowerCase() === key);
+
+        if (removing && present) {
+            user[field] = current.filter((c) => String(c).toLowerCase() !== key);
+        } else if (!removing && !present) {
+            current.push(other);
+            user[field] = current;
+        }
+        // Guard against unbounded growth from a script.
+        if (user[field].length > 500) user[field] = user[field].slice(-500);
+
+        await user.save();
+        return res.json({ [field]: user[field] });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed" });
+    }
+});
+
+// GET /starred
+// Everything the viewer has starred, newest first, across every conversation.
+// Scoped to the session user — a `?username=` param would be a way to read
+// someone else's saved messages.
+router.get("/starred", verifyToken, async (req, res) => {
+    try {
+        const me = await User.findById(req.userId).select("username").lean();
+        const username = me?.username;
+        if (!username) return res.status(401).json({ error: "Unauthorized" });
+
+        const messages = await Message.find({ starredBy: username })
+            .sort({ timeStamp: -1 })
+            .limit(100)
+            .lean();
+
+        return res.json(messages.map((m) => ({
+            ...m,
+            with: m.sender === username ? m.recipient : m.sender,
+        })));
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed" });
