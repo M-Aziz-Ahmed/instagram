@@ -399,20 +399,24 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
                             </button>
                         </div>
                     </div>
-                    {/* Volume */}
+                    {/* Volume. The visible rail is still h-1, but it now sits inside a
+                        taller tappable wrapper, and `touch-none` stops the drag
+                        from scrolling the panel out from under the thumb. */}
                     <div className="flex items-center gap-2 mt-2">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5 text-gray-500">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
                         </svg>
-                        <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={Math.round((musicState?.volume ?? 0.7) * 100)}
-                            onChange={handleVolumeChange}
-                            className="flex-1 h-1 accent-green-500"
-                        />
+                        <div className="flex-1 min-w-0 flex items-center h-6 -my-1 touch-none">
+                            <input
+                                type="range"
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={Math.round((musicState?.volume ?? 0.7) * 100)}
+                                onChange={handleVolumeChange}
+                                className="w-full h-1 accent-green-500"
+                            />
+                        </div>
                         <span className="text-[10px] text-gray-600 w-6 text-right">{Math.round((musicState?.volume ?? 0.7) * 100)}%</span>
                     </div>
                 </div>
@@ -423,7 +427,12 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
                 {activeTab === "search" ? (
                     <div className="p-3">
                         <div className="flex gap-2 mb-3">
-                            <div className="flex-1 flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+                            {/* `min-w-0` on the wrapper and the input: a flex item
+                                defaults to min-width:auto, so the search field could
+                                not shrink below its intrinsic width and panned the
+                                panel sideways on a 360px screen. Same as the
+                                now-playing and queue rows below. */}
+                            <div className="flex-1 min-w-0 flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
                                 <SearchIcon />
                                 <input
                                     type="text"
@@ -431,7 +440,7 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
                                     onChange={(e) => setQuery(e.target.value)}
                                     onKeyDown={(e) => e.key === "Enter" && search()}
                                     placeholder="Search YouTube..."
-                                    className="flex-1 bg-transparent text-xs text-white placeholder-gray-500 outline-none"
+                                    className="flex-1 min-w-0 bg-transparent text-xs text-white placeholder-gray-500 outline-none"
                                 />
                             </div>
                             <button
@@ -445,7 +454,13 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
                         {results.length > 0 ? (
                             <div className="space-y-1">
                                 {results.map((r) => (
-                                    <div key={r.videoId} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-white/5 transition-colors group">
+                                    // `vc-hover-row`/`vc-hover-ctl` replace the
+                                    // `sm:opacity-0 sm:group-hover:opacity-100`
+                                    // pair: hover is a pointer capability, not a
+                                    // width, and the rules live in VoiceChat.jsx
+                                    // (HOVER_CTL_CSS) so coarse pointers keep these
+                                    // visible and tappable.
+                                    <div key={r.videoId} className="vc-hover-row flex items-center gap-2.5 p-2 rounded-xl hover:bg-white/5 transition-colors">
                                         <div className="relative shrink-0">
                                             <img src={r.thumbnail} alt="" className="w-16 h-10 rounded-lg object-cover bg-white/5" loading="lazy" />
                                             {r.durationText && (
@@ -460,7 +475,7 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
                                         </div>
                                         <button
                                             onClick={() => addSong(r)}
-                                            className="p-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white sm:opacity-0 sm:group-hover:opacity-100 transition-all shrink-0"
+                                            className="vc-hover-ctl p-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white transition-all shrink-0"
                                             title="Add to queue"
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
@@ -489,14 +504,14 @@ export default function MusicPanel({ socket, channelId, user, initialState }) {
                                 </div>
                                 <div className="space-y-1">
                                     {queue.map((song, idx) => (
-                                        <div key={song.id} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-white/5 transition-colors group">
+                                        <div key={song.id} className="vc-hover-row flex items-center gap-2.5 p-2 rounded-xl hover:bg-white/5 transition-colors">
                                             <span className="text-[10px] text-gray-600 w-4 text-center shrink-0">{idx + 1}</span>
                                             <img src={song.thumbnail || YTMUSIC_THUMB(song.videoId)} alt="" className="w-10 h-7 rounded object-cover bg-white/5 shrink-0" />
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-xs font-medium text-gray-200 truncate">{song.title}</p>
                                                 <p className="text-[10px] text-gray-500">@{song.addedBy} {song.durationText ? `· ${song.durationText}` : ""}</p>
                                             </div>
-                                            <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
+                                            <div className="vc-hover-ctl flex items-center gap-1 transition-all">
                                                 <button onClick={() => playSong(song.id)} className="p-1 rounded bg-green-600/20 text-green-400 hover:bg-green-600/40 transition-colors" title="Play now">
                                                     <PlayIcon />
                                                 </button>

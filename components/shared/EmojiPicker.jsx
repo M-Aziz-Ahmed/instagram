@@ -108,7 +108,16 @@ export default function EmojiPicker({ onEmojiSelect, onClose, className = "" }) 
     const recentEmojis = useMemo(() => getRecentEmojis(), []);
 
     useEffect(() => {
-        searchRef.current?.focus();
+        // Desktop keeps the caret in the search box on open, which is the whole
+        // point of the box. Touch must not: focusing raises the software keyboard,
+        // and the keyboard shrinks the visual viewport while this panel is
+        // `absolute bottom-full` against a control that is itself mid-scroll, so
+        // the panel ends up anchored to a viewport that no longer exists and its
+        // top row is cut off. Opening without the keyboard is the fix; a mouse
+        // user can still tab straight into the field.
+        if (typeof window !== "undefined" && window.matchMedia?.("(hover: hover) and (pointer: fine)").matches) {
+            searchRef.current?.focus();
+        }
     }, []);
 
     useEffect(() => {
@@ -158,8 +167,16 @@ export default function EmojiPicker({ onEmojiSelect, onClose, className = "" }) 
     return (
         <div
             ref={containerRef}
-            className={`bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden ${className}`}
-            style={{ maxWidth: 340, width: '100%', maxHeight: 420 }}
+            // This panel is absolutely positioned inside a small toolbar button
+            // wrapper, so a percentage width resolved against ~30px (comment
+            // composer) to ~150px (composer) and the grid below landed in an
+            // invisible horizontal scroll with 5 of 9 columns unreachable. The
+            // size is therefore taken from the viewport rather than the anchor:
+            // narrow phones get 100vw - 2rem, `sm` gets enough room for 9 columns
+            // at a 40px target, and the height cap is dvh so a landscape phone
+            // cannot push the top row off-screen. `min-w-0` lets it shrink inside
+            // a flex parent instead of forcing one.
+            className={`bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col min-w-0 w-[min(340px,calc(100vw-2rem))] sm:w-[392px] sm:max-w-[calc(100vw-2rem)] max-h-[min(420px,60dvh)] ${className}`}
         >
             {/* Search + skin tone */}
             <div className="flex items-center gap-2 p-2 border-b border-gray-100 dark:border-gray-800">
@@ -174,24 +191,29 @@ export default function EmojiPicker({ onEmojiSelect, onClose, className = "" }) 
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         placeholder="Search emoji..."
-                        className="w-full bg-gray-100 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 rounded-xl pl-8 pr-3 py-1.5 outline-none"
+                        // 16px on touch: anything under that makes iOS zoom on
+                        // focus, and the layout viewport meta makes it impossible
+                        // to zoom back out.
+                        className="w-full bg-gray-100 dark:bg-gray-800 text-base sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 rounded-xl pl-8 pr-3 py-2 outline-none"
                     />
                 </div>
                 <div className="relative">
                     <button
                         onClick={() => setShowSkinTones(!showSkinTones)}
-                        className="text-lg p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                        className="text-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
                         title="Skin tone"
                     >
                         {skinTone === 0 ? "✋" : `✋${SKIN_TONES[skinTone]}`}
                     </button>
                     {showSkinTones && (
-                        <div className="absolute top-full right-0 mt-1 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-2 flex gap-1 z-20">
+                        // flex-wrap so the 44px swatches drop to a second row
+                        // instead of overflowing a 320px screen.
+                        <div className="absolute top-full right-0 mt-1 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-2 flex flex-wrap justify-end gap-1 z-20">
                             {SKIN_TONE_LABELS.map((label, i) => (
                                 <button
                                     key={label}
                                     onClick={() => { setSkinTone(i); setShowSkinTones(false); }}
-                                    className={`text-lg p-1.5 rounded-lg transition-colors ${skinTone === i ? "bg-blue-100 dark:bg-blue-900/30" : "hover:bg-gray-100 dark:hover:bg-gray-800"}`}
+                                    className={`text-lg p-2 rounded-lg transition-colors ${skinTone === i ? "bg-blue-100 dark:bg-blue-900/30" : "hover:bg-gray-100 dark:hover:bg-gray-800"}`}
                                     title={label}
                                 >
                                     👋{SKIN_TONES[i]}
@@ -211,7 +233,7 @@ export default function EmojiPicker({ onEmojiSelect, onClose, className = "" }) 
                         <button
                             key={cat.id}
                             onClick={() => { setActiveCategory(cat.id); setSearch(""); }}
-                            className={`text-lg p-1.5 rounded-lg transition-colors shrink-0 ${
+                            className={`text-lg p-2 rounded-lg transition-colors shrink-0 ${
                                 activeCategory === cat.id && !search
                                     ? "bg-blue-100 dark:bg-blue-900/30"
                                     : "hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -225,16 +247,21 @@ export default function EmojiPicker({ onEmojiSelect, onClose, className = "" }) 
             </div>
 
             {/* Emoji grid */}
-            <div className="p-2 overflow-y-auto" style={{ maxHeight: 280 }}>
+            <div className="p-2 overflow-y-auto flex-1 min-h-0 max-h-[min(280px,40dvh)]">
                 {displayEmojis.length === 0 ? (
                     <div className="text-center text-sm text-gray-400 py-8">No emojis found</div>
                 ) : (
-                    <div className="grid grid-cols-9 gap-0.5">
+                    // 7 columns on a phone so each cell keeps a ~44px touch
+                    // target inside the viewport-sized panel; 9 only once there
+                    // is room for it.
+                    <div className="grid grid-cols-7 sm:grid-cols-9 gap-0.5">
                         {displayEmojis.map((emoji, i) => (
                             <button
                                 key={`${emoji}-${i}`}
                                 onClick={() => handleSelect(emoji)}
-                                className="text-xl p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center"
+                                // Padding up, glyph down: 32x32 before, 44x44 now
+                                // at a 18px emoji instead of a 20px one.
+                                className="text-lg p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center touch-manipulation"
                                 title={emoji}
                             >
                                 {emoji}

@@ -197,17 +197,28 @@ export default function GroupSettings({ group, user, onClose, onGroupUpdated, on
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-950 rounded-2xl w-full max-w-lg mx-4 shadow-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+            {/* `dvh`, not `vh`: on iOS `vh` is the LARGEST viewport, so `85vh` could
+                exceed the visible area. With the header `shrink-0` and the body
+                `min-h-0`, `max-h` constrains the sheet itself and a focused input
+                shrinks the scroller instead of pushing the Save button off-screen.
+
+                `safe-top` / `safe-bottom` are on the sheet, not on the header and
+                the scrolling body: `.safe-*` are unlayered rules in globals.css, so
+                they override a same-side `py-*` / `p-5` utility and would leave
+                those edges unpadded wherever the inset is 0. On the sheet they just
+                inset the whole panel. */}
+            <div className="bg-white dark:bg-gray-950 rounded-2xl w-full max-w-lg mx-4 shadow-2xl max-h-[85dvh] flex flex-col overflow-hidden safe-top safe-bottom" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800 shrink-0">
                     <h2 className="font-bold text-lg text-gray-900 dark:text-gray-100">Group Settings</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+                    <button onClick={onClose} aria-label="Close"
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center justify-center w-11 h-11 -mr-2 shrink-0">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                         </svg>
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-5">
                     {/* Avatar + Info (admin only) */}
                     {isAdmin && (
                         <div className="space-y-3">
@@ -233,12 +244,16 @@ export default function GroupSettings({ group, user, onClose, onGroupUpdated, on
                             <input
                                 type="text" value={name} onChange={e => setName(e.target.value.slice(0, 50))}
                                 placeholder="Group name"
-                                className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-400 transition-colors"
+                                // Form controls are 16px on touch (see RepostButton):
+                                // 14px made iOS zoom the page on focus, and the layout
+                                // viewport meta in app/layout.js leaves no way to zoom
+                                // back out.
+                                className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-base sm:text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-400 transition-colors"
                             />
                             <textarea
                                 value={description} onChange={e => setDescription(e.target.value.slice(0, 200))}
                                 placeholder="Description" rows={2}
-                                className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-400 transition-colors resize-none"
+                                className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-base sm:text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-400 transition-colors resize-none"
                             />
                             <button onClick={handleSaveInfo} disabled={saving || !name.trim()}
                                 className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-40">
@@ -255,7 +270,7 @@ export default function GroupSettings({ group, user, onClose, onGroupUpdated, on
                                 <label className="flex items-center justify-between">
                                     <span className="text-xs text-gray-600 dark:text-gray-400">Who can send messages</span>
                                     <select value={whoCanSend} onChange={e => setWhoCanSend(e.target.value)}
-                                        className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-gray-100 outline-none">
+                                        className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-base sm:text-xs text-gray-900 dark:text-gray-100 outline-none">
                                         <option value="all">Everyone</option>
                                         <option value="admin">Admins only</option>
                                     </select>
@@ -263,7 +278,7 @@ export default function GroupSettings({ group, user, onClose, onGroupUpdated, on
                                 <label className="flex items-center justify-between">
                                     <span className="text-xs text-gray-600 dark:text-gray-400">Who can add members</span>
                                     <select value={whoCanAdd} onChange={e => setWhoCanAdd(e.target.value)}
-                                        className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-gray-100 outline-none">
+                                        className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-base sm:text-xs text-gray-900 dark:text-gray-100 outline-none">
                                         <option value="all">Everyone</option>
                                         <option value="admin">Admins only</option>
                                     </select>
@@ -283,7 +298,7 @@ export default function GroupSettings({ group, user, onClose, onGroupUpdated, on
                             <div>
                                 <input
                                     type="text" value={addMemberQuery} onChange={e => handleSearchMember(e.target.value)}
-                                    placeholder="Add a member..." className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-400 transition-colors"
+                                    placeholder="Add a member..." className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-base sm:text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-400 transition-colors"
                                 />
                                 {addMemberResults.length > 0 && (
                                     <div className="mt-1 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden max-h-32 overflow-y-auto">
@@ -301,7 +316,7 @@ export default function GroupSettings({ group, user, onClose, onGroupUpdated, on
                                 )}
                             </div>
                         )}
-                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                        <div className="space-y-1 max-h-60 overflow-y-auto">
                             {group.members?.map(m => (
                                 <div key={m.username} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                     <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
@@ -316,11 +331,14 @@ export default function GroupSettings({ group, user, onClose, onGroupUpdated, on
                                         {m.username === group.creator && <span className="ml-1 text-[10px] text-gray-400">(creator)</span>}
                                     </div>
                                     {isAdmin && m.username !== user.username && m.username !== group.creator && (
-                                        <div className="flex items-center gap-1">
+                                        <div className="flex items-center gap-1 shrink-0">
                                             {m.role !== "admin" && (
-                                                <button onClick={() => handlePromoteMember(m.username)} className="text-[10px] text-blue-500 hover:text-blue-600 px-1.5 py-1">Promote</button>
+                                                // 44px tall: at `text-[10px] px-1.5 py-1` these
+                                                // were ~23px, and "Remove" kicks someone out of
+                                                // the group — a mis-tap there is not cosmetic.
+                                                <button onClick={() => handlePromoteMember(m.username)} className="text-xs sm:text-[10px] text-blue-500 hover:text-blue-600 px-2 min-h-[44px] flex items-center rounded-lg">Promote</button>
                                             )}
-                                            <button onClick={() => handleRemoveMember(m.username)} className="text-[10px] text-red-500 hover:text-red-600 px-1.5 py-1">Remove</button>
+                                            <button onClick={() => handleRemoveMember(m.username)} className="text-xs sm:text-[10px] text-red-500 hover:text-red-600 px-2 min-h-[44px] flex items-center rounded-lg">Remove</button>
                                         </div>
                                     )}
                                 </div>

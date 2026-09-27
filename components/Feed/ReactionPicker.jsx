@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const REACTIONS = [
     { type: "like", emoji: "👍", label: "Like" },
@@ -13,6 +13,24 @@ const REACTIONS = [
 
 export default function ReactionPicker({ onReact, currentReaction, className = "" }) {
     const [show, setShow] = useState(false);
+    const rootRef = useRef(null);
+
+    // Dismiss on a pointer-down outside the picker instead of on the trigger's
+    // blur. On Android, tapping a button focuses it, so a tap on an emoji blurred
+    // the trigger and scheduled a close on a timer; on a loaded main thread that
+    // timer could land before the emoji's own onClick, and the reaction was lost.
+    // A pointer-down lands before the click of whatever was tapped, so the tap
+    // that chooses a reaction is never competing with a scheduled close.
+    useEffect(() => {
+        if (!show) return;
+        const handlePointerDown = (e) => {
+            if (rootRef.current && !rootRef.current.contains(e.target)) {
+                setShow(false);
+            }
+        };
+        document.addEventListener("pointerdown", handlePointerDown);
+        return () => document.removeEventListener("pointerdown", handlePointerDown);
+    }, [show]);
 
     const handleReaction = (type) => {
         onReact(type);
@@ -20,13 +38,13 @@ export default function ReactionPicker({ onReact, currentReaction, className = "
     };
 
     return (
-        <div className={`relative ${className}`}>
+        <div ref={rootRef} className={`relative select-none touch-manipulation ${className}`}>
             {/* Main button */}
             <button
                 onClick={() => setShow(!show)}
-                onBlur={() => setTimeout(() => setShow(false), 200)}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                 aria-label="React"
+                aria-expanded={show}
             >
                 {currentReaction ? (
                     <span className="text-xl">
@@ -41,12 +59,17 @@ export default function ReactionPicker({ onReact, currentReaction, className = "
 
             {/* Reaction picker popup */}
             {show && (
-                <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-900 rounded-full shadow-2xl border border-gray-200 dark:border-gray-700 px-2 py-2 flex gap-1 z-10 animate-scale-in">
+                // Six 40px cells in one row is ~278px, which is wider than a
+                // 320px phone's post column and pushed 🔥, 😢 and 😠 off-screen.
+                // Below `sm` the popup wraps to three per row (3 x 44px + gaps +
+                // padding = 152px), which fits any column while keeping a 44px
+                // target; from `sm` up there is room for the single row again.
+                <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-900 rounded-2xl sm:rounded-full shadow-2xl border border-gray-200 dark:border-gray-700 p-1.5 sm:px-2 sm:py-2 flex flex-wrap sm:flex-nowrap gap-1 max-w-[10rem] sm:max-w-none z-10 animate-scale-in">
                     {REACTIONS.map((reaction) => (
                         <button
                             key={reaction.type}
                             onClick={() => handleReaction(reaction.type)}
-                            className={`text-2xl p-2 hover:scale-125 transition-transform rounded-full ${
+                            className={`w-11 h-11 text-2xl flex items-center justify-center hover:scale-110 transition-transform rounded-full shrink-0 touch-manipulation ${
                                 currentReaction === reaction.type ? "bg-blue-100 dark:bg-blue-900/30" : "hover:bg-gray-100 dark:hover:bg-gray-800"
                             }`}
                             title={reaction.label}
@@ -79,7 +102,9 @@ export function ReactionCounts({ reactions, onReactionClick }) {
                 <button
                     key={reaction.type}
                     onClick={() => onReactionClick?.(reaction)}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-xs font-medium"
+                    // Was ~24px tall, which is a chip, not a target. min-h brings
+                    // it to a height a thumb can actually hit.
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 min-h-[40px] rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-xs font-medium touch-manipulation"
                     title={`${reaction.count} ${reaction.label}`}
                 >
                     <span className="text-base leading-none">{reaction.emoji}</span>

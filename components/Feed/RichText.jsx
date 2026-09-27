@@ -115,6 +115,13 @@ const FULL_REGEX = new RegExp(`(${URL_REGEX_STR}|#[a-zA-Z0-9_]+|@[a-zA-Z0-9_]+|$
 
 function ToxicSegment({ text }) {
     const [hovered, setHovered] = useState(false);
+    // Blur-to-reveal was wired to `onMouseEnter`/`onMouseLeave` only, and there
+    // is no hover on touch: on a phone every filtered word stayed
+    // `blur-[5px] text-transparent` forever, so the content filter silently
+    // failed on mobile. `revealed` is the tap path — a real button, so it is
+    // reachable by keyboard and screen reader too, not just by a synthetic
+    // touch event.
+    const [revealed, setRevealed] = useState(() => new Set());
     const [toxicWords, setToxicWords] = useState(cachedToxicWords || []);
 
     useEffect(() => {
@@ -123,36 +130,55 @@ function ToxicSegment({ text }) {
         }
     }, []);
 
+    const toggleRevealed = (index) => {
+        setRevealed((prev) => {
+            const next = new Set(prev);
+            if (next.has(index)) next.delete(index);
+            else next.add(index);
+            return next;
+        });
+    };
+
     if (toxicWords.length === 0) return <span>{text}</span>;
 
     const pattern = new RegExp(`(${toxicWords.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
     const segments = text.split(pattern);
-    let key = 0;
 
     return (
         <span
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
+            // `pointerType` is checked because mobile browsers synthesise
+            // mouseover/mouseout around a tap. Without the guard, tapping a
+            // word would flip the container-wide hover state on and leave the
+            // rest of the comment revealed until the next tap elsewhere.
+            onPointerEnter={(e) => { if (e.pointerType === "mouse") setHovered(true); }}
+            onPointerLeave={(e) => { if (e.pointerType === "mouse") setHovered(false); }}
         >
-            {segments.map((seg) => {
+            {segments.map((seg, i) => {
                 if (!seg) return null;
                 const isToxic = toxicWords.some((w) => seg.toLowerCase() === w);
                 if (isToxic) {
+                    const isRevealed = hovered || revealed.has(i);
                     return (
-                        <span
-                            key={key++}
-                            className={`inline-block transition-all duration-200 cursor-pointer select-none rounded ${
-                                hovered
+                        <button
+                            key={i}
+                            type="button"
+                            // The whole post card is a link, so without this the
+                            // tap that reveals the word would also navigate away.
+                            onClick={(e) => { e.stopPropagation(); toggleRevealed(i); }}
+                            aria-label={isRevealed ? `Hide filtered word` : `Reveal filtered word`}
+                            aria-expanded={isRevealed}
+                            className={`inline-block rounded border-0 bg-transparent p-0 text-inherit [line-height:inherit] align-baseline transition-all duration-200 cursor-pointer select-none touch-manipulation ${
+                                isRevealed
                                     ? "blur-none text-red-500 dark:text-red-400 font-semibold"
                                     : "blur-[5px] bg-gray-400/30 dark:bg-gray-500/30 text-transparent"
                             }`}
-                            title={hovered ? seg : "Hover to reveal"}
+                            title={isRevealed ? "Tap to hide" : "Tap to reveal"}
                         >
                             {seg}
-                        </span>
+                        </button>
                     );
                 }
-                return <span key={key++}>{seg}</span>;
+                return <span key={i}>{seg}</span>;
             })}
         </span>
     );

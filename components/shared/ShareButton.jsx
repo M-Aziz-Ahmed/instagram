@@ -211,12 +211,13 @@ export default function ShareButton({ postId, text, imageUrl, className = "" }) 
     }, [open]);
 
     useEffect(() => {
-        if (open) {
-            document.body.style.overflow = "hidden";
-        } else {
-            document.body.style.overflow = "";
-        }
-        return () => { document.body.style.overflow = ""; };
+        if (!open) return;
+        // Snapshot and restore rather than clear to "": a second sheet (or the
+        // lightbox) may be holding the lock itself, and unconditional clearing
+        // would drop it while that overlay is still open.
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        return () => { document.body.style.overflow = previousOverflow; };
     }, [open]);
 
     const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/post/${postId}` : "";
@@ -334,7 +335,13 @@ export default function ShareButton({ postId, text, imageUrl, className = "" }) 
                 >
                     <div
                         ref={modalRef}
-                        className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:w-[22rem] max-h-[85vh] shadow-2xl border border-gray-200 dark:border-gray-700 animate-slide-up overflow-hidden"
+                        // dvh, not vh: `vh` is the largest viewport on iOS, so
+                        // browser chrome pushed the title row and close button
+                        // above the top of a bottom-anchored sheet. safe-bottom
+                        // keeps the last row off the home indicator, and the
+                        // sheet scrolls, so a short viewport (landscape phone)
+                        // still reaches the buttons instead of hiding them.
+                        className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:w-[22rem] max-h-[85dvh] overflow-y-auto safe-bottom shadow-2xl border border-gray-200 dark:border-gray-700 animate-slide-up"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="p-4 pb-2">
@@ -344,7 +351,7 @@ export default function ShareButton({ postId, text, imageUrl, className = "" }) 
                                 </span>
                                 <button
                                     onClick={() => { setOpen(false); setShowQR(false); }}
-                                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2 -mr-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2.5 -mr-2.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation"
                                     aria-label="Close"
                                 >
                                     <CloseIcon />

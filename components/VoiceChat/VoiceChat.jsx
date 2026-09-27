@@ -35,8 +35,11 @@ function Participant({ participant, isLocal, onAdminAction }) {
         const handler = (e) => {
             if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
         };
-        document.addEventListener("mousedown", handler);
-        return () => document.removeEventListener("mousedown", handler);
+        // `mousedown` is not reliably fired by iOS Safari for touch input, so the
+        // menu stayed open behind the finger. `pointerdown` covers touch, pen and
+        // mouse in a single listener.
+        document.addEventListener("pointerdown", handler);
+        return () => document.removeEventListener("pointerdown", handler);
     }, [menuOpen]);
 
     return (
@@ -180,6 +183,22 @@ function ChannelCard({ channel, isActive, onJoin, onDelete, participantCount, is
 // reopen the panel. The server caches membership lookups, so this is cheap.
 const CHANNEL_POLL_MS = 30000;
 
+// Row controls in MusicPanel (add-to-queue, queue play/remove) are revealed on
+// hover, which only makes sense where hover exists. They used a `sm:`
+// breakpoint, which is the wrong axis: touch devices have no hover at all (so
+// the buttons were invisible yet still hit-testable), and the mobile bottom
+// sheet renders below 768px anyway, so the 640-767px band was covered twice.
+// `@media (hover: hover)` follows the pointer instead of the viewport, and the
+// base rule keeps them visible (and tappable) on coarse pointers. Kept here
+// rather than in globals.css so the rule lives with the sheet that uses it.
+const HOVER_CTL_CSS = `
+.vc-hover-ctl { opacity: 1; }
+@media (hover: hover) {
+  .vc-hover-ctl { opacity: 0; }
+  .vc-hover-row:hover .vc-hover-ctl,
+  .vc-hover-ctl:focus-visible { opacity: 1; }
+}`;
+
 export default function VoiceChat({ isOpen, onClose }) {
     const { socket, socketError, reconnectSocket } = useVoiceChat();
     const { user } = useUser();
@@ -192,6 +211,8 @@ export default function VoiceChat({ isOpen, onClose }) {
     const [showCreateChannel, setShowCreateChannel] = useState(false);
     const [newChannelName, setNewChannelName] = useState("");
     const [notification, setNotification] = useState(null);
+    const [micError, setMicError] = useState(null);
+    const [audioBlocked, setAudioBlocked] = useState(false);
     const [socketConnected, setSocketConnected] = useState(false);
     const [screenStream, setScreenStream] = useState(null);
     const [sharing, setSharing] = useState(false);
@@ -203,6 +224,11 @@ export default function VoiceChat({ isOpen, onClose }) {
     const [pttListening, setPttListening] = useState(false);
     const [musicOpen, setMusicOpen] = useState(false);
     const [initialMusicState, setInitialMusicState] = useState(null);
+    // `navigator.mediaDevices.getDisplayMedia` is undefined on iOS Safari and
+    // most Android browsers. Read it the same way the layout breakpoints are
+    // read, so the sheet renders identically on the server and never shows a
+    // screen-share button that can only fail.
+    const [canScreenShare] = useState(() => typeof window !== "undefined" && !!navigator.mediaDevices?.getDisplayMedia);
 
     const localStreamRef  = useRef(null);
     const screenStreamRef = useRef(null);
@@ -215,10 +241,16 @@ export default function VoiceChat({ isOpen, onClose }) {
     const analyserRef    = useRef(null);
     const audioCtxRef    = useRef(null);
     const animFrameRef   = useRef(null);
+    const audioStateHandlerRef = useRef(null);
+    const audioUnlockRef = useRef([]);
+    const blockedAudioRef = useRef(new Set());
+    const rejoinInFlightRef = useRef(false);
+    const lastRejoinAtRef = useRef(0);
 
     const socketRef = useRef(socket);
     const userRef = useRef(user);
     const activeChannelRef = useRef(null);
+    const deafenedRef = useRef(deafened);
     const speakingThrottleRef = useRef(0);
     const lastJoinedChannelRef = useRef(null);
     const remoteScreenSharerRef = useRef(null);
@@ -227,6 +259,7 @@ export default function VoiceChat({ isOpen, onClose }) {
     useEffect(() => { userRef.current = user; }, [user]);
     useEffect(() => { activeChannelRef.current = activeChannel; }, [activeChannel]);
     useEffect(() => { remoteScreenSharerRef.current = remoteScreenSharer; }, [remoteScreenSharer]);
+    useEffect(() => { deafenedRef.current = deafened; }, [deafened]);
 
     const notifTimerRef = useRef(null);
     const showNotif = useCallback((msg) => {
@@ -253,8 +286,16 @@ export default function VoiceChat({ isOpen, onClose }) {
         peerStreamsRef.current.clear();
         audioElementsRef.current.forEach((el) => { el.srcObject = null; el.remove(); });
         audioElementsRef.current.clear();
+        blockedAudioRef.current.clear();
+        setAudioBlocked(false);
         iceCandidateBufferRef.current.clear();
         analyserRef.current = null;
+        if (audioCtxRef.current && audioStateHandlerRef.current) {
+            try { audioCtxRef.current.removeEventListener("statechange", audioStateHandlerRef.current); } catch {}
+        }
+        audioStateHandlerRef.current = null;
+        audioUnlockRef.current.forEach(([evt, fn]) => window.removeEventListener(evt, fn));
+        audioUnlockRef.current = [];
         if (audioCtxRef.current) { try { audioCtxRef.current.close(); } catch {} }
         audioCtxRef.current = null;
         setActiveChannel(null);
@@ -267,6 +308,70 @@ export default function VoiceChat({ isOpen, onClose }) {
 
     useEffect(() => () => cleanup(), [cleanup]);
 
+    // A denied microphone is terminal on iOS: once permission is off,
+    // `getUserMedia` rejects immediately on every tap and never prompts again.
+    // `catch { return }` therefore made the join button look broken forever, so
+    // the reason is surfaced and the two cases are told apart — "denied" needs
+    // a trip to Settings, everything else is worth another tap.
+    const reportMicError = useCallback((err) => {
+        const name = err?.name;
+        if (name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError") {
+            setMicError("Microphone blocked. Turn on microphone access for this site in your browser settings, then tap the channel again.");
+        } else if (name === "NotFoundError" || name === "DevicesNotFoundError" || name === "OverconstrainedError") {
+            setMicError("No microphone found. Connect a mic or headset and try again.");
+        } else {
+            setMicError("Could not access your microphone. Check your permissions and try again.");
+        }
+    }, []);
+
+    // The one recovery path shared by every way back into a channel: a
+    // socket.io "reconnect", a fresh "connect" after a socket was replaced or
+    // its reconnection attempts ran out, and the app coming back to the
+    // foreground. All of them need the same three things — a live mic, a fresh
+    // speaking detector, and a new `voice:join`, because the server keys
+    // participants by socket id and none of that survives a new socket.
+    //
+    // socket.io emits "connect" immediately before "reconnect" on a Manager
+    // recovery, and a lock/unlock cycle can add the lifecycle handler on top of
+    // that, so overlapping paths are collapsed here rather than opening a second
+    // capture and re-joining twice.
+    const rejoinLastChannel = useCallback(async () => {
+        const s = socketRef.current;
+        const u = userRef.current;
+        const ch = lastJoinedChannelRef.current;
+        if (!s || !u || !ch || !s.connected) return false;
+        if (rejoinInFlightRef.current) return false;
+        if (Date.now() - lastRejoinAtRef.current < 2000) return false;
+        rejoinInFlightRef.current = true;
+        lastRejoinAtRef.current = Date.now();
+
+        try {
+            localStreamRef.current?.getTracks().forEach((t) => t.stop());
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            localStreamRef.current = stream;
+            if (!deafenedRef.current) {
+                startSpeakingDetection(stream);
+            }
+        } catch (err) {
+            // Never joined, so do not leave a channel id behind for the next
+            // recovery to chase.
+            lastJoinedChannelRef.current = null;
+            reportMicError(err);
+            return false;
+        } finally {
+            rejoinInFlightRef.current = false;
+        }
+
+        s.emit("voice:join", {
+            channelId: ch,
+            username: u.username,
+            avatarUrl: u.avatarUrl,
+            color: u.avatarColor || u.color || "#3b82f6",
+        });
+        showNotif("Reconnected to voice chat");
+        return true;
+    }, [reportMicError, showNotif, startSpeakingDetection]);
+
     // When panel closes, keep the user in the channel but hide the UI
     // Voice:leave only happens on explicit disconnect (leaveChannel button)
 
@@ -278,6 +383,7 @@ export default function VoiceChat({ isOpen, onClose }) {
         const handleJoined = (state) => {
             setActiveChannel(state.id);
             setParticipants(state.participants);
+            setMicError(null);
             if (state.music) {
                 setInitialMusicState(state.music);
             }
@@ -416,28 +522,13 @@ export default function VoiceChat({ isOpen, onClose }) {
             setSocketConnected(true);
 
             const s = socketRef.current;
-            const u = userRef.current;
-            if (!s || !u) return;
+            if (!s) return;
 
             s.emit("voice:get-channels");
 
-            const ch = lastJoinedChannelRef.current;
-            if (!ch) return;
-
-            try {
-                localStreamRef.current?.getTracks().forEach((t) => t.stop());
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                localStreamRef.current = stream;
-                startSpeakingDetection(stream);
-            } catch { return; }
-
-            s.emit("voice:join", {
-                channelId: ch,
-                username: u.username,
-                avatarUrl: u.avatarUrl,
-                color: u.avatarColor || u.color || "#3b82f6",
-            });
-            showNotif("Reconnected to voice chat");
+            // Re-join through the shared recovery path, which debounces itself
+            // because socket.io also fires "connect" just before "reconnect".
+            await rejoinLastChannel();
         };
 
         const fetchChannels = () => { if (socket.connected) socket.emit("voice:get-channels"); };
@@ -447,9 +538,17 @@ export default function VoiceChat({ isOpen, onClose }) {
         // a fresh connect (first mount, reconnectionAttempts exhausted, a new
         // socket object) emits "connect" instead, and the server derives
         // community channels from Mongo on each `voice:get-channels`.
-        const handleConnect = () => {
+        //
+        // A fresh socket also has no channel membership: the server keys
+        // participants by socket id, so after an in-place recovery the old
+        // socket.io session is gone and our `voice:join` is gone with it. This
+        // is exactly what iOS hands us after a screen lock. Without re-joining
+        // here, `activeChannel` stays null, the mic bar disappears and the
+        // MusicPanel unmounts — a connected ghost who is in nobody's channel.
+        const handleConnect = async () => {
             setSocketConnected(true);
             fetchChannels();
+            await rejoinLastChannel();
         };
 
         setSocketConnected(socket.connected);
@@ -521,6 +620,30 @@ export default function VoiceChat({ isOpen, onClose }) {
         };
     }, [socket, isOpen, cleanup, showNotif]);
 
+    // iOS rejects `play()` with NotAllowedError whenever the element was
+    // attached outside a user gesture, which for a peer joining mid-call is
+    // almost always. Swallowing that left the user in a silent call with no
+    // indication of why, so the rejection is recorded and surfaced as a "Tap
+    // for sound" affordance that retries on the next gesture.
+    const retryBlockedAudio = useCallback(async () => {
+        if (blockedAudioRef.current.size === 0) {
+            setAudioBlocked(false);
+            return;
+        }
+        let stillBlocked = false;
+        await Promise.all([...blockedAudioRef.current].map(async (username) => {
+            const el = audioElementsRef.current.get(username);
+            if (!el) { blockedAudioRef.current.delete(username); return; }
+            try {
+                await el.play();
+                blockedAudioRef.current.delete(username);
+            } catch {
+                stillBlocked = true;
+            }
+        }));
+        if (!stillBlocked) setAudioBlocked(false);
+    }, []);
+
     const attachRemoteAudio = useCallback((username, stream) => {
         let el = audioElementsRef.current.get(username);
         if (!el) {
@@ -534,8 +657,26 @@ export default function VoiceChat({ isOpen, onClose }) {
         el.srcObject = stream;
         el.muted = false;
         el.volume = 1;
-        el.play().catch(() => {});
+        el.play().then(() => {
+            if (blockedAudioRef.current.delete(username)) setAudioBlocked(blockedAudioRef.current.size > 0);
+        }).catch(() => {
+            blockedAudioRef.current.add(username);
+            setAudioBlocked(true);
+        });
     }, []);
+
+    // The next tap anywhere in the app is the gesture iOS needs. Listen once,
+    // passively, and only while there is something blocked to retry.
+    useEffect(() => {
+        if (!audioBlocked) return;
+        const unlock = () => { retryBlockedAudio(); };
+        window.addEventListener("pointerdown", unlock, { passive: true, once: true });
+        window.addEventListener("touchstart", unlock, { passive: true, once: true });
+        return () => {
+            window.removeEventListener("pointerdown", unlock);
+            window.removeEventListener("touchstart", unlock);
+        };
+    }, [audioBlocked, retryBlockedAudio]);
 
     const handlePeerTrack = useCallback((username, e) => {
         const track = e.track;
@@ -593,13 +734,54 @@ export default function VoiceChat({ isOpen, onClose }) {
         iceCandidateBufferRef.current.delete(username);
     }, []);
 
+    // iOS only lets an AudioContext run after a user gesture, and it suspends
+    // the context again on screen lock / app backgrounding. `joinChannel`
+    // creates the context *after* an `await getUserMedia(...)`, which severs
+    // the gesture chain, so the context is born suspended: the analyser keeps
+    // returning all zeros, `avg` is always 0, and nobody ever appears to be
+    // speaking. Same shape as `unlockCallAudio()` in utils/callSound.js —
+    // resume on demand, re-arm a one-shot passive gesture hook, and re-resume
+    // on every `statechange` — kept local so the two features stay uncoupled.
+    const resumeAudioContext = useCallback(() => {
+        const ctx = audioCtxRef.current;
+        if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {});
+    }, []);
+
+    const armAudioUnlock = useCallback(() => {
+        if (typeof window === "undefined") return;
+        const unlock = () => { resumeAudioContext(); };
+        ["pointerdown", "touchstart", "click"].forEach((evt) => {
+            window.addEventListener(evt, unlock, { passive: true, once: true });
+            audioUnlockRef.current.push([evt, unlock]);
+        });
+    }, [resumeAudioContext]);
+
     const startSpeakingDetection = useCallback((stream) => {
         try {
             if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
             if (audioCtxRef.current) { try { audioCtxRef.current.close(); } catch {} }
-            audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-            const source = audioCtxRef.current.createMediaStreamSource(stream);
-            analyserRef.current = audioCtxRef.current.createAnalyser();
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            audioCtxRef.current = ctx;
+
+            // Resuming without a gesture is a no-op on iOS, so the passive
+            // one-shot listeners do the actual unlocking on the next tap.
+            if (ctx.state === "suspended") ctx.resume().catch(() => {});
+            armAudioUnlock();
+
+            // iOS suspends on backgrounding and on screen lock, which silently
+            // kills the analyser. Re-arm the gesture hook every time it happens
+            // so the first tap after coming back revives the indicator.
+            const onStateChange = () => {
+                if (ctx.state === "suspended") {
+                    resumeAudioContext();
+                    armAudioUnlock();
+                }
+            };
+            ctx.addEventListener("statechange", onStateChange);
+            audioStateHandlerRef.current = onStateChange;
+
+            const source = ctx.createMediaStreamSource(stream);
+            analyserRef.current = ctx.createAnalyser();
             analyserRef.current.fftSize = 512;
             source.connect(analyserRef.current);
 
@@ -628,7 +810,7 @@ export default function VoiceChat({ isOpen, onClose }) {
             };
             detect();
         } catch {}
-    }, []);
+    }, [armAudioUnlock, resumeAudioContext]);
 
 const createPeerConnections = useCallback(async (channelParticipants) => {
         const s = socketRef.current;
@@ -766,6 +948,8 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
 
         cleanup();
         lastJoinedChannelRef.current = channelId;
+        lastRejoinAtRef.current = 0;
+        setMicError(null);
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -774,7 +958,9 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
             if (!deafened) {
                 startSpeakingDetection(stream);
             }
-        } catch {
+        } catch (err) {
+            lastJoinedChannelRef.current = null;
+            reportMicError(err);
             return;
         }
 
@@ -784,7 +970,7 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
             avatarUrl: u.avatarUrl,
             color: u.avatarColor || u.color || "#3b82f6",
         });
-    }, [cleanup, deafened, startSpeakingDetection]);
+    }, [cleanup, deafened, reportMicError, startSpeakingDetection]);
 
     useEffect(() => {
         if (!activeChannel || !participants.length) return;
@@ -816,8 +1002,49 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
             s.emit("voice:leave", { channelId: activeChannel });
         }
         lastJoinedChannelRef.current = null;
+        lastRejoinAtRef.current = 0;
         cleanup();
     }, [activeChannel, cleanup]);
+
+    // Mobile lifecycle recovery. Locking the phone or switching apps suspends
+    // the AudioContext and — on iOS — usually produces a brand-new socket rather
+    // than an in-place socket.io recovery, so the server drops our channel
+    // membership while the panel still believes we are in one. Nothing listened
+    // for that, which is why locking the phone silently ejected you. On the way
+    // back in, re-verify the socket and re-join if we are no longer in the
+    // channel; `online` covers the same recovery when the radio comes back.
+    useEffect(() => {
+        const recover = () => {
+            const s = socketRef.current;
+            const ch = lastJoinedChannelRef.current;
+            if (!s || !ch) return;
+            if (!s.connected) {
+                // socket.io can burn through its reconnection attempts while the
+                // app is backgrounded, and a Manager that gave up never tries
+                // again on its own — `connect` is what brings it back.
+                setSocketConnected(false);
+                reconnectSocket();
+                return;
+            }
+            setSocketConnected(true);
+            if (activeChannelRef.current !== ch) rejoinLastChannel();
+        };
+        const handleVisibility = () => { if (!document.hidden) recover(); };
+        const handleOffline = () => {
+            if (!lastJoinedChannelRef.current) return;
+            setSocketConnected(false);
+            showNotif("Offline — reconnecting to voice chat");
+        };
+
+        document.addEventListener("visibilitychange", handleVisibility);
+        window.addEventListener("online", recover);
+        window.addEventListener("offline", handleOffline);
+        return () => {
+            document.removeEventListener("visibilitychange", handleVisibility);
+            window.removeEventListener("online", recover);
+            window.removeEventListener("offline", handleOffline);
+        };
+    }, [reconnectSocket, rejoinLastChannel, showNotif]);
 
     const toggleMute = useCallback(() => {
         const newMuted = !muted;
@@ -891,6 +1118,16 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
             return;
         }
 
+        // `navigator.mediaDevices.getDisplayMedia` is undefined on iOS Safari
+        // and most Android browsers, so calling it there throws a TypeError
+        // that the bare `catch` below swallowed — a dead button with no
+        // feedback. Check first, say why, and keep the wording in step with
+        // components/Live/LiveStreamModal.jsx.
+        if (!navigator.mediaDevices?.getDisplayMedia) {
+            showNotif("Screen sharing is not supported on this browser. Try Chrome, Edge, or Safari 16+ on iOS.");
+            return;
+        }
+
         try {
             const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
             const videoTrack = stream.getVideoTracks()[0];
@@ -925,10 +1162,15 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
             });
 
             s.emit("voice:screen-share", { channelId: activeChannelRef.current, sharing: true });
-        } catch {
+        } catch (err) {
             setSharing(false);
+            // NotAllowedError is the user dismissing the picker, which needs no
+            // explanation. Anything else is a real failure and was invisible.
+            if (err?.name !== "NotAllowedError") {
+                showNotif("Screen sharing failed to start. Try Chrome, Edge, or Safari 16+ on iOS.");
+            }
         }
-    }, [sharing]);
+    }, [sharing, showNotif]);
 
     useEffect(() => {
         if (!ptt || !activeChannel) return;
@@ -970,21 +1212,29 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
     // PTT key capture mode
     useEffect(() => {
         if (!pttListening) return;
+        // iPads and Bluetooth keyboards meant that a capture-phase handler
+        // calling preventDefault() + stopPropagation() on *every* keydown made
+        // the whole sheet unresponsive, and the `once: true` listener meant the
+        // first stray keypress became the PTT key. Only Space is captured now;
+        // every other key is left completely alone.
+        const isCaptureKey = (e) => e.code === "Space" || e.key === " " || e.key === "Spacebar";
         const handleCapture = (e) => {
+            if (!isCaptureKey(e)) return;
             e.preventDefault();
             e.stopPropagation();
             setPttKey(e.code);
             setPttListening(false);
         };
-        const handleKeyDown = (e) => {
+        const handleKeyUp = (e) => {
+            if (!isCaptureKey(e)) return;
             e.preventDefault();
             e.stopPropagation();
         };
-        document.addEventListener("keydown", handleCapture, { capture: true, once: true });
-        document.addEventListener("keyup", handleKeyDown, { capture: true });
+        document.addEventListener("keydown", handleCapture, { capture: true });
+        document.addEventListener("keyup", handleKeyUp, { capture: true });
         return () => {
             document.removeEventListener("keydown", handleCapture, { capture: true });
-            document.removeEventListener("keyup", handleKeyDown, { capture: true });
+            document.removeEventListener("keyup", handleKeyUp, { capture: true });
         };
     }, [pttListening]);
 
@@ -1027,8 +1277,12 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
 
     return (
         <div className={`flex flex-col h-full bg-gray-950 text-white ${!isOpen ? "invisible" : ""}`}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
+            {/* Reveal-on-hover rules for MusicPanel's row controls, see HOVER_CTL_CSS */}
+            <style>{HOVER_CTL_CSS}</style>
+            {/* Header. `safe-top` because the app is a black-translucent PWA: in
+                standalone mode the web view runs under the status bar, which put
+                the connection dot and the close button behind the clock. */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0 safe-top">
                 <div className="flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full ${socketConnected ? "bg-green-400" : "bg-yellow-400 animate-pulse"}`} />
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 text-green-400">
@@ -1071,6 +1325,14 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
             {notification && (
                 <div className="mx-3 mt-2 px-3 py-2 bg-yellow-500/20 border border-yellow-500/30 rounded-lg text-xs text-yellow-300 shrink-0">
                     {notification}
+                </div>
+            )}
+
+            {/* Microphone failure. A toast is too short-lived for "enable it in
+                Settings", so this one stays until the next join attempt. */}
+            {micError && (
+                <div className="mx-3 mt-2 px-3 py-2 bg-red-500/20 border border-red-500/30 rounded-lg text-xs text-red-200 shrink-0">
+                    {micError}
                 </div>
             )}
 
@@ -1130,11 +1392,13 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
 
                             {Object.entries(communityGroups).map(([communityId, group]) => (
                                 <div key={communityId} className="space-y-1">
-                                    <p className="text-[10px] font-semibold text-purple-400 dark:text-purple-300 uppercase tracking-wider px-1 mb-1 flex items-center gap-1">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3">
+                                    <p className="text-[10px] font-semibold text-purple-400 dark:text-purple-300 uppercase tracking-wider px-1 mb-1 flex items-center gap-1 min-w-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3 h-3 shrink-0">
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
                                         </svg>
-                                        {group.name}
+                                        {/* A long community name used to widen the whole
+                                            channel list, so it has to shrink. */}
+                                        <span className="truncate">{group.name}</span>
                                     </p>
                                     {group.channels.map((ch) => (
                                         <ChannelCard
@@ -1226,17 +1490,37 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
                 </div>
             )}
 
-            {/* Music Panel - always mounted when in channel for audio sync, visually hidden when closed */}
+            {/* Music Panel - always mounted when in channel for audio sync, visually hidden when closed.
+                A fixed h-72 left a 375x667 phone with almost no channel list left
+                underneath once the panel opened. */}
             {activeChannel && (
-                <div className={musicOpen ? "h-72 border-t border-white/10 shrink-0" : "h-0 overflow-hidden"}>
+                <div className={musicOpen ? "h-48 sm:h-72 border-t border-white/10 shrink-0" : "h-0 overflow-hidden"}>
                         <MusicPanel socket={socket} channelId={activeChannel} user={user} initialState={initialMusicState} />
                 </div>
             )}
 
-            {/* Controls */}
+            {/* iOS rejected the remote audio elements' `play()`, so the call was
+                silent with no way back in. One tap retries every blocked element. */}
+            {audioBlocked && (
+                <button
+                    onClick={retryBlockedAudio}
+                    className="mx-3 mb-2 px-3 py-2 bg-amber-500/20 border border-amber-500/30 rounded-lg text-xs text-amber-200 flex items-center justify-center gap-2 shrink-0"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                    </svg>
+                    Tap for sound
+                </button>
+            )}
+
+            {/* Controls. `safe-bottom` lives on the sheet itself
+                (components/Layout/LayoutWrapper.jsx) — having it here as well
+                added the home-indicator inset twice and floated this row 34px
+                above where it belongs. */}
             {activeChannel && (
-                <div className="shrink-0 border-t border-white/10 px-4 py-3 safe-bottom">
+                <div className="shrink-0 border-t border-white/10 px-4 py-3">
                     <div className="flex items-center justify-center gap-3">
+                        {canScreenShare && (
                         <button
                             onClick={toggleScreenShare}
                             className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
@@ -1248,6 +1532,7 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0v1.036a1 1 0 0 1-.473.862l-2.277 1.366a1 1 0 0 1-1.09 0L11.14 7.148a1 1 0 0 0-1.09 0L4.473 9.148A1 1 0 0 1 4 8.286V5.25" />
                             </svg>
                         </button>
+                        )}
                         <button
                             onClick={() => {
                                 if (pttListening) { setPttListening(false); return; }
@@ -1278,7 +1563,7 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
                                 : ptt ? (pttActive ? "bg-green-500 text-white" : "bg-yellow-500 text-white")
                                 : "bg-white/10 text-white hover:bg-white/20"
                             }`}
-                            title={pttListening ? "Press any key..." : ptt ? `PTT: ${formatKey(pttKey)} (right-click to change)` : "Enable push-to-talk"}
+                            title={pttListening ? "Press Space..." : ptt ? `PTT: ${formatKey(pttKey)} (right-click to change)` : "Enable push-to-talk"}
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />

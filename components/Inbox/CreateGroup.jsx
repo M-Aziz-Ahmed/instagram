@@ -108,17 +108,25 @@ export default function CreateGroup({ user, onClose, onCreated }) {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-950 rounded-2xl w-full max-w-md mx-4 shadow-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+            {/* `dvh`, not `vh`: on iOS `vh` is the LARGEST viewport, so `85vh` could
+                exceed the visible area. The body is `min-h-0`, so a focused input
+                shrinks the scroller rather than pushing the Create button off.
+
+                `safe-top` / `safe-bottom` are on the sheet, not on its header and
+                footer: `.safe-*` are unlayered rules in globals.css, so they
+                override a same-side `py-4` utility and would leave those edges
+                unpadded wherever the inset is 0. */}
+            <div className="bg-white dark:bg-gray-950 rounded-2xl w-full max-w-md mx-4 shadow-2xl max-h-[85dvh] flex flex-col overflow-hidden safe-top safe-bottom" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800 shrink-0">
                     <h2 className="font-bold text-lg text-gray-900 dark:text-gray-100">New Group</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1" aria-label="Close">
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center justify-center w-11 h-11 -mr-2 shrink-0" aria-label="Close">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                         </svg>
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
                     {/* Group Avatar */}
                     <div className="flex items-center gap-4">
                         <button
@@ -148,7 +156,10 @@ export default function CreateGroup({ user, onClose, onCreated }) {
                         <input
                             type="text" value={name} onChange={e => setName(e.target.value.slice(0, 50))}
                             placeholder="e.g. Weekend Plans"
-                            className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
+                            // Form controls are 16px on touch (see RepostButton): 14px
+                            // made iOS zoom the page on focus, and the layout viewport
+                            // meta in app/layout.js leaves no way to zoom back out.
+                            className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-base sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
                         />
                         <span className="text-[11px] text-gray-400 mt-1 block text-right">{name.length}/50</span>
                     </div>
@@ -160,7 +171,7 @@ export default function CreateGroup({ user, onClose, onCreated }) {
                             value={description} onChange={e => setDescription(e.target.value.slice(0, 200))}
                             placeholder="What's this group about?"
                             rows={2}
-                            className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors resize-none"
+                            className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-base sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors resize-none"
                         />
                     </div>
 
@@ -170,7 +181,7 @@ export default function CreateGroup({ user, onClose, onCreated }) {
                         <input
                             type="text" value={contactSearch} onChange={e => setContactSearch(e.target.value)}
                             placeholder="Filter your conversations..."
-                            className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
+                            className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-base sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
                         />
                         {loadingContacts ? (
                             <p className="text-xs text-gray-400 mt-2">Loading your chats...</p>
@@ -217,11 +228,11 @@ export default function CreateGroup({ user, onClose, onCreated }) {
                     )}
                 </div>
 
-                <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-800">
+                <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-800 shrink-0">
                     <button
                         onClick={handleCreate}
                         disabled={!name.trim() || creating}
-                        className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2.5 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+                        className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm"
                     >
                         {creating ? "Creating..." : "Create Group"}
                     </button>

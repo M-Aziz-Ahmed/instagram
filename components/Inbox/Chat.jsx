@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/context/ToastContext";
@@ -99,7 +100,9 @@ function getMessageStatus(msg) {
 }
 
 export default function Chat({ pendingMessage, recipient, recipientUser, scrollContainerRef, setReplyingTo, isTyping, isRecording }) {
-    const { user } = useUser();
+const { user } = useUser();
+const router = useRouter();
+
     const { showToast } = useToast();
     const [messages, setMessages]   = useState([]);
     const [loading, setLoading]     = useState(true);
@@ -798,7 +801,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                 </div>
                             )}
 
-                            <div className="flex flex-col max-w-[72vw] sm:max-w-xs lg:max-w-md">
+                            <div className="flex flex-col min-w-0 max-w-[72vw] sm:max-w-xs lg:max-w-md">
                                 {!isMine && !sameAsPrev && (
                                     <div className="flex items-center gap-1 mb-1 ml-1">
                                         <span className="text-xs text-gray-500 dark:text-gray-400">{msg.sender}</span>
@@ -860,7 +863,21 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                                     alt="Photo"
                                                     width={600}
                                                     height={400}
-                                                    className="w-full h-auto object-cover"
+                                                    /* `object-cover` was paired with
+                                                       * `h-auto`, which makes it a
+                                                       * no-op: with no fixed height
+                                                       * the box is already the
+                                                       * intrinsic ratio, so nothing
+                                                       * is cropped. The real problem
+                                                       * was the opposite one — a tall
+                                                       * portrait (a screenshot, say)
+                                                       * rendered at full height and
+                                                       * swamped the thread. Clamp the
+                                                       * height and switch to
+                                                       * `object-contain` so the
+                                                       * clamp letterboxes instead of
+                                                       * squashing the image. */
+                                                    className="w-full max-h-[420px] object-contain"
                                                     priority={false}
                                                 />
                                             )}
@@ -894,8 +911,15 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className={`px-4 py-2.5 text-sm leading-snug wrap-break-word ${msg.imageUrl ? "border-t border-white/20" : ""}`}>
-                                            <RichText text={msg.text} className="text-inherit" />
+                                        <div className={`px-4 py-2.5 text-sm leading-snug break-words ${msg.imageUrl ? "border-t border-white/20" : ""}`}>
+                                            {/* `RichText` renders every `#tag` as a
+                                                * <button onClick={() => onHashtag?.(tag)}>.
+                                                * Without this prop the handler is a
+                                                * no-op, so tapping a hashtag in a DM
+                                                * looked live and did nothing. The feed
+                                                * takes its tag filter from `?tag=`, not
+                                                * from a `/tag/[tag]` route. */}
+                                            <RichText text={msg.text} className="text-inherit" onHashtag={(tag) => router.push(`/?tag=${encodeURIComponent(tag)}`)} />
                                         </div>
                                     )}
                                     {msg.linkPreview && !msg.deleted && (
@@ -921,8 +945,9 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                 <div className={`flex items-center gap-1 mt-0.5 ${isMine ? "justify-end mr-1" : "justify-start ml-1"}`}>
                                     <button
                                         onClick={() => setReplyingTo(msg)}
-                                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors opacity-60 hover:opacity-100"
-                                        title="Reply">
+                                        className="p-1 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                                        title="Reply"
+                                        aria-label="Reply">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
                                         </svg>
@@ -930,12 +955,13 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                     {msg.text && (
                                         <button
                                             onClick={() => translateMessage(msg._id, msg.text)}
-                                            className={`p-1 rounded-full transition-colors ${
+                                            className={`p-1 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-full transition-colors ${
                                                 translations[msg._id]
-                                                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-500 opacity-100"
-                                                    : "hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 opacity-60 hover:opacity-100"
+                                                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-500"
+                                                    : "hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                                             }`}
-                                            title={translations[msg._id] ? "Hide translation" : "Translate"}>
+                                            title={translations[msg._id] ? "Hide translation" : "Translate"}
+                                            aria-label={translations[msg._id] ? "Hide translation" : "Translate translation"}>
                                             {translatingIdx === msg._id ? (
                                                 <div className="w-3.5 h-3.5 border-2 border-gray-300 dark:border-gray-600 border-t-gray-600 dark:border-t-gray-300 rounded-full animate-spin" />
                                             ) : (
@@ -950,10 +976,10 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                     <button
                                         onClick={() => handleStar(msg)}
                                         disabled={msg._sending || !msg._id}
-                                        className={`p-1 rounded-full transition-colors disabled:opacity-40 ${
+                                        className={`p-1 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-full transition-colors disabled:opacity-40 ${
                                             msg.starredBy?.includes(username)
                                                 ? "text-yellow-500"
-                                                : "text-gray-400 dark:text-gray-500 hover:text-yellow-500 opacity-60 hover:opacity-100"
+                                                : "text-gray-500 dark:text-gray-400 hover:text-yellow-500"
                                         }`}
                                         aria-label={msg.starredBy?.includes(username) ? "Unstar message" : "Star message"}
                                         title={msg.starredBy?.includes(username) ? "Unstar" : "Star"}
@@ -978,7 +1004,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                             {canRecall(msg) && (
                                                 <button
                                                     onClick={() => handleRecall(msg)}
-                                                    className="ml-1 text-[10px] text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors font-medium"
+                                                    className="ml-1 px-1.5 min-h-[32px] flex items-center text-[10px] text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors font-medium"
                                                     title="Recall message"
                                                 >
                                                     Recall
@@ -988,7 +1014,8 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                                 <div className="relative">
                                                     <button
                                                         onClick={() => setActiveMenu(activeMenu === msg._id ? null : msg._id)}
-                                                        className="p-1 rounded-full hover:bg-white/20 text-gray-400 dark:text-gray-500 hover:text-gray-200 transition-colors"
+                                                        className="p-1 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-full hover:bg-white/20 text-gray-500 dark:text-gray-400 hover:text-gray-200 transition-colors"
+                                                        aria-label="Message actions"
                                                     >
                                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
                                                             <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
@@ -1036,7 +1063,8 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                                 <button
                                                     onClick={() => setForwardMsg(msg)}
                                                     title="Forward message"
-                                                    className="hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+                                                    aria-label="Forward message"
+                                                    className="p-1 -m-1 min-h-[32px] min-w-[32px] flex items-center justify-center rounded-full hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
                                                 >
                                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
@@ -1116,7 +1144,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                     setShowScrollBtn(false);
                     scrollToBottom();
                 }}
-                className="sticky bottom-3 mx-auto w-9 h-9 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shadow-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors z-10 ml-auto mr-auto"
+                className="sticky bottom-3 mx-auto w-11 h-11 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shadow-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors z-10 ml-auto mr-auto"
                 aria-label="Scroll to bottom"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
@@ -1133,7 +1161,12 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                     setNewMessagesCount(0);
                     scrollToBottom();
                 }}
-                className="fixed bottom-24 left-1/2 -translate-x-1/2 z-20 rounded-full bg-blue-500 px-4 py-2 text-xs font-semibold text-white shadow-lg hover:bg-blue-600 transition-colors"
+                /* `bottom-24` is a flat 96px, but the fixed bottom nav is
+                 * `h-16` PLUS `safe-bottom` (64px + up to 34px). With any
+                 * inset of 32px or more the pill's bottom edge slid under the
+                 * nav. `z-20` is also below the nav's `z-30`, so it could not
+                 * simply be raised above it. */
+                className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-20 rounded-full bg-blue-500 px-4 min-h-[40px] flex items-center text-xs font-semibold text-white shadow-lg hover:bg-blue-600 transition-colors"
             >
                 {newMessagesCount} new message{newMessagesCount > 1 ? "s" : ""}
             </button>

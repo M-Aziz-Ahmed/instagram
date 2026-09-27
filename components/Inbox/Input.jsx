@@ -403,12 +403,20 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
             {imagePreview && (
                 <div className="relative inline-flex self-start">
                     <img src={imagePreview} alt="" className="h-24 max-w-full rounded-xl object-cover border border-gray-200 dark:border-gray-700" />
+                    {/* 44px button, 24px painted dot. The badge is absolutely
+                        positioned over the preview, so a 44px box that PAINTED 44px
+                        would cover the attachment itself — hence the inner span. It
+                        is inset to the preview's own top-right corner rather than
+                        straddling it, so its overhang can never land on a sibling
+                        chip's dismiss button. */}
                     <button
                         onClick={removeImage}
-                        className="absolute -top-2 -right-2 bg-gray-800 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-gray-700 transition-colors shadow"
+                        className="absolute top-0 right-0 w-11 h-11 flex items-center justify-center"
                         aria-label="Remove image"
                     >
-                        &#x2715;
+                        <span className="bg-gray-800 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-gray-700 transition-colors shadow">
+                            &#x2715;
+                        </span>
                     </button>
                     {uploading && (
                         <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center">
@@ -432,12 +440,15 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                         </svg>
                         <span className="text-xs text-gray-500 dark:text-gray-400">Voice message</span>
                     </div>
+                    {/* 44px button, 24px painted dot — see the image badge above. */}
                     <button
                         onClick={() => setAudioUrl("")}
-                        className="absolute -top-2 -right-2 bg-gray-800 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-gray-700 transition-colors shadow"
+                        className="absolute top-0 right-0 w-11 h-11 flex items-center justify-center"
                         aria-label="Remove audio"
                     >
-                        &#x2715;
+                        <span className="bg-gray-800 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-gray-700 transition-colors shadow">
+                            &#x2715;
+                        </span>
                     </button>
                 </div>
             )}
@@ -449,7 +460,8 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                         <p className="text-[10px] text-blue-500 dark:text-blue-400 font-semibold">Replying to {replyingTo.sender}</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{replyingTo.text}</p>
                     </div>
-                    <button onClick={() => setReplyingTo(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 shrink-0">
+                    <button onClick={() => setReplyingTo(null)} aria-label="Cancel reply"
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center justify-center w-11 h-11 -mr-2 shrink-0">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                         </svg>
@@ -461,12 +473,15 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
             {linkPreview && (
                 <div className="relative self-start w-full max-w-xs sm:max-w-sm">
                     <LinkPreviewCard preview={linkPreview} />
+                    {/* 44px button, 24px painted dot — see the image badge above. */}
                     <button
                         onClick={() => { setLinkPreview(null); linkUrlRef.current = null; }}
-                        className="absolute -top-2 -right-2 bg-gray-800 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-gray-700 transition-colors shadow"
+                        className="absolute top-0 right-0 w-11 h-11 flex items-center justify-center"
                         aria-label="Remove link preview"
                     >
-                        &#x2715;
+                        <span className="bg-gray-800 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-gray-700 transition-colors shadow">
+                            &#x2715;
+                        </span>
                     </button>
                 </div>
             )}
@@ -478,7 +493,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                     onClick={() => fileRef.current?.click()}
                     disabled={!user || !recipient}
                     aria-label="Attach image"
-                    className="shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40"
+                    className="shrink-0 w-11 h-11 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-40 touch-manipulation"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -492,7 +507,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                         onClick={() => { setShowEmoji(!showEmoji); setShowGif(false); }}
                         disabled={!user || !recipient}
                         aria-label="Add emoji"
-                        className={`shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ${showEmoji ? "text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20" : "text-gray-500 dark:text-gray-400 hover:text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"}`}
+                        className={`shrink-0 w-11 h-11 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 touch-manipulation ${showEmoji ? "text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20" : "text-gray-500 dark:text-gray-400 hover:text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20"}`}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-5 h-5">
                             <circle cx="12" cy="12" r="10" />
@@ -517,7 +532,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                         onClick={() => { setShowGif(!showGif); setShowEmoji(false); }}
                         disabled={!user || !recipient}
                         aria-label="Add GIF"
-                        className={`shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ${showGif ? "text-purple-500 bg-purple-50 dark:bg-purple-900/20" : "text-gray-500 dark:text-gray-400 hover:text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20"}`}
+                        className={`shrink-0 w-11 h-11 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 touch-manipulation ${showGif ? "text-purple-500 bg-purple-50 dark:bg-purple-900/20" : "text-gray-500 dark:text-gray-400 hover:text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20"}`}
                     >
                         <span className="text-[11px] font-bold">GIF</span>
                     </button>
@@ -544,7 +559,10 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                         onKeyDown={handleKeyDown}
                         placeholder={recipient ? "Message\u2026" : "Select a conversation\u2026"}
                         disabled={!user || !recipient}
-                        className="flex-1 bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none disabled:cursor-not-allowed"
+                        // 16px on touch: 14px made iOS zoom the page on focus, and
+                        // the layout viewport meta in app/layout.js leaves no way to
+                        // zoom back out.
+                        className="flex-1 min-w-0 bg-transparent text-base sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none disabled:cursor-not-allowed"
                     />
                     {showMentionDropdown && mentionMode === "user" && mentionResults.length > 0 && (
                         <div className="absolute bottom-full mb-2 left-0 right-0 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto z-40">
@@ -552,8 +570,17 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                                 <button
                                     key={u._id || u.username}
                                     type="button"
-                                    onMouseDown={(e) => { e.preventDefault(); insertMention(u.username); }}
-                                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${i === mentionHighlight ? "bg-gray-100 dark:bg-gray-800" : ""}`}
+                                    // `onPointerDown`, not `onMouseDown`: on touch the
+                                    // mouse event is synthesised AFTER `touchend`, so a
+                                    // scroll gesture that started on a row both scrolled
+                                    // the list and inserted the mention. Pointer events
+                                    // cover mouse, touch and pen in one path, and firing
+                                    // before the gesture resolves is what makes
+                                    // `preventDefault()` able to stop the input losing
+                                    // focus. `touch-manipulation` drops the 300ms
+                                    // double-tap delay.
+                                    onPointerDown={(e) => { e.preventDefault(); insertMention(u.username); }}
+                                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors touch-manipulation ${i === mentionHighlight ? "bg-gray-100 dark:bg-gray-800" : ""}`}
                                 >
                                     <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: u.avatarColor }}>
                                         {u.avatarUrl ? <img src={u.avatarUrl} alt="" className="w-full h-full rounded-full object-cover" /> : u.username?.[0]?.toUpperCase()}
@@ -572,8 +599,9 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                                     <button
                                         key={tagName}
                                         type="button"
-                                        onMouseDown={(e) => { e.preventDefault(); insertHashtag(tagName); }}
-                                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${i === mentionHighlight ? "bg-gray-100 dark:bg-gray-800" : ""}`}
+                                        // `onPointerDown` — see the mention row above.
+                                        onPointerDown={(e) => { e.preventDefault(); insertHashtag(tagName); }}
+                                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors touch-manipulation ${i === mentionHighlight ? "bg-gray-100 dark:bg-gray-800" : ""}`}
                                     >
                                         <span className="text-blue-500 font-medium text-xs">#</span>
                                         <span className="font-medium text-gray-900 dark:text-gray-100 truncate">{tagName}</span>
@@ -591,7 +619,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                         onClick={handleSend}
                         disabled={sending || uploading}
                         aria-label="Send"
-                        className="shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-blue-500 hover:bg-blue-600 dark:hover:bg-blue-400 flex items-center justify-center text-white transition-colors disabled:opacity-50"
+                        className="shrink-0 w-11 h-11 sm:w-10 sm:h-10 rounded-full bg-blue-500 hover:bg-blue-600 dark:hover:bg-blue-400 flex items-center justify-center text-white transition-colors disabled:opacity-50 touch-manipulation"
                     >
                         {sending ? (
                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

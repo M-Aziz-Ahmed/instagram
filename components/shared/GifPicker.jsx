@@ -15,7 +15,14 @@ export default function GifPicker({ onSelect, onClose, className = "" }) {
     const abortRef     = useRef(null);
 
     useEffect(() => {
-        inputRef.current?.focus();
+        // Mouse/keyboard only. Auto-focusing on touch raises the software
+        // keyboard, which shrinks the visual viewport while this panel is
+        // `absolute bottom-full` against a control mid-scroll, so it ends up
+        // mispositioned with its search row cut off. The search box is one tap
+        // away instead.
+        if (typeof window !== "undefined" && window.matchMedia?.("(hover: hover) and (pointer: fine)").matches) {
+            inputRef.current?.focus();
+        }
     }, []);
 
     useEffect(() => {
@@ -72,8 +79,7 @@ export default function GifPicker({ onSelect, onClose, className = "" }) {
     return (
         <div
             ref={containerRef}
-            className={`bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col ${className}`}
-            style={{ maxWidth: 340, width: '100%', maxHeight: 'min(400px, 50dvh)' }}
+            className={`bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col min-w-0 w-[min(340px,calc(100vw-2rem))] sm:max-w-[calc(100vw-2rem)] max-h-[min(400px,50dvh)] ${className}`}
         >
             {/* Search */}
             <div className="p-2 border-b border-gray-100 dark:border-gray-800">
@@ -88,12 +94,17 @@ export default function GifPicker({ onSelect, onClose, className = "" }) {
                         value={query}
                         onChange={(e) => handleSearch(e.target.value)}
                         placeholder="Search GIFs..."
-                        className="w-full bg-gray-100 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 rounded-xl pl-9 pr-3 py-2 outline-none"
+                        // 16px on touch: under that iOS zooms on focus and the
+                        // layout viewport meta makes the zoom unrecoverable.
+                        className="w-full bg-gray-100 dark:bg-gray-800 text-base sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 rounded-xl pl-9 pr-12 py-2 outline-none"
                     />
                     {query && (
+                        // Was a bare 14px glyph: a 14x14 hit target. The icon keeps
+                        // its size, the tap area does not.
                         <button
                             onClick={() => handleSearch("")}
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                            aria-label="Clear search"
+                            className="absolute right-0 top-1/2 -translate-y-1/2 h-11 w-11 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -107,7 +118,7 @@ export default function GifPicker({ onSelect, onClose, className = "" }) {
             <div className="flex gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800">
                 <button
                     onClick={() => { setTab("trending"); setQuery(""); fetchGifs("", 0); }}
-                    className={`text-xs font-medium px-3 py-1 rounded-full transition-colors ${
+                    className={`text-sm font-medium px-3 py-2 min-h-[44px] rounded-full transition-colors touch-manipulation ${
                         tab === "trending"
                             ? "bg-blue-500 text-white"
                             : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -117,7 +128,7 @@ export default function GifPicker({ onSelect, onClose, className = "" }) {
                 </button>
                 <button
                     onClick={() => { setTab("reactions"); setQuery(""); fetchGifs("reactions", 0); }}
-                    className={`text-xs font-medium px-3 py-1 rounded-full transition-colors ${
+                    className={`text-sm font-medium px-3 py-2 min-h-[44px] rounded-full transition-colors touch-manipulation ${
                         tab === "reactions"
                             ? "bg-blue-500 text-white"
                             : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -127,7 +138,7 @@ export default function GifPicker({ onSelect, onClose, className = "" }) {
                 </button>
                 <button
                     onClick={() => { setTab("animals"); setQuery(""); fetchGifs("cute animals", 0); }}
-                    className={`text-xs font-medium px-3 py-1 rounded-full transition-colors ${
+                    className={`text-sm font-medium px-3 py-2 min-h-[44px] rounded-full transition-colors touch-manipulation ${
                         tab === "animals"
                             ? "bg-blue-500 text-white"
                             : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -138,7 +149,8 @@ export default function GifPicker({ onSelect, onClose, className = "" }) {
             </div>
 
             {/* GIF grid */}
-            <div className="p-2 overflow-y-auto flex-1 min-h-0" style={{ maxHeight: 300 }}>
+            <div className="p-2 overflow-y-auto flex-1 min-h-0 max-h-[min(300px,40dvh)]">
+
                 {loading && gifs.length === 0 ? (
                     <div className="flex items-center justify-center py-8">
                         <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-600 border-t-blue-500 rounded-full animate-spin" />

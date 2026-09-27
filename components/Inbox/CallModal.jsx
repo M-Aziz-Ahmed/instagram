@@ -47,7 +47,10 @@ function VideoGrid({ remoteStreams, localStream, videoOn, loudspeaker, type }) {
                 </div>
             )}
 
-            {/* Floating self-view */}
+            {/* Floating self-view. The notch inset is applied by `safe-top` on the
+                panel below, not here: this box is fixed-size with `overflow-hidden`,
+                so padding it would have shrunk the self-view by the full inset
+                instead of moving it clear of the status bar. */}
             <div className="absolute top-3 right-3 z-10 w-24 h-36 sm:w-32 sm:h-48 rounded-xl overflow-hidden border-2 border-white/20 shadow-lg bg-gray-900">
                 <LocalVideo localStream={localStream} videoOn={videoOn} />
             </div>
@@ -153,7 +156,18 @@ export default function CallModal() {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="w-full max-w-lg h-[85vh] max-h-[700px] bg-gray-950 rounded-3xl flex flex-col overflow-hidden shadow-2xl">
+            {/* `dvh`, not `vh`: on iOS `vh` is the LARGEST viewport, so `h-[85vh]`
+                could be taller than what was actually visible — and the control bar
+                is the last flex child, so what fell off the bottom was
+                Decline/Accept/End. `max-h-[700px]` never rescues a phone, so the cap
+                is the real viewport instead, applied once here.
+
+                `safe-top` / `safe-bottom` are on the panel, not on the controls:
+                `.safe-*` are unlayered rules in globals.css, so on the control bar
+                they would override its own `p-6` everywhere the inset is 0. Here
+                they inset the panel, which also takes the self-view PiP clear of
+                the status bar. */}
+            <div className="w-full max-w-lg h-[85dvh] max-h-[100dvh] bg-gray-950 rounded-3xl flex flex-col overflow-hidden shadow-2xl safe-top safe-bottom">
 
                 {/* Call Info */}
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-center relative">
@@ -198,7 +212,7 @@ export default function CallModal() {
                 </div>
 
                 {/* Controls */}
-                <div className="flex items-center justify-center gap-4 p-6 bg-gray-900/80">
+                <div className="flex items-center justify-center gap-4 p-6 bg-gray-900/80 shrink-0">
                     {isIncoming && status === "ringing" ? (
                         <>
                             <button

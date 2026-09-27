@@ -32,26 +32,61 @@ import UserActionsMenu from "@/components/shared/UserActionsMenu";
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
-function ImageCarousel({ images, onImageClick, showHeart }) {
+// The swipe handlers and the tap handler are the same ones the single-image
+// path uses, passed down rather than re-implemented. That matters for two
+// reasons: `scrollDetectedRef` is what tells a drag apart from a tap, and it
+// only knows about a drag if it is told about one — the carousel used to keep
+// its own touch bookkeeping, so the guard never saw a swipe and a swipe to
+// photo 2 also fired the compatibility `click` and opened the lightbox.
+// `onImageTap` is the same function as the single-image click target, which is
+// what finally makes double-tap-to-like work on multi-image posts: before
+// this, `showHeart` was passed in but nothing in here could ever set it true.
+function ImageCarousel({ images, onImageTap, onTouchStart, onTouchEnd, onTouchMove, showHeart }) {
     const [idx, setIdx] = useState(0);
     const touchX = useRef(null);
 
     const go = (dir) => setIdx((i) => Math.max(0, Math.min(images.length - 1, i + dir)));
-    const onTouchStart = (e) => { touchX.current = e.touches[0].clientX; };
-    const onTouchEnd = (e) => {
-        if (touchX.current == null) return;
-        const diff = touchX.current - e.changedTouches[0].clientX;
-        if (Math.abs(diff) > 40) go(diff > 0 ? 1 : -1);
+    const goTo = (i) => setIdx(Math.max(0, Math.min(images.length - 1, i)));
+
+    const handleTouchStart = (e) => {
+        touchX.current = e.touches[0].clientX;
+        onTouchStart?.(e);
+    };
+
+    // Delegates straight to the parent instead of calling preventDefault here.
+    // React registers touchmove as a *passive* listener on its root, so
+    // preventDefault from an onTouchMove prop is a no-op that only logs
+    // "Unable to preventDefault inside passive event listener". The gesture is
+    // claimed declaratively by `touch-pan-y` on the surface below, which is
+    // what actually stops the browser arbitrating a mostly-horizontal drag as a
+    // page scroll — and unlike preventDefault it also settles the slightly
+    // diagonal case, by deciding the axis up front rather than after the fact.
+    const handleTouchMove = (e) => onTouchMove?.(e);
+
+    const handleTouchEnd = (e) => {
+        if (touchX.current != null) {
+            const diff = touchX.current - e.changedTouches[0].clientX;
+            if (Math.abs(diff) > 40) go(diff > 0 ? 1 : -1);
+        }
         touchX.current = null;
+        // Runs last so the parent's touchend has already set (or cleared)
+        // scrollDetectedRef by the time anything reads it.
+        onTouchEnd?.(e);
     };
 
     return (
         <div className="mt-3 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 relative select-none">
             <div
-                className="relative cursor-pointer"
-                onClick={() => onImageClick?.(images[idx])}
-                onTouchStart={onTouchStart}
-                onTouchEnd={onTouchEnd}
+                // touch-pan-y = `touch-action: pan-y`: vertical panning stays
+                // the page's, horizontal panning is the carousel's. Without it
+                // the browser may claim a slightly diagonal drag for a page
+                // scroll and end the gesture in touchcancel, leaving
+                // scrollDetectedRef false and still firing the click.
+                className="relative cursor-pointer touch-pan-y"
+                onClick={() => onImageTap?.(images[idx])}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
             >
                 <div className="flex transition-transform duration-300 ease-out" style={{ transform: `translateX(-${idx * 100}%)` }}>
                     {images.map((src, i) => (
@@ -69,18 +104,41 @@ function ImageCarousel({ images, onImageClick, showHeart }) {
             {images.length > 1 && (
                 <>
                     {idx > 0 && (
-                        <button onClick={(e) => { e.stopPropagation(); go(-1); }} className="absolute left-1.5 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs transition-colors z-10">
+                        // 28x28 was the only prev/next affordance and it was
+                        // hard to hit with a thumb. 44px now, nudged in to
+                        // left-2/right-2 so the finger does not have to reach
+                        // into the very corner of the card to land on it.
+                        <button onClick={(e) => { e.stopPropagation(); go(-1); }}
+                            aria-label="Previous image"
+                            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white w-11 h-11 rounded-full flex items-center justify-center text-lg transition-colors z-10 touch-manipulation select-none">
                             ‹
                         </button>
                     )}
                     {idx < images.length - 1 && (
-                        <button onClick={(e) => { e.stopPropagation(); go(1); }} className="absolute right-1.5 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs transition-colors z-10">
+                        <button onClick={(e) => { e.stopPropagation(); go(1); }}
+                            aria-label="Next image"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white w-11 h-11 rounded-full flex items-center justify-center text-lg transition-colors z-10 touch-manipulation select-none">
                             ›
                         </button>
                     )}
-                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 z-10">
+                    {/* The dots are 6x6. They used to be 6x6 <div>s, which is a
+                        6x6 *target* — unreachable, and, on a multi-image post,
+                        the only indicator of where you are. The dot stays
+                        visually 6x6; only the hit area grows, to 20x20 with the
+                        glyph centred, which is the smallest target a thumb can
+                        find on a 320px screen without the row becoming taller
+                        than the image. */}
+                    <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-0.5 z-10">
                         {images.map((_, i) => (
-                            <div key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${i === idx ? "bg-white" : "bg-white/40"}`} />
+                            <button
+                                key={i}
+                                onClick={() => goTo(i)}
+                                aria-label={`Go to image ${i + 1} of ${images.length}`}
+                                aria-current={i === idx}
+                                className="w-5 h-5 flex items-center justify-center touch-manipulation"
+                            >
+                                <span className={`w-1.5 h-1.5 rounded-full transition-colors ${i === idx ? "bg-white" : "bg-white/40"}`} />
+                            </button>
                         ))}
                     </div>
                 </>
@@ -203,7 +261,13 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
                             <span className="text-xs text-gray-500 dark:text-gray-400">Voice comment</span>
                         </div>
                         <button onClick={() => setAudioUrl("")}
-                            className="absolute -top-1.5 -right-1.5 bg-black/60 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] hover:bg-black/80">
+                            // 16x16 was a sub-pixel target sitting on top of an
+                            // already-small chip. 32px is as big as this can get
+                            // without burying the "Voice comment" pill it sits on
+                            // — the hit area is the button, the glyph is centred
+                            // inside it.
+                            aria-label="Remove voice comment"
+                            className="absolute -top-2 -right-2 bg-black/60 text-white rounded-full w-8 h-8 flex items-center justify-center text-xs hover:bg-black/80 touch-manipulation">
                             &#x2715;
                         </button>
                     </div>
@@ -216,9 +280,35 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
                         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
                         placeholder={placeholder || "Write a reply\u2026"}
                         maxLength={300}
-                        className="flex-1 bg-transparent text-xs text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
+                        // min-w-0 is not optional here. A flex item's automatic
+                        // minimum size is its content's min-content size, and
+                        // for `<input>` that is the intrinsic width of the
+                        // rendered field (~177px at `size=20`), not 0. So
+                        // `flex-1` alone left the field unable to shrink below
+                        // 177px. Measured at 320px: article px-4 (32) + avatar
+                        // w-10 + gap-3 (52) leaves a 236px column, the
+                        // composer's own w-6 avatar + gap-2 (32) leaves 204px,
+                        // and that row's px-3 leaves 180px. 177 (input floor) +
+                        // 8 (ml-2) + ~127 (emoji 20 + GIF 31 + image 20 + mic
+                        // 36, plus gaps) = ~312px, so ~132px was clipped by
+                        // `body { overflow-x: hidden }` and emoji, GIF, image,
+                        // mic and the Post submit button were all off-screen —
+                        // commenting on a 320px phone was impossible. With
+                        // min-w-0 the field absorbs all of it and keeps
+                        // ~53px, or ~21px once the Post button appears: tight,
+                        // but every control is on screen and tappable, which is
+                        // the difference between a narrow field and an
+                        // unusable one.
+                        // text-base on mobile: anything under 16px makes iOS
+                        // Safari zoom the page on focus, and layout.js pins
+                        // maximumScale: 1, so the user could not zoom back out.
+                        className="flex-1 min-w-0 bg-transparent text-base sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
                     />
-                    <div className="flex items-center gap-1 ml-2 relative">
+                    {/* shrink-0 so the input is the only thing that gives way.
+                        The buttons are the only way to attach media or submit,
+                        so they must keep their size; the field is the elastic
+                        one and min-w-0 above lets it absorb all the pressure. */}
+                    <div className="flex items-center gap-1 ml-2 relative shrink-0">
                         <button type="button" onClick={() => { setShowEmoji(!showEmoji); setShowGif(false); }}
                             className={`p-0.5 rounded transition-colors ${showEmoji ? "text-yellow-500" : "text-gray-400 hover:text-yellow-500"}`}
                             title="Add emoji">
@@ -277,7 +367,8 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
                     <div className="relative mt-1.5 inline-block">
                         <img src={imageUrl} alt="" className="h-16 rounded-lg object-cover border border-gray-200 dark:border-gray-700" />
                         <button onClick={() => setImageUrl("")}
-                            className="absolute -top-1.5 -right-1.5 bg-black/60 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] hover:bg-black/80">
+                            aria-label="Remove image"
+                            className="absolute -top-2 -right-2 bg-black/60 text-white rounded-full w-8 h-8 flex items-center justify-center text-xs hover:bg-black/80 touch-manipulation">
                             &#x2715;
                         </button>
                     </div>
@@ -293,13 +384,16 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
     );
 }
 
+// `label` is what the reaction buttons announce. The keys are the wire format
+// ("love", "fire") and read as jargon in a screen reader, and the counts chips
+// build their tooltip out of the same field.
 const COMMENT_REACTIONS = [
-    { type: "like", emoji: "👍" },
-    { type: "love", emoji: "❤️" },
-    { type: "laugh", emoji: "😂" },
-    { type: "fire", emoji: "🔥" },
-    { type: "sad", emoji: "😢" },
-    { type: "angry", emoji: "😠" },
+    { type: "like", emoji: "👍", label: "Like" },
+    { type: "love", emoji: "❤️", label: "Love" },
+    { type: "laugh", emoji: "😂", label: "Funny" },
+    { type: "fire", emoji: "🔥", label: "Fire" },
+    { type: "sad", emoji: "😢", label: "Sad" },
+    { type: "angry", emoji: "😠", label: "Angry" },
 ];
 
 // Thread ordering options. "Top" is the default because a thread read
@@ -326,7 +420,13 @@ function CommentReactionButton({ comment, user, postId, onReact }) {
             <button
                 onClick={() => setShow(!show)}
                 onBlur={() => setTimeout(() => setShow(false), 200)}
-                className={`inline-flex items-center text-[11px] font-medium transition-colors px-1.5 py-1 rounded min-h-[28px] ${
+                aria-label="React to comment"
+                aria-expanded={show}
+                // Was an explicit min-h-[28px] — a deliberate cap on the
+                // target, which is the one thing an explicit min-height on a
+                // control should never be. 40px matches the reaction-count
+                // chip in ReactionPicker.jsx, so the two read as one control.
+                className={`inline-flex items-center justify-center text-[11px] font-medium transition-colors px-1.5 py-1 rounded min-h-[40px] min-w-[40px] touch-manipulation ${
                     myReaction
                         ? "text-blue-500"
                         : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
@@ -335,13 +435,18 @@ function CommentReactionButton({ comment, user, postId, onReact }) {
                 {myReaction ? myReaction.emoji : "😊"}
             </button>
             {show && (
-                <div className="absolute bottom-full left-0 mb-1 bg-white dark:bg-gray-900 rounded-full shadow-xl border border-gray-200 dark:border-gray-700 px-1.5 py-1 flex gap-0.5 z-10">
+                // Same wrapping treatment as the post-level picker: six 40px
+                // cells in one row is ~278px, wider than a 320px phone's
+                // comment column, which pushed 🔥/😢/😠 off the side of the
+                // card. Three per row is ~152px and keeps a 40px target.
+                <div className="absolute bottom-full left-0 mb-1 bg-white dark:bg-gray-900 rounded-full shadow-xl border border-gray-200 dark:border-gray-700 p-1.5 flex flex-wrap gap-0.5 max-w-[10rem] sm:max-w-none z-10">
                     {COMMENT_REACTIONS.map((r) => (
                         <button
                             key={r.type}
                             onClick={() => handleReact(r.type)}
-                            className={`text-base p-1 hover:scale-125 transition-transform rounded-full ${
-                                myReaction?.type === r.type ? "bg-blue-100 dark:bg-blue-900/30" : "hover:bg-gray-100 dark:hover:bg-gray-800"
+                            aria-label={r.label || r.type}
+                            className={`w-10 h-10 text-base flex items-center justify-center hover:scale-110 transition-transform rounded-full shrink-0 touch-manipulation ${
+                                myReaction?.type === r.type ? "bg-blue-100 dark:bg-blue-900/30" : "hover:bg-gray-100 dark:bg-gray-800"
                             }`}
                         >
                             {r.emoji}
@@ -364,12 +469,16 @@ function CommentReactionCounts({ reactions, onClick }) {
                 // Was a plain <span>. These chips sit directly under the text they
                 // describe, so tapping one to see who reacted was the obvious
                 // thing to try and there was nothing to tap.
+                // ~19px tall is a label, not a target; min-h plus a little
+                // horizontal padding takes it to a thumb-sized chip. These are
+                // secondary read-outs, so 32px is enough here — the buttons
+                // that do something are 40px.
                 <button
                     key={r.type}
                     onClick={onClick ? () => onClick(r.type) : undefined}
                     disabled={!onClick}
                     title={onClick ? `Who reacted ${r.label || r.type}` : undefined}
-                    className={`inline-flex items-center gap-0.5 text-[10px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-full px-1.5 py-0.5 ${onClick ? "hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" : "cursor-default"}`}
+                    className={`inline-flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-full px-2 py-1 min-h-[32px] touch-manipulation ${onClick ? "hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" : "cursor-default"}`}
                 >
                     <span className="text-xs">{r.emoji}</span>
                     <span>{r.count}</span>
@@ -403,7 +512,13 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
             <div className="flex gap-2 items-start py-1.5">
                 <PostAvatar sender={comment.sender} color={comment.color} avatarUrl={avatarUrl} author={author} size="sm" />
                 <div className="flex-1 min-w-0">
-                    <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl px-3 py-1.5 inline-block max-w-full">
+                    {/* break-words is not cosmetic. Without it this bubble's
+                        width is its max-content and a 40-character
+                        unbroken token (a long handle, a base64-ish string)
+                        runs past the card, where `body { overflow-x: hidden }`
+                        clips it with no ellipsis and no way to scroll to
+                        the rest. */}
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl px-3 py-1.5 inline-block max-w-full min-w-0 break-words">
                         <span className="font-semibold text-xs text-gray-900 dark:text-gray-100 mr-1 inline-flex items-center gap-1">
                             <Link href={`/profile/${encodeURIComponent(comment.sender)}`} className="hover:underline">
                                 {comment.sender}
@@ -423,13 +538,26 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                                         }
                                         if (e.key === "Escape") setEditing(false);
                                     }}
-                                    className="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 text-xs text-gray-900 dark:text-gray-100 outline-none focus:border-blue-400"
+                                    // text-base on mobile, and this one is the
+                                    // worst case in the file: it carries
+                                    // autoFocus, so opening Edit zoomed the page
+                                    // to 1.3x the moment the row appeared, and
+                                    // layout.js's maximumScale: 1 meant the
+                                    // reader could not pinch back out.
+                                    // min-w-0 + max-w-full rather than a fixed
+                                    // width: the input's automatic minimum is
+                                    // its intrinsic ~177px, and this row shares
+                                    // the bubble with Save and Cancel, so an
+                                    // unconstrained field pushed both buttons
+                                    // out of a ~204px comment column.
+                                    className="min-w-0 max-w-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 text-base sm:text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-400"
                                     maxLength={300}
                                     autoFocus
                                 />
                                 <button onClick={() => { if (editText.trim()) { onEditComment(comment.commentId, editText.trim()); setEditing(false); } }}
-                                    className="text-[10px] text-blue-500 font-bold">Save</button>
-                                <button onClick={() => setEditing(false)} className="text-[10px] text-gray-400">Cancel</button>
+                                    className="text-[10px] text-blue-500 font-bold min-h-[40px] px-1">Save</button>
+                                <button onClick={() => setEditing(false)}
+                                    className="text-[10px] text-gray-400 min-h-[40px] px-1">Cancel</button>
                             </div>
                         ) : (
                             <>
@@ -469,7 +597,7 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                             <button
                                 onClick={() => onToggleTranslate(comment.commentId, comment.text)}
                                 disabled={isTranslating}
-                                className="text-[11px] text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 font-medium transition-colors px-1.5 py-1.5 min-h-[32px] disabled:opacity-50"
+                                className="text-[11px] text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 font-medium transition-colors px-1.5 py-1.5 min-h-[40px] touch-manipulation disabled:opacity-50"
                                 title={translation ? "Hide translation" : `Translate to ${translateTargetName}`}
                                 aria-label={translation ? "Hide translation" : `Translate to ${translateTargetName}`}
                             >
@@ -489,7 +617,7 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                         {user && (
                             <button
                                 onClick={() => onReply(comment.commentId, comment.sender)}
-                                className="text-[11px] text-gray-400 hover:text-blue-500 font-medium transition-colors px-2 py-1.5 min-h-[36px]"
+                                className="text-[11px] text-gray-400 hover:text-blue-500 font-medium transition-colors px-2 py-1.5 min-h-[40px] touch-manipulation"
                             >
                                 Reply
                             </button>
@@ -498,13 +626,13 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                             <>
                             <button
                                 onClick={() => { setEditing(true); setEditText(comment.text || ""); }}
-                                className="text-[11px] text-gray-400 hover:text-blue-500 font-medium transition-colors px-2 py-1.5 min-h-[36px]"
+                                className="text-[11px] text-gray-400 hover:text-blue-500 font-medium transition-colors px-2 py-1.5 min-h-[40px] touch-manipulation"
                             >
                                 Edit
                             </button>
                             <button
                                 onClick={() => onDelete(comment.commentId)}
-                                className="text-[11px] text-gray-400 hover:text-red-500 font-medium transition-colors px-2 py-1.5 min-h-[36px]"
+                                className="text-[11px] text-gray-400 hover:text-red-500 font-medium transition-colors px-2 py-1.5 min-h-[40px] touch-manipulation"
                             >
                                 Delete
                             </button>
@@ -872,13 +1000,28 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
         touchStartRef.current = null;
     };
 
-    // Double-tap to like, single tap to open lightbox (fires via onClick only)
-    const handleImageTap = () => {
+    // Arm the same guard mid-gesture, not only on touchend. Two reasons: by the
+    // time a compatibility click arrives the flag is already set, and a gesture
+    // the browser claims for a page scroll ends in touchcancel rather than
+    // touchend, so the touchend handler would never run and the click would go
+    // through as a tap.
+    const handleImageTouchMove = (e) => {
+        if (!touchStartRef.current) return;
+        const t = e.touches?.[0];
+        if (t && (Math.abs(t.clientX - touchStartRef.current.x) > 10 || Math.abs(t.clientY - touchStartRef.current.y) > 10)) {
+            scrollDetectedRef.current = true;
+        }
+    };
+
+    // Double-tap to like, single tap to open lightbox (fires via onClick only).
+    // `src` is the image the reader actually tapped, so the carousel can open
+    // the slide they are looking at rather than always the first one.
+    const handleImageTap = (src) => {
         if (scrollDetectedRef.current) {
             scrollDetectedRef.current = false;
             return;
         }
-        const mainImage = (post.imageUrls?.length > 0 ? post.imageUrls[0] : post.imageUrl) || post.imageUrl;
+        const mainImage = src || (post.imageUrls?.length > 0 ? post.imageUrls[0] : post.imageUrl) || post.imageUrl;
         if (!user) {
             setLightboxSrc(mainImage);
             return;
@@ -1260,25 +1403,34 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
 
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
+                        {/* Names are free-form on an anonymous app, so an unbroken
+                            60-character handle is possible. max-w-full +
+                            min-w-0 + truncate on each name means the row's
+                            flex-wrap has something to shrink; without them the
+                            name is max-content wide and the following badges
+                            and the ml-auto action cluster get pushed out of the
+                            card, where overflow-x: hidden clips them. */}
                         {post._community ? (
-                            <Link href={`/communities/${post.communityId}`} className="font-bold text-sm text-gray-900 dark:text-gray-100 hover:underline">
+                            <Link href={`/communities/${post.communityId}`} className="font-bold text-sm text-gray-900 dark:text-gray-100 hover:underline min-w-0 max-w-full truncate">
                                 {post._community.name}
                             </Link>
                         ) : (
-                            <Link href={`/profile/${encodeURIComponent(post.sender)}`} className="font-bold text-sm text-gray-900 dark:text-gray-100 hover:underline">
+                            <Link href={`/profile/${encodeURIComponent(post.sender)}`} className="font-bold text-sm text-gray-900 dark:text-gray-100 hover:underline min-w-0 max-w-full truncate">
                                 {post.sender}
                             </Link>
                         )}
                         {post._community && (
-                            <Link href={`/profile/${encodeURIComponent(post.sender)}`} className="text-xs text-gray-500 dark:text-gray-400 hover:underline">
+                            <Link href={`/profile/${encodeURIComponent(post.sender)}`} className="text-xs text-gray-500 dark:text-gray-400 hover:underline min-w-0 max-w-full truncate">
                                 u/{post.sender}
                             </Link>
                         )}
                         {!post._community && <UserBadges isPro={author?.isPro} isVerified={author?.isVerified} isAdmin={author?.isAdmin} roles={author?.roles || []} size="sm" />}
                         <span className="text-gray-400 dark:text-gray-500 text-xs">&middot;</span>
-                        <span className="text-gray-400 dark:text-gray-500 text-xs">{timeAgo(post.timeStamp)}</span>
+                        <span className="text-gray-400 dark:text-gray-500 text-xs shrink-0">{timeAgo(post.timeStamp)}</span>
                         {post.flair?.name && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-medium rounded-full text-white" style={{ backgroundColor: post.flair.color || "#3b82f6" }}>
+                            // Capped at 14rem: a flair is a badge, so it should
+                            // give way before the author name does.
+                            <span title={post.flair.name} style={{ backgroundColor: post.flair.color || "#3b82f6" }} className="px-1.5 py-0.5 text-[10px] font-medium rounded-full text-white max-w-[14rem] truncate">
                                 {post.flair.emoji && `${post.flair.emoji} `}{post.flair.name}
                             </span>
                         )}
@@ -1437,11 +1589,11 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
 
                     {post.isRepost && post.repostComment && (
                         <div className="mt-1.5">
-                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap break-words">
                                 <RichText text={post.repostComment} onHashtag={handleHashtag} />
                             </p>
                             {commentKey && translations[commentKey] && (
-                                <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-1 leading-relaxed whitespace-pre-wrap">
+                                <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-1 leading-relaxed whitespace-pre-wrap break-words">
                                     {translations[commentKey]}
                                 </p>
                             )}
@@ -1476,12 +1628,12 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                     <span className="text-gray-400 dark:text-gray-500 text-[11px]">{timeAgo(post._originalPost.timeStamp)}</span>
                                 </div>
                                 {post._originalPost.text && (
-                                    <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap">
+                                    <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap break-words">
                                         <RichText text={post._originalPost.text} onHashtag={handleHashtag} />
                                     </p>
                                 )}
                                 {origKey && translations[origKey] && (
-                                    <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-1 leading-relaxed whitespace-pre-wrap">
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-1 leading-relaxed whitespace-pre-wrap break-words">
                                         {translations[origKey]}
                                     </p>
                                 )}
@@ -1508,7 +1660,14 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                             <img src={imgs[0]} alt="" className="w-full h-auto block" loading="lazy" />
                                         </div>
                                     ) : (
-                                        <ImageCarousel images={imgs} onImageClick={(src) => setLightboxSrc(src)} />
+                                        <ImageCarousel
+                                            images={imgs}
+                                            onImageTap={handleImageTap}
+                                            onTouchStart={handleTouchStart}
+                                            onTouchEnd={handleTouchEnd}
+                                            onTouchMove={handleImageTouchMove}
+                                            showHeart={showHeart}
+                                        />
                                     );
                                 })()}
                                 {post._originalPost.videoUrl && (
@@ -1538,7 +1697,7 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                         onChange={(e) => setEditText(e.target.value)}
                                         maxLength={1000}
                                         rows={3}
-                                        className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-400 dark:focus:border-blue-500 resize-none"
+                                        className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-base sm:text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-400 dark:focus:border-blue-500 resize-none"
                                         autoFocus
                                     />
                                     <div className="flex items-center gap-2 mt-1.5">
@@ -1559,11 +1718,11 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                 </div>
                             ) : (
                                 <>
-                                    <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap">
+                                    <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap break-words">
                                         <RichText text={post.text} onHashtag={handleHashtag} toxicWords />
                                     </p>
                                     {translations[post._id] && (
-                                        <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-1 leading-relaxed whitespace-pre-wrap">
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 italic mt-1 leading-relaxed whitespace-pre-wrap break-words">
                                             {translations[post._id]}
                                         </p>
                                     )}
@@ -1618,9 +1777,14 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         return allImages.length === 1 ? (
                             <div
                                 ref={imageRef}
-                                className="mt-3 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 relative cursor-pointer select-none"
-                                onClick={handleImageTap}
+                                className="mt-3 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 relative cursor-pointer select-none touch-pan-y"
+                                // Wrapped rather than passed by reference:
+                                // handleImageTap now takes the tapped image as
+                                // its argument, and handing it the click event
+                                // would put a SyntheticEvent in that slot.
+                                onClick={() => handleImageTap()}
                                 onTouchStart={handleTouchStart}
+                                onTouchMove={handleImageTouchMove}
                                 onTouchEnd={handleTouchEnd}
                             >
                                 <img
@@ -1638,7 +1802,14 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                 )}
                             </div>
                         ) : (
-                            <ImageCarousel images={allImages} onImageClick={(src) => setLightboxSrc(src)} showHeart={showHeart} />
+                            <ImageCarousel
+                                images={allImages}
+                                onImageTap={handleImageTap}
+                                onTouchStart={handleTouchStart}
+                                onTouchEnd={handleTouchEnd}
+                                onTouchMove={handleImageTouchMove}
+                                showHeart={showHeart}
+                            />
                         );
                     })()}
 
@@ -1649,8 +1820,22 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         />
                     )}
 
-                    <div className="flex items-center gap-1 sm:gap-3 mt-3 relative">
-                        <ReactionPicker 
+                    {/* This row does not fit a 320px phone. Two children are
+                        pinned at min-w-[44px] (the reaction trigger and the
+                        bookmark), three more floor at ~36-44px, and the view
+                        count needs ~40px: ~260px of children plus gaps into a
+                        ~236px content column. `ml-auto` on the bookmark has no
+                        free space to consume, so the overflow was pushed out of
+                        the <article> and `body { overflow-x: hidden }` clipped
+                        it — the save button simply did not exist on a small
+                        phone. flex-wrap is the fix that keeps every target
+                        reachable: a line break is something a reader can see
+                        and understand, where a clipped control is not. The
+                        gaps come down to 2px at the smallest size (they were
+                        4px) to buy back the pixels, and the 44px touch targets
+                        are left exactly as they were. */}
+                    <div className="flex flex-wrap items-center gap-x-0.5 sm:gap-x-3 gap-y-1 mt-3 relative">
+                        <ReactionPicker
                             onReact={handleReaction}
                             currentReaction={currentReaction}
                         />
@@ -1661,7 +1846,7 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                 setShowComments((v) => !v);
                             }}
                             aria-label="Comments"
-                            className="flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-blue-500 transition-colors min-h-[44px] px-2 py-1 rounded-lg animate-press"
+                            className="flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-blue-500 transition-colors min-h-[44px] px-2 py-1 rounded-lg animate-press shrink-0"
                         >
                             <CommentIcon />
                             {/* commentCount is authoritative; post.comments is a
@@ -1675,7 +1860,7 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         ) : (
                             <button
                                 onClick={() => { setLoginAction("repost"); setShowLoginModal(true); }}
-                                className="flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-green-500 transition-colors min-h-[44px] px-2 py-1 rounded-lg"
+                                className="flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-green-500 transition-colors min-h-[44px] px-2 py-1 rounded-lg shrink-0"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 0 0-3.7-3.7 48.678 48.678 0 0 0-7.324 0 4.006 4.006 0 0 0-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 0 0 3.7 3.7 48.656 48.656 0 0 0 7.324 0 4.006 4.006 0 0 0 3.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3-3 3" />
@@ -1690,7 +1875,7 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         />
 
                         {viewCount > 0 && (
-                            <span className="flex items-center gap-1 text-sm text-gray-400 dark:text-gray-500 ml-1">
+                            <span className="flex items-center gap-1 text-sm text-gray-400 dark:text-gray-500 ml-1 shrink-0">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
@@ -1699,7 +1884,11 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                             </span>
                         )}
 
-                        <div className="ml-auto">
+                        {/* ml-auto only has an effect when there is free space on
+                            the line; with flex-wrap the bookmark now falls to a
+                            second line instead of off the edge of the card, and
+                            ml-auto parks it at the right of that line. */}
+                        <div className="ml-auto shrink-0">
                             {user ? (
                                 <BookmarkButton postId={post._id} />
                             ) : (

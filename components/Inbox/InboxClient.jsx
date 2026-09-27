@@ -258,8 +258,12 @@ const prevGroupRef = useRef(null);
         !hitState.failed;
 
     if (!ready) {
+        // Same formula as the loaded tree below: LayoutWrapper reserves a flat
+        // `pb-16` for the bottom nav on mobile, so a bare `h-dvh` here made the
+        // document `100dvh + 64px` tall and the page rubber-banded while the
+        // session was still being resolved.
         return (
-            <div className="flex h-dvh items-center justify-center bg-white dark:bg-gray-950">
+            <div className="flex h-[calc(100dvh-4rem)] lg:h-dvh items-center justify-center bg-white dark:bg-gray-950">
                 <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-700 border-t-gray-600 dark:border-t-gray-400 rounded-full animate-spin" />
             </div>
         );
@@ -312,12 +316,16 @@ const prevGroupRef = useRef(null);
 
     return (
         <div className="flex h-[calc(100dvh-4rem)] lg:h-dvh bg-white dark:bg-gray-950 overflow-hidden">
+            {/* `safe-top` for the status bar in standalone PWA mode — the page has
+                no header of its own, so this column is what sat under the clock. It
+                goes here rather than on the header row below because `.safe-top` is
+                an unlayered rule and would override that row's own `py-4`. */}
             <aside className={`
                 flex flex-col shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950
-                w-full md:w-80
+                w-full md:w-80 safe-top
                 ${view === "chat" ? "hidden md:flex" : "flex"}
             `}>
-                <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+                <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0">
                     <span className="font-semibold text-base tracking-tight text-gray-900 dark:text-gray-100">Inbox</span>
                     <div className="flex items-center gap-1">
                         {tab === "groups" && (
@@ -448,10 +456,20 @@ const prevGroupRef = useRef(null);
                                         </div>
                                     )}
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-1.5">
-                                            <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{convo.username}</p>
-                                            <UserBadges isPro={convo.user?.isPro} isVerified={convo.user?.isVerified} isAdmin={convo.user?.isAdmin} roles={convo.user?.roles || []} size="sm" />
-                                            <OnlineDot username={convo.username} onlineMap={onlineMap} />
+                                        {/* Every UserBadges child is `shrink-0`, so in a
+                                            no-wrap row the badges could not absorb
+                                            pressure and the name took all of it: at
+                                            320px a Pro+verified+admin user with a role
+                                            left ~43px of name. The badges themselves
+                                            are dropped on the narrowest screens, and
+                                            where they do render they are capped, so the
+                                            name keeps a readable floor. */}
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                            <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate min-w-0 max-w-[55%] sm:max-w-none">{convo.username}</p>
+                                            <span className="hidden min-[360px]:flex items-center gap-1.5 shrink min-w-0 overflow-hidden">
+                                                <UserBadges isPro={convo.user?.isPro} isVerified={convo.user?.isVerified} isAdmin={convo.user?.isAdmin} roles={convo.user?.roles || []} size="sm" />
+                                                <OnlineDot username={convo.username} onlineMap={onlineMap} />
+                                            </span>
                                         </div>
                                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                                             {convo.lastMessage?.sender === user?.username ? "You: " : ""}

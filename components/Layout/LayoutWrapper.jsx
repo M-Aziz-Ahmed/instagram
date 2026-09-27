@@ -94,12 +94,24 @@ export default function LayoutWrapper({ children }) {
             {isMobile && voiceOpen && (
                 <div className="fixed inset-0 z-50 lg:hidden">
                     <div className="absolute inset-0 bg-black/50" onClick={closeVoiceChat} />
-                    <div className="absolute bottom-0 left-0 right-0 h-[75vh] max-h-[calc(100vh-env(safe-area-inset-bottom))] bg-gray-950 rounded-t-2xl shadow-2xl overflow-hidden flex flex-col animate-slide-up safe-bottom">
+                    {/* `vh` on iOS is the LARGEST viewport, so a 75vh sheet could be
+                        taller than what is actually visible — the drag handle and
+                        the close button ended up above the top of the screen, with
+                        no way back. `dvh` tracks the real viewport, and
+                        `max-h` no longer subtracts the inset a second time: the
+                        home-indicator padding below is applied once, here, by
+                        `safe-bottom`. */}
+                    <div className="absolute bottom-0 left-0 right-0 h-[75dvh] max-h-[100dvh] bg-gray-950 rounded-t-2xl shadow-2xl overflow-hidden flex flex-col animate-slide-up safe-bottom">
                         {/* Drag handle */}
                         <div className="flex justify-center pt-3 pb-1 shrink-0">
                             <div className="w-10 h-1 bg-gray-600 rounded-full" />
                         </div>
-                        <div className="flex-1 overflow-y-auto">
+                        {/* Sizes the panel, but is deliberately NOT a scroll
+                            container: VoiceChat scrolls its own channel list, and a
+                            second scroller here meant an inner flick that reached
+                            its end scrolled the sheet itself and took the mic bar
+                            with it. `min-h-0` lets the child's `h-full` resolve. */}
+                        <div className="flex-1 min-h-0">
                             <VoiceChat isOpen={voiceOpen} onClose={closeVoiceChat} />
                         </div>
                     </div>

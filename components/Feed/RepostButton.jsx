@@ -56,8 +56,12 @@ export default function RepostButton({ postId, onReposted, className = "" }) {
             </button>
 
             {showModal && (
-                <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
-                    <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
+                <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowModal(false)}>
+                    {/* Same shape as ReactionListModal: a dvh cap with its own
+                        scroll, so in landscape the Cancel/Repost buttons are
+                        reachable instead of clipped off the bottom, and
+                        safe-bottom keeps them off the home indicator. */}
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md max-h-[85dvh] overflow-y-auto safe-bottom p-6 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between">
                             <h2 className="font-bold text-lg text-gray-900 dark:text-gray-100">Repost</h2>
                             <button 
@@ -81,7 +85,10 @@ export default function RepostButton({ postId, onReposted, className = "" }) {
                                 placeholder="Share your thoughts..."
                                 maxLength={280}
                                 rows={4}
-                                className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl px-4 py-3 text-sm outline-none focus:border-black dark:focus:border-gray-500 transition-colors resize-none"
+                                // 16px on touch: 14px made iOS zoom the page on
+                                // focus, and the layout viewport meta in
+                                // app/layout.js leaves no way to zoom back out.
+                                className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl px-4 py-3 text-base sm:text-sm outline-none focus:border-black dark:focus:border-gray-500 transition-colors resize-none"
                             />
                             <p className="text-right text-xs text-gray-400 dark:text-gray-500 mt-1">
                                 {comment.length}/280

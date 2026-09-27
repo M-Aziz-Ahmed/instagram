@@ -96,11 +96,20 @@ export default function ForwardModal({ message, onClose, onForwarded }) {
             className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
             onClick={onClose}
         >
+            {/* `max-h` in `dvh` plus a real flex column, matching
+                ReactionListModal. Without a cap the sheet grew to fit ~576px of
+                content inside a box that could not scroll, so with the keyboard up
+                (which the autofocus above guarantees) the footer fell behind it and
+                Cancel/Forward became unreachable.
+
+                `safe-bottom` is on the sheet, not on the footer: `.safe-bottom` is
+                an unlayered rule in globals.css, so on the footer it would override
+                the footer's own `py-3` everywhere the inset is 0. */}
             <div
                 onClick={(e) => e.stopPropagation()}
-                className="w-full sm:max-w-md bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+                className="w-full sm:max-w-md max-h-[85dvh] sm:max-h-[80dvh] bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden safe-bottom"
             >
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Forward message</h3>
                     <button
                         onClick={onClose}
@@ -113,68 +122,76 @@ export default function ForwardModal({ message, onClose, onForwarded }) {
                     </button>
                 </div>
 
-                <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Message</p>
-                    <p className="text-sm text-gray-800 dark:text-gray-200 line-clamp-3">{preview}</p>
+                {/* Scrollable body. Everything between the header and the footer
+                    lives here so a focused input shrinks this rather than pushing
+                    the footer out of the sheet. */}
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Message</p>
+                        <p className="text-sm text-gray-800 dark:text-gray-200 line-clamp-3">{preview}</p>
+                    </div>
+
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={selected ? selected.username : query}
+                            onChange={(e) => { setSelected(null); setQuery(e.target.value); }}
+                            placeholder="Search for a person..."
+                            className="w-full bg-gray-100 dark:bg-gray-800 rounded-full px-4 py-2 text-base sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
+                        />
+
+                        {searching && (
+                            <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">Searching...</p>
+                        )}
+
+                        {!searching && candidates.length > 0 && (
+                            <ul className="mt-2 max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
+                                {candidates.map((c) => (
+                                    <li key={c.username}>
+                                        <button
+                                            onClick={() => { setSelected(c); setQuery(""); }}
+                                            className="w-full flex items-center gap-3 px-2 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
+                                        >
+                                            {c.avatarUrl ? (
+                                                <img src={c.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
+                                            ) : (
+                                                <span className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white"
+                                                    style={{ backgroundColor: c.avatarColor || "#3b82f6" }}>
+                                                    {c.username[0]?.toUpperCase()}
+                                                </span>
+                                            )}
+                                            <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{c.username}</span>
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+
+                        {!searching && query.trim() && candidates.length === 0 && (
+                            <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">No matching accounts</p>
+                        )}
+                    </div>
+
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1" htmlFor="forward-note">
+                            Add a note (optional)
+                        </label>
+                        <textarea
+                            id="forward-note"
+                            value={note}
+                            onChange={(e) => setNote(e.target.value.slice(0, 500))}
+                            rows={2}
+                            placeholder="Say something about this..."
+                            // 16px on touch: a 14px control makes iOS zoom the page on
+                            // focus, and the layout viewport meta in app/layout.js
+                            // leaves no way to zoom back out.
+                            className="w-full bg-gray-100 dark:bg-gray-800 rounded-xl px-3 py-2 text-base sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none"
+                        />
+                    </div>
                 </div>
 
-                <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        value={selected ? selected.username : query}
-                        onChange={(e) => { setSelected(null); setQuery(e.target.value); }}
-                        placeholder="Search for a person..."
-                        className="w-full bg-gray-100 dark:bg-gray-800 rounded-full px-4 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
-                    />
-
-                    {searching && (
-                        <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">Searching...</p>
-                    )}
-
-                    {!searching && candidates.length > 0 && (
-                        <ul className="mt-2 max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
-                            {candidates.map((c) => (
-                                <li key={c.username}>
-                                    <button
-                                        onClick={() => { setSelected(c); setQuery(""); }}
-                                        className="w-full flex items-center gap-3 px-2 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
-                                    >
-                                        {c.avatarUrl ? (
-                                            <img src={c.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
-                                        ) : (
-                                            <span className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white"
-                                                style={{ backgroundColor: c.avatarColor || "#3b82f6" }}>
-                                                {c.username[0]?.toUpperCase()}
-                                            </span>
-                                        )}
-                                        <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{c.username}</span>
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-
-                    {!searching && query.trim() && candidates.length === 0 && (
-                        <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">No matching accounts</p>
-                    )}
-                </div>
-
-                <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1" htmlFor="forward-note">
-                        Add a note (optional)
-                    </label>
-                    <textarea
-                        id="forward-note"
-                        value={note}
-                        onChange={(e) => setNote(e.target.value.slice(0, 500))}
-                        rows={2}
-                        placeholder="Say something about this..."
-                        className="w-full bg-gray-100 dark:bg-gray-800 rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none resize-none"
-                    />
-                </div>
-
-                <div className="flex items-center justify-end gap-2 px-4 py-3">
+                <div className="flex items-center justify-end gap-2 px-4 py-3 shrink-0">
                     <button
                         onClick={onClose}
                         className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"

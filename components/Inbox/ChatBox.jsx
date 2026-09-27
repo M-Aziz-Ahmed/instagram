@@ -108,13 +108,21 @@ export default function ChatBox({ onBack, recipient, recipientUser, archived = f
     }, [recipient, user?.username]);
 
     // Poll for recipient's online status
+    //
+    // Same two defects as the typing poll above: it asked every 30s for a state
+    // nobody could see while the tab was hidden, and nothing guarded the write
+    // after the await — switching chats mid-flight painted the PREVIOUS
+    // recipient's last-seen into the thread that had just been opened.
     useEffect(() => {
         if (!recipient) return;
+        let disposed = false;
         const fetchStatus = async () => {
+            if (document.hidden) return;
             try {
                 const res = await fetch(`/api/users/online?usernames=${encodeURIComponent(recipient)}`, {
                     credentials: 'include'
                 });
+                if (disposed) return;
                 if (res.ok) {
                     const data = await res.json();
                     const status = data.users?.[recipient];
@@ -128,9 +136,15 @@ export default function ChatBox({ onBack, recipient, recipientUser, archived = f
                 }
             } catch { /* silent */ }
         };
+        const onVisibility = () => { if (!document.hidden) fetchStatus(); };
         fetchStatus();
         const id = setInterval(fetchStatus, 30000);
-        return () => clearInterval(id);
+        document.addEventListener("visibilitychange", onVisibility);
+        return () => {
+            disposed = true;
+            clearInterval(id);
+            document.removeEventListener("visibilitychange", onVisibility);
+        };
     }, [recipient]);
 
     // Reset per-conversation state when switching chats
@@ -152,7 +166,14 @@ export default function ChatBox({ onBack, recipient, recipientUser, archived = f
     }
 
     return (
-        <div className="flex flex-col h-full">
+        // `safe-top` / `safe-bottom` live HERE, on the column, not on the header
+        // and composer. The app is a `black-translucent` PWA, so in standalone
+        // mode the web view extends under the status bar and the home indicator.
+        // `.safe-*` are unlayered rules in globals.css, so they BEAT a same-side
+        // `py-*` utility — putting one on the header or the composer would have
+        // deleted their own vertical padding wherever the inset is 0. On the
+        // column they simply displace the whole thread, which is what is wanted.
+        <div className="flex flex-col h-full safe-top safe-bottom">
 
             {/* ── Header ──────────────────────────────────────────────────── */}
             <header className="sticky top-0 z-20 flex items-center gap-2 px-3 md:px-6 py-3 md:py-4 border-b border-gray-200 dark:border-gray-800 shrink-0 bg-white/95 dark:bg-gray-950/95 backdrop-blur">

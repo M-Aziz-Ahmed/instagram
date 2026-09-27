@@ -47,12 +47,27 @@ const canUploadVideo = user?.canUploadVideo === true;
 
     useEffect(() => {
         const handler = () => {
-            document.getElementById("compose")?.scrollIntoView({ behavior: "smooth" });
-            const textarea = document.getElementById("compose")?.querySelector("textarea");
+            const compose = document.getElementById("compose");
+            const textarea = compose?.querySelector("textarea");
+            // Focus first, and with preventScroll. The old order was
+            // scrollIntoView({ behavior: "smooth" }) and then focus() on the
+            // next line, which starts the keyboard while a ~300ms animation is
+            // still running; the keyboard shrinks the visual viewport, and the
+            // animation finishes against the offset it was computed from
+            // before that happened — so the caret ends up off-screen. Focusing
+            // with preventScroll also leaves the scroll position entirely to the
+            // frame below, where it can be done against the final layout.
             if (textarea) {
-                textarea.focus();
+                textarea.focus({ preventScroll: true });
                 textarea.setSelectionRange(textarea.value.length, textarea.value.length);
             }
+            // Next frame: the soft keyboard has been requested and the
+            // visual viewport is its final size, so this scroll lands on the
+            // composer's real position. `scroll-mt` on #compose keeps its top
+            // out from under the sticky h-12 header.
+            requestAnimationFrame(() => {
+                compose?.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
         };
         window.addEventListener("open-compose", handler);
         return () => window.removeEventListener("open-compose", handler);
@@ -341,7 +356,12 @@ const canUploadVideo = user?.canUploadVideo === true;
     const canPost = ((text.trim().length > 0 || hasMedia || hasGif || !!audioUrl || !!video) || hasValidPoll) && !posting;
 
     return (
-        <div id="compose" className="border-b border-gray-200 dark:border-gray-800 p-4">
+        // scroll-mt matches the sticky header it has to clear: h-12 (48px) plus
+        // the safe-area inset the header's own padding-top adds, since
+        // scrollIntoView aligns the element's scroll-margin edge to the top of
+        // the viewport and would otherwise park the first line of the composer
+        // underneath the header. sm: the header grows to h-14.
+        <div id="compose" className="border-b border-gray-200 dark:border-gray-800 p-4 scroll-mt-[calc(3rem+env(safe-area-inset-top))] sm:scroll-mt-[calc(3.5rem+env(safe-area-inset-top))]">
             <div className="flex gap-3">
                 <div
                     className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-sm select-none mt-0.5"
@@ -502,7 +522,13 @@ const canUploadVideo = user?.canUploadVideo === true;
                                             setPollOptions(next);
                                         }}
                                         placeholder={`Option ${idx + 1}`}
-                                        className="flex-1 bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-blue-400 dark:focus:border-blue-500"
+                                        // text-base on mobile, sm:text-sm from
+                                        // there up: 14px makes iOS Safari zoom
+                                        // the page the moment this field takes
+                                        // focus, and layout.js pins
+                                        // maximumScale: 1, so there is no way
+                                        // back out.
+                                        className="flex-1 min-w-0 bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 text-base sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-blue-400 dark:focus:border-blue-500"
                                     />
                                     {idx >= 2 && (
                                         <button onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
@@ -589,7 +615,18 @@ const canUploadVideo = user?.canUploadVideo === true;
                     )}
 
                     <div className="flex items-center justify-between p-1 border-t border-gray-100 dark:border-gray-800">
-                        <div className="flex items-center gap-0.5 sm:gap-1 relative overflow-x-auto flex-1 min-w-0">
+                        {/* scrollbar-hide so the overflow below `sm` is at least
+                        discoverable. Seven controls plus the Post button need
+                        ~290px and the strip gets ~188px at 320px, so the
+                        Close-Friends toggle — the last `sm:hidden` control —
+                        genuinely sits past the right edge; a visible scrollbar
+                        is the only cue there is anything over there, and on
+                        touch there is no cursor to find the edge with. The
+                        spacing below `sm` is already at its tightest (gap-0.5 =
+                        2px, p-1.5 on the icons), so what is left to give is the
+                        Post button's horizontal padding, dropped from px-3 to
+                        px-2 while it shows nothing but the word "Post". */}
+                    <div className="flex items-center gap-0.5 sm:gap-1 relative overflow-x-auto scrollbar-hide flex-1 min-w-0">
                             <button
                                 onClick={() => { setShowEmoji(!showEmoji); setShowGif(false); }}
                                 aria-label="Add emoji"
@@ -653,7 +690,12 @@ const canUploadVideo = user?.canUploadVideo === true;
                                         : "Video upload is limited on this account — post a link instead"
                                 }
                                 disabled={!user || posting || !!video || hasMedia || !!audioUrl}
-                                className="p-1.5 sm:p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors disabled:opacity-40"
+                                // relative is load-bearing: the lock dot below is
+                                // absolutely positioned, and without a positioned
+                                // ancestor it resolved against the whole toolbar
+                                // strip instead of this button, landing ~90px to
+                                // the right of the video control it annotates.
+                                className="relative p-1.5 sm:p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors disabled:opacity-40 shrink-0 touch-manipulation"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                     strokeWidth={1.8} stroke="currentColor" className="w-4.5 h-4.5 sm:w-5 sm:h-5">
@@ -729,7 +771,7 @@ const canUploadVideo = user?.canUploadVideo === true;
                         <button
                             onClick={handlePost}
                             disabled={!canPost}
-                            className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs sm:text-sm font-bold px-3 sm:px-5 py-1.5 rounded-full hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0 flex items-center justify-center ml-1"
+                            className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs sm:text-sm font-bold px-2 sm:px-5 py-1.5 rounded-full hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0 flex items-center justify-center ml-0.5 sm:ml-1 touch-manipulation"
                         >
                             {posting ? (
                                 <span className="flex items-center gap-1.5">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useToast } from "@/context/ToastContext";
 import { useCall } from "@/context/CallContext";
 import RichText from "@/components/Feed/RichText";
@@ -104,7 +105,7 @@ function GroupMessageBubble({ msg, user, onReact, onDelete, onReply, onHashtag, 
                                                 if (e.key === "Enter") { e.preventDefault(); onSaveEdit(); }
                                                 if (e.key === "Escape") onCancelEdit();
                                             }}
-                                            className="text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 outline-none focus:border-blue-400 text-gray-900 dark:text-gray-100"
+                                            className="text-base sm:text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 outline-none focus:border-blue-400 text-gray-900 dark:text-gray-100"
                                         />
                                         <div className="flex gap-2 text-[11px] font-semibold">
                                             <button onClick={onSaveEdit} className="text-blue-500 hover:underline">Save</button>
@@ -137,20 +138,24 @@ function GroupMessageBubble({ msg, user, onReact, onDelete, onReply, onHashtag, 
                 </div>
                 {!msg.deleted && msg.imageUrl && (
                     <div className="mt-1 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 max-w-[80vw] sm:max-w-xs cursor-pointer" onClick={() => setLightbox(true)}>
-                        <img src={msg.imageUrl} alt="" className="w-full h-auto block" loading="lazy" />
+                        {/* `h-auto` keeps the intrinsic ratio, but a tall portrait
+                            * (a screenshot) then renders at full height and swamps
+                            * the thread. Clamp the height and letterbox instead. */}
+                        <img src={msg.imageUrl} alt="" className="w-full max-h-[420px] object-contain block" loading="lazy" />
                     </div>
                 )}
                 <div className={`flex items-center gap-2 mt-0.5 ${isOwn ? "flex-row-reverse" : ""}`}>
                     <span className="text-gray-300 dark:text-gray-600 text-[10px]">{timeAgo(msg.timeStamp)}</span>
                     <div className="relative">
-                        <button onClick={() => setShowReactions(!showReactions)} className="text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+                        <button onClick={() => setShowReactions(!showReactions)} className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 p-1 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-full" aria-label="React to message">
                             {myReaction ? REACTIONS.find(r => r.type === myReaction)?.emoji || "😊" : "😊"}
                         </button>
                         {showReactions && (
                             <div className="absolute bottom-full left-0 mb-1 bg-white dark:bg-gray-900 rounded-full shadow-xl border border-gray-200 dark:border-gray-700 px-1.5 py-1 flex gap-0.5 z-10">
                                 {REACTIONS.map(r => (
                                     <button key={r.type} onClick={() => { onReact(msg._id, r.type); setShowReactions(false); }}
-                                        className={`text-base p-1 hover:scale-125 transition-transform rounded-full ${myReaction === r.type ? "bg-blue-100 dark:bg-blue-900/30" : ""}`}>
+                                        aria-label={`React ${r.type}`}
+                                        className={`text-base p-1 min-h-[40px] min-w-[40px] flex items-center justify-center hover:scale-125 transition-transform rounded-full ${myReaction === r.type ? "bg-blue-100 dark:bg-blue-900/30" : ""}`}>
                                         {r.emoji}
                                     </button>
                                 ))}
@@ -193,13 +198,25 @@ function GroupMessageBubble({ msg, user, onReact, onDelete, onReply, onHashtag, 
                     )}
                     {isOwn && (
                         <>
+                            {/* These were `opacity-0 group-hover:opacity-100`, which
+                                hides them WITHOUT removing them from hit-testing.
+                                There is no hover on touch, so on a phone they were
+                                permanently invisible yet still tappable — a stray tap
+                                near a message row silently deleted it. Gate the
+                                reveal on a real hover-capable pointer so a touch
+                                device always shows them. */}
                             <button
                                 onClick={() => onEdit(msg)}
-                                className="text-[11px] text-gray-400 hover:text-blue-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="text-[11px] text-gray-400 hover:text-blue-500 font-medium px-1.5 min-h-[32px] [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity"
                             >
                                 Edit
                             </button>
-                            <button onClick={() => onDelete(msg._id)} className="text-[11px] text-gray-400 hover:text-red-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity">Delete</button>
+                            <button
+                                onClick={() => onDelete(msg._id)}
+                                className="text-[11px] text-gray-400 hover:text-red-500 font-medium px-1.5 min-h-[32px] [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity"
+                            >
+                                Delete
+                            </button>
                         </>
                     )}
                 </div>
@@ -214,6 +231,7 @@ function GroupMessageBubble({ msg, user, onReact, onDelete, onReply, onHashtag, 
 export default function GroupChatBox({ groupId, user, onBack, group }) {
     const { showToast } = useToast();
     const { startGroupCall } = useCall();
+    const router = useRouter();
     const [messages, setMessages] = useState([]);
     const [loading, setLoading] = useState(true);
     const [hasMore, setHasMore] = useState(true);
@@ -531,10 +549,16 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
         // positioned, and without a positioned ancestor here it anchored to
         // whatever further ancestor happened to be relative — so it floated
         // somewhere unrelated to the chat pane.
-        <div className="flex flex-col h-full relative">
+        //
+        // `safe-top` / `safe-bottom` live here, on the column, for the same
+        // reason as in ChatBox: they are unlayered rules in globals.css and so
+        // would DELETE a same-side `py-*` on the header or composer wherever the
+        // inset is 0 (i.e. on every desktop). On the column they just displace
+        // the whole pane out from under the status bar and the home indicator.
+        <div className="flex flex-col h-full relative safe-top safe-bottom">
             {/* Header */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-                <button onClick={onBack} className="p-2 -ml-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors" aria-label="Back">
+                <button onClick={onBack} className="p-2.5 -ml-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors" aria-label="Back">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 text-gray-600 dark:text-gray-400">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
                     </svg>
@@ -548,7 +572,7 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
                     </div>
                     <p className="text-[11px] text-gray-400 dark:text-gray-500">{members.length} members</p>
                 </div>
-                <button onClick={() => setShowSettings(true)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-gray-500" aria-label="Group settings">
+                <button onClick={() => setShowSettings(true)} className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-gray-500" aria-label="Group settings">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
@@ -556,7 +580,7 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
                 </button>
                 <button
                     onClick={handleGroupCall}
-                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-blue-500"
+                    className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-blue-500"
                     // This drew a video-camera glyph and labelled itself "Group
                     // call", but handleGroupCall starts an *audio* call and groups
                     // have no video option. Both the icon and the label promised
@@ -603,7 +627,7 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
                         onReact={handleReact}
                         onDelete={handleDelete}
                         onReply={setReplyTo}
-                        onHashtag={(tag) => window.location.href = `/?tag=${tag}`}
+                        onHashtag={(tag) => router.push(`/?tag=${encodeURIComponent(tag)}`)}
                         onTranslate={handleTranslate}
                         onStar={handleStar}
                         onEdit={beginEdit}
@@ -620,7 +644,15 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
             </div>
 
             {!scrollAtBottom && (
-                <button onClick={scrollToBottom} className="absolute bottom-24 right-4 bg-gray-800 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg z-10 hover:bg-gray-700 transition-colors">
+                /* `bottom-24` is a flat 96px, but the fixed bottom nav measures
+                 * `h-16` + `safe-bottom` (64px + up to 34px). With a 32px inset
+                 * or more the 32px button slid under the nav and half of it was
+                 * unclickable. */
+                <button
+                    onClick={scrollToBottom}
+                    aria-label="Scroll to bottom"
+                    className="absolute bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] right-3 bg-gray-800 text-white rounded-full w-11 h-11 flex items-center justify-center shadow-lg z-10 hover:bg-gray-700 transition-colors"
+                >
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                         <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                     </svg>
@@ -634,19 +666,19 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
                         <span className="text-gray-500 dark:text-gray-400 truncate">
                             Replying to <span className="font-medium text-gray-700 dark:text-gray-300">{replyTo.sender}</span>
                         </span>
-                        <button onClick={() => setReplyTo(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 ml-2">&#x2715;</button>
+                        <button onClick={() => setReplyTo(null)} aria-label="Cancel reply" className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 ml-1 p-1 min-h-[32px] min-w-[32px] flex items-center justify-center rounded-full">&#x2715;</button>
                     </div>
                 )}
                 {imageUrl && (
                     <div className="relative inline-block mb-2">
                         <img src={imageUrl} alt="" className="h-16 rounded-lg object-cover border border-gray-200 dark:border-gray-700" />
-                        <button onClick={() => setImageUrl("")} className="absolute -top-1.5 -right-1.5 bg-black/60 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">&#x2715;</button>
+                        <button onClick={() => setImageUrl("")} aria-label="Remove image" className="absolute -top-2 -right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-[10px]">&#x2715;</button>
                     </div>
                 )}
                 {linkPreview && (
                     <div className="relative mb-2 max-w-xs sm:max-w-sm">
                         <LinkPreviewCard preview={linkPreview} small />
-                        <button onClick={() => { setLinkPreview(null); linkUrlRef.current = null; }} className="absolute -top-1.5 -right-1.5 bg-black/60 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">&#x2715;</button>
+                        <button onClick={() => { setLinkPreview(null); linkUrlRef.current = null; }} aria-label="Remove link preview" className="absolute -top-2 -right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-[10px]">&#x2715;</button>
                     </div>
                 )}
                 <div className="flex items-center gap-2">
@@ -661,7 +693,7 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
                             type="text" value={text} onChange={e => setText(e.target.value)}
                             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                             placeholder="Message..." maxLength={1000}
-                            className="flex-1 bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
+                            className="flex-1 min-w-0 bg-transparent text-base sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
                         />
                         <div className="relative ml-2">
                             <button onClick={() => setShowEmoji(!showEmoji)} className="text-gray-400 hover:text-yellow-500 transition-colors" aria-label="Emoji">
@@ -681,7 +713,8 @@ export default function GroupChatBox({ groupId, user, onBack, group }) {
                     </div>
                     {(text.trim() || imageUrl || audioUrl) ? (
                         <button onClick={handleSend} disabled={sending}
-                            className="bg-blue-500 hover:bg-blue-600 text-white rounded-full w-9 h-9 flex items-center justify-center transition-colors disabled:opacity-50">
+                                                        className="bg-blue-500 hover:bg-blue-600 text-white rounded-full w-11 h-11 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors disabled:opacity-50"
+>
                             {sending ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : (
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-4 h-4">
                                     <path d="M3.478 2.405a.75.75 0 0 0-.926.94l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.405Z" />

@@ -627,13 +627,20 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
     return (
         <div>
             {newPostCount > 0 && (
-                <div className="sticky top-12 z-20 flex justify-center pt-2 pointer-events-none">
+                /* This was `sticky top-12 z-20`, which is worse than it looks:
+                 * `top-12` ignored the header's `safe-top` inset, so on a notched
+                 * phone the pill slid up under the status bar, and `z-20` tied
+                 * the header's own z-20 while coming later in the DOM, so it
+                 * painted over the header and swallowed its taps. Anchored to the
+                 * bottom instead: it never competes with the header, and it clears
+                 * the `h-16 + safe-bottom` fixed nav (z-30). */
+                <div className="fixed left-0 right-0 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:bottom-6 z-20 flex justify-center px-3 pointer-events-none">
                     <button
                         onClick={() => {
                             setNewPostCount(0);
                             window.scrollTo({ top: 0, behavior: "smooth" });
                         }}
-                        className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 shadow-lg transition-colors animate-fade-up"
+                        className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-blue-600 active:bg-blue-700 text-white text-xs font-semibold px-4 min-h-[40px] shadow-lg transition-colors animate-fade-up"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-3.5 h-3.5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 19.5V4.5m0 0-6.75 6.75M12 4.5l6.75 6.75" />
@@ -643,8 +650,15 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                 </div>
             )}
 
-            {/* Feed toolbar: content-type filter, manual refresh, shortcut help. */}
-            <div className="sticky top-0 z-10 flex items-center gap-2 py-2 px-1 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-100 dark:border-gray-800">
+            {/* Feed toolbar: content-type filter, manual refresh, shortcut help.
+
+                This was `sticky top-0 z-10`. The header above it is also
+                `sticky top-0 z-20` and measures `safe-top + h-12`, so once the
+                feed scrolled the two sat at the same offset and the higher-z
+                header covered the toolbar completely: the content-type filters
+                and the refresh button were unreachable on mobile. The toolbar
+                now sticks directly beneath the header instead of under it. */}
+            <div className="sticky top-[calc(3rem+env(safe-area-inset-top,0px))] sm:top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-10 flex items-center gap-2 py-2 px-1 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-100 dark:border-gray-800">
                 <div
                     className="flex items-center gap-1 overflow-x-auto scrollbar-hide min-w-0"
                     role="group"
@@ -655,7 +669,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                             key={f.value}
                             onClick={() => setFilter(f.value)}
                             aria-pressed={filter === f.value}
-                            className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors min-h-[32px] ${
+                            className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors min-h-[40px] ${
                                 filter === f.value
                                     ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
                                     : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -671,7 +685,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                         onClick={onToggleScheduled}
                         aria-label="Scheduled posts"
                         title="Scheduled posts"
-                        className="p-2 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
+                        className="p-2 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
@@ -682,7 +696,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                         disabled={refreshing}
                         aria-label="Refresh feed"
                         title="Refresh feed (R)"
-                        className="p-2 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 min-h-[36px] min-w-[36px] flex items-center justify-center"
+                        className="p-2 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 min-h-[40px] min-w-[40px] flex items-center justify-center"
                     >
                         <svg
                             xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8}
@@ -697,7 +711,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                         aria-label="Keyboard shortcuts"
                         title="Keyboard shortcuts (?)"
                         aria-pressed={showHelp}
-                        className={`p-2 rounded-full transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center ${
+                        className={`p-2 rounded-full transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center ${
                             showHelp
                                 ? "text-blue-600 bg-blue-50 dark:bg-blue-900/30"
                                 : "text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"

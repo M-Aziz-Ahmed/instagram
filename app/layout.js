@@ -100,7 +100,23 @@ export const metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // `maximumScale`/`userScalable: false` used to be set here. Android Chrome
+  // honours them, so those users were permanently locked at 100% zoom with no
+  // way to magnify text (a WCAG 1.4.4 failure), and an iOS focus-zoom on any
+  // sub-16px input could never be undone. iOS ignores the pair entirely, so it
+  // only ever cost accessibility. Zoom is left at the browser default.
+  userScalable: true,
+  // Without `viewport-fit=cover` every `env(safe-area-inset-*)` resolves to 0 on
+  // iOS, so the `safe-top`/`safe-bottom` padding utilities in globals.css were
+  // silent no-ops in the standalone PWA: content sat under the status bar and
+  // behind the home indicator. This is what makes those insets real.
+  viewportFit: "cover",
+  // Chrome's default (`resizes-visual`) shrinks only the visual viewport when
+  // the keyboard opens, leaving the layout viewport at full height. Every
+  // `dvh`-sized sheet and `position: fixed` composer therefore kept its old
+  // height and put its footer behind the keyboard. `resizes-content` resizes the
+  // layout viewport too, so `dvh` and fixed elements track the visible area.
+  interactiveWidget: "resizes-content",
 };
 
 const jsonLd = {
