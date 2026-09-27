@@ -18,6 +18,10 @@ const router = express.Router();
 // a single post cannot be used as free video hosting.
 const MAX_VIDEO_SECONDS = 180;
 
+// Content-type filters for GET /api/posts. "all" is the absence of a filter, so
+// it is not a member: the client simply omits the param for it.
+const FEED_FILTERS = new Set(["media", "video", "links", "polls", "text"]);
+
 function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 }
@@ -265,7 +269,7 @@ async function enrichPost(post) {
 // GET /
 router.get("/", async (req, res) => {
     try {
-        const { tag, feed, username, lang, before, communityId } = req.query;
+        const { tag, feed, username, lang, before, communityId, filter } = req.query;
         const limit = Math.min(parseInt(req.query.limit || "20", 10), 50);
 
         let query = {};
@@ -321,6 +325,59 @@ router.get("/", async (req, res) => {
                     { "linkPreview.videoId": { $type: "string", $ne: "" } },
                 ],
             });
+        }
+
+        // Content-type filter, applied client-side-by-chip. The feed had no way to
+        // say "only show me video" or "only polls", so a user following several
+        // media-heavy accounts had to scroll past everything to find the one
+        // post they cared about.
+        //
+        // An unrecognised value is ignored rather than rejected: the chips are
+        // the only producer, and a stale client sending an old value should get
+        // the normal feed instead of an error.
+        //
+        // "video" deliberately includes a linked clip, because that is how video
+        // appears on the feed for anyone without the upload_video permission —
+        // the two are visually identical to a reader.
+        if (FEED_FILTERS.has(filter)) {
+            switch (filter) {
+                case "media":
+                    query.$and.push({
+                        $or: [
+                            { imageUrl: { $type: "string", $ne: "" } },
+                            // Quoted: a numeric path segment is not a valid bare
+                            // object key, so `imageUrls.0` is a SyntaxError.
+                            { "imageUrls.0": { $exists: true } },
+                        ],
+                    });
+                    break;
+                case "video":
+                    query.$and.push({
+                        $or: [
+                            { videoUrl: { $type: "string", $ne: "" } },
+                            { "linkPreview.videoId": { $type: "string", $ne: "" } },
+                        ],
+                    });
+                    break;
+                case "links":
+                    query.$and.push({ "linkPreview.videoId": { $type: "string", $ne: "" } });
+                    break;
+                case "polls":
+                    query.$and.push({ "poll.enabled": true });
+                    break;
+                case "text":
+                    // "Text only" has to exclude media explicitly, otherwise it
+                    // is just "everything", which is what the All chip is.
+                    query.$and.push({
+                        text: { $type: "string", $ne: "" },
+                        imageUrl: "",
+                        imageUrls: { $size: 0 },
+                        videoUrl: "",
+                        audioUrl: "",
+                        "linkPreview.videoId": "",
+                    });
+                    break;
+            }
         }
 
         // Community filter
@@ -397,6 +454,24 @@ router.get("/", async (req, res) => {
             downvotes: 1,
             score: 1,
             flair: 1,
+            // These four were missing from this projection, which made the feed
+            // a *different document* from the one every other surface returns.
+            //
+            // `linkPreview` is why a YouTube/TikTok link posted by a user showed
+            // the play button and thumbnail on their profile but rendered as bare
+            // inert text in the social feed: GET /api/posts/user/:username reads
+            // with no projection and included it, while this one did not, so
+            // PostCard's `post.linkPreview?.videoId` guard was always false here.
+            linkPreview: 1,
+            // Same story for polls — PollCard was fully built and reachable from
+            // /post/:id, but the feed projection dropped the field, so a poll
+            // never rendered in the main feed.
+            poll: 1,
+            // The comment badge fell back to `post.comments.length`, which is
+            // capped at MAX_EMBEDDED_COMMENTS (200), so a post with 5,000
+            // comments displayed "200" everywhere in the feed.
+            commentCount: 1,
+            editedAt: 1,
         })
             .sort({ timeStamp: -1 })
             .limit(fetchLimit)

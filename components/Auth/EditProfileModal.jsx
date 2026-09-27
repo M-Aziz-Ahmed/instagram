@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/context/ToastContext";
 import NotificationSettings from "@/components/Notifications/NotificationSettings";
+import { LANGUAGES } from "@/utils/languages";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
@@ -239,36 +240,9 @@ export default function SettingsModal({ onClose }) {
                                         onChange={(e) => setLang(e.target.value)}
                                         className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl px-4 py-3 text-sm outline-none focus:border-black dark:focus:border-gray-500 transition-colors appearance-none cursor-pointer"
                                     >
-                                        <option value="en">English</option>
-                                        <option value="es">Español</option>
-                                        <option value="fr">Français</option>
-                                        <option value="de">Deutsch</option>
-                                        <option value="pt">Português</option>
-                                        <option value="it">Italiano</option>
-                                        <option value="ja">日本語</option>
-                                        <option value="ko">한국어</option>
-                                        <option value="zh-CN">中文 (简体)</option>
-                                        <option value="zh-TW">中文 (繁體)</option>
-                                        <option value="ar">العربية</option>
-                                        <option value="hi">हिन्दी</option>
-                                        <option value="ru">Русский</option>
-                                        <option value="tr">Türkçe</option>
-                                        <option value="vi">Tiếng Việt</option>
-                                        <option value="th">ไทย</option>
-                                        <option value="pl">Polski</option>
-                                        <option value="nl">Nederlands</option>
-                                        <option value="sv">Svenska</option>
-                                        <option value="id">Bahasa Indonesia</option>
-                                        <option value="ms">Bahasa Melayu</option>
-                                        <option value="uk">Українська</option>
-                                        <option value="cs">Čeština</option>
-                                        <option value="ro">Română</option>
-                                        <option value="el">Ελληνικά</option>
-                                        <option value="he">עברית</option>
-                                        <option value="fi">Suomi</option>
-                                        <option value="no">Norsk</option>
-                                        <option value="da">Dansk</option>
-                                        <option value="hu">Magyar</option>
+                                        {LANGUAGES.map((l) => (
+                                            <option key={l.code} value={l.code}>{l.native}</option>
+                                        ))}
                                     </select>
                                 </div>
 

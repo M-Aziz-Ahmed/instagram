@@ -9,11 +9,25 @@ import { isRenderableAd } from "@/utils/adSession";
 import UserBadges from "@/components/shared/UserBadges";
 import { useUser } from "@/context/UserContext";
 import { timeAgo } from "@/utils/timeAgo";
+import useFeedShortcuts from "@/utils/useFeedShortcuts";
 
 const PAGE_SIZE = 5;
 // Upper bound on the in-memory feed. Keeps a long-lived tab from growing an
 // unbounded post list (and an unbounded number of ad slots) via the 60s prepend.
 const MAX_FEED_POSTS = 300;
+
+// Content-type filters. `all` is the absence of a filter, so it is not sent to
+// the server (see buildParams). These must stay in sync with FEED_FILTERS in
+// live-server/routes/posts.js — an unrecognised value there is ignored, which
+// would leave the chip looking selected while the feed showed everything.
+const FEED_FILTERS = [
+    { value: "all",    label: "All",    emoji: "✳️" },
+    { value: "media",  label: "Media",  emoji: "🖼️" },
+    { value: "video",  label: "Video",  emoji: "▶️" },
+    { value: "links",  label: "Links",  emoji: "🔗" },
+    { value: "polls",  label: "Polls",  emoji: "📊" },
+    { value: "text",   label: "Text",   emoji: "💬" },
+];
 
 function SearchResults({ query, onClear, onHashtag }) {
     const [users, setUsers]             = useState([]);
@@ -210,6 +224,8 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
     const [loading, setLoading]         = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore]         = useState(true);
+    const [filter, setFilter]           = useState("all");
+    const [refreshing, setRefreshing]   = useState(false);
     const sentinelRef                   = useRef(null);
     const lastRefreshRef                = useRef(0);
     const viewBatchRef                  = useRef([]);
@@ -322,6 +338,41 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
 
     const fetchPostsRef = useRef(null);
 
+    // Pulled out of `user` so the deps below are exact primitives. Listing
+    // `user?.autoTranslate, user?.language` against a body that reads them off
+    // `user` makes the compiler infer the whole object, and it then refuses to
+    // preserve the memoisation.
+    const { autoTranslate, language } = user || {};
+
+    // One place that knows what the feed is asking for.
+    //
+    // This used to be written out three times — in fetchPosts, inline in the
+    // 60s auto-refresh, and (for a manual refresh) nowhere at all. The copies
+    // had already drifted: the auto-refresh only sent `username` inside the
+    // `feedType === "following"` branch, while fetchPosts sent it whenever it
+    // was set. On a profile that meant every 60 seconds the auto-refresh
+    // requested the *global* feed and prepended unrelated posts into the
+    // profile view, with no error to show for it.
+    //
+    // `append` adds the `before` cursor. The refresh paths deliberately do not
+    // pass it: they want the newest page, not the next page.
+    const buildParams = useCallback(({ append = false } = {}) => {
+        const params = new URLSearchParams();
+        if (activeTag) params.set("tag", activeTag);
+        if (feedType === "following") {
+            params.set("feed", "following");
+        }
+        if (username) params.set("username", username);
+        if (filter && filter !== "all") params.set("filter", filter);
+        if (autoTranslate && language) params.set("lang", language);
+        if (append && postsRef.current.length > 0) {
+            const oldest = postsRef.current[postsRef.current.length - 1];
+            if (oldest?.timeStamp) params.set("before", oldest.timeStamp);
+        }
+        params.set("limit", String(PAGE_SIZE));
+        return params;
+    }, [activeTag, feedType, username, filter, autoTranslate, language]);
+
     const fetchPosts = useCallback(async ({ append = false } = {}) => {
         if (append && (!hasMoreRef.current || postsLoadingRef.current)) return;
         try {
@@ -329,18 +380,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             postsLoadingRef.current = true;
             setLoadingMore(true);
 
-            const params = new URLSearchParams();
-            if (activeTag) params.set("tag", activeTag);
-            if (feedType === "following" && username) {
-                params.set("feed", "following");
-            }
-            if (username) params.set("username", username);
-            if (user?.autoTranslate && user?.language) params.set("lang", user.language);
-            if (append && postsRef.current.length > 0) {
-                const oldest = postsRef.current[postsRef.current.length - 1];
-                if (oldest?.timeStamp) params.set("before", oldest.timeStamp);
-            }
-            params.set("limit", String(PAGE_SIZE));
+            const params = buildParams({ append });
 
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -385,34 +425,106 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [activeTag, onAuthError, feedType, username, user]);
+    }, [buildParams, onAuthError]);
 
     // Keep a ref to fetchPosts so the observer always calls the latest version
     fetchPostsRef.current = fetchPosts;
 
+    // Changing what the feed is asking for has to actually go and ask for it.
+    //
+    // This used to only clear the list and set `loading`, on the assumption that
+    // the IntersectionObserver sentinel would notice the empty list and fetch.
+    // It cannot: while `loading` is true the component renders skeletons, so the
+    // sentinel is unmounted, and the only thing that ever clears `loading` is a
+    // completed fetch. Switching between the All and For You tabs, or clearing a
+    // hashtag filter, therefore hung on the skeleton until a full page reload.
+    //
+    // This effect also covers the initial load, which is why the separate
+    // once-per-mount effect below is gone — it was the same fetch, and having
+    // both meant the first render raced two requests.
+    //
+    // Deps are deliberately the query identity only, and the fetch is read
+    // through a ref. Depending on `fetchPosts` itself would re-run this whenever
+    // its identity changed, and that identity includes `onAuthError`, which the
+    // parent does not necessarily keep stable — an inline handler there would
+    // turn this into an unbounded refetch loop.
     useEffect(() => {
-        setPosts([]);
-        setHasMore(true);
+        // `setHasMore` is deliberately not called here: fetchPosts sets it from
+        // the response, and setting it now would be a synchronous setState in an
+        // effect body for a value that is about to be overwritten anyway.
         hasMoreRef.current = true;
         postsLoadingRef.current = false;
-        setLoading(true);
         lastRefreshRef.current = 0;
-    }, [activeTag, feedType, username]);
-
-    // Initial fetch - run once per mount
-    const initialFetched = useRef(false);
-    useEffect(() => {
-        if (initialFetched.current) return;
-        initialFetched.current = true;
-        fetchPosts().finally(() => {
+        fetchPostsRef.current?.().finally(() => {
             setLoading(false);
         });
-    }, []); // Run once on mount
+    }, [activeTag, feedType, username, filter]);
+
+    // The `refreshTrigger` prop was destructured and then never read, so
+    // publishing a post did nothing to the feed underneath the composer — the
+    // new post only appeared after the 60s tick, or on a manual page reload.
+    // FeedClient increments this from Compose's onPosted.
+    const lastTriggerRef = useRef(refreshTrigger);
+    useEffect(() => {
+        if (lastTriggerRef.current === refreshTrigger) return;
+        lastTriggerRef.current = refreshTrigger;
+        lastRefreshRef.current = 0;
+        fetchPosts().finally(() => setLoading(false));
+    }, [refreshTrigger, fetchPosts]);
 
     const loadingRef = useRef(false);
     const loadingMoreRef = useRef(false);
     loadingRef.current = loading;
     loadingMoreRef.current = loadingMore;
+
+    // Prepend anything published since the last page, keeping the buffer bounded.
+    // Shared by the 60s tick, the refresh button and the keyboard shortcut, so
+    // all three behave identically instead of drifting apart.
+    const refreshLatest = useCallback(async ({ timeout = 10000 } = {}) => {
+        const params = buildParams();
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        try {
+            const res = await fetch(`/api/posts?${params}`, {
+                cache: "no-store",
+                signal: controller.signal,
+            });
+            if (!res.ok) return 0;
+            const data = await res.json();
+            if (data.translations) {
+                setServerTranslations((prev) => ({ ...prev, ...data.translations }));
+            }
+            if (!Array.isArray(data.posts)) return 0;
+            setPosts((prev) => {
+                const ids = new Set(prev.map((p) => p._id));
+                const fresh = data.posts.filter((p) => p && p._id && !ids.has(p._id));
+                if (fresh.length === 0) return prev;
+                // Cap the buffer. Prepending without ever trimming meant a tab
+                // left open grew an unbounded post list — and an unbounded
+                // number of ad slots with it.
+                return [...fresh, ...prev].slice(0, MAX_FEED_POSTS);
+            });
+            return data.posts.length;
+        } catch {
+            return 0;
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    }, [buildParams]);
+
+    // Manual refresh. The 60s tick is a safety net, not something to make someone
+    // wait on: posting, replying and toggling a filter all change what the feed
+    // should contain, and none of them waited for it.
+    const handleRefresh = useCallback(async () => {
+        if (refreshing) return;
+        setRefreshing(true);
+        lastRefreshRef.current = Date.now();
+        try {
+            await refreshLatest();
+        } finally {
+            setRefreshing(false);
+        }
+    }, [refreshing, refreshLatest]);
 
 // Auto-refresh for new posts (every 60s, skip if loading)
     useEffect(() => {
@@ -421,45 +533,10 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
             if (now - lastRefreshRef.current < 60000) return;
             if (loadingRef.current || loadingMoreRef.current) return;
             lastRefreshRef.current = now;
-
-            const params = new URLSearchParams();
-            if (activeTag) params.set("tag", activeTag);
-            if (feedType === "following" && username) {
-                params.set("feed", "following");
-                params.set("username", username);
-            }
-            if (user?.autoTranslate && user?.language) {
-                params.set("lang", user.language);
-            }
-            params.set("limit", "5");
-
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-            fetch(`/api/posts?${params}`, { 
-                cache: "no-store",
-                signal: controller.signal
-            })
-                .then((r) => r.ok ? r.json() : null)
-                .then((data) => {
-                    if (!data?.posts || !Array.isArray(data.posts)) return;
-                    if (data.translations) {
-                        setServerTranslations((prev) => ({ ...prev, ...data.translations }));
-                    }
-                    setPosts((prev) => {
-                        const ids = new Set(prev.map((p) => p._id));
-                        const fresh = data.posts.filter((p) => p && p._id && !ids.has(p._id));
-                        if (fresh.length === 0) return prev;
-                        // Cap the buffer. Prepending without ever trimming meant
-                        // a tab left open grew an unbounded post list — and an
-                        // unbounded number of ad slots with it.
-                        return [...fresh, ...prev].slice(0, MAX_FEED_POSTS);
-                    });
-                })
-                .catch(() => {});
+            refreshLatest();
         }, 60000);
         return () => clearInterval(id);
-    }, [activeTag, feedType, username, user?.autoTranslate, user?.language]);
+    }, [refreshLatest]);
 
     useEffect(() => {
         const sentinel = sentinelRef.current;
@@ -477,6 +554,37 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
         observer.observe(sentinel);
         return () => observer.disconnect();
     }, [loading]);
+
+    // j/k move between posts by asking the browser to scroll the next rendered
+    // post into view, rather than tracking an index: the list is reordered by
+    // the 60s prepend and by infinite scroll, so any index held in state would
+    // drift out of date and scroll to the wrong post. Deriving from the DOM at
+    // the moment of the keystroke cannot drift.
+    const focusPostAtOffset = useCallback((offset) => {
+        const nodes = Array.from(document.querySelectorAll("[data-feed-post]"));
+        if (nodes.length === 0) return;
+
+        // The post currently occupying the middle of the viewport.
+        let currentIndex = nodes.findIndex((el) => {
+            const rect = el.getBoundingClientRect();
+            return rect.top <= window.innerHeight / 2 && rect.bottom >= window.innerHeight / 2;
+        });
+        if (currentIndex === -1) {
+            // Nothing straddles the middle (long post, or the gap between two):
+            // fall back to the first post whose top has not yet passed.
+            currentIndex = nodes.findIndex((el) => el.getBoundingClientRect().top > 0);
+            if (currentIndex === -1) currentIndex = nodes.length - 1;
+        }
+
+        const nextIndex = Math.min(Math.max(currentIndex + offset, 0), nodes.length - 1);
+        nodes[nextIndex]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, []);
+
+    const { showHelp, setShowHelp, shortcuts } = useFeedShortcuts({
+        onNext: () => focusPostAtOffset(1),
+        onPrevious: () => focusPostAtOffset(-1),
+        onRefresh: handleRefresh,
+    });
 
     // Show search results when searchQuery is set
     if (searchQuery) {
@@ -510,6 +618,77 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
 
     return (
         <div>
+            {/* Feed toolbar: content-type filter, manual refresh, shortcut help. */}
+            <div className="sticky top-0 z-10 flex items-center gap-2 py-2 px-1 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-100 dark:border-gray-800">
+                <div
+                    className="flex items-center gap-1 overflow-x-auto scrollbar-hide min-w-0"
+                    role="group"
+                    aria-label="Filter feed by content type"
+                >
+                    {FEED_FILTERS.map((f) => (
+                        <button
+                            key={f.value}
+                            onClick={() => setFilter(f.value)}
+                            aria-pressed={filter === f.value}
+                            className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors min-h-[32px] ${
+                                filter === f.value
+                                    ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
+                                    : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                            }`}
+                        >
+                            <span aria-hidden="true">{f.emoji}</span>
+                            {f.label}
+                        </button>
+                    ))}
+                </div>
+                <div className="ml-auto flex items-center gap-0.5 shrink-0">
+                    <button
+                        onClick={handleRefresh}
+                        disabled={refreshing}
+                        aria-label="Refresh feed"
+                        title="Refresh feed (R)"
+                        className="p-2 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 min-h-[36px] min-w-[36px] flex items-center justify-center"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8}
+                            stroke="currentColor"
+                            className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992V4.356M3.02 19.644v-4.992h4.992m0 0l3.181-3.183a8.25 8.25 0 0 1 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                        </svg>
+                    </button>
+                    <button
+                        onClick={() => setShowHelp((v) => !v)}
+                        aria-label="Keyboard shortcuts"
+                        title="Keyboard shortcuts (?)"
+                        aria-pressed={showHelp}
+                        className={`p-2 rounded-full transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center ${
+                            showHelp
+                                ? "text-blue-600 bg-blue-50 dark:bg-blue-900/30"
+                                : "text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        }`}
+                    >
+                        <span className="text-xs font-bold">?</span>
+                    </button>
+                </div>
+            </div>
+
+            {showHelp && (
+                <div className="mt-2 mx-1 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
+                    <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2">Keyboard shortcuts</p>
+                    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                        {shortcuts.map((s) => (
+                            <li key={s.keys} className="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
+                                <span>{s.label}</span>
+                                <kbd className="shrink-0 font-mono text-[10px] px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900">
+                                    {s.keys}
+                                </kbd>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
             {activeTag && (
                 <div className="py-3 border-b border-gray-200 flex items-center gap-2">
                     <span className="text-sm font-bold text-blue-600">#{activeTag}</span>
@@ -526,14 +705,15 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                 item.type === "ad" ? (
                     <AdCard key={`ad-${item.adKey}-${item.data._id}`} ad={item.data} />
                 ) : item.data?._id ? (
-                    <PostCard
-                        key={item.data._id}
-                        post={item.data}
-                        onDelete={handleDelete}
-                        onHashtag={onHashtag}
-                        serverTranslation={serverTranslations[item.data._id]}
-                        trackView={trackView}
-                    />
+                    <div key={item.data._id} data-feed-post>
+                        <PostCard
+                            post={item.data}
+                            onDelete={handleDelete}
+                            onHashtag={onHashtag}
+                            serverTranslation={serverTranslations[item.data._id]}
+                            trackView={trackView}
+                        />
+                    </div>
                 ) : null
             )}
             <div ref={sentinelRef} className="h-1" />

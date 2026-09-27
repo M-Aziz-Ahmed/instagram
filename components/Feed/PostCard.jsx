@@ -22,7 +22,11 @@ import ToxicText from "@/components/shared/ToxicText";
 import Link from "next/link";
 import { LoginModal } from "@/components/shared/GuestPrompt";
 import { timeAgo } from "@/utils/timeAgo";
-import { trackImpression } from "@/utils/postAnalytics";
+// trackHashtagClick was called below but never imported, so every hashtag click
+// in the feed threw a ReferenceError and the tag filter never applied.
+import { trackImpression, trackHashtagClick } from "@/utils/postAnalytics";
+import { translateItem, translateItems } from "@/utils/translateApi";
+import { languageName } from "@/utils/languages";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
@@ -100,6 +104,16 @@ function CommentIcon() {
             strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
             <path strokeLinecap="round" strokeLinejoin="round"
                 d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785A5.969 5.969 0 0 0 6 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337Z" />
+        </svg>
+    );
+}
+
+function TranslateGlyph() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+            strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5 shrink-0">
+            <path strokeLinecap="round" strokeLinejoin="round"
+                d="M10.5 21H5.25A2.25 2.25 0 0 1 3 18.75V5.25A2.25 2.25 0 0 1 5.25 3H10.5m3 0h5.25A2.25 2.25 0 0 1 21 5.25v13.5A2.25 2.25 0 0 1 18.75 21H15m-6-12h5.25M12 3v1.5M9 21l3-9 3 9m-5.25-3h4.5M15 21h4.5" />
         </svg>
     );
 }
@@ -287,6 +301,14 @@ const COMMENT_REACTIONS = [
     { type: "angry", emoji: "😠" },
 ];
 
+// Thread ordering options. "Top" is the default because a thread read
+// oldest-first puts the reply that answers the post underneath every "first!".
+const COMMENT_SORTS = [
+    { value: "top", label: "Top" },
+    { value: "new", label: "Newest" },
+    { value: "old", label: "Oldest" },
+];
+
 function CommentReactionButton({ comment, user, postId, onReact }) {
     const [show, setShow] = useState(false);
     const myReaction = COMMENT_REACTIONS.find(r =>
@@ -347,11 +369,18 @@ function CommentReactionCounts({ reactions }) {
     );
 }
 
-function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, postId, onDelete, onReactComment, onEditComment }) {
+function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, postId, onDelete, onReactComment, onEditComment, sortComments, translationsById, translatingIds, onToggleTranslate, translateTargetName }) {
+    // Replies honour the same ordering as the top level, so choosing "Newest"
+    // does not leave the nested half of the thread in the old order.
     const replies = useMemo(
-        () => allComments.filter((c) => c.parentId === comment.commentId),
-        [allComments, comment.commentId]
+        () => sortComments(allComments.filter((c) => c.parentId === comment.commentId)),
+        [allComments, comment.commentId, sortComments]
     );
+
+    // Derived from the shared maps rather than passed in individually, so the
+    // recursive call below does not have to resolve each reply's own values.
+    const translation = translationsById?.[comment.commentId];
+    const isTranslating = !!translatingIds?.[comment.commentId];
 
     const [commentLightbox, setCommentLightbox] = useState(false);
     const [editing, setEditing] = useState(false);
@@ -416,8 +445,34 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                     {commentLightbox && comment.imageUrl && (
                         <ImageLightbox src={comment.imageUrl} alt="Comment image" onClose={() => setCommentLightbox(false)} />
                     )}
+                    {translation && (
+                        <p className="mt-1 text-xs italic text-gray-500 dark:text-gray-400 leading-relaxed break-words">
+                            {translation}
+                        </p>
+                    )}
                     <div className="flex items-center gap-2 mt-0.5 px-1">
                         <span className="text-gray-300 dark:text-gray-600 text-[11px]">{timeAgo(comment.timeStamp)}</span>
+                        {/* Only offered when there is something to translate, and
+                            never on the reader's own comment — they wrote it in
+                            the target language already. */}
+                        {user && comment.text?.trim() && comment.sender !== user.username && (
+                            <button
+                                onClick={() => onToggleTranslate(comment.commentId, comment.text)}
+                                disabled={isTranslating}
+                                className="text-[11px] text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 font-medium transition-colors px-1.5 py-1.5 min-h-[32px] disabled:opacity-50"
+                                title={translation ? "Hide translation" : `Translate to ${translateTargetName}`}
+                                aria-label={translation ? "Hide translation" : `Translate to ${translateTargetName}`}
+                            >
+                                {isTranslating ? (
+                                    <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin align-middle" />
+                                ) : (
+                                    <span className="inline-flex items-center gap-1">
+                                        <TranslateGlyph />
+                                        {translation ? "Hide" : "Translate"}
+                                    </span>
+                                )}
+                            </button>
+                        )}
                         {user && (
                             <CommentReactionButton comment={comment} user={user} postId={postId} onReact={onReactComment} />
                         )}
@@ -465,6 +520,11 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                     onDelete={onDelete}
                     onReactComment={onReactComment}
                     onEditComment={onEditComment}
+                    sortComments={sortComments}
+                    translationsById={translationsById}
+                    translatingIds={translatingIds}
+                    onToggleTranslate={onToggleTranslate}
+                    translateTargetName={translateTargetName}
                 />
             ))}
         </div>
@@ -529,11 +589,18 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
     const [savingEdit, setSavingEdit]         = useState(false);
     const [showModMenu, setShowModMenu]       = useState(false);
     const [moderating, setModerating]         = useState(false);
-    const [showReportMenu, setShowReportMenu] = useState(false);
-    const [reporting, setReporting]           = useState(false);
+    const [showReportMenu, setShowReportMenu]       = useState(false);
+    const [reporting, setReporting]                 = useState(false);
+    // Comment translation, keyed by commentId. Kept separate from `translations`
+    // (which is keyed for post/original/repost-comment) so clearing one never
+    // disturbs the other.
+    const [commentTranslations, setCommentTranslations] = useState({});
+    const [translatingComments, setTranslatingComments] = useState({});
+    const [commentSort, setCommentSort]             = useState("top");
     const autoTranslatedRef = useRef(false);
     const origTranslatedRef = useRef(false);
     const commentTranslatedRef = useRef(false);
+    const autoTranslatedCommentsRef = useRef(false);
     const hasTrackedView = useRef(false);
     const lastTapRef = useRef(0);
     const singleTapTimer = useRef(null);
@@ -592,10 +659,46 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
         };
     }, [post._id, trackView]);
 
+    // Comment ordering.
+    //
+    // Previously always oldest-first, which meant on any thread with real
+    // discussion the interesting replies were below a wall of "first!" and the
+    // feed gave no way to change it. "Top" ranks by engagement so the replies
+    // worth reading surface first, and it falls back to chronological so the
+    // order stays stable for a quiet thread — otherwise a single reaction would
+    // reshuffle every comment under the reader.
+    //
+    // Scope: this sorts the comments embedded on the post, which the server caps
+    // at MAX_EMBEDDED_COMMENTS (200). A thread older than that is already only
+    // partially present in the feed, and sorting does not change that.
+    const sortComments = useCallback((list) => {
+        const arr = [...list];
+        if (commentSort === "new") {
+            return arr.sort((a, b) => new Date(b.timeStamp) - new Date(a.timeStamp));
+        }
+        if (commentSort === "old") {
+            return arr.sort((a, b) => new Date(a.timeStamp) - new Date(b.timeStamp));
+        }
+        const weight = (c) => {
+            const r = c.reactions || {};
+            return Object.values(r).reduce((n, list) => n + (list?.length || 0), 0)
+                + (c.likes?.length || 0);
+        };
+        return arr.sort((a, b) => {
+            const diff = weight(b) - weight(a);
+            return diff !== 0 ? diff : new Date(a.timeStamp) - new Date(b.timeStamp);
+        });
+    }, [commentSort]);
+
     const topLevelComments = useMemo(
-        () => (post.comments || []).filter((c) => !c.parentId),
-        [post.comments]
+        () => sortComments((post.comments || []).filter((c) => !c.parentId)),
+        [post.comments, sortComments]
     );
+
+    // Falls back to the embedded window for documents written before
+    // commentCount existed, and for the single-post route where the full
+    // document is returned anyway.
+    const commentTotal = post.commentCount ?? (post.comments?.length || 0);
 
     const translatePost = async (postId, text) => {
         if (translations[postId]) {
@@ -881,6 +984,118 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
             showToast("Failed to edit comment", "error");
         }
     };
+
+    // ── Comment translation ────────────────────────────────────────
+    //
+    // A post's own text, its reposted original and the repost caption have always
+    // had a translate button. Comments had none, which is the surface where
+    // language actually varies most: someone replies in their own language to a
+    // thread they cannot otherwise read, and there was no way to read the reply
+    // at all.
+    const translateTarget = user?.language || "en";
+    const translateTargetName = languageName(translateTarget);
+
+    const handleTranslateComment = useCallback(async (commentId, text) => {
+        // Same toggle semantics as the post-level button: pressing again on an
+        // already-translated comment hides it rather than re-requesting.
+        setCommentTranslations((prev) => {
+            if (prev[commentId]) {
+                const next = { ...prev };
+                delete next[commentId];
+                return next;
+            }
+            return prev;
+        });
+        if (commentTranslations[commentId]) return;
+
+        setTranslatingComments((prev) => ({ ...prev, [commentId]: true }));
+        const translated = await translateItem(text, translateTarget);
+        setTranslatingComments((prev) => {
+            const next = { ...prev };
+            delete next[commentId];
+            return next;
+        });
+        if (translated) {
+            setCommentTranslations((prev) => ({ ...prev, [commentId]: translated }));
+        }
+    }, [commentTranslations, translateTarget]);
+
+    const untranslatableComments = useCallback(
+        (list) => (list || []).filter(
+            (c) => c.text?.trim() && c.sender !== user?.username
+        ),
+        [user?.username]
+    );
+
+    // Memoised because the thread toolbar reads it on every render.
+    const translatableComments = useMemo(
+        () => untranslatableComments(post.comments),
+        [post.comments, untranslatableComments]
+    );
+
+    const translatingAllComments = Object.keys(translatingComments).length > 0;
+
+    // Translate every comment on the post in one action. Worth having on its own
+    // because a 200-comment thread is not something anyone is going to translate
+    // one button at a time, and it is the same batched request the auto-translate
+    // path already uses.
+    const handleTranslateAllComments = useCallback(async () => {
+        const targets = untranslatableComments(post.comments);
+        if (targets.length === 0) return;
+        setTranslatingComments((prev) => {
+            const next = { ...prev };
+            for (const c of targets) next[c.commentId] = true;
+            return next;
+        });
+        const results = await translateItems(
+            targets.map((c) => ({ id: c.commentId, text: c.text })),
+            translateTarget
+        );
+        setTranslatingComments((prev) => {
+            const next = { ...prev };
+            for (const c of targets) delete next[c.commentId];
+            return next;
+        });
+        const found = Object.keys(results).length;
+        if (found) {
+            setCommentTranslations((prev) => ({ ...prev, ...results }));
+            showToast(
+                found === 1 ? "Translated 1 comment" : `Translated ${found} comments`,
+                "success"
+            );
+        } else {
+            showToast("Nothing to translate", "error");
+        }
+    }, [post.comments, untranslatableComments, translateTarget, showToast]);
+
+    // Auto-translate comments when the reader opted in. One-shot per post, and
+    // only once the comments are actually on screen — an unopened thread has
+    // nothing to translate and the reader has not asked to read it yet.
+    useEffect(() => {
+        if (!user?.autoTranslate) return;
+        if (!showComments) return;
+        if (autoTranslatedCommentsRef.current) return;
+
+        const targets = untranslatableComments(post.comments);
+        if (targets.length === 0) {
+            autoTranslatedCommentsRef.current = true;
+            return;
+        }
+        autoTranslatedCommentsRef.current = true;
+
+        let cancelled = false;
+        translateItems(
+            targets.map((c) => ({ id: c.commentId, text: c.text })),
+            translateTarget
+        ).then((results) => {
+            if (cancelled) return;
+            if (Object.keys(results).length) {
+                setCommentTranslations((prev) => ({ ...prev, ...results }));
+            }
+        });
+
+        return () => { cancelled = true; };
+    }, [user?.autoTranslate, showComments, post.comments, untranslatableComments, translateTarget]);
 
     const handleDelete = async () => {
         if (!user || deleting) return;
@@ -1400,7 +1615,10 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                             className="flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-blue-500 transition-colors min-h-[44px] px-2 py-1 rounded-lg animate-press"
                         >
                             <CommentIcon />
-                            {(post.comments?.length || 0) > 0 && <span>{post.comments.length}</span>}
+                            {/* commentCount is authoritative; post.comments is a
+                                bounded window (200) and was being used as the
+                                count, so any thread over that displayed "200". */}
+                            {commentTotal > 0 && <span>{commentTotal}</span>}
                         </button>
 
                         {user ? (
@@ -1460,6 +1678,49 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
 
                     {showComments && (
                         <div className="mt-3 flex flex-col gap-2">
+                            {/* Thread controls. Hidden entirely when there is
+                                nothing to sort or translate, so a single-comment
+                                post does not get a toolbar of inert controls. */}
+                            {(topLevelComments.length > 1 || translatableComments.length > 0) && (
+                                <div className="flex items-center justify-between gap-2 px-1 pb-0.5">
+                                    <div
+                                        className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500"
+                                        role="group"
+                                        aria-label="Sort comments"
+                                    >
+                                        {COMMENT_SORTS.map((s) => (
+                                            <button
+                                                key={s.value}
+                                                onClick={() => setCommentSort(s.value)}
+                                                aria-pressed={commentSort === s.value}
+                                                className={`px-2 py-1 rounded-full transition-colors min-h-[28px] ${
+                                                    commentSort === s.value
+                                                        ? "font-semibold text-gray-900 dark:text-gray-100 bg-gray-100 dark:bg-gray-800"
+                                                        : "hover:text-gray-600 dark:hover:text-gray-300"
+                                                }`}
+                                            >
+                                                {s.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {translatableComments.length > 0 && (
+                                        <button
+                                            onClick={handleTranslateAllComments}
+                                            disabled={translatingAllComments}
+                                            className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors px-2 py-1 rounded-full min-h-[28px] disabled:opacity-50 shrink-0"
+                                            title={`Translate all comments to ${translateTargetName}`}
+                                        >
+                                            {translatingAllComments ? (
+                                                <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                                            ) : (
+                                                <TranslateGlyph />
+                                            )}
+                                            Translate all
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
                             {topLevelComments.length > 0 && (
                                 <div className="flex flex-col">
                                     {topLevelComments.map((c) => (
@@ -1475,6 +1736,11 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                             onDelete={handleDeleteComment}
                                             onReactComment={handleReactComment}
                                             onEditComment={handleEditComment}
+                                            sortComments={sortComments}
+                                            translationsById={commentTranslations}
+                                            translatingIds={translatingComments}
+                                            onToggleTranslate={handleTranslateComment}
+                                            translateTargetName={translateTargetName}
                                         />
                                     ))}
                                 </div>
