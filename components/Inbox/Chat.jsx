@@ -98,13 +98,12 @@ function getMessageStatus(msg) {
     return "sent";
 }
 
-export default function Chat({ pendingMessage, recipient, recipientUser, scrollContainerRef, replyingTo, setReplyingTo, isTyping, isRecording }) {
+export default function Chat({ pendingMessage, recipient, recipientUser, scrollContainerRef, setReplyingTo, isTyping, isRecording }) {
     const { user } = useUser();
     const { showToast } = useToast();
     const [messages, setMessages]   = useState([]);
     const [loading, setLoading]     = useState(true);
     const bottomRef                  = useRef(null);
-    const pendingIdRef               = useRef(null);
     const isNearBottomRef            = useRef(true);
     const scrolledToLastReadRef      = useRef(false);
     const username                   = user?.username;
@@ -117,6 +116,11 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
     const [editMsgText, setEditMsgText] = useState("");
     const [activeMenu, setActiveMenu] = useState(null);
     const [forwardMsg, setForwardMsg] = useState(null);
+    // The message the reader had already seen when this conversation was
+    // opened, i.e. the "New messages" divider's anchor. Read once per
+    // conversation (see the effect that performs the initial jump) because the
+    // live localStorage marker advances as soon as anything scrolls.
+    const [unreadAnchorId, setUnreadAnchorId] = useState(null);
 
     const isNearBottom = useCallback(() => {
         const el = scrollContainerRef.current;
@@ -134,6 +138,43 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         const elapsed = Date.now() - new Date(msg.timeStamp).getTime();
         return elapsed < RECALL_WINDOW_MS;
     }, [username]);
+
+    // Make the Recall button actually disappear when its window closes.
+    //
+    // `canRecall` reads `Date.now()`, but a render is the only thing that can
+    // hide the button, so a message rendered a second before its 60s expired
+    // kept a live, clickable Recall until some unrelated re-render happened to
+    // come along — the 8s poll at best, and nothing at all on an idle thread,
+    // where the server would then reject it as too late, after the confirm
+    // dialog.
+    //
+    // Instead of a blanket 1s tick, arm one timer for the moment the latest
+    // still-recallable message expires, and re-arm after it fires. An idle
+    // thread (nothing inside its window) arms no timer at all. The clock is
+    // read inside the effect rather than in the render body: `Date.now()` during
+    // render is not pure, and the earliest deadline is only needed to size the
+    // timeout, not to draw anything.
+    const [, forceRecallTick] = useState(0);
+
+    useEffect(() => {
+        if (!username) return;
+        let timer;
+        const arm = () => {
+            let deadline = 0;
+            for (const m of messages) {
+                if (m.sender !== username || m._sending) continue;
+                const expires = new Date(m.timeStamp).getTime() + RECALL_WINDOW_MS;
+                if (expires > Date.now() && expires > deadline) deadline = expires;
+            }
+            if (!deadline) return;
+            timer = setTimeout(() => {
+                forceRecallTick((n) => n + 1);
+                arm();
+            }, Math.max(250, deadline - Date.now()));
+        };
+        arm();
+        return () => clearTimeout(timer);
+    }, [messages, username, forceRecallTick]);
 
     const handleStar = useCallback(async (msg) => {
         // Optimistic: the row re-renders from the local copy and the server is the
@@ -183,6 +224,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             const res = await fetch(`/api/messages/${encodeURIComponent(msg._id)}`, {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
+                credentials: "include",
             });
             if (res.ok) {
                 setMessages((prev) => prev.filter((m) => m._id !== msg._id));
@@ -202,6 +244,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             const res = await fetch(`/api/messages/${msg._id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
+                credentials: "include",
                 body: JSON.stringify({ text: editMsgText.trim() }),
             });
             if (res.ok) {
@@ -224,6 +267,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             const res = await fetch(`/api/messages/${msg._id}`, {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
+                credentials: "include",
             });
             if (res.ok) {
                 setMessages((prev) => prev.map((m) => m._id === msg._id ? { ...m, text: "", deleted: true } : m));
@@ -272,12 +316,32 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             return { ...m, reactions };
         }));
         try {
-            await fetch("/api/messages", {
+            const res = await fetch("/api/messages", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
+                credentials: "include",
                 body: JSON.stringify({ sender: username, messageId: msgId, action: "react", reactionType }),
             });
-        } catch {}
+            if (!res.ok) throw new Error("react failed");
+            // Take the server's `reactions` verbatim. The local guess above is
+            // only correct if nothing else touched the row in the meantime: the
+            // server strips the user from every other bucket before toggling,
+            // the 8s poll can land between the optimistic write and this
+            // response, and a second reaction can overlap. Discarding the
+            // response (the old `catch {}`) let any of those leave the chips
+            // showing a mixture of both answers — a chip the server never
+            // agreed to, and one that self-heals only if a later poll happens
+            // to fix it.
+            const data = await res.json().catch(() => null);
+            if (data?.reactions) {
+                setMessages(prev => prev.map(m => (
+                    m._id === msgId ? { ...m, reactions: data.reactions } : m
+                )));
+            }
+        } catch {
+            // Nothing to roll back: the optimistic write is the only state we
+            // have, and the next 8s poll overwrites it with the truth.
+        }
     }, [username]);
 
     useEffect(() => {
@@ -312,19 +376,27 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         setMessages([]);
         setHasMore(false);
         setOldestTimestamp(null);
+        setUnreadAnchorId(null);
         setLoading(true);
     }, []);
 
     const syncPendingMessage = useCallback((pm) => {
+        // A confirmed outgoing send advances the read marker. Done here, in the
+        // callback body, and *not* inside the setMessages updater: updaters must
+        // be pure, and React is free to call one more than once (StrictMode
+        // double-invokes, and a discarded render can simply drop it), which
+        // would replay a localStorage write — a side effect nobody can undo —
+        // for something that only needs to happen once per message.
+        if (pm._id && !pm._sending && pm.sender === username && username && recipient) {
+            setLastReadId(username, recipient, pm._id);
+        }
+
         setMessages((prev) => {
             if (pm._remove) {
                 return prev.filter((m) => m._id !== pm._id && m._tempId !== pm._tempId);
             }
 
             if (pm._id && !pm._sending) {
-                if (pm.sender === user?.username && username && recipient) {
-                    setLastReadId(username, recipient, pm._id);
-                }
                 const tempIndex = prev.findIndex((m) => m._tempId && m.sender === pm.sender && m.text === pm.text && m.imageUrl === pm.imageUrl);
                 if (tempIndex !== -1) {
                     const copy = prev.slice();
@@ -349,14 +421,12 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             return [...prev, pm];
         });
 
-        if (pm._tempId) pendingIdRef.current = pm._tempId;
-
         if (pm.sender === user?.username) {
             isNearBottomRef.current = true;
             setShowScrollBtn(false);
             requestAnimationFrame(() => scrollToBottom());
         }
-    }, [user?.username, scrollToBottom]);
+    }, [user?.username, recipient, scrollToBottom]);
 
     const resetScrollState = useCallback(() => {
         isNearBottomRef.current = true;
@@ -376,9 +446,9 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             limit: String(options.limit || 20),
         });
         if (options.before) params.set("before", options.before);
-        if (user?.autoTranslate && user?.language) {
-            params.set("lang", user.language);
-        }
+        // No `lang` param: GET /api/messages never read one, so sending it only
+        // looked like the server was doing the translating. It isn't — the batch
+        // effect above posts to /api/translate.
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -396,9 +466,8 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             const fetched = Array.isArray(data.messages) ? data.messages : [];
             setHasMore(Boolean(data.hasMore));
 
-            if (data.translations) {
-                setTranslations((prev) => ({ ...prev, ...data.translations }));
-            }
+            // No `translations` merge either: the response is `{ messages,
+            // hasMore }` and nothing else, so this branch never ran.
 
             setMessages(prev => {
                 const keyOf = (m) => m._id || m._tempId;
@@ -466,7 +535,7 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
             }
             return null;
         }
-    }, [username, recipient, user?.autoTranslate, user?.language]);
+    }, [username, recipient]);
 
     const loadOlderMessages = useCallback(async () => {
         if (!username || !recipient || !hasMore || loadingMore || !oldestTimestamp) return;
@@ -588,6 +657,14 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         if (!scrolledToLastReadRef.current) {
             scrolledToLastReadRef.current = true;
             const lastReadId = getLastReadId(username, recipient);
+            // The "New messages" divider is anchored to this read marker, so it
+            // has to be read *here* and not during render: the scroll handler
+            // above rewrites localStorage on every scroll event, and the jump
+            // below fires one, so by the next render the stored value is
+            // already "the newest thing that happened to be on screen". Reading
+            // it in the same effect as the jump gets the pre-scroll value, which
+            // is the only one that still means "where the reader stopped".
+            if (lastReadId) queueMicrotask(() => setUnreadAnchorId(lastReadId));
             if (lastReadId) {
                 const el = document.getElementById(`msg-${lastReadId}`);
                 if (el) {
@@ -646,6 +723,15 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
         );
     }
 
+    // Index of the first *unread* message, i.e. the one just after the marker
+    // captured when the thread was opened. -1 whenever there is no marker, it
+    // has been evicted, or it is not on the loaded page — and then no divider is
+    // drawn, because there is no honest place to put one.
+    const dividerAfter = unreadAnchorId
+        ? messages.findIndex((m) => m._id === unreadAnchorId) + 1
+        : 0;
+    const showUnreadDivider = dividerAfter > 0 && dividerAfter < messages.length;
+
     return (
         <div className="relative h-full">
         <div className="flex flex-col gap-0.5 w-full">
@@ -685,6 +771,15 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
 
                 return (
                     <div key={msg._id || msg._tempId} id={msg._id ? `msg-${msg._id}` : undefined}>
+                        {showUnreadDivider && i === dividerAfter && (
+                            <div className="flex items-center gap-3 my-3">
+                                <span className="h-px flex-1 bg-blue-300 dark:bg-blue-500/40" />
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-blue-500 dark:text-blue-400">
+                                    New messages
+                                </span>
+                                <span className="h-px flex-1 bg-blue-300 dark:bg-blue-500/40" />
+                            </div>
+                        )}
                         {showTime && (
                             <div className="flex justify-center my-4">
                                 <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-full">
@@ -956,7 +1051,12 @@ export default function Chat({ pendingMessage, recipient, recipientUser, scrollC
                                         .map(r => ({ ...r, count: msg.reactions[r.type]?.length || 0, users: msg.reactions[r.type] || [] }))
                                         .filter(r => r.count > 0);
                                     const myReaction = MSG_REACTIONS.find(r => msg.reactions[r.type]?.includes(username));
-                                    if (counts.length === 0 && !myReaction) return null;
+                                    // `counts` keeps only buckets with at least one
+                                    // voter, so an empty `counts` means every bucket
+                                    // is empty — which makes `myReaction`
+                                    // necessarily undefined. The second term could
+                                    // never change the outcome.
+                                    if (counts.length === 0) return null;
                                     return (
                                         <div className={`flex items-center gap-1 mt-0.5 flex-wrap ${isMine ? "justify-end mr-1" : "justify-start ml-1"}`}>
                                             {counts.map(r => (

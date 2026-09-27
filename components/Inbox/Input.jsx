@@ -44,23 +44,29 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
     //
     // `typingTo: ""` used to mean "delete my row", which also deleted the
     // `recording` flag VoiceRecorder sets — so any keystroke cleared the other
-    // person's "recording…" state. Passing `recording: true` alongside the
-    // recipient updates the row instead of removing it, so the flag survives and
-    // the idle clear can still turn it off when the user actually stops.
+    // person's "recording…" state. Updating the row instead of removing it fixes
+    // that, but `recording` is now genuinely independent of `typingTo`: a
+    // keystroke must NOT claim it. Sending `recording: true` here made a merely
+    // typing user report as `isRecording`, and since the UI prefers
+    // `isRecording`, the typing indicator never lit at all. So the key is
+    // omitted unless the caller is actually VoiceRecorder, and the server
+    // preserves the stored value when it is absent.
     const postTyping = useCallback((typingTo, recording) => {
         if (!user) return;
+        const body = { typingTo };
+        if (typeof recording === "boolean") body.recording = recording;
         fetch("/api/typing", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: 'include',
-            body: JSON.stringify({ typingTo, recording: !!recording }),
+            body: JSON.stringify(body),
         }).catch(() => {});
     }, [user]);
 
     useEffect(() => {
         if (!user || !recipient) return;
         return () => {
-            postTyping("", false);
+            postTyping("", undefined);
         };
     }, [user, recipient, postTyping]);
 
@@ -86,7 +92,7 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
         // rather than removed and the flag survives.
         if (val.trim()) {
             typingTimeoutRef.current = setTimeout(() => {
-                postTyping(recipient, true);
+                postTyping(recipient);
             }, 400);
         }
 
@@ -94,10 +100,10 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
         if (val.trim()) {
             clearTimeout(typingIdleRef.current);
             typingIdleRef.current = setTimeout(() => {
-                postTyping("", false);
+                postTyping("");
             }, 3000);
         } else {
-            postTyping("", false);
+            postTyping("");
         }
 
         // Detect @mention or #hashtag at cursor
@@ -122,6 +128,11 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
 
     useEffect(() => {
         if (mentionQuery === null) return;
+        // AbortController, like InboxClient's message search. Without it a slow
+        // response for an earlier keystroke could land *after* a newer one and
+        // overwrite its results, leaving the dropdown showing matches for a
+        // prefix the user has already deleted.
+        const controller = new AbortController();
         const t = setTimeout(async () => {
             try {
                 if (mentionMode === "hashtag") {
@@ -133,21 +144,28 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                     const url = mentionQuery
                         ? `/api/hashtags/trending?limit=8&search=${encodeURIComponent(mentionQuery)}`
                         : `/api/hashtags/trending?limit=8`;
-                    const res = await fetch(url);
+                    const res = await fetch(url, { signal: controller.signal });
                     if (res.ok) {
                         const data = await res.json();
-                        setHashtagResults(data.hashtags || data || []);
+                        const list = data.hashtags || data;
+                        // Guard the shape: everything downstream indexes and
+                        // maps this array, and a non-array body used to pass
+                        // straight through and put junk in front of
+                        // insertHashtag.
+                        setHashtagResults(Array.isArray(list) ? list : []);
                     }
                 } else {
-                    const res = await fetch(`/api/search?q=${encodeURIComponent(mentionQuery)}`);
+                    const res = await fetch(`/api/search?q=${encodeURIComponent(mentionQuery)}`, {
+                        signal: controller.signal,
+                    });
                     if (res.ok) {
                         const data = await res.json();
-                        setMentionResults(data.users || []);
+                        setMentionResults(Array.isArray(data.users) ? data.users : []);
                     }
                 }
-            } catch { /* silent */ }
+            } catch { /* silent — includes the AbortError of a superseded keystroke */ }
         }, 200);
-        return () => clearTimeout(t);
+        return () => { clearTimeout(t); controller.abort(); };
     }, [mentionQuery, mentionMode]);
 
     useEffect(() => { setMentionHighlight(0); }, [mentionResults, hashtagResults, mentionMode]);
@@ -285,6 +303,13 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
             setImagePreview(snapshotImage);
             setAudioUrl(snapshotAudio);
             if (snapshotReply) setReplyingTo({ sender: snapshotReply.sender, text: snapshotReply.text });
+            // `linkUrlRef.current = null` only resets the de-dupe guard so the
+            // preview effect refetches — it does not put the chip back. Without
+            // restoring the state, the 600ms debounce in that effect is the only
+            // thing that could bring it back, and a fast retry (or any edit that
+            // does not change the URL) went out with the preview silently
+            // dropped.
+            setLinkPreview(snapshotLink);
             linkUrlRef.current = null;
             if (onMessageSent) onMessageSent({ _tempId: tempId, _remove: true });
         } finally {
@@ -311,11 +336,20 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
     };
 
     const insertHashtag = (tag) => {
+        // Coerce once, and refuse to touch the input if nothing usable came
+        // through. The callers are not uniform — the dropdown passes
+        // `item.tag` from an object, the keyboard path can hand over a stale
+        // `undefined` — so `tag.replace` could throw on a non-string (killing
+        // the keypress) and `` `#${cleanTag}` `` on a raw object would paste a
+        // literal "[object Object]" into a message the user is about to send.
+        const raw = typeof tag === "string" ? tag : tag?.tag;
+        if (typeof raw !== "string") return;
+        const cleanTag = raw.replace(/^#/, "").trim();
+        if (!cleanTag) return;
         const pos = inputRef.current?.selectionStart ?? text.length;
         const before = text.slice(0, pos);
         const after = text.slice(pos);
         const hashIdx = before.lastIndexOf("#");
-        const cleanTag = tag.replace(/^#/, "");
         const newText = before.slice(0, hashIdx) + `#${cleanTag} ` + after;
         setText(newText);
         setShowMentionDropdown(false);
@@ -343,7 +377,11 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
             } else if (e.key === "Enter" || e.key === "Tab") {
                 e.preventDefault();
                 if (mentionMode === "hashtag") {
-                    insertHashtag(items[mentionHighlight]?.tag || items[mentionHighlight]);
+                    // The item can be an object (`{ tag, count }`) or a bare
+                    // string depending on the endpoint; insertHashtag normalises
+                    // it and no-ops on anything else.
+                    const hit = items[mentionHighlight];
+                    insertHashtag(hit?.tag ?? hit);
                 } else {
                     insertMention(items[mentionHighlight].username);
                 }
@@ -380,8 +418,13 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                 </div>
             )}
 
-            {/* Audio preview */}
-            {audioUrl && !imagePreview && (
+            {/* Audio preview. Shown whenever `audioUrl` is set — *not* gated on
+                `!imagePreview`. `handleSend` snapshots image and audio
+                independently and sends both, so hiding the chip (and with it the
+                remove button) the moment an image was attached left a recorded
+                voice note with no way to clear it: it went out attached to the
+                photo no matter what the user did. */}
+            {audioUrl && (
                 <div className="relative inline-flex self-start">
                     <div className="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 text-blue-500">

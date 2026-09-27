@@ -14,16 +14,32 @@ function rcToSquare(row, col) {
 function parseFEN(fen) {
     if (!fen) return [];
     const rows = fen.split(" ")[0].split("/");
+    // A truncated or malformed FEN used to make `rows[r]` undefined for some r,
+    // and `for (const ch of rows[r])` then threw inside render - which white-screened
+    // the whole board. Hand back a valid, empty 8x8 board instead so the grid still
+    // renders (the overlay already guards against a missing "k" in Chess).
+    if (rows.length !== 8) {
+        return Array.from({ length: 8 }, () => Array(8).fill(null));
+    }
     const board = [];
     for (let r = 0; r < 8; r++) {
         const row = [];
-        for (const ch of rows[r]) {
-            if (/\d/.test(ch)) {
-                for (let i = 0; i < parseInt(ch); i++) row.push(null);
-            } else {
-                row.push({ type: ch.toLowerCase(), color: ch === ch.toUpperCase() ? "w" : "b" });
+        for (const ch of String(rows[r] ?? "")) {
+            if (/[1-8]/.test(ch)) {
+                // A rank may run over 8 squares with bad input ("9", or a run of
+                // digits); never emit more cells than the grid has columns.
+                for (let i = 0; i < parseInt(ch) && row.length < 8; i++) row.push(null);
+            } else if (/[pnbrqkPNBRQK]/.test(ch)) {
+                if (row.length < 8) {
+                    row.push({ type: ch.toLowerCase(), color: ch === ch.toUpperCase() ? "w" : "b" });
+                }
             }
+            // Any other character is junk and is ignored rather than turned into a
+            // bogus piece type.
         }
+        // Pad a short rank so every row still has 8 columns and the 8-column grid
+        // stays aligned.
+        while (row.length < 8) row.push(null);
         board.push(row);
     }
     return board;
@@ -50,6 +66,13 @@ export default function ChessBoard({
     const boardRef = useRef(null);
     const [dragging, setDragging] = useState(null);
     const [dragOver, setDragOver] = useState(null);
+    // Touch has no HTML5 drag-and-drop and mobile is this app's primary target, so
+    // the same source/target flow runs off touch events. Touch is implicitly
+    // captured by the element the gesture started on, so the square the finger
+    // actually ended up on has to be resolved with elementFromPoint rather than
+    // read off the event target.
+    const touchSourceRef = useRef(null);
+    const dragLeaveTimerRef = useRef(null);
 
     const board = useMemo(() => parseFEN(fen), [fen]);
     const flipped = isFlipped;
@@ -85,7 +108,9 @@ export default function ChessBoard({
         const piece = board[realRow]?.[realCol];
         if (!piece || piece.color !== playerColor) return;
         setDragging({ ri, ci, square });
-        onSquareClick?.(square);
+        // NOTE: onSquareClick is deliberately NOT called here. In ChessGameClient it
+        // TOGGLES the selection, so selecting an already-selected piece to drag it
+        // would clear the selection on drag start and the drop would be dropped.
         if (e.dataTransfer) {
             e.dataTransfer.effectAllowed = "move";
             const cellSize = boardRef.current ? boardRef.current.offsetWidth / 8 : 60;
@@ -97,16 +122,29 @@ export default function ChessBoard({
             e.dataTransfer.setDragImage(ghost, 0, 0);
             setTimeout(() => document.body.removeChild(ghost), 0);
         }
-    }, [board, flipped, playerColor, isPlayerTurn, gameOver, onSquareClick, displayToSquare]);
+    }, [board, flipped, playerColor, isPlayerTurn, gameOver, displayToSquare]);
 
     const handleDragOver = useCallback((e, ri, ci) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        setDragOver({ ri, ci });
+        // A pending dragleave from crossing a child element is superseded by this
+        // dragover on the same square.
+        clearTimeout(dragLeaveTimerRef.current);
+        setDragOver(displayToSquare(ri, ci));
+    }, [displayToSquare]);
+
+    // dragleave also fires every time the pointer crosses into a child of the
+    // square (the piece, the legal-move marker, the check gradient), so clearing
+    // the highlight synchronously made it flicker while dragging. Defer it and let
+    // the dragover on the next square cancel the timer.
+    const handleDragLeave = useCallback(() => {
+        clearTimeout(dragLeaveTimerRef.current);
+        dragLeaveTimerRef.current = setTimeout(() => setDragOver(null), 0);
     }, []);
 
     const handleDrop = useCallback((e, ri, ci) => {
         e.preventDefault();
+        clearTimeout(dragLeaveTimerRef.current);
         setDragOver(null);
         if (gameOver) return;
         const targetSquare = displayToSquare(ri, ci);
@@ -117,9 +155,50 @@ export default function ChessBoard({
     }, [dragging, legalMoves, onMove, gameOver, displayToSquare]);
 
     const handleDragEnd = useCallback(() => {
+        clearTimeout(dragLeaveTimerRef.current);
         setDragging(null);
         setDragOver(null);
     }, []);
+
+    const squareAtPoint = useCallback((clientX, clientY) => {
+        const el = document.elementFromPoint(clientX, clientY);
+        return el?.closest?.("[data-square]")?.getAttribute("data-square") || null;
+    }, []);
+
+    // Touch equivalent of drag start: remember the source but do NOT hide the piece
+    // yet, otherwise a plain tap would blank it out for the length of the gesture.
+    // The drag is only "promoted" once the finger actually moves to another square,
+    // which also leaves tap-to-select (onClick) working exactly as before.
+    const handleTouchStart = useCallback((e, ri, ci) => {
+        if (gameOver || !isPlayerTurn) return;
+        const realRow = flipped ? 7 - ri : ri;
+        const realCol = flipped ? 7 - ci : ci;
+        const piece = board[realRow]?.[realCol];
+        if (!piece || piece.color !== playerColor) return;
+        touchSourceRef.current = { ri, ci, square: displayToSquare(ri, ci) };
+    }, [board, flipped, playerColor, isPlayerTurn, gameOver, displayToSquare]);
+
+    const handleTouchMove = useCallback((e) => {
+        const t = e.touches?.[0];
+        const source = touchSourceRef.current;
+        if (!t || !source) return;
+        const square = squareAtPoint(t.clientX, t.clientY);
+        if (!square) return;
+        if (square !== source.square) setDragging(source);
+        setDragOver(square === source.square ? null : square);
+    }, [squareAtPoint]);
+
+    const handleTouchEnd = useCallback((e) => {
+        const t = e.changedTouches?.[0];
+        const source = touchSourceRef.current;
+        touchSourceRef.current = null;
+        const square = t ? squareAtPoint(t.clientX, t.clientY) : null;
+        if (source && square && square !== source.square && legalMoves?.includes(square)) {
+            onMove?.(source.square, square);
+        }
+        setDragging(null);
+        setDragOver(null);
+    }, [squareAtPoint, legalMoves, onMove]);
 
     const findKingSquare = useCallback((kingColor) => {
         for (let r = 0; r < 8; r++) {
@@ -191,7 +270,7 @@ export default function ChessBoard({
                                 const isLastMoveFrom = lastMove?.from === square;
                                 const isLastMoveTo = lastMove?.to === square;
                                 const isRecentMove = moveAnimation && isLastMoveTo;
-                                const isDragOverTarget = dragOver?.ri === ri && dragOver?.ci === ci;
+                                const isDragOverTarget = dragOver === square;
                                 const isDragSource = dragging?.ri === ri && dragging?.ci === ci;
                                 const isKingInCheck = inCheckKingSquare === square && piece?.type === "k";
 
@@ -209,6 +288,7 @@ export default function ChessBoard({
                                 return (
                                     <div
                                         key={`${ri}-${ci}`}
+                                        data-square={square}
                                         className={`relative flex items-center justify-center ${isRecentMove ? "move-flash" : ""}`}
                                         style={{
                                             backgroundColor: bgColor,
@@ -217,7 +297,11 @@ export default function ChessBoard({
                                         onClick={() => handleClick(ri, ci)}
                                         onDragOver={(e) => handleDragOver(e, ri, ci)}
                                         onDrop={(e) => handleDrop(e, ri, ci)}
-                                        onDragLeave={() => setDragOver(null)}
+                                        onDragLeave={handleDragLeave}
+                                        onTouchStart={(e) => handleTouchStart(e, ri, ci)}
+                                        onTouchMove={handleTouchMove}
+                                        onTouchEnd={handleTouchEnd}
+                                        onTouchCancel={handleTouchEnd}
                                     >
                                         {isKingInCheck && (
                                             <div
@@ -251,13 +335,18 @@ export default function ChessBoard({
 
                                         {piece && !isDragSource && (
                                             <div
-                                                className="z-20 transition-transform duration-75 ease-out"
+                                                // The grid is fluid (aspectRatio 1), so a fixed 60px piece
+                                                // under-filled wide cells and overflowed the cell at 320px
+                                                // (~40px cells). ChessPiece renders its size straight into
+                                                // style width/height, so a percentage fills the cell; the
+                                                // wrapper has to fill the cell first for that % to resolve.
+                                                className="w-full h-full z-20 transition-transform duration-75 ease-out"
                                                 draggable={isPlayerTurn && piece.color === playerColor}
                                                 onDragStart={(e) => handleDragStart(e, ri, ci)}
                                                 onDragEnd={handleDragEnd}
                                                 style={{ willChange: "transform" }}
                                             >
-                                                <ChessPiece piece={piece} size={60} />
+                                                <ChessPiece piece={piece} size="100%" />
                                             </div>
                                         )}
                                     </div>

@@ -18,7 +18,6 @@ import VideoLinkCard from "@/components/shared/VideoLinkCard";
 import EmojiPicker from "@/components/shared/EmojiPicker";
 import GifPicker from "@/components/shared/GifPicker";
 import PollCard from "./PollCard";
-import ToxicText from "@/components/shared/ToxicText";
 import Link from "next/link";
 import { LoginModal } from "@/components/shared/GuestPrompt";
 import { timeAgo } from "@/utils/timeAgo";

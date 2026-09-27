@@ -69,24 +69,42 @@ export default function ChatBox({ onBack, recipient, recipientUser, archived = f
     useOnlineStatus(user?.username);
 
     // Poll for typing/recording status
+    //
+    // Gated on `document.hidden`: a backgrounded tab kept asking every 3s for
+    // a state nobody could see, which is pure battery and bandwidth. The
+    // `visibilitychange` listener re-polls the instant the tab comes back, so
+    // the indicator is never stale on return — which is exactly when the user
+    // is looking at the header.
     useEffect(() => {
         if (!recipient || !user?.username) return;
+        let disposed = false;
         const poll = async () => {
+            if (document.hidden) return;
             try {
                 const res = await fetch(`/api/typing?username=${encodeURIComponent(user.username)}`, {
                     credentials: 'include'
                 });
                 if (res.ok) {
                     const data = await res.json();
+                    // The cleanup can land between the request and the response;
+                    // without this, switching chats mid-flight wrote the previous
+                    // recipient's typing state into the thread just opened.
+                    if (disposed) return;
                     const isThem = data.typingUser === recipient;
                     setIsTyping(isThem && !!data.isTyping);
                     setIsRecording(isThem && !!data.isRecording);
                 }
             } catch { /* silent */ }
         };
+        const onVisibility = () => { if (!document.hidden) poll(); };
         poll();
         const id = setInterval(poll, 3000);
-        return () => clearInterval(id);
+        document.addEventListener("visibilitychange", onVisibility);
+        return () => {
+            disposed = true;
+            clearInterval(id);
+            document.removeEventListener("visibilitychange", onVisibility);
+        };
     }, [recipient, user?.username]);
 
     // Poll for recipient's online status
@@ -292,7 +310,7 @@ export default function ChatBox({ onBack, recipient, recipientUser, archived = f
 
             {/* ── Messages ────────────────────────────────────────────────── */}
             <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-4">
-                <Chat key={recipient} pendingMessage={pendingMessage} recipient={recipient} recipientUser={recipientUser} scrollContainerRef={scrollContainerRef} replyingTo={replyingTo} setReplyingTo={setReplyingTo} isTyping={isTyping} isRecording={isRecording} />
+                <Chat key={recipient} pendingMessage={pendingMessage} recipient={recipient} recipientUser={recipientUser} scrollContainerRef={scrollContainerRef} setReplyingTo={setReplyingTo} isTyping={isTyping} isRecording={isRecording} />
             </div>
 
             {/* ── Input ───────────────────────────────────────────────────── */}

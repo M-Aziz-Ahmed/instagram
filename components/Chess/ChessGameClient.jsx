@@ -67,9 +67,17 @@ export default function ChessGameClient({ gameId }) {
     const [isFlipped, setIsFlipped] = useState(false);
     const [lastMove, setLastMove] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
-    const [timers, setTimers] = useState({ white: 600, black: 600 });
+    // Deliberately not seeded with 600/600. That hard-coded 10:00 is only right
+    // for one of the six time-control presets, so a 1-minute bullet or a 15|10
+    // game briefly showed a clock that had nothing to do with the game. The
+    // real values arrive with the game payload; until then `game` is null and
+    // the render is short-circuited to a skeleton, so there is no clock on
+    // screen to be wrong.
+    const [timers, setTimers] = useState(null);
     const [drawOffer, setDrawOffer] = useState(null);
-    const [loading, setLoading] = useState(true);
+    // Which gameId the last completed fetch was for, rather than a plain
+    // `loading` boolean. See the derived `loading` below.
+    const [loadedGameId, setLoadedGameId] = useState(null);
     const [error, setError] = useState(null);
     const [soundOn, setSoundOn] = useState(true);
     const [promotionPending, setPromotionPending] = useState(null);
@@ -83,9 +91,38 @@ export default function ChessGameClient({ gameId }) {
     const timerRef = useRef(null);
     const gameRef = useRef(null);
     const reviewRef = useRef(null);
+    // Every setTimeout in this component (the move animation, the error toast)
+    // used to fire into an unmounted tree. The ids are tracked in a Set so the
+    // timer removes itself as it fires, and the unmount sweep only ever has to
+    // clear what is still pending.
+    const timeoutIdsRef = useRef(new Set());
 
-    gameRef.current = game;
-    reviewRef.current = reviewIndex;
+    // Assigning refs during render is a render side effect: under concurrent
+    // rendering a discarded render still mutated them, so the 1s clock interval
+    // and the review state could observe values from a render that never
+    // committed. An effect with no dependency array still runs after every
+    // commit, so the values are identical — just never set mid-render.
+    useEffect(() => {
+        gameRef.current = game;
+        reviewRef.current = reviewIndex;
+    });
+
+    const trackTimeout = useCallback((fn, ms) => {
+        const id = setTimeout(() => {
+            timeoutIdsRef.current.delete(id);
+            fn();
+        }, ms);
+        timeoutIdsRef.current.add(id);
+        return id;
+    }, []);
+
+    useEffect(() => {
+        const ids = timeoutIdsRef.current;
+        return () => {
+            ids.forEach(clearTimeout);
+            ids.clear();
+        };
+    }, []);
 
     const myColor = useMemo(() => {
         if (!game || !user?.username) return null;
@@ -98,6 +135,14 @@ export default function ChessGameClient({ gameId }) {
     const isMyTurn = game?.turn === myColor;
     const gameOver = game?.status && game.status !== "active" && game.status !== "waiting";
     const isReviewing = reviewIndex !== null;
+    // Derived, not a state flag that is only ever set to false. Navigating from
+    // one game to another client-side reuses this component, so the old boolean
+    // stayed false and the previous game's board, clock and move list were
+    // painted over the new route until the fetch resolved. Comparing the id
+    // this render is on against the id the last fetch resolved for puts the
+    // component back into its loading state on its own — no reset call to
+    // forget, and no setState written synchronously in the effect.
+    const loading = loadedGameId !== gameId;
 
     const inCheck = useMemo(() => {
         if (!game?.fen || gameOver) return false;
@@ -142,6 +187,13 @@ export default function ChessGameClient({ gameId }) {
     const totalReviewPositions = fenHistory.length;
     const canGoBack = isReviewing && reviewIndex > 0;
     const canGoForward = isReviewing && reviewIndex < totalReviewPositions - 1;
+    // ChessMoveHistory reads any negative currentMoveIndex as "live" and
+    // highlights the last move. `reviewIndex - 1` is therefore -1 both when we
+    // are live and when the review is parked on the start position (index 0),
+    // so stepping back to move 0 lit up the final move instead of nothing.
+    // -2 is a sentinel no move index can equal, and isReviewing tells the
+    // component which of the two negative cases this is.
+    const historyMoveIndex = isReviewing ? (reviewIndex > 0 ? reviewIndex - 1 : -2) : -1;
 
     const toggleSound = () => {
         const next = !soundOn;
@@ -154,7 +206,12 @@ export default function ChessGameClient({ gameId }) {
     }, []);
 
     const goToStart = useCallback(() => {
-        if (fenHistory.length > 0) setReviewIndex(0);
+        // fenHistory always holds at least the initial position, so the old
+        // `length > 0` guard was always true and the Start button did nothing
+        // on a game with no moves — while its own `disabled` prop disables
+        // exactly that case. Match the disabled prop: only enter review when
+        // there is a move to step back to.
+        if (fenHistory.length > 1) setReviewIndex(0);
     }, [fenHistory]);
 
     const goBack = useCallback(() => {
@@ -179,7 +236,19 @@ export default function ChessGameClient({ gameId }) {
             if (e.key === "ArrowLeft") {
                 e.preventDefault();
                 if (!isReviewing) {
-                    if (fenHistory.length > 1) setReviewIndex(fenHistory.length - 2);
+                    // One position back from the live end. A normal one-move
+                    // game has two positions (start + that move), so
+                    // length - 2 is 0 and the start position — already
+                    // correct. The silent no-op was the degenerate variant: a
+                    // single move that arrived without its own FEN collapses
+                    // the history to one entry, where `length > 1` is false and
+                    // the key did nothing at all. Fall back to index 0 so that
+                    // case is reviewable too.
+                    if (fenHistory.length > 1) {
+                        setReviewIndex(fenHistory.length - 2);
+                    } else if (game?.moves?.length > 0) {
+                        setReviewIndex(0);
+                    }
                 } else if (reviewIndex > 0) {
                     setReviewIndex(reviewIndex - 1);
                 }
@@ -194,7 +263,9 @@ export default function ChessGameClient({ gameId }) {
                 }
             } else if (e.key === "Home") {
                 e.preventDefault();
-                if (fenHistory.length > 0) setReviewIndex(0);
+                // Same guard as goToStart / the Start button: with no moves
+                // there is no position to jump back to.
+                if (fenHistory.length > 1) setReviewIndex(0);
             } else if (e.key === "End") {
                 e.preventDefault();
                 setReviewIndex(null);
@@ -204,7 +275,7 @@ export default function ChessGameClient({ gameId }) {
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isReviewing, reviewIndex, fenHistory]);
+    }, [isReviewing, reviewIndex, fenHistory, game?.moves?.length]);
 
     useEffect(() => {
         if (!user?.username) return;
@@ -260,7 +331,7 @@ export default function ChessGameClient({ gameId }) {
             if (data.move) {
                 setLastMove({ from: data.move.from, to: data.move.to });
                 setMoveAnimation({ from: data.move.from, to: data.move.to, notation: data.move.san, key: Date.now() });
-                setTimeout(() => setMoveAnimation(null), 2000);
+                trackTimeout(() => setMoveAnimation(null), 2000);
             }
             setSelectedSquare(null);
             setLegalMoves([]);
@@ -284,13 +355,28 @@ export default function ChessGameClient({ gameId }) {
             setDrawOffer(null);
         });
 
-        s.on("chess:time-sync", ({ timers: t }) => {
-            setTimers(t);
+        s.on("chess:time-sync", (data) => {
+            if (data?.timers) setTimers(data.timers);
+            // The flag actually falls server-side in response to this event, and
+            // the outcome is reported back on the same channel. The old handler
+            // destructured only `timers` and threw the rest away, so a flagged
+            // game kept rendering as live here: no game-over modal, and the
+            // board still accepted input for a game that was already over.
+            const status = data?.status;
+            if (status && status !== "active") {
+                setGame((prev) => prev ? {
+                    ...prev,
+                    status,
+                    result: data.result ?? prev.result,
+                    resultReason: data.resultReason ?? prev.resultReason,
+                    winner: data.winner ?? prev.winner,
+                } : prev);
+            }
         });
 
         s.on("chess:error", ({ message }) => {
             setError(message);
-            setTimeout(() => setError(null), 3000);
+            trackTimeout(() => setError(null), 3000);
             // Unstick the engine indicator. `aiThinking` was only ever cleared by
             // a chess:move, so a single rejected move (an illegal one, a race
             // with the clock, a server error) left it true for the rest of the
@@ -303,7 +389,7 @@ export default function ChessGameClient({ gameId }) {
             s.emit("chess:leave-game", { gameId });
             s.disconnect();
         };
-    }, [gameId, user?.username]);
+    }, [gameId, user?.username, trackTimeout]);
 
     useEffect(() => {
         async function fetchGame() {
@@ -311,6 +397,9 @@ export default function ChessGameClient({ gameId }) {
                     const res = await fetch(`/api/chess/games/${gameId}`);
                 if (res.ok) {
                     const data = await res.json();
+                    // Clocks come from the game, never from a hard-coded default:
+                    // the only value that can be right before the payload lands
+                    // is "we do not know yet".
                     setGame(data.game);
                     setTimers(data.game.timers);
                     setChatMessages(data.game.chat || []);
@@ -318,13 +407,22 @@ export default function ChessGameClient({ gameId }) {
                         const last = data.game.moves[data.game.moves.length - 1];
                         setLastMove({ from: last.from, to: last.to });
                     }
+                    setError(null);
                 } else {
+                    // Drop the previous game's payload too, so the "not found"
+                    // screen is not rendered on top of another game's board.
+                    setGame(null);
+                    setTimers(null);
                     setError("Game not found");
                 }
             } catch (e) {
+                setGame(null);
+                setTimers(null);
                 setError("Failed to load game");
             }
-            setLoading(false);
+            // Release the skeleton. `loading` is `loadedGameId !== gameId`, so
+            // this is the only write needed — on success and on failure alike.
+            setLoadedGameId(gameId);
         }
         fetchGame();
     }, [gameId]);
@@ -342,7 +440,10 @@ export default function ChessGameClient({ gameId }) {
             const g = gameRef.current;
             if (!g || g.status !== "active") return;
             setTimers((prev) => {
-                const next = { ...prev };
+                // `timers` starts as null now, so a tick landing before the
+                // fetch resolved would otherwise spread to {} and decrement
+                // undefined into NaN.
+                const next = { white: prev?.white ?? 0, black: prev?.black ?? 0 };
                 if (g.turn === "w") {
                     next.white = Math.max(0, next.white - 1);
                 } else {
@@ -512,6 +613,9 @@ export default function ChessGameClient({ gameId }) {
     };
 
     if (loading) {
+        // Placeholder board rather than a real one. Rendering the board and a
+        // hard-coded 10:00 clock while the payload was still in flight showed
+        // a position and a time control that belonged to no game at all.
         return (
             <div className="flex items-center justify-center h-96">
                 <div className="text-center">
@@ -607,9 +711,9 @@ export default function ChessGameClient({ gameId }) {
                     </div>
 
                     <ChessTimer
-                        time={timers[topColor]}
+                        time={timers?.[topColor]}
                         isActive={game.turn === topColor}
-                        isLow={timers[topColor] < 30}
+                        isLow={(timers?.[topColor] ?? 0) < 30}
                         label={nameOf(topPlayer)}
                         player={topPlayer}
                     />
@@ -634,9 +738,9 @@ export default function ChessGameClient({ gameId }) {
                     </div>
 
                     <ChessTimer
-                        time={timers[bottomColor]}
+                        time={timers?.[bottomColor]}
                         isActive={game.turn === bottomColor}
-                        isLow={timers[bottomColor] < 30}
+                        isLow={(timers?.[bottomColor] ?? 0) < 30}
                         label={nameOf(bottomPlayer)}
                         player={bottomPlayer}
                     />
@@ -818,7 +922,8 @@ export default function ChessGameClient({ gameId }) {
                                 <div className="h-[250px] sm:h-[300px]">
                                     <ChessMoveHistory
                                         moves={game.moves || []}
-                                        currentMoveIndex={isReviewing ? reviewIndex - 1 : -1}
+                                        currentMoveIndex={historyMoveIndex}
+                                        isReviewing={isReviewing}
                                         onMoveClick={goToMove}
                                         orientation={myColor}
                                     />
@@ -840,7 +945,8 @@ export default function ChessGameClient({ gameId }) {
                             <div className="h-72 xl:h-80 border-b border-gray-200 dark:border-gray-700">
                                 <ChessMoveHistory
                                     moves={game.moves || []}
-                                    currentMoveIndex={isReviewing ? reviewIndex - 1 : -1}
+                                    currentMoveIndex={historyMoveIndex}
+                                    isReviewing={isReviewing}
                                     onMoveClick={goToMove}
                                     orientation={myColor}
                                 />
@@ -873,19 +979,31 @@ export default function ChessGameClient({ gameId }) {
                         <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mb-4">
                             <ChessReviewPanel
                                 moves={game.moves || []}
-                                playerColor={myColor || "w"}
+                                playerColor={seatColor}
                                 playerName={me?.username || user?.username || "Player"}
                                 opponentName={opponent?.username || "Opponent"}
                                 result={game.result}
                                 resultReason={game.resultReason}
                                 onGoToMove={goToMove}
+                                // Without this the panel's own close button and
+                                // its Escape handler were inert, so "View" moved
+                                // the board invisibly behind the modal and the
+                                // only way out was the button far below.
+                                onClose={() => setShowGameOver(false)}
                             />
                         </div>
 
                         <div className="flex flex-col gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                             {!isSpectator && (
                                 <button
-                                    onClick={() => playAgain("/api/chess/games", { mode: game.mode, aiDifficulty: game.aiDifficulty })}
+                                    onClick={() => playAgain("/api/chess/games", {
+                                        mode: game.mode,
+                                        aiDifficulty: game.aiDifficulty,
+                                        // The time control was dropped here, so the
+                                        // server fell back to its 600s default and a
+                                        // 1-minute bullet came back as 10 minutes.
+                                        timeControl: game.timeControl,
+                                    })}
                                     disabled={creating}
                                     className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-colors shadow-md text-center text-sm"
                                 >

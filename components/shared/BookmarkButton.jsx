@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/context/ToastContext";
 
-export default function BookmarkButton({ postId,初始 }) {
+export default function BookmarkButton({ postId }) {
     const { user, reloadUser } = useUser();
     const { showToast } = useToast();
     const [saving, setSaving] = useState(false);

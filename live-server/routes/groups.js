@@ -460,6 +460,11 @@ router.patch("/:id/messages", verifyToken, async (req, res) => {
 });
 
 // GET /:id/members
+// DEAD ENDPOINT - no client calls it. `GET /` and `GET /:id` both return the
+// group document with `members` already embedded, which is what
+// `components/Inbox/GroupSettings.jsx` reads, so this duplicates that. Kept
+// rather than deleted because it is a reachable public API path; do not build
+// on it.
 router.get("/:id/members", verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
@@ -473,6 +478,14 @@ router.get("/:id/members", verifyToken, async (req, res) => {
 });
 
 // POST /:id/members
+// DEAD ENDPOINT - no client calls it, and it only ever *adds* a member: it
+// destructures { username, avatarUrl, color } and ignores `action` entirely, so
+// the `action: "promote"` this used to be sent came back 400 "Already a member"
+// and GroupSettings' Promote button silently did nothing. The route that really
+// changes a role is PATCH /:id with `action: "updateRole"`, and the one that
+// really removes a member is PATCH /:id with `action: "removeMember"`; both are
+// what the client calls today. Kept, not deleted, because it is a reachable
+// public API path.
 router.post("/:id/members", verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
@@ -509,6 +522,12 @@ router.post("/:id/members", verifyToken, async (req, res) => {
 });
 
 // DELETE /:id/members/:username
+// DEAD ENDPOINT - no client calls it. Removal goes through
+// PATCH /:id { action: "removeMember" } (see GroupSettings.jsx), which is also
+// the only path that keeps the group consistent: this route deletes the whole
+// group document outright when the last member leaves, with none of the
+// bookkeeping the PATCH path does. Kept, not deleted, because it is a reachable
+// public API path.
 router.delete("/:id/members/:username", verifyToken, async (req, res) => {
     try {
         const { id, username: memberUsername } = req.params;

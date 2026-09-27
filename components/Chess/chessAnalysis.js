@@ -2,6 +2,76 @@
 
 const PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 };
 
+// A full board is worth roughly 3900cp, so anything at or above MATE_SCORE can
+// only have come from an actual mate and never from a material swing. Mate is
+// detected structurally (isMateAfter) rather than by sniffing a magic number,
+// because evaluateBoard is pure centipawns and can never reach this value.
+const MATE_SCORE = 100000;
+
+const KNIGHT_OFFSETS = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+const KING_OFFSETS = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+const DIAGONALS = [[-1,-1],[-1,1],[1,-1],[1,1]];
+const ORTHOGONALS = [[-1,0],[1,0],[0,-1],[0,1]];
+
+const inBounds = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
+
+function findKingSquare(board, color) {
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            if (board[r][c]?.type === "k" && board[r][c]?.color === color) return { r, c };
+        }
+    }
+    return null;
+}
+
+// Is (row, col) attacked by any piece of `byColor`? Used for two things: filtering
+// out moves that walk into check, and recognising a delivered mate.
+function isSquareAttacked(board, row, col, byColor) {
+    // Row 0 is rank 8, so a white pawn captures "upwards" (towards row - 1) and a
+    // black pawn "downwards"; hence the mirrored attacker row.
+    const pawnRow = byColor === "w" ? row + 1 : row - 1;
+    for (const dc of [-1, 1]) {
+        const p = inBounds(pawnRow, col + dc) ? board[pawnRow][col + dc] : null;
+        if (p && p.color === byColor && p.type === "p") return true;
+    }
+
+    for (const [dr, dc] of KNIGHT_OFFSETS) {
+        const p = inBounds(row + dr, col + dc) ? board[row + dr][col + dc] : null;
+        if (p && p.color === byColor && p.type === "n") return true;
+    }
+
+    for (const [dr, dc] of KING_OFFSETS) {
+        const p = inBounds(row + dr, col + dc) ? board[row + dr][col + dc] : null;
+        if (p && p.color === byColor && p.type === "k") return true;
+    }
+
+    for (const [dr, dc] of DIAGONALS) {
+        let r = row + dr, c = col + dc;
+        while (inBounds(r, c)) {
+            const p = board[r][c];
+            if (p) {
+                if (p.color === byColor && (p.type === "b" || p.type === "q")) return true;
+                break;
+            }
+            r += dr; c += dc;
+        }
+    }
+
+    for (const [dr, dc] of ORTHOGONALS) {
+        let r = row + dr, c = col + dc;
+        while (inBounds(r, c)) {
+            const p = board[r][c];
+            if (p) {
+                if (p.color === byColor && (p.type === "r" || p.type === "q")) return true;
+                break;
+            }
+            r += dr; c += dc;
+        }
+    }
+
+    return false;
+}
+
 function fenToBoard(fen) {
     const parts = fen.split(" ");
     const rows = parts[0].split("/");
@@ -39,7 +109,31 @@ function evaluateBoard(fen) {
     return score;
 }
 
+// Castling rights are lost when a king moves, when a rook leaves its home
+// square, and when anything is captured on a rook's home square.
+function updateCastlingRights(castling, piece, from, to) {
+    let rights = castling;
+    const drop = (right) => {
+        rights = rights.split("").filter((c) => c !== right).join("");
+    };
+    if (piece.type === "k") {
+        if (piece.color === "w") { drop("K"); drop("Q"); } else { drop("k"); drop("q"); }
+    }
+    if (piece.type === "r") {
+        if (from === "a1") drop("Q");
+        if (from === "h1") drop("K");
+        if (from === "a8") drop("q");
+        if (from === "h8") drop("k");
+    }
+    if (to === "a1") drop("Q");
+    if (to === "h1") drop("K");
+    if (to === "a8") drop("q");
+    if (to === "h8") drop("k");
+    return rights || "-";
+}
+
 function applyMoveToFen(fen, from, to, promotion) {
+    const parts = fen.split(" ");
     const { board } = fenToBoard(fen);
     const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
     const RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"];
@@ -52,8 +146,19 @@ function applyMoveToFen(fen, from, to, promotion) {
     const piece = board[fromRow][fromCol];
     if (!piece) return null;
 
+    // The destination has to be inspected BEFORE anything is written to it,
+    // otherwise the "did this pawn capture diagonally?" test further down can
+    // never be true and en passant silently never removes the captured pawn.
+    const captured = board[toRow][toCol];
+
     board[toRow][toCol] = piece;
     board[fromRow][fromCol] = null;
+
+    if (piece.type === "p" && fromCol !== toCol && !captured) {
+        // en passant: the destination was empty, so the victim is the pawn
+        // sitting next to the mover on the same rank.
+        board[fromRow][toCol] = null;
+    }
 
     if (piece.type === "p" && (toRow === 0 || toRow === 7)) {
         board[toRow][toCol] = { type: promotion || "q", color: piece.color };
@@ -67,10 +172,6 @@ function applyMoveToFen(fen, from, to, promotion) {
             board[toRow][3] = board[toRow][0];
             board[toRow][0] = null;
         }
-    }
-
-    if (piece.type === "p" && fromCol !== toCol && !board[toRow][toCol]) {
-        board[fromRow][toCol] = null;
     }
 
     const newRows = board.map((row) => {
@@ -88,8 +189,29 @@ function applyMoveToFen(fen, from, to, promotion) {
         return s;
     });
 
-    const nextTurn = fen.split(" ")[1] === "w" ? "b" : "w";
-    return newRows.join("/") + ` ${nextTurn} - - 0 1`;
+    // Castling rights, the en passant square and both clocks have to survive the
+    // ply. Hard-coding "- - 0 1" made castling look illegal from the second move
+    // onwards and left the 50-move and repetition rules permanently unfalsifiable.
+    const castling = !parts[2] || parts[2] === "-"
+        ? "-"
+        : updateCastlingRights(parts[2], piece, from, to);
+
+    // FEN records the square a pawn would have to move *onto* to capture en
+    // passant, and only directly after a double pawn push.
+    const epSquare = (piece.type === "p" && Math.abs(toRow - fromRow) === 2)
+        ? FILES[toCol] + RANKS[(fromRow + toRow) / 2]
+        : "-";
+
+    const prevHalf = parseInt(parts[4], 10);
+    const halfmove = (piece.type === "p" || captured)
+        ? 0
+        : (Number.isFinite(prevHalf) ? prevHalf : 0) + 1;
+
+    const prevFull = parseInt(parts[5], 10);
+    const nextTurn = parts[1] === "w" ? "b" : "w";
+    const fullmove = (parts[1] === "b" ? 1 : 0) + (Number.isFinite(prevFull) ? prevFull : 1);
+
+    return newRows.join("/") + ` ${nextTurn} ${castling} ${epSquare} ${halfmove} ${fullmove}`;
 }
 
 function getMaterialBalance(fen) {
@@ -180,15 +302,57 @@ function generatePseudoMoves(fen) {
         }
     }
 
-    return moves;
+    // Known approximation: castling and en passant are deliberately NOT generated
+    // here. Half-implementing them (e.g. allowing a king to jump two squares
+    // through check, or double-pushing onto an occupied square) would produce
+    // positions that are not reachable, so they are left out entirely rather than
+    // half-implemented. Neither is needed to rank ordinary moves, and
+    // generatePseudoMoves is only ever fed positions that came out of
+    // applyMoveToFen, so a missing ep capture can never hide a real reply.
+    return moves.filter((m) => {
+        const nextFen = applyMoveToFen(fen, m.from, m.to, m.promotion);
+        if (!nextFen) return false;
+        const { board: next } = fenToBoard(nextFen);
+        const king = findKingSquare(next, turn);
+        if (!king) return true;
+        return !isSquareAttacked(next, king.r, king.c, turn === "w" ? "b" : "w");
+    });
+}
+
+// Real mate detection: after this move the side to move is in check and has no
+// legal reply. Checkmate used to be guessed from `score > 9000`, but evaluateBoard
+// only returns centipawns, so 9000 is unreachable and the threshold really meant
+// "big material swing" - which is how ordinary winning moves got labelled
+// "Checkmate was available!".
+function isMateAfter(fen, move) {
+    const nextFen = applyMoveToFen(fen, move.from, move.to, move.promotion);
+    if (!nextFen) return false;
+    const { board, turn: opponent } = fenToBoard(nextFen);
+    const king = findKingSquare(board, opponent);
+    if (!king) return false;
+    // A mate has to be a check, so bail out before the far more expensive reply
+    // generation for the ~95% of candidates that are not even checks.
+    if (!isSquareAttacked(board, king.r, king.c, opponent === "w" ? "b" : "w")) return false;
+    return generatePseudoMoves(nextFen).length === 0;
 }
 
 function scoreMove(fen, move) {
     const newFen = applyMoveToFen(fen, move.from, move.to, move.promotion);
     if (!newFen) return -Infinity;
-    const score = evaluateBoard(newFen);
-    const material = getMaterialBalance(newFen);
-    return score * (fen.split(" ")[1] === "w" ? 1 : -1) + material * 10;
+    // BOTH terms have to be expressed from the mover's point of view. The eval
+    // term already was, but the material term was always white-relative, so every
+    // Black move carried a doubled white bias and findBestMoves - which always
+    // sorts descending - recommended Black's worst moves.
+    const sign = fen.split(" ")[1] === "w" ? 1 : -1;
+    const score = evaluateBoard(newFen) * sign + getMaterialBalance(newFen) * 10 * sign;
+    // A delivered mate outranks any material swing, and scoring it at exactly
+    // MATE_SCORE is what lets the `>= MATE_SCORE` checks in classifyMove mean
+    // "real mate" instead of "big material swing". Move generation is only ever
+    // one ply deep, so every mate found here is mate-in-1 and they legitimately
+    // tie - adding the centipawn term as a tie-breaker would risk pushing a mate
+    // back below the MATE_SCORE threshold whenever the cp score is negative.
+    if (isMateAfter(fen, move)) return MATE_SCORE;
+    return score;
 }
 
 function findBestMoves(fen) {
@@ -222,22 +386,24 @@ export function classifyMove(fen, move, playerColor) {
 
     const moveScore = moveScoreEntry.score;
     const cpLoss = getCentipawnLoss(bestScore, moveScore);
-    const isTopMove = moveScoreEntry === bestMoves[0];
-    const bestMoveIsCheckmate = bestScore > 9000;
+    // Reference equality mislabelled a move that merely TIED with the best one,
+    // because bestMoves contains a fresh object per move.
+    const isTopMove = bestMoves.indexOf(moveScoreEntry) === 0;
+    const bestMoveIsCheckmate = bestScore >= MATE_SCORE;
 
     if (move.promotion && isTopMove) {
         return { label: "brilliant", color: "#f59e0b", description: "Perfect promotion!" };
     }
 
-    if (bestMoveIsCheckmate && !isTopMove) {
-        const checkmateMoves = bestMoves.filter((m) => m.score > 9000);
-        const moveIsCheckmate = checkmateMoves.some((m) => m.from === move.from && m.to === move.to);
-        if (!moveIsCheckmate && checkmateMoves.length > 0) {
-            return { label: "miss", color: "#ef4444", description: "Checkmate was available!" };
-        }
+    if (bestMoveIsCheckmate) {
+        const checkmateMoves = bestMoves.filter((m) => m.score >= MATE_SCORE);
+        const moveIsCheckmate = checkmateMoves.some(
+            (m) => m.from === move.from && m.to === move.to && (m.promotion || "q") === (move.promotion || "q")
+        );
         if (moveIsCheckmate) {
-            return { label: "excellent", color: "#22c55e", description: "Forced checkmate!" };
+            return { label: "excellent", color: "#22c55e", description: "Checkmate!" };
         }
+        return { label: "miss", color: "#ef4444", description: "Checkmate was available!" };
     }
 
     if (isTopMove) {
@@ -269,14 +435,24 @@ export function classifyMove(fen, move, playerColor) {
 function boardHasPiece(fen, square) {
     const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
     const RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"];
-    const col = FILES.indexOf(square[0]);
-    const row = RANKS.indexOf(square[1]);
+    const col = FILES.indexOf(square?.[0]);
+    const row = RANKS.indexOf(square?.[1]);
+    // indexOf gives -1 for anything off the board, and `board[row]?.[col] !== null`
+    // is TRUE for undefined, so an out-of-bounds square used to look like a
+    // capture and the "Best move - excellent capture!" label appeared for free.
+    if (row < 0 || col < 0 || row > 7 || col > 7) return false;
     const { board } = fenToBoard(fen);
-    return board[row]?.[col] !== null;
+    return board[row]?.[col] != null;
+}
+
+// ChessReviewPanel divides these fields directly, so the shape has to be complete
+// even when no moves were played - otherwise an unstarted game renders NaN%.
+function emptyStats() {
+    return { brilliant: 0, excellent: 0, good: 0, inaccuracy: 0, mistake: 0, blunder: 0, miss: 0, total: 0 };
 }
 
 export function analyseGameMoves(moves, playerColor) {
-    if (!moves || moves.length === 0) return { moves: [], stats: {} };
+    if (!moves || moves.length === 0) return { moves: [], stats: emptyStats() };
 
     let currentFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     const analysed = [];

@@ -6,18 +6,53 @@ const { verifyToken } = require("../middleware/auth");
 const router = express.Router();
 
 // POST /
+// `username` is never read from the body - it comes from the session - so a
+// caller cannot write typing state onto somebody else's account.
+//
+// Three states, and the branch is on `typingTo` alone:
+//   typingTo set   -> upsert the row (this is the "they are active" ping)
+//   typingTo === "" -> explicit idle-clear, remove the row
+//   no typingTo   -> nothing at all; a malformed body must not be able to
+//                     clear an indicator it never set.
+//
+// The clear removes the row rather than blanking `typingTo`, which also drops
+// the `recording` flag. That is correct for every caller that sends it today -
+// `components/Inbox/Input.jsx` posts `typingTo: ""` from its 3s idle timer, on
+// send, and on unmount, and `components/shared/VoiceRecorder.jsx` posts it when
+// the recording stops - so a clear always means "I am no longer doing anything".
+//
+// `recording` is now INDEPENDENT of `typingTo`. Previously the upsert wrote
+// `recording: !!recording` unconditionally, so a plain keystroke (which cannot
+// meaningfully claim a recording) had to either wipe a live recording flag or
+// claim one itself. The client resolves that by omitting the key: an absent
+// `recording` preserves whatever is stored, so typing while recording shows
+// "recording…" rather than flickering, and typing alone no longer reports
+// `isRecording: true` and suppress the typing indicator.
+//
+// Known limitation, left alone deliberately: `Typing.username` is `unique`, so
+// the row is per-account, not per-connection. Two browser tabs of the same user
+// therefore overwrite each other - tab A typing to bob makes tab B, talking to
+// carol, invisible, and clearing in one tab clears the other. Fixing it means a
+// per-tab key on the document and a rewrite of both the POST and the GET, which
+// is a model change rather than a fix; `updatedAt`'s 15s TTL keeps it self-
+// healing, so the failure is a stale indicator for at most 15 seconds.
 router.post("/", verifyToken, async (req, res) => {
     try {
         const { typingTo, recording } = req.body;
         const username = (await User.findById(req.userId).select("username").lean())?.username;
 
         if (typingTo) {
+            const update = { typingTo, updatedAt: new Date() };
+            // Only touch `recording` when the caller actually said something
+            // about it. An omitted key must not be read as "false".
+            if (typeof recording === "boolean") update.recording = recording;
+
             await Typing.findOneAndUpdate(
                 { username },
-                { typingTo, recording: !!recording, updatedAt: new Date() },
+                update,
                 { upsert: true, returnDocument: 'after', maxTimeMS: 5000 }
             );
-        } else {
+        } else if (typingTo === "") {
             await Typing.deleteOne({ username }).maxTimeMS(5000);
         }
         return res.json({ ok: true });

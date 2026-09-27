@@ -1,7 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { analyseGameMoves, findTurningPoints, generateGameSummary } from "./chessAnalysis";
+
+// ChessGameClient's goToMove(moveIndex) sets reviewIndex = moveIndex + 1, and
+// reviewIndex indexes fenHistory, where entry 0 is the start position and entry
+// i+1 is the position AFTER ply i (0-indexed move list). So the ply of "move
+// moveNumber played by color" is 2*(moveNumber-1) for White and 2*(moveNumber-1)+1
+// for Black. Passing moveNumber-1 landed on move k of the game for a Black move
+// instead of ply 2k+1, so "View" always jumped to the wrong half-move.
+function plyOfMove(moveNumber, color) {
+    return 2 * (moveNumber - 1) + (color === "b" ? 1 : 0);
+}
 
 const LABEL_CONFIG = {
     brilliant:  { label: "Brilliant",  color: "text-amber-500",  bg: "bg-amber-100 dark:bg-amber-900/30",  dot: "bg-amber-500",  icon: "\u2728" },
@@ -13,8 +23,21 @@ const LABEL_CONFIG = {
     miss:       { label: "Miss",       color: "text-red-500",    bg: "bg-red-100 dark:bg-red-900/30",      dot: "bg-red-500",    icon: "\uD83D\uDE35" },
 };
 
-export default function ChessReviewPanel({ moves, playerColor, playerName, opponentName, result, resultReason, onGoToMove }) {
+export default function ChessReviewPanel({ moves, playerColor, playerName, opponentName, result, resultReason, onGoToMove, onClose }) {
     const [showComprehensive, setShowComprehensive] = useState(false);
+
+    // This panel is rendered inside a fixed inset-0 z-50 modal, so without a close
+    // affordance "View" re-rendered the board invisibly behind the overlay and
+    // Escape only reset review navigation. onClose is optional so the panel still
+    // works (just without a close button) in a non-modal context.
+    useEffect(() => {
+        if (!onClose) return;
+        const handleKey = (e) => {
+            if (e.key === "Escape") onClose();
+        };
+        window.addEventListener("keydown", handleKey);
+        return () => window.removeEventListener("keydown", handleKey);
+    }, [onClose]);
 
     const analysis = useMemo(() => {
         return analyseGameMoves(moves, playerColor);
@@ -65,7 +88,19 @@ export default function ChessReviewPanel({ moves, playerColor, playerName, oppon
         : "\uD83D\uDE1E";
 
     return (
-        <div className="w-full max-w-sm mx-auto">
+        <div className="w-full max-w-sm mx-auto relative">
+            {onClose && (
+                <button
+                    onClick={onClose}
+                    aria-label="Close review"
+                    title="Close review"
+                    className="absolute top-0 right-0 p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                </button>
+            )}
             <div className={`text-center mb-4 ${resultColor}`}>
                 <div className="text-3xl mb-1">{resultEmoji}</div>
                 <div className="font-bold text-lg">
@@ -122,7 +157,7 @@ export default function ChessReviewPanel({ moves, playerColor, playerName, oppon
                             return (
                                 <div
                                     key={i}
-                                    onClick={() => onGoToMove?.(m.moveNumber - 1)}
+                                    onClick={() => onGoToMove?.(plyOfMove(m.moveNumber, m.color))}
                                     className="flex items-center gap-1.5 text-xs py-0.5 px-1 rounded hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
                                 >
                                     <span className="w-6 text-gray-400 text-[10px] text-right shrink-0">{m.moveNumber}.</span>
@@ -157,7 +192,7 @@ export default function ChessReviewPanel({ moves, playerColor, playerName, oppon
                                 <span className="font-mono text-sm font-bold text-green-700 dark:text-green-300">{comprehensive.bestMove.san}</span>
                                 <span className="text-[10px] text-green-600 dark:text-green-500">Move {comprehensive.bestMove.moveNumber}</span>
                                 <button
-                                    onClick={() => onGoToMove?.(comprehensive.bestMove.moveNumber - 1)}
+                                    onClick={() => onGoToMove?.(plyOfMove(comprehensive.bestMove.moveNumber, comprehensive.bestMove.color))}
                                     className="text-[10px] text-blue-500 hover:underline ml-auto"
                                 >
                                     View
@@ -173,7 +208,7 @@ export default function ChessReviewPanel({ moves, playerColor, playerName, oppon
                                 <span className="font-mono text-sm font-bold text-red-700 dark:text-red-300">{comprehensive.biggestBlunder.san}</span>
                                 <span className="text-[10px] text-red-600 dark:text-red-500">Move {comprehensive.biggestBlunder.moveNumber}</span>
                                 <button
-                                    onClick={() => onGoToMove?.(comprehensive.biggestBlunder.moveNumber - 1)}
+                                    onClick={() => onGoToMove?.(plyOfMove(comprehensive.biggestBlunder.moveNumber, comprehensive.biggestBlunder.color))}
                                     className="text-[10px] text-blue-500 hover:underline ml-auto"
                                 >
                                     View
@@ -195,6 +230,7 @@ export default function ChessReviewPanel({ moves, playerColor, playerName, oppon
                                         <span className="text-gray-500 dark:text-gray-400">
                                             {tp.isBlunder ? "Blunder" : "Key move"}
                                         </span>
+                                        {/* findTurningPoints already reports a 0-indexed ply, so it is passed as-is. */}
                                         <button
                                             onClick={() => onGoToMove?.(tp.moveIndex)}
                                             className="text-[10px] text-blue-500 hover:underline ml-auto"

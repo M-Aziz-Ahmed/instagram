@@ -19,15 +19,25 @@ function applyAudioRoute(el, loudspeaker) {
 
 // WhatsApp-style video layout: the other person fills the screen and your own
 // camera is a small PiP box in the corner that doesn't block the view.
-function VideoGrid({ remoteStreams, localStream, videoOn, loudspeaker }) {
+function VideoGrid({ remoteStreams, localStream, videoOn, loudspeaker, type }) {
     const peers = Object.entries(remoteStreams);
-    const isOneToOne = peers.length === 1;
+    // From the call `type`, not from how many peers happen to be connected. The
+    // count is a moving target: a group call fills up one peer at a time, and
+    // keying off it made the first person to join fill the screen and then
+    // reflow the whole grid the moment the second one arrived.
+    const isOneToOne = type !== "group";
 
     return (
         <div className="relative w-full h-full bg-black">
             {isOneToOne ? (
                 <div className="absolute inset-0">
-                    <RemoteVideo username={peers[0][0]} stream={peers[0][1]} loudspeaker={loudspeaker} fill />
+                    {/* `peers[0]` is not guaranteed: a video call reaches
+                        "active" before the remote track arrives, so the grid can
+                        render with nothing in it. The old count-based condition
+                        made that impossible to reach, so it needed no guard. */}
+                    {peers[0] && (
+                        <RemoteVideo username={peers[0][0]} stream={peers[0][1]} loudspeaker={loudspeaker} fill />
+                    )}
                 </div>
             ) : (
                 <div className={`w-full h-full grid gap-1 ${peers.length <= 2 ? "grid-cols-2" : "grid-cols-3"}`}>
@@ -124,8 +134,20 @@ export default function CallModal() {
     // Show the video grid once video is enabled (or the call is a video call),
     // even if the call started as audio-only.
     const showVideo = !isAudioOnly || videoOn || hasVideoTrack;
-    const peerNames = type === "1:1" ? recipients.join(", ") : recipients.join(", ");
-    const displayName = caller || "Unknown";
+    // Who the other side is.
+    //
+    // `recipients` is the list of people who were *called* — the server relays
+    // it verbatim to every recipient, so for a 1:1 it holds exactly one name:
+    // on the callee's side, that is *you*. Reading the peer as `recipients[0]`
+    // therefore showed your own initial and your own username as the other
+    // person for the whole time an incoming call was ringing or connected, and
+    // showed your own initial on an outgoing one. `caller` is the counterpart
+    // unless it is us, in which case `recipients[0]` is.
+    const displayName = (caller === user?.username ? recipients[0] : caller) || "Unknown";
+    // A group has no single counterpart, so an outgoing group call heads with the
+    // full recipient list. (The 1:1 and group branches used to be written
+    // identically, so the ternary decided nothing.)
+    const peerNames = type === "1:1" ? displayName : recipients.join(", ");
 
     if (status === "ended") return null;
 
@@ -157,6 +179,7 @@ export default function CallModal() {
                                     localStream={localStream}
                                     videoOn={videoOn}
                                     loudspeaker={isLoudspeaker}
+                                    type={type}
                                 />
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full">
@@ -164,10 +187,10 @@ export default function CallModal() {
                                     {Object.entries(remoteStreams).map(([username, stream]) => (
                                         <RemoteAudio key={username} stream={stream} loudspeaker={isLoudspeaker} />
                                     ))}
-                                    <div className="w-20 h-20 rounded-full bg-gray-800 flex items-center justify-center text-white text-2xl font-bold mb-4">
-                                        {type === "1:1" ? (recipients[0]?.[0]?.toUpperCase() || "?") : `${Object.keys(remoteStreams).length + 1}`}
+                                <div className="w-20 h-20 rounded-full bg-gray-800 flex items-center justify-center text-white text-2xl font-bold mb-4">
+                                        {type === "1:1" ? (displayName[0]?.toUpperCase() || "?") : `${Object.keys(remoteStreams).length + 1}`}
                                     </div>
-                                    <p className="text-white font-medium">{type === "1:1" ? recipients[0] : `${Object.keys(remoteStreams).length + 1} participants`}</p>
+                                    <p className="text-white font-medium">{type === "1:1" ? displayName : `${Object.keys(remoteStreams).length + 1} participants`}</p>
                                 </div>
                             )}
                         </div>

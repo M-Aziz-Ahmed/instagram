@@ -167,6 +167,19 @@ const prevGroupRef = useRef(null);
         return conversations.find((c) => c.username === selectedConvo.username) || selectedConvo;
     }, [conversations, selectedConvo]);
 
+    // An open thread is being read, but `unreadCount` only refreshes on the 15s
+    // conversation poll — so its badge sat next to the very messages you were
+    // reading, still claiming they were unread, for up to 15s after you opened
+    // it. Read as zero for that one thread and let the poll keep supplying the
+    // real number for every other row; leaving the thread restores it.
+    //
+    // Derived rather than written into state on selection: the poll replaces the
+    // array wholesale, so a zeroed copy would be reverted on the next tick
+    // anyway, and a deep-linked or search-opened thread never goes through
+    // `handleSelectConvo` at all.
+    const unreadOf = (convo) =>
+        convo.username === activeConvo?.username ? 0 : convo.unreadCount || 0;
+
     // Deep linking
     useEffect(() => {
         // Two refs, not one. `prevTargetRef` was shared, so a URL carrying both
@@ -377,7 +390,7 @@ const prevGroupRef = useRef(null);
                                 </p>
                                 {messageHits.map(hit => (
                                     <button
-                                        key={hit._id || hit.id}
+                                        key={hit.id || hit._id}
                                         onClick={() => openSearchHit(hit)}
                                         className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 active:bg-gray-100 dark:active:bg-gray-700 transition-colors text-left"
                                     >
@@ -445,9 +458,9 @@ const prevGroupRef = useRef(null);
                                             {convo.lastMessage?.audioUrl && !convo.lastMessage?.text ? "\uD83C\uDFA4 Voice message" : convo.lastMessage?.imageUrl && !convo.lastMessage?.text ? "\uD83D\uDCF7 Photo" : convo.lastMessage?.text?.slice(0, 30) || "Message"} · {timeAgo(convo.lastMessage?.timeStamp)}
                                         </p>
                                     </div>
-                                    {convo.unreadCount > 0 && (
+                                    {unreadOf(convo) > 0 && (
                                         <span className="bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shrink-0">
-                                            {convo.unreadCount > 9 ? "9+" : convo.unreadCount}
+                                            {unreadOf(convo) > 9 ? "9+" : unreadOf(convo)}
                                         </span>
                                     )}
                                 </button>

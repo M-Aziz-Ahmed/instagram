@@ -1,9 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { useUser } from "@/context/UserContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+
+// `window.location.href` is not readable on the server, and the old
+// `typeof window !== "undefined" ? window.location.href : ""` guard only
+// protected the server render: the first *client* render already had `window`
+// and produced a full URL where the server had produced "", so the two trees
+// disagreed. `useSyncExternalStore` is the supported way to read a
+// browser-only value — the third argument is what the server renders and what
+// the hydration pass compares against, and the value is only swapped for the
+// real one afterwards. It never changes while the page is open, so the
+// no-op subscription is all that is needed.
+const subscribeToLocation = () => () => {};
+const getLocationHref = () => (typeof window === "undefined" ? "" : window.location.href);
+const getServerHref = () => "";
 
 export default function ChessChallengeClient({ gameId }) {
     const { user } = useUser();
@@ -12,6 +25,11 @@ export default function ChessChallengeClient({ gameId }) {
     const [loading, setLoading] = useState(true);
     const [joining, setJoining] = useState(false);
     const [error, setError] = useState(null);
+    // The role the server assigned on POST /spectate. Preferred over anything
+    // inferred from the payload, because only the server knows whether this
+    // user is one of the two players or merely watching.
+    const [role, setRole] = useState(null);
+    const shareLink = useSyncExternalStore(subscribeToLocation, getLocationHref, getServerHref);
 
     useEffect(() => {
         async function fetchGame() {
@@ -20,6 +38,14 @@ export default function ChessChallengeClient({ gameId }) {
                 if (res.ok) {
                     const data = await res.json();
                     setGame(data.game);
+                } else if (res.status === 401) {
+                    // The chess REST routes now require a session, so an
+                    // unauthenticated visitor to a shared challenge link gets a
+                    // 401. Saying "Challenge not found" was actively wrong — it
+                    // exists, the reader just is not signed in.
+                    setError("Log in to open this challenge");
+                } else if (res.status === 403) {
+                    setError("You are not a player in this challenge");
                 } else {
                     setError("Challenge not found");
                 }
@@ -30,6 +56,33 @@ export default function ChessChallengeClient({ gameId }) {
         }
         fetchGame();
     }, [gameId]);
+
+    useEffect(() => {
+        // Nothing told an open challenge page that the other player had
+        // accepted, so a creator watched "Waiting for X to accept..." for ever
+        // on a game that was already live. Re-fetch while the game is still
+        // waiting; the effect tears itself down as soon as `status` changes,
+        // which is what flips the page to "Go to Game". Ticks that land while
+        // the tab is hidden are skipped, so a backgrounded tab stops polling.
+        if (game?.status !== "waiting") return;
+        let cancelled = false;
+        const poll = async () => {
+            if (document.hidden) return;
+            try {
+                const res = await fetch(`/api/chess/games/${gameId}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!cancelled && data.game) setGame(data.game);
+            } catch {
+                // Keep the last known state; the next tick retries.
+            }
+        };
+        const id = setInterval(poll, 10000);
+        return () => {
+            cancelled = true;
+            clearInterval(id);
+        };
+    }, [gameId, game?.status]);
 
     const handleJoinChallenge = async () => {
         if (!user) return;
@@ -70,7 +123,19 @@ export default function ChessChallengeClient({ gameId }) {
                 }),
             });
             if (res.ok) {
+                const data = await res.json();
+                // Take the role the server decided on instead of re-deriving
+                // "spectator" from the absence of a colour in the payload, which
+                // could not tell a player apart from a watcher.
+                if (data?.role) setRole(data.role);
+                if (data?.game) setGame(data.game);
                 router.push(`/chess/game/${gameId}`);
+            } else {
+                // The one failure a user hits here is a 400 "Game not started
+                // yet" — they opened the challenge page early. It used to leave
+                // the button re-enabled with nothing to explain the refusal.
+                const data = await res.json().catch(() => null);
+                setError(data?.error || "Failed to spectate");
             }
         } catch {
             setError("Failed to spectate");
@@ -108,18 +173,27 @@ export default function ChessChallengeClient({ gameId }) {
     const isCreator = game.white.username === user?.username;
     const isInvited = game.challengeFor === user?.username;
     const isWaiting = game.status === "waiting";
-    const isPlayer = game.white.username === user?.username || game.black.username === user?.username;
+    // Once /spectate has answered, its `role` is authoritative — the username
+    // comparison is only the fallback for players who never had to spectate.
+    const isPlayer = role
+        ? role === "player"
+        : game.white.username === user?.username || game.black.username === user?.username;
     const timeControl = game.timeControl;
+    // The first access was optional-chained but the second was not, so a game
+    // stored without a timeControl threw a TypeError on this render and took
+    // the whole page down with it. Make the second read safe too, and fall back
+    // to plain text rather than printing "NaN min".
     const tcLabel = timeControl?.increment > 0
         ? `${timeControl.initial / 60} + ${timeControl.increment}`
-        : `${timeControl.initial / 60} min`;
+        : `${timeControl?.initial / 60} min`;
+    const tcText = timeControl?.initial ? tcLabel : "Time control unknown";
 
     return (
         <div className="max-w-md mx-auto px-4 py-12">
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 text-center">
                 <div className="text-4xl mb-3">♟️</div>
                 <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">Chess Challenge</h1>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-6">{tcLabel} · vs Player</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-6">{tcText} · vs Player</p>
 
                 <div className="flex items-center justify-center gap-4 mb-6">
                     <div className="text-center">
@@ -178,9 +252,9 @@ export default function ChessChallengeClient({ gameId }) {
                             <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
                             <p className="text-xs text-blue-500 font-medium">Waiting for {game.challengeFor || "opponent"} to accept...</p>
                         </div>
-                        <p className="text-[10px] text-gray-400 mb-2 break-all">Challenge link: {typeof window !== "undefined" ? window.location.href : ""}</p>
+                        <p className="text-[10px] text-gray-400 mb-2 break-all">Challenge link: {shareLink}</p>
                         <button
-                            onClick={() => { navigator.clipboard?.writeText(window.location.href); }}
+                            onClick={() => { if (shareLink) navigator.clipboard?.writeText(shareLink); }}
                             className="w-full px-4 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
                         >
                             Copy Link

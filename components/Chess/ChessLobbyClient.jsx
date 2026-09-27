@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useUser } from "@/context/UserContext";
+import { useToast } from "@/context/ToastContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ChessProfileHistory from "./ChessProfileHistory";
@@ -25,19 +26,35 @@ const AI_LEVELS = [
 ];
 
 function StatusBadge({ status }) {
-    const colors = {
-        waiting: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-        active: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    // Previously anything that was not `waiting` or `active` fell through to
+    // the yellow "In Progress" badge, so a checkmate, a resignation, a draw and
+    // a flag fall were all reported as a game still being played. Each status
+    // gets its own label and colour, and an unrecognised one is shown as
+    // itself rather than silently relabelled.
+    const config = {
+        waiting:    { label: "Waiting",     color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
+        active:     { label: "In Progress", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+        checkmate:  { label: "Checkmate",   color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" },
+        resigned:   { label: "Resigned",    color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+        timeout:    { label: "Timeout",     color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+        draw:       { label: "Draw",        color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+        stalemate:  { label: "Stalemate",   color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+    };
+    const neutral = "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+    const cfg = config[status] || {
+        label: status ? String(status).charAt(0).toUpperCase() + String(status).slice(1) : "Unknown",
+        color: neutral,
     };
     return (
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${colors[status] || colors.waiting}`}>
-            {status === "waiting" ? "Waiting" : "In Progress"}
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${cfg.color}`}>
+            {cfg.label}
         </span>
     );
 }
 
 export default function ChessLobbyClient() {
     const { user } = useUser();
+    const { showToast } = useToast();
     const router = useRouter();
     const [showAIPanel, setShowAIPanel] = useState(false);
     const [showChallengePanel, setShowChallengePanel] = useState(false);
@@ -50,6 +67,22 @@ export default function ChessLobbyClient() {
     const [challengeCopied, setChallengeCopied] = useState(false);
     const [myGames, setMyGames] = useState([]);
     const [pendingChallenges, setPendingChallenges] = useState([]);
+    // The two lobby lists are polled every 10s. Reporting every failed poll
+    // would stack the same toast six times a minute, so each poller reports a
+    // failure once and is silenced again by its next success.
+    const pollerErrorsRef = useRef(new Set());
+    const reportPollerError = useCallback((key, message) => {
+        if (pollerErrorsRef.current.has(key)) return;
+        pollerErrorsRef.current.add(key);
+        showToast(message, "error");
+    }, [showToast]);
+
+    // Reads the server's `error` field when there is one, without letting a
+    // non-JSON body (a proxy 502, an HTML error page) throw out of the handler.
+    const readError = async (res, fallback) => {
+        const data = await res.json().catch(() => null);
+        return data?.error || `${fallback} (${res.status})`;
+    };
 
     const fetchMyGames = useCallback(async () => {
         if (!user?.username) return;
@@ -58,9 +91,14 @@ export default function ChessLobbyClient() {
             if (res.ok) {
                 const data = await res.json();
                 setMyGames(data.games || []);
+                pollerErrorsRef.current.delete("games");
+            } else {
+                reportPollerError("games", await readError(res, "Couldn't load your games"));
             }
-        } catch (e) {}
-    }, [user?.username]);
+        } catch (e) {
+            reportPollerError("games", "Couldn't load your games");
+        }
+    }, [user?.username, reportPollerError]);
 
     const fetchPendingChallenges = useCallback(async () => {
         if (!user?.username) return;
@@ -70,9 +108,14 @@ export default function ChessLobbyClient() {
                 const data = await res.json();
                 const challenges = (data.games || []).filter(g => g.challengeFor === user.username);
                 setPendingChallenges(challenges);
+                pollerErrorsRef.current.delete("challenges");
+            } else {
+                reportPollerError("challenges", await readError(res, "Couldn't load challenges"));
             }
-        } catch (e) {}
-    }, [user?.username]);
+        } catch (e) {
+            reportPollerError("challenges", "Couldn't load challenges");
+        }
+    }, [user?.username, reportPollerError]);
 
     useEffect(() => {
         fetchMyGames();
@@ -103,9 +146,15 @@ export default function ChessLobbyClient() {
             if (res.ok) {
                 const data = await res.json();
                 router.push(`/chess/game/${data.game._id}`);
+            } else {
+                // A 400 ("Username required") or a 500 used to fall out of the
+                // `if` and land straight on setCreating(false), so the button
+                // simply re-enabled and nothing explained why.
+                showToast(await readError(res, "Couldn't start the game"), "error");
             }
         } catch (e) {
             console.error("Failed to create AI game:", e);
+            showToast("Couldn't start the game — check your connection", "error");
         }
         setCreating(false);
     };
@@ -128,9 +177,15 @@ export default function ChessLobbyClient() {
             if (res.ok) {
                 const data = await res.json();
                 setChallengeLink(window.location.origin + data.challengeLink);
+            } else {
+                // Previously silent: the panel stayed on the form and the
+                // button re-enabled with no indication the challenge was not
+                // created.
+                showToast(await readError(res, "Couldn't create the challenge"), "error");
             }
         } catch (e) {
             console.error("Failed to create challenge:", e);
+            showToast("Couldn't create the challenge — check your connection", "error");
         }
         setCreating(false);
     };
@@ -149,8 +204,15 @@ export default function ChessLobbyClient() {
             });
             if (res.ok) {
                 router.push(`/chess/game/${gameId}`);
+            } else {
+                // The two failures a user actually hits here — "Game already
+                // started" (someone beat them to it) and "Cannot play
+                // yourself" — were both silent no-ops.
+                showToast(await readError(res, "Couldn't join the challenge"), "error");
             }
-        } catch (e) {}
+        } catch (e) {
+            showToast("Couldn't join the challenge — check your connection", "error");
+        }
     };
 
     const formatTimeControl = (tc) => {
@@ -312,7 +374,29 @@ export default function ChessLobbyClient() {
                                     className="flex-1 px-3 py-2 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
                                 />
                                 <button
-                                    onClick={() => { navigator.clipboard?.writeText(challengeLink); setChallengeCopied(true); setTimeout(() => setChallengeCopied(false), 2000); }}
+                                    onClick={() => {
+                                        // `navigator.clipboard` is undefined on
+                                        // any non-HTTPS origin (and in older
+                                        // browsers), and `writeText` rejects
+                                        // outright when the permission is
+                                        // denied. The old call ignored both and
+                                        // flipped the label to "Copied!"
+                                        // unconditionally, so the UI claimed a
+                                        // copy that never happened and the
+                                        // rejection was unhandled.
+                                        if (!navigator.clipboard?.writeText) {
+                                            showToast("Couldn't copy the link — select it and copy manually", "error");
+                                            return;
+                                        }
+                                        navigator.clipboard.writeText(challengeLink)
+                                            .then(() => {
+                                                setChallengeCopied(true);
+                                                setTimeout(() => setChallengeCopied(false), 2000);
+                                            })
+                                            .catch(() => {
+                                                showToast("Couldn't copy the link — select it and copy manually", "error");
+                                            });
+                                    }}
                                     className="px-3 py-2 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
                                 >
                                     {challengeCopied ? "Copied!" : "Copy"}

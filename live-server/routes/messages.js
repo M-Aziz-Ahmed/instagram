@@ -91,6 +91,24 @@ router.get("/", verifyToken, async (req, res) => {
             };
             if (before) query.timeStamp = { $lt: new Date(before) };
 
+            // Marks *before* the read, not after it.
+            //
+            // The response body is the array of documents the `find()` below
+            // returns, so an `updateMany` fired after that read - and not
+            // awaited - could not change the payload: the messages went out with
+            // `delivered: false` even though the flag had just been set, and the
+            // grey tick only turned up on a later poll. Doing the write first
+            // makes this response the one that carries the new values. A failure
+            // here must not fail the read, so it is caught.
+            try {
+                await Message.updateMany(
+                    { sender: user2, recipient: user1, delivered: false },
+                    { $set: { delivered: true } }
+                ).maxTimeMS(5000);
+            } catch (e) {
+                console.error("[MESSAGES] delivered flag update failed:", e.message);
+            }
+
             const messages = await Message.find(query)
                 .sort({ timeStamp: -1 })
                 .limit(limit + 1)
@@ -100,11 +118,6 @@ router.get("/", verifyToken, async (req, res) => {
             const hasMore = messages.length > limit;
             const sliced = hasMore ? messages.slice(0, limit) : messages;
             const ordered = sliced.reverse();
-
-            Message.updateMany(
-                { sender: user2, recipient: user1, delivered: false },
-                { $set: { delivered: true } }
-            ).catch(() => {});
 
             return res.json({ messages: ordered, hasMore });
         }

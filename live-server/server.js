@@ -412,17 +412,166 @@ app.delete("/api/streams/:id", async (req, res) => {
 });
 
 // ── Chess HTTP Routes ──────────────────────────────────────────
-app.get("/api/chess/games", async (req, res) => {
+//
+// Every route in this block used to take the caller's identity from `req.body`
+// or `req.query`, with no session and no rate limit. `GET /api/chess/games?
+// status=waiting` listed up to 50 other people's open challenges, including
+// who each one was aimed at; `GET /api/chess/games/:id` handed the whole
+// document - chat included - to anyone who had the id; and `POST
+// /api/chess/games` was an unmetered way to create documents.
+//
+// They are also registered *before* the `app.use("/api/chess", apiLimiter, ...)`
+// mount further down the file, so they win the match and the limiter on that
+// mount never ran for any of them. Hence the explicit limiters here.
+//
+// The contract is otherwise unchanged: same paths, same response shapes, and the
+// AI flow still auto-activates the game server-side. The visible difference is
+// that a caller can no longer sit in a seat, or open a challenge, as somebody
+// else.
+//
+// These two are required here rather than referenced from their declarations
+// further down: a `const` is in its temporal dead zone until its own
+// declaration is evaluated, so the handlers below could not have used the names.
+// The aliases also keep them from colliding with the same `require` at the
+// bottom of the file.
+const { verifyToken: requireChessSession } = require("./middleware/auth");
+const { apiLimiter: chessReadLimiter, writeLimiter: chessWriteLimiter } = require("./middleware/rateLimit");
+const User = require("./models/user");
+
+const CHESS_STATUSES = new Set(["waiting", "active", "checkmate", "stalemate", "draw", "resigned", "timeout", "abandoned"]);
+const CHESS_MODES = new Set(["multiplayer", "ai"]);
+// Unanswered games and spectators are the two lists with no natural bound: each
+// entry is a document that is never finished, so nothing but the TTL ever
+// removes it.
+const CHESS_MAX_OPEN_GAMES = 10;
+const CHESS_MAX_SPECTATORS = 200;
+const CHESS_MIN_INITIAL = 30;
+const CHESS_MAX_INITIAL = 3600;
+const CHESS_MAX_INCREMENT = 60;
+
+// The session is the only accepted source of identity. The body still carries a
+// `username` - three client call sites send it - but it is ignored: a
+// caller-supplied name is a claim, not a credential.
+const chessSessionUser = async (req) => {
+    const me = await User.findById(req.userId)
+        .select("username avatarUrl avatarColor")
+        .lean()
+        .maxTimeMS(5000);
+    if (!me?.username) return null;
+    return {
+        username: me.username,
+        avatarUrl: me.avatarUrl || "",
+        avatarColor: me.avatarColor || "#3b82f6",
+    };
+};
+
+const chessInt = (value, min, max, fallback) => {
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, n));
+};
+
+// A time control is written to three places (`timeControl` and both clocks) and
+// was read as `timeControl?.initial || 600`, so a caller could ask for a
+// zero-second, negative or 10^9-second game. The floor of 30s is below the
+// shortest control the lobby offers (1 min), so nothing the UI can request is
+// affected.
+const chessTimeControl = (body) => {
+    const tc = body?.timeControl || {};
+    return {
+        initial: chessInt(tc.initial, CHESS_MIN_INITIAL, CHESS_MAX_INITIAL, 600),
+        increment: chessInt(tc.increment, 0, CHESS_MAX_INCREMENT, 0),
+    };
+};
+
+// "w", "b", or null when the caller is in neither seat. The old form,
+// `game.white.username === username ? "w" : "b"`, answered "b" for anyone who
+// was not White - so a stranger was treated as the second player.
+const chessColorFor = (game, username) => {
+    if (!game || !username) return null;
+    if (game.white?.username === username) return "w";
+    if (game.black?.username === username) return "b";
+    return null;
+};
+
+const chessIsSpectator = (game, username) =>
+    !!username && (game?.spectators || []).some((s) => s.username === username);
+
+// The AI side has no username - `black.username` is "" on every AI game - so
+// reading it back as a name left `winner` empty and the client rendered
+// "Checkmate!  wins". The REST move path already substituted "Computer"; the
+// socket path did not. One definition, used by both.
+const chessNames = (game) => ({
+    white: game.white?.username || "White",
+    black: game.mode === "ai" ? "Computer" : (game.black?.username || "Black"),
+});
+
+// `chess.pgn()` on a Chess built from `game.fen` emits the headers and an empty
+// movetext, because a position carries no history: every PGN ever stored here
+// was header-only however many moves had been played, and a take-back left the
+// stored PGN describing a game with no moves at all. `game.moves` does hold
+// every move in SAN, so the movetext is rebuilt from it - which is also the only
+// correct source after moves have been removed, since the FEN no longer implies
+// them.
+const chessPgn = (game) => {
+    const moves = game?.moves || [];
+    const names = chessNames(game);
+    const played = (game?.createdAt ? new Date(game.createdAt) : new Date())
+        .toISOString().slice(0, 10).replace(/-/g, ".");
+    const result = game?.result && game.result !== "*" ? game.result : "*";
+    const body = [];
+    for (let i = 0; i < moves.length; i += 2) {
+        const white = moves[i]?.san;
+        const black = moves[i + 1]?.san;
+        if (!white && !black) continue;
+        body.push(`${i / 2 + 1}. ${white || ""}${black ? " " + black : ""}`.trim());
+    }
+    return [
+        `[Event "?"]`,
+        `[Site "?"]`,
+        `[Date "${played}"]`,
+        `[Round "?"]`,
+        `[White "${names.white}"]`,
+        `[Black "${names.black}"]`,
+        `[Result "${result}"]`,
+        "",
+        body.join(" "),
+        result,
+    ].join("\n");
+};
+
+app.get("/api/chess/games", chessReadLimiter, requireChessSession, async (req, res) => {
     try {
+        const me = await chessSessionUser(req);
+        if (!me) return res.status(401).json({ error: "Unauthorized" });
+
         const { status, username } = req.query;
-        const filter = {};
-        if (status) filter.status = status;
-        if (username) {
-            filter.$or = [
-                { "white.username": username },
-                { "black.username": username },
-            ];
+
+        // `?username=` used to name the account whose games to list, so anyone
+        // could enumerate a stranger's record. The lobby only ever passes its
+        // own username, which is now the session's, so a mismatch is refused
+        // rather than quietly answered with the caller's own games.
+        if (username && String(username) !== me.username) {
+            return res.status(403).json({ error: "You can only list your own games" });
         }
+
+        const filter = {};
+        if (status) {
+            const s = String(status);
+            if (!CHESS_STATUSES.has(s)) return res.status(400).json({ error: "Invalid status" });
+            filter.status = s;
+        }
+        // The caller's own games, in all three ways one can be theirs: a seat
+        // they hold, or a pending challenge aimed at them. This is what the
+        // lobby needs for both of its lists (it re-filters client-side), and it
+        // is why every other account's pending challenges - and their
+        // `challengeFor` - are no longer readable by enumeration.
+        filter.$or = [
+            { "white.username": me.username },
+            { "black.username": me.username },
+            { challengeFor: me.username },
+        ];
+
         const games = await ChessGame.find(filter)
             .sort({ createdAt: -1 })
             .limit(50)
@@ -434,10 +583,26 @@ app.get("/api/chess/games", async (req, res) => {
     }
 });
 
-app.get("/api/chess/games/:id", async (req, res) => {
+app.get("/api/chess/games/:id", chessReadLimiter, requireChessSession, async (req, res) => {
     try {
+        const me = await chessSessionUser(req);
+        if (!me) return res.status(401).json({ error: "Unauthorized" });
+
         const game = await ChessGame.findById(req.params.id).lean();
         if (!game) return res.status(404).json({ error: "Game not found" });
+
+        // The board, the clocks, the move list and the PGN are the point of the
+        // page and are shared with a live spectator on purpose. The in-game
+        // chat and the spectator list are not: chat is written by the two
+        // players alone, and neither field is needed to render the page. A
+        // logged-in stranger holding the id used to receive both, and a
+        // logged-out visitor the whole document - the route had no session at
+        // all, so this is the read that made a game id a credential.
+        if (!chessColorFor(game, me.username) && !chessIsSpectator(game, me.username)) {
+            const { chat, spectators, ...visible } = game;
+            return res.json({ game: visible });
+        }
+
         res.json({ game });
     } catch (err) {
         console.error("[CHESS API] Get game error:", err.message);
@@ -445,26 +610,41 @@ app.get("/api/chess/games/:id", async (req, res) => {
     }
 });
 
-app.post("/api/chess/games", async (req, res) => {
+app.post("/api/chess/games", chessWriteLimiter, requireChessSession, async (req, res) => {
     try {
-        const { username, avatarUrl, avatarColor, timeControl, mode, aiDifficulty, inviteUser } = req.body;
-        if (!username) return res.status(400).json({ error: "Username required" });
+        const me = await chessSessionUser(req);
+        if (!me) return res.status(401).json({ error: "Unauthorized" });
 
-        const initial = timeControl?.initial || 600;
-        const increment = timeControl?.increment || 0;
+        const { mode, aiDifficulty } = req.body;
+        const gameMode = CHESS_MODES.has(mode) ? mode : "multiplayer";
+        const { initial, increment } = chessTimeControl(req.body);
+        const difficulty = chessInt(aiDifficulty, 1, 20, 10);
+
+        // Nothing is ever cleaned up until the document TTL runs, so a caller
+        // who could create without limit could pin the collection. Only
+        // *unanswered* games count: a game in progress is never blocked, and
+        // neither is an AI game, which is created already active.
+        const openGames = await ChessGame
+            .countDocuments({ "white.username": me.username, status: "waiting" })
+            .maxTimeMS(5000);
+        if (openGames >= CHESS_MAX_OPEN_GAMES) {
+            return res.status(429).json({ error: "You have too many open games. Wait for one to be accepted." });
+        }
 
         const game = await ChessGame.create({
-            white: { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#3b82f6" },
-            mode: mode || "multiplayer",
-            aiDifficulty: aiDifficulty || 10,
+            white: { username: me.username, avatarUrl: me.avatarUrl, avatarColor: me.avatarColor },
+            mode: gameMode,
+            aiDifficulty: difficulty,
             timeControl: { initial, increment },
             timers: { white: initial, black: initial },
-            invitedBy: inviteUser || "",
-            status: mode === "ai" ? "active" : "waiting",
-            timerLastTick: mode === "ai" ? new Date() : null,
+            // The inviter is whoever is signed in, not the body's `inviteUser`.
+            // Nothing reads this field today.
+            invitedBy: me.username,
+            status: gameMode === "ai" ? "active" : "waiting",
+            timerLastTick: gameMode === "ai" ? new Date() : null,
         });
 
-        logGame("chess_created", { username, gameId: game._id.toString(), gameType: mode || "multiplayer", message: `Chess game created: ${mode || "multiplayer"}` });
+        logGame("chess_created", { username: me.username, gameId: game._id.toString(), gameType: gameMode, message: `Chess game created: ${gameMode}` });
 
         res.json({ game });
     } catch (err) {
@@ -473,21 +653,31 @@ app.post("/api/chess/games", async (req, res) => {
     }
 });
 
-app.post("/api/chess/games/:id/join", async (req, res) => {
+app.post("/api/chess/games/:id/join", chessWriteLimiter, requireChessSession, async (req, res) => {
     try {
-        const { username, avatarUrl, avatarColor } = req.body;
+        const me = await chessSessionUser(req);
+        if (!me) return res.status(401).json({ error: "Unauthorized" });
+
         const game = await ChessGame.findById(req.params.id);
         if (!game) return res.status(404).json({ error: "Game not found" });
         if (game.status !== "waiting") return res.status(400).json({ error: "Game already started" });
         if (game.mode === "ai") return res.status(400).json({ error: "Cannot join AI game" });
-        if (game.white.username === username) return res.status(400).json({ error: "Cannot play yourself" });
+        if (game.white.username === me.username) return res.status(400).json({ error: "Cannot play yourself" });
+        // A challenge names its target, and the challenge page only ever offers
+        // "Accept" to that target. Without this, anybody with the link - which
+        // is meant to be shareable - could take the seat. Games created through
+        // POST /api/chess/games carry no `challengeFor` and stay open to anyone,
+        // which is how the lobby's "join a waiting game" flow works.
+        if (game.challengeFor && game.challengeFor !== me.username) {
+            return res.status(403).json({ error: "This challenge is for someone else" });
+        }
 
-        game.black = { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#3b82f6" };
+        game.black = { username: me.username, avatarUrl: me.avatarUrl, avatarColor: me.avatarColor };
         game.status = "active";
         game.timerLastTick = new Date();
         await game.save();
 
-        logGame("chess_joined", { username, gameId: game._id.toString(), message: `${username} joined chess game` });
+        logGame("chess_joined", { username: me.username, gameId: game._id.toString(), message: `${me.username} joined chess game` });
 
         res.json({ game });
     } catch (err) {
@@ -496,19 +686,25 @@ app.post("/api/chess/games/:id/join", async (req, res) => {
     }
 });
 
-app.post("/api/chess/games/:id/spectate", async (req, res) => {
+app.post("/api/chess/games/:id/spectate", chessWriteLimiter, requireChessSession, async (req, res) => {
     try {
-        const { username, avatarUrl, avatarColor } = req.body;
+        const me = await chessSessionUser(req);
+        if (!me) return res.status(401).json({ error: "Unauthorized" });
+
         const game = await ChessGame.findById(req.params.id);
         if (!game) return res.status(404).json({ error: "Game not found" });
         if (game.status === "waiting") return res.status(400).json({ error: "Game not started yet" });
 
-        const alreadySpectating = game.spectators.some(s => s.username === username);
-        const isPlayer = game.white.username === username || game.black.username === username;
+        const isPlayer = !!chessColorFor(game, me.username);
 
-        if (!alreadySpectating && !isPlayer) {
-            game.spectators.push({ username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#3b82f6" });
-            await game.save();
+        if (!isPlayer && !chessIsSpectator(game, me.username)) {
+            // Spectators are appended to the game document on every join, so
+            // this used to be a way to grow a document without bound. Past the
+            // cap the game is still watchable, it just is not listed.
+            if (game.spectators.length < CHESS_MAX_SPECTATORS) {
+                game.spectators.push({ username: me.username, avatarUrl: me.avatarUrl, avatarColor: me.avatarColor });
+                await game.save();
+            }
         }
 
         res.json({ game, role: isPlayer ? "player" : "spectator" });
@@ -518,26 +714,45 @@ app.post("/api/chess/games/:id/spectate", async (req, res) => {
     }
 });
 
-app.post("/api/chess/games/new/challenge", async (req, res) => {
+app.post("/api/chess/games/new/challenge", chessWriteLimiter, requireChessSession, async (req, res) => {
     try {
-        const { username, avatarUrl, avatarColor, challengeFor, timeControl, inviteUser } = req.body;
-        if (!username) return res.status(400).json({ error: "Username required" });
+        const me = await chessSessionUser(req);
+        if (!me) return res.status(401).json({ error: "Unauthorized" });
 
-        const initial = timeControl?.initial || 600;
-        const increment = timeControl?.increment || 0;
+        const challengeFor = String(req.body?.challengeFor || "").trim();
+        if (!challengeFor) return res.status(400).json({ error: "Who is the challenge for?" });
+        if (challengeFor === me.username) return res.status(400).json({ error: "Cannot challenge yourself" });
+        // A challenge for an account that does not exist can never be accepted,
+        // and would sit in the collection until the TTL sweeps it up. Rejecting
+        // it here is cheaper and stops the lobby from offering a dead challenge.
+        const target = await User.findOne({ username: challengeFor })
+            .select("username")
+            .lean()
+            .maxTimeMS(5000);
+        if (!target) return res.status(404).json({ error: "User not found" });
+
+        const { initial, increment } = chessTimeControl(req.body);
+
+        const openGames = await ChessGame
+            .countDocuments({ "white.username": me.username, status: "waiting" })
+            .maxTimeMS(5000);
+        if (openGames >= CHESS_MAX_OPEN_GAMES) {
+            return res.status(429).json({ error: "You have too many open challenges. Wait for one to be accepted." });
+        }
 
         const game = await ChessGame.create({
-            white: { username, avatarUrl: avatarUrl || "", avatarColor: avatarColor || "#3b82f6" },
+            white: { username: me.username, avatarUrl: me.avatarUrl, avatarColor: me.avatarColor },
             mode: "multiplayer",
+            aiDifficulty: 10,
             timeControl: { initial, increment },
             timers: { white: initial, black: initial },
-            invitedBy: inviteUser || "",
-            challengeFor: challengeFor || "",
+            invitedBy: me.username,
+            challengeFor,
             status: "waiting",
             timerLastTick: null,
         });
 
-        logGame("chess_challenge_created", { username, gameId: game._id.toString(), challengeFor, message: `Challenge created for ${challengeFor}` });
+        logGame("chess_challenge_created", { username: me.username, gameId: game._id.toString(), challengeFor, message: `Challenge created for ${challengeFor}` });
 
         res.json({ game, challengeLink: `/chess/challenge/${game._id}` });
     } catch (err) {
@@ -546,18 +761,24 @@ app.post("/api/chess/games/new/challenge", async (req, res) => {
     }
 });
 
-app.post("/api/chess/games/:id/move", async (req, res) => {
+app.post("/api/chess/games/:id/move", chessWriteLimiter, requireChessSession, async (req, res) => {
     try {
-        const { from, to, promotion, username } = req.body;
+        const me = await chessSessionUser(req);
+        if (!me) return res.status(401).json({ error: "Unauthorized" });
+
+        const { from, to, promotion } = req.body;
         const game = await ChessGame.findById(req.params.id);
         if (!game) return res.status(404).json({ error: "Game not found" });
         if (game.status !== "active") return res.status(400).json({ error: "Game not active" });
 
         const chess = new Chess(game.fen);
         const isWhiteTurn = chess.turn() === "w";
-        const playerColor = game.white.username === username ? "w" : "b";
+        // Strictly against the game's own seats: never "not White, therefore
+        // Black", which handed the move to anybody at all.
+        const playerColor = chessColorFor(game, me.username);
         const isAIMove = game.mode === "ai" && chess.turn() === "b";
         if (!isAIMove && playerColor !== (isWhiteTurn ? "w" : "b")) {
+            if (!playerColor) return res.status(403).json({ error: "You are not a player in this game" });
             return res.status(400).json({ error: "Not your turn" });
         }
 
@@ -587,31 +808,30 @@ app.post("/api/chess/games/:id/move", async (req, res) => {
             notation: moveResult.san, timestamp: now,
             thinkingMs: game.timerLastTick ? (now.getTime() - new Date(game.timerLastTick).getTime()) : 0,
         });
-        game.pgn = chess.pgn();
+        game.pgn = chessPgn(game);
         game.timerLastTick = now;
 
-            const whiteName = game.white.username || "White";
-            const blackName = game.mode === "ai" ? "Computer" : (game.black.username || "Black");
+        const { white: whiteName, black: blackName } = chessNames(game);
 
-            if (chess.isCheckmate()) {
-                game.status = "checkmate";
-                game.result = isWhiteTurn ? "1-0" : "0-1";
-                game.resultReason = "Checkmate";
-                game.winner = isWhiteTurn ? whiteName : blackName;
-                logGame("chess_checkmate", { username, gameId: game._id.toString(), message: `Checkmate! Winner: ${game.winner}` });
-            } else if (chess.isStalemate()) {
-                game.status = "stalemate";
-                game.result = "1/2-1/2";
-                game.resultReason = "Stalemate";
-            } else if (chess.isDraw()) {
-                game.status = "draw";
-                game.result = "1/2-1/2";
-                game.resultReason = "Draw";
-            } else if (game.timers.white <= 0 || game.timers.black <= 0) {
-                game.status = "timeout";
-                game.result = game.timers.white <= 0 ? "0-1" : "1-0";
-                game.resultReason = "Timeout";
-                game.winner = game.timers.white <= 0 ? blackName : whiteName;
+        if (chess.isCheckmate()) {
+            game.status = "checkmate";
+            game.result = isWhiteTurn ? "1-0" : "0-1";
+            game.resultReason = "Checkmate";
+            game.winner = isWhiteTurn ? whiteName : blackName;
+            logGame("chess_checkmate", { username: me.username, gameId: game._id.toString(), message: `Checkmate! Winner: ${game.winner}` });
+        } else if (chess.isStalemate()) {
+            game.status = "stalemate";
+            game.result = "1/2-1/2";
+            game.resultReason = "Stalemate";
+        } else if (chess.isDraw()) {
+            game.status = "draw";
+            game.result = "1/2-1/2";
+            game.resultReason = "Draw";
+        } else if (game.timers.white <= 0 || game.timers.black <= 0) {
+            game.status = "timeout";
+            game.result = game.timers.white <= 0 ? "0-1" : "1-0";
+            game.resultReason = "Timeout";
+            game.winner = game.timers.white <= 0 ? blackName : whiteName;
         } else {
             game.status = "active";
             game.result = "*";
@@ -631,7 +851,7 @@ app.post("/api/chess/games/:id/move", async (req, res) => {
                         from: aiResult.from, to: aiResult.to, san: aiResult.san, fen: game.fen,
                         notation: aiResult.san, timestamp: aiNow, thinkingMs: 500 + Math.random() * 2000,
                     });
-                    game.pgn = chess.pgn();
+                    game.pgn = chessPgn(game);
                     game.timerLastTick = aiNow;
 
                     if (chess.isCheckmate()) {
@@ -663,10 +883,18 @@ app.post("/api/chess/games/:id/move", async (req, res) => {
     }
 });
 
-app.get("/api/chess/games/:id/moves", async (req, res) => {
+// No client calls this. Kept because the game id is not a credential any more
+// and this used to hand the whole move list and PGN to anyone who asked.
+app.get("/api/chess/games/:id/moves", chessReadLimiter, requireChessSession, async (req, res) => {
     try {
+        const me = await chessSessionUser(req);
+        if (!me) return res.status(401).json({ error: "Unauthorized" });
+
         const game = await ChessGame.findById(req.params.id).lean();
         if (!game) return res.status(404).json({ error: "Game not found" });
+        if (!chessColorFor(game, me.username) && !chessIsSpectator(game, me.username)) {
+            return res.status(403).json({ error: "Not available" });
+        }
         res.json({ moves: game.moves, pgn: game.pgn });
     } catch (err) {
         console.error("[CHESS API] Get moves error:", err.message);
@@ -674,10 +902,19 @@ app.get("/api/chess/games/:id/moves", async (req, res) => {
     }
 });
 
-app.get("/api/chess/games/:id/chat", async (req, res) => {
+// No client calls this either. Chat is the players' own channel - the socket
+// handler only lets a seat in it write - so it is not served to a stranger who
+// happens to have the id.
+app.get("/api/chess/games/:id/chat", chessReadLimiter, requireChessSession, async (req, res) => {
     try {
+        const me = await chessSessionUser(req);
+        if (!me) return res.status(401).json({ error: "Unauthorized" });
+
         const game = await ChessGame.findById(req.params.id).lean();
         if (!game) return res.status(404).json({ error: "Game not found" });
+        if (!chessColorFor(game, me.username) && !chessIsSpectator(game, me.username)) {
+            return res.status(403).json({ error: "Not available" });
+        }
         res.json({ chat: game.chat || [] });
     } catch (err) {
         console.error("[CHESS API] Get chat error:", err.message);
@@ -1316,6 +1553,32 @@ async function isUserBanned(username) {
 }
 
 io.on("connection", async (socket) => {
+    // ── Socket identity is a claim, not a credential ──────────────
+    //
+    // `username` is read from the handshake query string and is not checked
+    // against anything. Anyone can connect claiming to be any account, and
+    // every socket subsystem then acts on that name: voice (`voice:join` and
+    // the whole channel map), live streaming, and all eight board games
+    // (connect4, tictactoe, checkers, reversi, battleship, hangman, reaction
+    // duel, chess) resolve their player from it. It is also what
+    // `socket.join(username)` below puts the connection in.
+    //
+    // It is not fixed here, on purpose. Authenticating the handshake means
+    // either verifying the `af_session` cookie on the upgrade or having the
+    // client send a token - `utils/socketClient.js#getSocketConfig` is the
+    // single place that builds every socket's config, and two of the callers
+    // (`context/VoiceChatContext.jsx`, `components/CallWrapper.jsx`, plus
+    // `components/Live/LiveStreamModal.jsx`) connect with *no* username at
+    // all, so requiring one would break voice and live outright rather than
+    // secure them. Doing it properly is a change to the client and to the
+    // push/voice fan-out, not a change to this line.
+    //
+    // What is done instead, for chess only: the HTTP layer authenticates for
+    // real (`verifyToken` in the chess routes above), so a game can no longer
+    // be created or joined as somebody else, and every chess socket handler
+    // re-derives the caller's seat from the game's own `white.username` /
+    // `black.username` rather than trusting anything the client asserted -
+    // see `assertChessPlayer` below.
     const username = socket.handshake?.query?.username;
     const isAdmin = username ? await isUserAdmin(username) : false;
     socket.data = { ...socket.data, username, isAdmin };
@@ -1907,16 +2170,23 @@ io.on("connection", async (socket) => {
     socket.on("chess:join-game", async ({ gameId }) => {
         socket.join(`chess:${gameId}`);
         socket.data.chessGameId = gameId;
+        // Advisory only. Every mutating handler below re-derives the role from
+        // the database for the game in the payload, so this cannot be used to
+        // gain authority over anything - it is kept purely for the log line.
         socket.data.chessRole = "spectator";
 
         try {
             const game = await ChessGame.findById(gameId);
             if (game) {
-                if (game.white.username === username || game.black.username === username) {
+                const role = await chessRoleFor(game, username);
+                if (role === "player") {
                     socket.data.chessRole = "player";
-                } else {
-                    const alreadySpectating = game.spectators.some(s => s.username === username);
-                    if (!alreadySpectating) {
+                } else if ((game.spectators || []).length < CHESS_MAX_SPECTATORS) {
+                    // Same cap as the REST spectate route: this appends to the
+                    // game document on every join, and nothing else ever trims
+                    // it, so an unbounded list was one more way to grow a
+                    // document. Past the cap the game is still watchable.
+                    if (!chessIsSpectator(game, username)) {
                         game.spectators.push({ username, avatarUrl: "", avatarColor: "#3b82f6" });
                         await game.save();
                     }
@@ -1947,9 +2217,10 @@ io.on("connection", async (socket) => {
             if (auth.error) {
                 return socket.emit("chess:error", { message: auth.error });
             }
-            if (socket.data.chessRole === "spectator") {
-                return socket.emit("chess:error", { message: "Spectators cannot make moves" });
-            }
+            // No `socket.data.chessRole` check here any more: that field
+            // describes the last game this socket joined, and `assertChessPlayer`
+            // has just established that the caller holds a seat in *this* game,
+            // which is strictly stronger - a non-player is turned away above.
 
             const game = auth.game;
             if (game.status !== "active") {
@@ -1958,7 +2229,10 @@ io.on("connection", async (socket) => {
 
             const chess = new Chess(game.fen);
             const isWhiteTurn = chess.turn() === "w";
-            const playerColor = game.white.username === username ? "w" : "b";
+            // Strictly against the game's own seats, never "not White, therefore
+            // Black" - that inference is what let a socket that had merely
+            // claimed a name move for either side.
+            const playerColor = chessColorFor(game, username);
             const isAIMove = game.mode === "ai" && chess.turn() === "b";
 
             if (!isAIMove && playerColor !== (isWhiteTurn ? "w" : "b")) {
@@ -1992,14 +2266,20 @@ io.on("connection", async (socket) => {
                 notation: moveResult.san, timestamp: now,
                 thinkingMs: game.timerLastTick ? (now.getTime() - new Date(game.timerLastTick).getTime()) : 0,
             });
-            game.pgn = chess.pgn();
+            game.pgn = chessPgn(game);
             game.timerLastTick = now;
+
+            // `black.username` is "" on every AI game, so naming the winner
+            // from it left `winner` empty and the client rendered
+            // "Checkmate!  wins". chessNames substitutes "Computer", which is
+            // what the REST twin of this handler already did.
+            const { white: whiteName, black: blackName } = chessNames(game);
 
             if (chess.isCheckmate()) {
                 game.status = "checkmate";
                 game.result = isWhiteTurn ? "1-0" : "0-1";
                 game.resultReason = "Checkmate";
-                game.winner = isWhiteTurn ? game.white.username : game.black.username;
+                game.winner = isWhiteTurn ? whiteName : blackName;
             } else if (chess.isStalemate()) {
                 game.status = "stalemate";
                 game.result = "1/2-1/2";
@@ -2012,7 +2292,7 @@ io.on("connection", async (socket) => {
                 game.status = "timeout";
                 game.result = game.timers.white <= 0 ? "0-1" : "1-0";
                 game.resultReason = "Timeout";
-                game.winner = game.timers.white <= 0 ? game.black.username : game.white.username;
+                game.winner = game.timers.white <= 0 ? blackName : whiteName;
             } else {
                 game.status = "active";
                 game.result = "*";
@@ -2035,6 +2315,10 @@ io.on("connection", async (socket) => {
             });
 
             if (game.mode === "ai" && game.status === "active") {
+                // The move count this engine result is only valid for. Captured
+                // now, after the human's move is saved, and re-checked in the
+                // timeout below.
+                const expectedMoveCount = game.moves.length;
                 const aiDelay = 500 + Math.floor(Math.random() * 1500);
                 setTimeout(async () => {
                     try {
@@ -2042,6 +2326,19 @@ io.on("connection", async (socket) => {
                         const latest = await ChessGame.findById(gameId);
                         if (!latest || latest.status !== "active") {
                             console.log("[AI] Game no longer active, skipping");
+                            return;
+                        }
+
+                        // Optimistic concurrency check. The engine is pointed at
+                        // the position this handler just saved, so if the document
+                        // has moved on since - a take-back, a resign, a second AI
+                        // trigger from a duplicated move - the move about to be
+                        // computed belongs to a position that no longer exists,
+                        // and saving it would overwrite whatever happened in
+                        // between. Discarding costs one engine turn; saving would
+                        // corrupt the game.
+                        if (latest.moves.length !== expectedMoveCount) {
+                            console.log(`[AI] Position moved on (${expectedMoveCount} -> ${latest.moves.length} moves), discarding engine move for ${gameId}`);
                             return;
                         }
 
@@ -2062,7 +2359,7 @@ io.on("connection", async (socket) => {
                             from: aiResult.from, to: aiResult.to, san: aiResult.san, fen: latest.fen,
                             notation: aiResult.san, timestamp: aiNow, thinkingMs: 0,
                         });
-                        latest.pgn = aiChess.pgn();
+                        latest.pgn = chessPgn(latest);
                         latest.timerLastTick = aiNow;
 
                         if (aiChess.isCheckmate()) {
@@ -2111,10 +2408,14 @@ io.on("connection", async (socket) => {
 
     socket.on("chess:chat", async ({ gameId, text, color, avatarUrl }) => {
         if (!text?.trim()) return;
-        if (socket.data.chessRole === "spectator") return;
         try {
-            const game = await ChessGame.findById(gameId);
-            if (!game) return;
+            // Re-derived for the game in the payload, not read off
+            // `socket.data.chessRole`: that field describes the last game this
+            // socket joined, so a socket that had joined game A as a player
+            // could write into game B's chat simply by naming B. Chat is the
+            // players' own channel, so a non-player is refused outright.
+            const auth = await assertChessPlayer(socket, gameId, username);
+            if (auth.error) return;
 
             const msg = {
                 username,
@@ -2124,9 +2425,9 @@ io.on("connection", async (socket) => {
                 createdAt: new Date(),
             };
 
-            game.chat.push(msg);
-            if (game.chat.length > 100) game.chat = game.chat.slice(-100);
-            await game.save();
+            auth.game.chat.push(msg);
+            if (auth.game.chat.length > 100) auth.game.chat = auth.game.chat.slice(-100);
+            await auth.game.save();
 
             io.to(`chess:${gameId}`).emit("chess:chat", {
                 ...msg,
@@ -2140,17 +2441,32 @@ io.on("connection", async (socket) => {
 
     socket.on("chess:take-back", async ({ gameId }) => {
         try {
-            const game = await ChessGame.findById(gameId);
-            if (!game || game.status !== "active") return socket.emit("chess:error", { message: "Game not active" });
+            const auth = await assertChessPlayer(socket, gameId, username);
+            if (auth.error) return socket.emit("chess:error", { message: auth.error });
+
+            const game = auth.game;
+            if (game.status !== "active") return socket.emit("chess:error", { message: "Game not active" });
             if (game.mode !== "ai") return socket.emit("chess:error", { message: "Take back only available vs AI" });
 
-            const playerColor = game.white.username === username ? "w" : "b";
-            if (playerColor !== "w") return socket.emit("chess:error", { message: "Not your turn" });
+            // The guard used to be `game.white.username === username ? "w" : "b"`,
+            // which answered "b" for a non-player and then refused with
+            // "Not your turn" - a message about whose turn it was, sent to
+            // somebody who is not in the game at all. There is only one seat in
+            // an AI game that can take back, so say that.
+            if (chessColorFor(game, username) !== "w") {
+                return socket.emit("chess:error", { message: "Only the player with the white pieces can take back" });
+            }
 
             const chess = new Chess(game.fen);
             if (chess.turn() !== "w") return socket.emit("chess:error", { message: "Wait for AI to finish" });
 
             if (game.moves.length < 2) return socket.emit("chess:error", { message: "No moves to take back" });
+
+            // The two moves about to be removed: the player's own, and the
+            // engine's reply. Their clocks have to be rewound too, or the
+            // opponent's time is simply lost every time the button is pressed.
+            const removedPlayer = game.moves[game.moves.length - 2];
+            const removedEngine = game.moves[game.moves.length - 1];
 
             game.moves.splice(-2, 2);
 
@@ -2163,7 +2479,29 @@ io.on("connection", async (socket) => {
 
             const restoreChess = new Chess(game.fen);
             game.turn = restoreChess.turn();
-            game.pgn = restoreChess.pgn();
+            // Rebuilt from `game.moves`, not `restoreChess.pgn()`: a Chess built
+            // from a FEN has no history, so `pgn()` returned the headers with an
+            // empty movetext and a take-back silently erased every earlier move
+            // from the stored PGN even though `game.moves` still had them. Both
+            // clocks are capped at the game's initial time so repeated take-backs
+            // cannot be farmed for clock.
+            game.pgn = chessPgn(game);
+            const clockCap = game.timeControl?.initial || 0;
+            const playerThinking = Number(removedPlayer?.thinkingMs) || 0;
+            const engineThinkingMs = removedEngine && removedPlayer
+                ? new Date(removedEngine.timestamp).getTime() - new Date(removedPlayer.timestamp).getTime()
+                : 0;
+            // A stored timestamp that is not a date yields NaN, and NaN survives
+            // `Math.max(0, NaN)` - which would write a NaN clock into the
+            // document. A NaN clock never reaches zero, so the flag would never
+            // fall. Anything that is not a finite number of milliseconds is
+            // simply not credited back.
+            const whiteBack = Number.isFinite(playerThinking) ? Math.max(0, playerThinking) / 1000 : 0;
+            const blackBack = Number.isFinite(engineThinkingMs) ? Math.max(0, engineThinkingMs) / 1000 : 0;
+            if (clockCap > 0) {
+                game.timers.white = Math.min(clockCap, game.timers.white + whiteBack);
+                game.timers.black = Math.min(clockCap, game.timers.black + blackBack);
+            }
             game.timerLastTick = new Date();
             await game.save();
 
@@ -2188,14 +2526,23 @@ io.on("connection", async (socket) => {
 
     socket.on("chess:resign", async ({ gameId }) => {
         try {
-            const game = await ChessGame.findById(gameId);
-            if (!game || game.status !== "active") return;
+            // Re-derived for the game in the payload, so a socket that joined
+            // some other game as a player cannot resign this one.
+            const auth = await assertChessPlayer(socket, gameId, username);
+            if (auth.error) return;
 
-            const isWhite = game.white.username === username;
+            const game = auth.game;
+            if (game.status !== "active") return;
+
+            // Same empty-name problem as the checkmate path: in an AI game the
+            // engine's seat has no username, so resigning left `winner` empty and
+            // the client rendered " resigns,  wins".
+            const { white: whiteName, black: blackName } = chessNames(game);
+            const isWhite = chessColorFor(game, username) === "w";
             game.status = "resigned";
             game.result = isWhite ? "0-1" : "1-0";
             game.resultReason = "Resignation";
-            game.winner = isWhite ? game.black.username : game.white.username;
+            game.winner = isWhite ? blackName : whiteName;
             await game.save();
 
             io.to(`chess:${gameId}`).emit("chess:game-over", {
@@ -2211,17 +2558,33 @@ io.on("connection", async (socket) => {
         }
     });
 
-    socket.on("chess:offer-draw", ({ gameId }) => {
-        io.to(`chess:${gameId}`).except(socket.id).emit("chess:draw-offer", {
-            gameId,
-            from: username,
-        });
+    // A draw offer is a negotiation between the two seats, so it is gated on
+    // holding one - re-derived for the game in the payload, not read off
+    // `socket.data.chessRole`, which only describes the last game this socket
+    // joined. Without that, any socket in any game could push a "draw offered"
+    // prompt into a game it had never joined.
+    socket.on("chess:offer-draw", async ({ gameId }) => {
+        try {
+            const auth = await assertChessPlayer(socket, gameId, username);
+            if (auth.error) return;
+            if (auth.game.status !== "active") return;
+
+            io.to(`chess:${gameId}`).except(socket.id).emit("chess:draw-offer", {
+                gameId,
+                from: username,
+            });
+        } catch (err) {
+            console.error("[CHESS] Offer draw error:", err.message);
+        }
     });
 
     socket.on("chess:accept-draw", async ({ gameId }) => {
         try {
-            const game = await ChessGame.findById(gameId);
-            if (!game || game.status !== "active") return;
+            const auth = await assertChessPlayer(socket, gameId, username);
+            if (auth.error) return;
+
+            const game = auth.game;
+            if (game.status !== "active") return;
 
             game.status = "draw";
             game.result = "1/2-1/2";
@@ -2240,17 +2603,34 @@ io.on("connection", async (socket) => {
         }
     });
 
-    socket.on("chess:decline-draw", ({ gameId }) => {
-        io.to(`chess:${gameId}`).except(socket.id).emit("chess:draw-declined", {
-            gameId,
-            from: username,
-        });
+    socket.on("chess:decline-draw", async ({ gameId }) => {
+        try {
+            const auth = await assertChessPlayer(socket, gameId, username);
+            if (auth.error) return;
+
+            io.to(`chess:${gameId}`).except(socket.id).emit("chess:draw-declined", {
+                gameId,
+                from: username,
+            });
+        } catch (err) {
+            console.error("[CHESS] Decline draw error:", err.message);
+        }
     });
 
     socket.on("chess:time-sync", async ({ gameId }) => {
         try {
+            // Both helpers, for two different jobs. The role is re-derived for
+            // the game in the payload - `socket.data.chessRole` only describes
+            // the last game this socket joined - because falling the flag below
+            // *ends* the game and has to be limited to a seat in it. A spectator
+            // is still answered, because a spectator's client runs the same
+            // local countdown and emits this when its own copy reaches zero; the
+            // reply is the correction, and the correction changes nothing.
             const game = await ChessGame.findById(gameId);
             if (!game || game.status !== "active") return;
+
+            const role = await chessRoleFor(game, username);
+            if (role !== "player" && !chessIsSpectator(game, username)) return;
 
             if (game.timerLastTick) {
                 const elapsed = (Date.now() - new Date(game.timerLastTick).getTime()) / 1000;
@@ -2274,6 +2654,12 @@ io.on("connection", async (socket) => {
                 const loserIsWhite = timers.white <= 0;
                 const loserIsBlack = timers.black <= 0;
                 if (loserIsWhite || loserIsBlack) {
+                    // Only a seat in the game may end it. A spectator reaching
+                    // zero on their own local copy is a clock display artefact,
+                    // not a result, and acting on it would award the game to
+                    // whoever happened to be watching with the emptiest clock.
+                    if (role !== "player") return;
+
                     const loserColor = loserIsWhite ? "w" : "b";
                     const winnerName = loserColor === "w"
                         ? (game.black?.username || "Computer")

@@ -2,7 +2,9 @@
 
 import { useRef, useEffect } from "react";
 
-export default function ChessMoveHistory({ moves, currentMoveIndex, onMoveClick, orientation }) {
+// `isReviewing` is optional: ChessGameClient does not pass it yet, so when it is
+// undefined we fall back to the old inference from a negative index.
+export default function ChessMoveHistory({ moves, currentMoveIndex, onMoveClick, orientation, isReviewing }) {
     const listRef = useRef(null);
     const lastMoveRef = useRef(null);
 
@@ -33,6 +35,12 @@ export default function ChessMoveHistory({ moves, currentMoveIndex, onMoveClick,
     const isLatestWhite = lastPair && lastPair.black === null;
     const latestIdx = moves.length - 1;
 
+    // "currentMoveIndex < 0 means live" is wrong: ChessGameClient passes
+    // reviewIndex - 1, which is -1 both when not reviewing AND at reviewIndex 0
+    // (the start position), so the start position highlighted the LAST move. The
+    // live-board highlight therefore keys off the explicit isReviewing flag.
+    const reviewing = isReviewing ?? currentMoveIndex < 0;
+
     return (
         <div className="flex flex-col h-full">
             <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
@@ -54,8 +62,8 @@ export default function ChessMoveHistory({ moves, currentMoveIndex, onMoveClick,
                     </div>
                 )}
                 {pairs.map((pair) => {
-                    const isWhiteLatest = currentMoveIndex < 0 && latestIdx === pair.whiteIdx;
-                    const isBlackLatest = currentMoveIndex < 0 && latestIdx === pair.blackIdx;
+                    const isWhiteLatest = !reviewing && latestIdx === pair.whiteIdx;
+                    const isBlackLatest = !reviewing && latestIdx === pair.blackIdx;
                     const isHighlighted = isWhiteLatest || isBlackLatest;
 
                     return (
