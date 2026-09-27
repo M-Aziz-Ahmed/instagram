@@ -37,6 +37,44 @@ const userSchema = new mongoose.Schema({
     // badge, but still delivered. Distinct from mutedUsers, which is about a
     // person rather than a thread.
     mutedChats: [{ type: String, default: [] }],
+    // Pinned conversations, floated to the top of the list. Same shape as the
+    // two arrays above, on purpose: there is no Conversation model in this app
+    // (the DM list is an aggregate grouped by counterpart username), so
+    // per-conversation state has to live on the user document. Introducing a
+    // second source of truth for "which conversations exist" would be a much
+    // larger change than adding the flag.
+    pinnedChats: [{ type: String, default: [] }],
+    // Richer per-conversation settings that do not fit a flag. A Map keyed by
+    // the LOWERCASE counterpart username, so casing never splits a thread in two.
+    // Absent key = all defaults, which is why every consumer must treat a
+    // missing entry as "not configured" rather than assuming the field exists.
+    chatPreferences: {
+        type: Map,
+        of: {
+            // What the other person is called locally. Never affects routing.
+            nickname:     { type: String, default: "" },
+            // "off" | "mentions" | "all"
+            notify:       { type: String, enum: ["off", "mentions", "all"], default: "all" },
+            sound:        { type: String, enum: ["default", "none"], default: "default" },
+            // Hours after which new messages in this thread are hidden until
+            // the user reopens it. 0 = off.
+            autoDeleteHours: { type: Number, default: 0, min: 0, max: 8760 },
+            // 0 = off. Days after which a message in this thread is removed.
+            disappearingDays: { type: Number, default: 0, min: 0, max: 365 },
+            // Unread messages in this thread are not counted in the global badge.
+            excludeFromBadge: { type: Boolean, default: false },
+        },
+        default: () => ({}),
+    },
+    // Night hours, during which nothing pops a notification. Stored in UTC to
+    // match how every other timestamp in this app is handled.
+    quietHours: {
+        enabled:   { type: Boolean, default: false },
+        startHour: { type: Number, default: 22, min: 0, max: 23 },
+        endHour:   { type: Number, default: 8, min: 0, max: 23 },
+    },
+    // When false, push payloads carry "New message" instead of the body.
+    notificationPreviews: { type: Boolean, default: true },
     // Last time this user explicitly confirmed they are 18+. Consumed by
     // middleware/adultGate.js, which re-asks every 30 days. Only ever written
     // by POST /api/adult-gate/confirm.

@@ -13,6 +13,10 @@ const { resolveLinkPreview } = require("../utils/linkPreview");
 const { rejectIfBlocked } = require("../lib/textFilter");
 const { enforceMedia } = require("../lib/mediaModeration");
 
+// How long a sender may un-send their own message. The client mirrors
+// this for the button, but the server is what actually enforces it.
+const RECALL_WINDOW_MS = 60 * 1000;
+
 const router = express.Router();
 
 // Resolves a recipient and enforces every messaging rule that must hold before
@@ -172,18 +176,59 @@ router.get("/", verifyToken, async (req, res) => {
             // rather than being filtered out server-side. The client can then
             // offer an "Archived" / "Muted" section and the reader can un-archive
             // something — a list they cannot see is a list they cannot undo.
-            const me = await User.findById(req.userId).select("archivedChats mutedChats").lean().maxTimeMS(5000);
-            const archived = new Set((me?.archivedChats || []).map((c) => String(c).toLowerCase()));
-            const muted = new Set((me?.mutedChats || []).map((c) => String(c).toLowerCase()));
+            //
+            // `?view=active|archived|muted` applies that separation server-side
+            // as well, so the list can be paged and counted without shipping
+            // every thread to a client that is about to hide most of them.
+            const me = await User.findById(req.userId)
+                .select("archivedChats mutedChats pinnedChats chatPreferences")
+                .lean()
+                .maxTimeMS(5000);
+            const lc = (v) => String(v).toLowerCase();
+            const archived = new Set((me?.archivedChats || []).map(lc));
+            const muted = new Set((me?.mutedChats || []).map(lc));
+            const pinned = new Set((me?.pinnedChats || []).map(lc));
+            const preferences = me?.chatPreferences instanceof Map
+                ? Object.fromEntries(me.chatPreferences)
+                : me?.chatPreferences || {};
 
-            const result = conversations.map((conv) => ({
-                username: conv._id,
-                user: userMap.get(conv._id) || { username: conv._id, avatarUrl: "", color: "#3b82f6", isPro: false },
-                lastMessage: conv.lastMessage,
-                unreadCount: conv.unreadCount,
-                archived: archived.has(String(conv._id).toLowerCase()),
-                muted: muted.has(String(conv._id).toLowerCase()),
-            }));
+            let result = conversations.map((conv) => {
+                const key = lc(conv._id);
+                const raw = preferences[key] || {};
+                return {
+                    username: conv._id,
+                    user: userMap.get(conv._id) || { username: conv._id, avatarUrl: "", color: "#3b82f6", isPro: false },
+                    lastMessage: conv.lastMessage,
+                    unreadCount: conv.unreadCount,
+                    archived: archived.has(key),
+                    muted: muted.has(key),
+                    pinned: pinned.has(key),
+                    // Resolved so the client does not have to know whether the
+                    // user document hydrated chatPreferences as a Map or an
+                    // object, and so a missing key is a plain default here.
+                    preferences: {
+                        nickname: raw.nickname || "",
+                        notify: raw.notify || "all",
+                        sound: raw.sound || "default",
+                        autoDeleteHours: raw.autoDeleteHours ?? 0,
+                        disappearingDays: raw.disappearingDays ?? 0,
+                        excludeFromBadge: raw.excludeFromBadge === true,
+                    },
+                };
+            });
+
+            // Pinned threads float to the top, then everything else by recency.
+            // Pinned-ness is a per-view concern: an archived thread pinned by the
+            // user still belongs in the archived section, so ordering is applied
+            // after the view filter rather than before.
+            const view = ["active", "archived", "muted"].includes(req.query.view) ? req.query.view : "all";
+            if (view === "active") result = result.filter((c) => !c.archived);
+            if (view === "archived") result = result.filter((c) => c.archived);
+            if (view === "muted") result = result.filter((c) => c.muted);
+            result.sort((a, b) => {
+                if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+                return new Date(b.lastMessage?.timeStamp || 0) - new Date(a.lastMessage?.timeStamp || 0);
+            });
 
             return res.json(result);
         }
@@ -283,40 +328,132 @@ router.get("/search", verifyToken, async (req, res) => {
 
 router.post("/", verifyToken, requireFeature("dms"), async (req, res) => {
     try {
-        const { text, imageUrl, audioUrl, recipient, color, replyTo, linkPreview } = req.body;
+        // The destructure list here was the ONLY place the new fields could be
+        // written from, and it listed none of them — so `videoUrl`,
+        // `attachments`, `kind`, `location` and `poll` were declared on the
+        // schema and then silently discarded, and a video/file/poll/location-only
+        // message was rejected outright by the "text, image or audio required"
+        // check below. Both are fixed together, because a message made only of
+        // an attachment is the entire point of the attachment field.
+        const {
+            text, imageUrl, audioUrl, videoUrl, recipient, color, replyTo, linkPreview,
+            attachments, location, poll, contact, kind,
+        } = req.body;
         const senderDoc = await User.findById(req.userId).select("username avatarColor blockedUsers mutedUsers").lean();
         const sender = senderDoc?.username;
         if (!sender) return res.status(400).json({ error: "Sender not found" });
         if (!recipient?.trim()) return res.status(400).json({ error: "Recipient is required" });
-        if (!text?.trim() && !imageUrl && !audioUrl) {
-            return res.status(400).json({ error: "Message text, image, or audio is required" });
+
+        // Normalise the attachment list once so every later check sees the same
+        // shape. Entries missing a url are dropped rather than stored as blanks.
+        const attachmentList = (Array.isArray(attachments) ? attachments : [])
+            .filter((a) => a && typeof a === "object" && a.url)
+            .slice(0, 10)
+            .map((a) => ({
+                url: String(a.url).slice(0, 2000),
+                name: String(a.name ?? "").slice(0, 200),
+                mimeType: String(a.mimeType ?? "").slice(0, 120),
+                size: Number.isFinite(Number(a.size)) ? Math.max(0, Number(a.size)) : 0,
+            }));
+
+        const hasPoll = !!(poll && typeof poll === "object" && String(poll.question || "").trim() && Array.isArray(poll.options));
+        const pollOptions = hasPoll
+            ? poll.options
+                .map((o) => String(o?.text ?? "").trim().slice(0, 100))
+                .filter(Boolean)
+                .slice(0, 6)
+            : [];
+        const hasLocation = !!(location && typeof location === "object"
+            && Number.isFinite(Number(location.lat)) && Number.isFinite(Number(location.lng)));
+
+        if (!text?.trim() && !imageUrl && !audioUrl && !videoUrl && attachmentList.length === 0 && !hasPoll && !hasLocation) {
+            return res.status(400).json({ error: "A message needs text, media, a file, a poll or a location" });
+        }
+
+        // A poll with no usable options would render an empty card forever.
+        if (poll && String(poll.question || "").trim() && pollOptions.length < 2) {
+            return res.status(400).json({ error: "A poll needs at least 2 options" });
         }
 
         const resolved = await resolveRecipient(sender, senderDoc, recipient);
         if (resolved.status) return res.status(resolved.status).json(resolved.body);
         const { recipientName, recipientDoc } = resolved;
 
-        const resolvedPreview = await resolveLinkPreview(text, linkPreview);
+        // `suppressPreview` exists because the server re-resolves a preview
+        // whenever the client omits one, so a client-side "don't load link
+        // previews" toggle could not work — sending `linkPreview: null` just
+        // made the server fetch it anyway. An explicit opt-out is honoured
+        // before the fetch, which is the only way a user can stop this app
+        // fetching a URL someone sent them.
+        const resolvedPreview = req.body?.suppressPreview
+            ? null
+            : await resolveLinkPreview(text, linkPreview);
 
         // DMs were entirely unmoderated. The Message model also has a pre-save
         // hook as a backstop, but checking here means the user gets a clean 400
         // with the matched term instead of a generic 500 from the hook.
         if (await rejectIfBlocked(text, "dm", res)) return;
 
-        if (imageUrl) {
-            const dmMedia = await enforceMedia([imageUrl], {
+        // Screen every media URL on the message, not just imageUrl. A video or a
+        // document attachment was previously unmoderated because only the single
+        // image field existed when this check was written.
+        const mediaUrls = [
+            ...(imageUrl ? [imageUrl] : []),
+            ...(videoUrl ? [videoUrl] : []),
+            ...attachmentList.map((a) => a.url),
+        ];
+        if (mediaUrls.length > 0) {
+            const dmMedia = await enforceMedia(mediaUrls, {
                 surface: "dm",
-                message: "This image was blocked by the automated media filter.",
+                message: "This attachment was blocked by the automated media filter.",
             });
             if (!dmMedia.ok) {
                 return res.status(400).json({ error: dmMedia.message, filtered: true, reason: dmMedia.error });
             }
         }
 
+        // Derived rather than trusted, because a client that omits `kind` would
+        // otherwise default to "text" and an image-only message would render as
+        // an empty bubble. Order matters: an explicit "code" or "contact" is
+        // respected, everything else is inferred from the fields present.
+        const resolvedKind = ["code", "contact", "poll", "location"].includes(String(kind))
+            ? String(kind)
+            : hasPoll ? "poll"
+                : hasLocation ? "location"
+                    : videoUrl ? "video"
+                        : attachmentList.length ? "file"
+                            : imageUrl ? "image"
+                                : audioUrl ? "audio"
+                                    : "text";
+
         const message = await Message.create({
             text:      text?.trim() || "",
             imageUrl:  imageUrl || "",
             audioUrl:  audioUrl || "",
+            videoUrl:  videoUrl || "",
+            attachments: attachmentList,
+            kind:      resolvedKind,
+            location:  hasLocation
+                ? {
+                    lat: Number(location.lat),
+                    lng: Number(location.lng),
+                    label: String(location.label ?? "").slice(0, 200),
+                }
+                : null,
+            poll: hasPoll
+                ? {
+                    question: String(poll.question).trim().slice(0, 200),
+                    options: pollOptions.map((t) => ({ text: t, votes: [] })),
+                    votes: [],
+                }
+                : null,
+            contact: contact && contact.username
+                ? {
+                    username: String(contact.username).slice(0, 40),
+                    displayName: String(contact.displayName ?? "").slice(0, 80),
+                    avatarUrl: String(contact.avatarUrl ?? "").slice(0, 2000),
+                }
+                : null,
             sender,
             recipient: recipientName,
             color:     color || senderDoc?.avatarColor || "#3b82f6",
@@ -324,7 +461,17 @@ router.post("/", verifyToken, requireFeature("dms"), async (req, res) => {
             linkPreview: resolvedPreview,
         });
 
-        const preview = text?.trim() ? text.trim().slice(0, 120) : audioUrl ? "\uD83C\uDFA4 Voice message" : "\uD83D\uDCF7 Image";
+        // The notification preview has to name what was actually sent, or a
+        // file-only or poll-only message arrives as an empty push.
+        const preview = text?.trim()
+            ? text.trim().slice(0, 120)
+            : resolvedKind === "poll" ? "\uD83D\uDCC3 Poll"
+                : resolvedKind === "location" ? "\uD83D\uDCCD Location"
+                    : resolvedKind === "video" ? "\uD83C\uDFAC Video"
+                        : resolvedKind === "file" ? "\uD83D\uDCCE File"
+                            : resolvedKind === "contact" ? "\uD83D\uDCCB Contact"
+                                : resolvedKind === "code" ? "\uD83D\uDCDC Code"
+                                    : audioUrl ? "\uD83C\uDFA4 Voice message" : "\uD83D\uDCF7 Image";
 
         Notification.create({
             recipient: recipientName,
@@ -662,19 +809,40 @@ router.patch("/read-all", verifyToken, async (req, res) => {
 // GET /unread
 router.get("/unread", verifyToken, async (req, res) => {
     try {
-        const userDoc = await User.findById(req.userId).select("username").lean();
+        const userDoc = await User.findById(req.userId).select("username mutedChats chatPreferences").lean();
         const username = userDoc?.username;
         if (!username) return res.status(400).json({ error: "User not found" });
 
+        // Muted conversations were counted here even though
+        // User.mutedChats documents itself as "excluded from the unread badge".
+        // The badge therefore climbed for conversations the user had explicitly
+        // silenced — which is the exact opposite of what muting is for.
+        const prefs = userDoc?.chatPreferences instanceof Map
+            ? Object.fromEntries(userDoc.chatPreferences)
+            : userDoc?.chatPreferences || {};
+        const excluded = new Set(
+            (userDoc?.mutedChats || []).map((c) => String(c).toLowerCase())
+        );
+        for (const [key, value] of Object.entries(prefs)) {
+            if (value && value.excludeFromBadge === true) excluded.add(String(key).toLowerCase());
+        }
+
         const result = await Message.aggregate([
             { $match: { recipient: username, isRead: false } },
-            { $count: "total" },
+            { $group: { _id: "$sender", count: { $sum: 1 } } },
+            { $match: { _id: { $nin: [...excluded] } } },
+            { $group: { _id: null, total: { $sum: "$count" } } },
         ]);
 
-        return res.json({ total: result[0]?.total || 0 });
+        return res.json({
+            total: result[0]?.total || 0,
+            excludedConversations: excluded.size,
+        });
     } catch (error) {
         console.error(error);
-        return res.json({ total: 0 });
+        // Returning 0 on error makes a broken unread count look like "you are
+        // all caught up", which is worse than admitting the count is unknown.
+        return res.json({ total: 0, degraded: true, error: "Could not read the unread count" });
     }
 });
 
@@ -706,10 +874,15 @@ router.put("/:id", verifyToken, async (req, res) => {
     }
 });
 
-// DELETE /:id â€” soft-delete message
+// DELETE /:id — soft-delete message
+//
+// `?recall=1` is the sender un-sending their own message inside the recall
+// window. Without it this is the sender's ordinary "delete for me", which only
+// ever blanks what they sent.
 router.delete("/:id", verifyToken, async (req, res) => {
     try {
         const { id } = req.params;
+        const isRecall = req.query.recall === "1" || req.body?.recall === true;
 
         const userDoc = await User.findById(req.userId).select("username").lean();
         const username = userDoc?.username;
@@ -719,7 +892,32 @@ router.delete("/:id", verifyToken, async (req, res) => {
         if (!message) return res.status(404).json({ error: "Message not found" });
         if (message.sender !== username) return res.status(403).json({ error: "Unauthorized" });
 
+        if (isRecall) {
+            // The 60s recall window was enforced ONLY in the client
+            // (RECALL_WINDOW_MS in Chat.jsx). Any caller could send the request
+            // without the button and remove a message of any age. The window
+            // has to live on the server to mean anything.
+            const ageMs = Date.now() - new Date(message.timeStamp).getTime();
+            if (ageMs > RECALL_WINDOW_MS) {
+                return res.status(400).json({
+                    error: "The time to unsend this message has passed",
+                    ageSeconds: Math.round(ageMs / 1000),
+                    windowSeconds: RECALL_WINDOW_MS / 1000,
+                });
+            }
+            if (message.deleted) return res.status(400).json({ error: "Message already deleted" });
+        }
+
         message.text = "";
+        // Media must be cleared as well. The old code blanked the text and left
+        // imageUrl/audioUrl in place, so the picture stayed visible underneath
+        // a "This message was deleted" tombstone.
+        message.imageUrl = "";
+        message.audioUrl = "";
+        message.videoUrl = "";
+        message.attachments = [];
+        message.linkPreview = null;
+        message.pinned = false;
         message.deleted = true;
         message.editedAt = null;
         await message.save();

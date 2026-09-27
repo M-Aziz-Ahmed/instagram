@@ -33,6 +33,59 @@ const messagesSchema = new mongoose.Schema({
         default: null,
     },
     editedAt: { type: Date, default: null },
+    // `readAt` was being written by routes/messages.js on mark-read but was
+    // never declared here. The schema is strict, so mongoose dropped it on every
+    // save and the "when did they read it" timestamp was silently lost.
+    readAt:   { type: Date, default: null },
+    // Pinned to the top of the thread. Per-user, not per-conversation: everyone
+    // in a DM sees the same pin, so a single boolean is right. The counterpart
+    // is a pinned-MESSAGE list, not a conversation-level flag.
+    pinned:   { type: Boolean, default: false },
+    // Saved/bookmarked, per user. Distinct from `starredBy`: star is a quick
+    // "important" flag, bookmark is "I will come back to this".
+    bookmarkedBy: { type: [String], default: [] },
+    // Marks a read message as unread again. Cleared as soon as the recipient
+    // re-reads, so a read/unread flip is a single reversible field.
+    markedUnreadBy: { type: [String], default: [] },
+    // Set when the user asked for this message to be removed after a delay.
+    // A TTL index on this field is what actually deletes the document; the timer
+    // only controls whether the sender can set it.
+    expiresAt: { type: Date, default: null },
+    // Delivery transport, so the renderer can show a distinct icon per kind.
+    // Kept denormalised alongside the fields themselves rather than inferred,
+    // because "audioUrl set" cannot distinguish a voice note from a file.
+    kind: { type: String, enum: ["text", "image", "video", "audio", "file", "location", "poll", "contact", "code"], default: "text" },
+    // Non-image/video attachments. Declared here so it is not dropped.
+    attachments: [{
+        url:      { type: String, default: "" },
+        name:     { type: String, default: "" },
+        mimeType: { type: String, default: "" },
+        size:     { type: Number, default: 0 },
+    }],
+    videoUrl:  { type: String, default: "" },
+    // Present on location messages. Stored as a plain object rather than a
+    // GeoJSON Point because it is never queried by proximity.
+    location: {
+        lat:    { type: Number, default: null },
+        lng:    { type: Number, default: null },
+        label:  { type: String, default: "" },
+    },
+    // Polls in DMs. Shape matches the post poll so PollCard can be reused.
+    poll: {
+        question: { type: String, default: "" },
+        options: [{
+            text:  { type: String, default: "" },
+            votes: { type: [String], default: [] },
+        }],
+        votes: { type: [String], default: [] },
+    },
+    // A shared contact card. Never contains the sender's own account data —
+    // the client fills the card from a public profile fetch.
+    contact: {
+        username:   { type: String, default: "" },
+        displayName:{ type: String, default: "" },
+        avatarUrl:  { type: String, default: "" },
+    },
     // Messages the reader has starred, for jumping back to them. A plain
     // username array so "is this starred" is a single `includes`, and so two
     // people starring the same message never collide.
@@ -49,6 +102,16 @@ messagesSchema.index({ sender: 1, timeStamp: -1 });
 messagesSchema.index({ recipient: 1, timeStamp: -1 });
 // Backs "my starred messages" without a collection scan.
 messagesSchema.index({ starredBy: 1, timeStamp: -1 });
+// Same for bookmarks, and for the pinned-message strip.
+messagesSchema.index({ bookmarkedBy: 1, timeStamp: -1 });
+messagesSchema.index({ sender: 1, recipient: 1, pinned: -1 });
+/**
+ * Mongo removes a document once `expiresAt` is in the past, which is what makes
+ * disappearing messages actually disappear. Documents with a null `expiresAt`
+ * are never expired, so this is safe for the whole collection.
+ * Follows the existing pattern on post.js.
+ */
+messagesSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 /**
  * Defence in depth for the content filter.

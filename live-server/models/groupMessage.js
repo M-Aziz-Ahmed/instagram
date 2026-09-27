@@ -23,8 +23,48 @@ const groupMessageSchema = new mongoose.Schema({
     readBy:    { type: [String], default: [] },
     // Per-user, so starring is personal inside a shared conversation.
     starredBy: { type: [String], default: [] },
-    // Group messages could not be edited at all, unlike DMs.
     editedAt:  { type: Date, default: null },
+    // `mentions` was being assigned by routes/groups.js on every message edit
+    // but was never declared here, so strict mode dropped it and group mentions
+    // never existed. Declared now; `post.js` already has the same field.
+    mentions:  { type: [String], default: [] },
+    // Group-wide pin, shown in a strip at the top of the thread. Unlike a DM
+    // this is a property of the message, not of a viewer, so a boolean is right.
+    pinned:    { type: Boolean, default: false },
+    pinnedBy:  { type: String, default: "" },
+    // Per-user saved, and read-then-unread-again.
+    bookmarkedBy:    { type: [String], default: [] },
+    markedUnreadBy: { type: [String], default: [] },
+    // Sender-requested expiry. A TTL index on this is what deletes the document;
+    // the group setting only controls whether a sender may set it.
+    expiresAt: { type: Date, default: null },
+    kind: { type: String, enum: ["text", "image", "video", "audio", "file", "location", "poll", "contact", "code"], default: "text" },
+    attachments: [{
+        url:      { type: String, default: "" },
+        name:     { type: String, default: "" },
+        mimeType: { type: String, default: "" },
+        size:     { type: Number, default: 0 },
+    }],
+    videoUrl:  { type: String, default: "" },
+    location: {
+        lat:   { type: Number, default: null },
+        lng:   { type: Number, default: null },
+        label: { type: String, default: "" },
+    },
+    poll: {
+        question: { type: String, default: "" },
+        options: [{
+            text:  { type: String, default: "" },
+            votes: { type: [String], default: [] },
+        }],
+        votes: { type: [String], default: [] },
+    },
+    contact: {
+        username:    { type: String, default: "" },
+        displayName: { type: String, default: "" },
+        avatarUrl:   { type: String, default: "" },
+    },
+
     // Soft delete. DMs blank the text and set `deleted`; groups used to hard
     // delete the row, which made an edit-in-progress message simply vanish
     // mid-render and left the sender with no way to tell it apart from a network
@@ -48,6 +88,11 @@ const groupMessageSchema = new mongoose.Schema({
 groupMessageSchema.index({ groupId: 1, timeStamp: -1 });
 groupMessageSchema.index({ groupId: 1, readBy: 1 });
 groupMessageSchema.index({ starredBy: 1, timeStamp: -1 });
+groupMessageSchema.index({ bookmarkedBy: 1, timeStamp: -1 });
+groupMessageSchema.index({ groupId: 1, pinned: -1 });
+// Makes sender-requested group expiry actually delete the document. A null
+// `expiresAt` is never expired, so the index is safe for the whole collection.
+groupMessageSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 /**
  * Model-level content-filter backstop. Group chat had no text moderation, so any

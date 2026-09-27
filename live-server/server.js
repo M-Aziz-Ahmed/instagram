@@ -3846,6 +3846,10 @@ app.use("/api/admin", apiLimiter, require("./routes/admin"));
 app.use("/api/admin", apiLimiter, require("./routes/adminPower"));
 app.use("/api/admin/system-logs", apiLimiter, require("./routes/systemLogs"));
 app.use("/api/messages", apiLimiter, require("./routes/messages"));
+// Per-conversation settings, message actions, bulk ops, search, export and
+// drafts. Separate from /api/messages so the send/receive core and the new
+// capability do not have to live in one 700-line file.
+app.use("/api/messaging", apiLimiter, require("./routes/messaging"));
 app.use("/api/drafts", apiLimiter, require("./routes/drafts"));
 app.use("/api/groups", apiLimiter, require("./routes/groups"));
 app.use("/api/communities", apiLimiter, require("./routes/communities"));
