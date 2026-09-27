@@ -16,12 +16,14 @@ import FloatingDownloadButton from "@/components/FloatingButton/FloatingDownload
 import { useSidebar } from "@/context/SidebarContext";
 import Link from "next/link";
 import StoryTray from "@/components/Stories/StoryTray";
+import ScheduledPostsPanel from "@/components/Feed/ScheduledPostsPanel";
 
 export default function FeedClient() {
     const { user, ready, logout } = useUser();
     const router                  = useRouter();
     const { openSidebar }         = useSidebar();
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+const [showScheduled, setShowScheduled] = useState(false);
     const [activeTag, setActiveTag]           = useState(() => {
         if (typeof window !== "undefined") {
             return new URLSearchParams(window.location.search).get("tag");
@@ -194,6 +196,9 @@ export default function FeedClient() {
                 <main className="flex-1 min-w-0 border-x border-gray-100 dark:border-gray-800 lg:border-x-0">
                     {!isGuest && <StoryTray />}
                     {!searchQuery && !isGuest && <Compose onPosted={() => setRefreshTrigger((n) => n + 1)} />}
+                    {!searchQuery && !isGuest && showScheduled && (
+                        <ScheduledPostsPanel onClose={() => setShowScheduled(false)} />
+                    )}
                     <Feed
                         refreshTrigger={refreshTrigger}
                         activeTag={activeTag}
@@ -203,6 +208,7 @@ export default function FeedClient() {
                         username={user?.username || ""}
                         searchQuery={searchQuery}
                         onClearSearch={() => setSearchQuery(null)}
+                        onToggleScheduled={() => setShowScheduled((v) => !v)}
                         isGuest={isGuest}
                     />
                 </main>

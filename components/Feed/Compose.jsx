@@ -8,6 +8,7 @@ import VoiceRecorder from "@/components/shared/VoiceRecorder";
 import EmojiPicker from "@/components/shared/EmojiPicker";
 import GifPicker from "@/components/shared/GifPicker";
 import { useDraftSync } from "@/utils/useDraftSync";
+import SchedulePicker, { formatScheduleLabel } from "./SchedulePicker";
 
 const CLOUD_NAME     = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET  = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
@@ -36,6 +37,10 @@ const canUploadVideo = user?.canUploadVideo === true;
     const [showPoll, setShowPoll]         = useState(false);
     const [pollOptions, setPollOptions]   = useState(["", ""]);
     const [pollExpiry, setPollExpiry]     = useState(null);
+    // ISO string, or null for "publish now". Sent as `scheduledAt`, which the
+    // server turns into isScheduled + scheduledAt.
+    const [scheduledAt, setScheduledAt]   = useState(null);
+    const [scheduleOpen, setScheduleOpen] = useState(false);
     const [draft, setDraft]               = useState(null);
     const fileRef                         = useRef(null);
     const videoRef                        = useRef(null);
@@ -296,6 +301,10 @@ const canUploadVideo = user?.canUploadVideo === true;
                         expiresIn: pollExpiry,
                     } : {}),
                     ...(pollExpiry && !showPoll ? { expiresIn: pollExpiry } : {}),
+                    // Omitted entirely when unset so the server's own
+                    // `scheduledAt > now` check decides, rather than sending an
+                    // empty string it would have to reject.
+                    ...(scheduledAt ? { scheduledAt } : {}),
                 }),
             });
             if (!res.ok) {
@@ -310,10 +319,12 @@ const canUploadVideo = user?.canUploadVideo === true;
             setShowPoll(false);
             setPollOptions(["", ""]);
             setPollExpiry(null);
+            setScheduledAt(null);
+            setScheduleOpen(false);
             setDraft(null);
             // The post is live, so the saved copy is now stale.
             clearDraft();
-            showToast("Post published", "success");
+            showToast(scheduledAt ? "Post scheduled" : "Post published", "success");
             if (onPosted) onPosted();
         } catch (err) {
             console.error(err);
@@ -513,26 +524,68 @@ const canUploadVideo = user?.canUploadVideo === true;
                         </div>
                     )}
 
-                    {(showPoll || pollExpiry) && (
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[11px] text-gray-500 dark:text-gray-400">Auto-delete:</span>
-                            {[null, 60000, 180000, 600000, 1800000, 3600000].map((ms) => {
-                                const label = ms === null ? "Never" : ms < 3600000 ? `${ms / 60000}m` : `${ms / 3600000}h`;
-                                return (
-                                    <button
-                                        key={label}
-                                        onClick={() => setPollExpiry(ms)}
-                                        className={`text-[11px] font-medium px-2 py-1 rounded-full transition-colors ${
-                                            pollExpiry === ms
-                                                ? "bg-blue-500 text-white"
-                                                : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                                        }`}
-                                    >
-                                        {label}
-                                    </button>
-                                );
-                            })}
-                        </div>
+                    {/* Timing row. Previously this only appeared once a poll
+                        existed or an expiry was already chosen, so the auto-delete
+                        control was unreachable until you had added a poll — and
+                        `expiresIn` was never read by the server, so choosing any
+                        of these did nothing at all. */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                            {showPoll ? "Poll closes:" : "Auto-delete:"}
+                        </span>
+                        {[null, 60000, 180000, 600000, 1800000, 3600000].map((ms) => {
+                            const label = ms === null ? "Never" : ms < 3600000 ? `${ms / 60000}m` : `${ms / 3600000}h`;
+                            return (
+                                <button
+                                    key={label}
+                                    onClick={() => setPollExpiry(ms)}
+                                    className={`text-[11px] font-medium px-2 py-1 rounded-full transition-colors min-h-[28px] ${
+                                        pollExpiry === ms
+                                            ? "bg-blue-500 text-white"
+                                            : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Schedule. The server has accepted `scheduledAt` and run a
+                        publisher on an interval since before this existed, but no
+                        client had ever sent it, so scheduled posting was a feature
+                        with no way to reach it. */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400">Schedule:</span>
+                        <button
+                            onClick={() => setScheduleOpen((v) => !v)}
+                            aria-expanded={scheduleOpen}
+                            className={`text-[11px] font-medium px-2 py-1 rounded-full transition-colors min-h-[28px] ${
+                                scheduleOpen || scheduledAt
+                                    ? "bg-blue-500 text-white"
+                                    : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                            }`}
+                        >
+                            {scheduledAt ? formatScheduleLabel(scheduledAt) : "Set a time"}
+                        </button>
+                        {scheduledAt && (
+                            <button
+                                onClick={() => { setScheduledAt(null); setScheduleOpen(false); }}
+                                className="text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-1.5 py-1 rounded-full min-h-[28px]"
+                            >
+                                Clear
+                            </button>
+                        )}
+                    </div>
+
+                    {scheduleOpen && (
+                        <SchedulePicker
+                            value={scheduledAt}
+                            onChange={(iso) => {
+                                setScheduledAt(iso);
+                                if (iso) setScheduleOpen(false);
+                            }}
+                        />
                     )}
 
                     <div className="flex items-center justify-between p-1 border-t border-gray-100 dark:border-gray-800">

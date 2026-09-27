@@ -1,9 +1,10 @@
 const express = require("express");
 const User = require("../models/user");
-const Notification = require("../models/notification");
 const { verifyToken, optionalAuth } = require("../middleware/auth");
 const { isProUserDoc } = require("../lib/economy");
 const { canUploadVideo } = require("../lib/videoUpload");
+// In-app document + OS push in one call. See lib/notify.js.
+const { notify } = require("../lib/notify");
 
 const router = express.Router();
 
@@ -235,14 +236,18 @@ router.post("/:username/follow", verifyToken, async (req, res) => {
                 if (!targetUser.pendingFollowRequests.includes(username)) {
                     targetUser.pendingFollowRequests.push(username);
                 }
-                Notification.create({
-                    recipient: targetUsername,
+                // Both channels: someone asking to follow a private account is
+                // exactly the notification that has to arrive when the app is
+                // closed, otherwise the request just sits there unseen.
+                notify({
+                    recipients: targetUsername,
                     type: "follow_request",
                     fromUser: username,
-                    fromColor: currentUser.avatarColor || "#3b82f6",
-                    fromAvatarUrl: currentUser.avatarUrl || "",
-                    text: "",
-                }).catch(() => {});
+                    fromColor: currentUser.avatarColor,
+                    fromAvatarUrl: currentUser.avatarUrl,
+                    url: `/profile/${encodeURIComponent(username)}`,
+                    actor: username,
+                });
                 await targetUser.save();
                 return res.json({
                     following: false,
@@ -255,14 +260,17 @@ router.post("/:username/follow", verifyToken, async (req, res) => {
             if (!currentUser.following.includes(targetUsername)) currentUser.following.push(targetUsername);
             if (!targetUser.followers.includes(username)) targetUser.followers.push(username);
 
-            Notification.create({
-                recipient: targetUsername,
+            // Both channels. A new follower was in-app only, so it never reached
+            // anyone who wasn't already looking at the app.
+            notify({
+                recipients: targetUsername,
                 type: "follow",
                 fromUser: username,
-                fromColor: currentUser.avatarColor || "#3b82f6",
-                fromAvatarUrl: currentUser.avatarUrl || "",
-                text: "",
-            }).catch(() => {});
+                fromColor: currentUser.avatarColor,
+                fromAvatarUrl: currentUser.avatarUrl,
+                url: `/profile/${encodeURIComponent(username)}`,
+                actor: username,
+            });
         }
 
         await Promise.all([currentUser.save(), targetUser.save()]);
@@ -300,14 +308,16 @@ router.post("/:username/follow/accept", verifyToken, async (req, res) => {
 
         await Promise.all([targetUser.save(), requesterUser.save()]);
 
-        Notification.create({
-            recipient: requesterUsername,
+        // Both channels — the person who requested the follow is waiting on this.
+        notify({
+            recipients: requesterUsername,
             type: "follow_accept",
             fromUser: username,
-            fromColor: targetUser.avatarColor || "#3b82f6",
-            fromAvatarUrl: targetUser.avatarUrl || "",
-            text: "",
-        }).catch(() => {});
+            fromColor: targetUser.avatarColor,
+            fromAvatarUrl: targetUser.avatarUrl,
+            url: `/profile/${encodeURIComponent(username)}`,
+            actor: username,
+        });
 
         return res.json({ ok: true, pendingFollowRequests: targetUser.pendingFollowRequests });
     } catch (error) {

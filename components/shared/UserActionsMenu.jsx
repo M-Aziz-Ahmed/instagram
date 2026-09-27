@@ -27,8 +27,14 @@ const REPORT_REASONS = [
  * drops the follow edges both ways, and cannot be undone from here (unblock
  * lives in Settings), so it asks for confirmation. Muting is reversible in
  * place and does not break the follow relationship.
+ *
+ * `hideReport` exists for the feed, which already has its own report control in
+ * the post header. Without it, mounting this menu on a post would put two report
+ * affordances a few pixels apart. Mute and block are still the point there: a
+ * post is the first place you decide you never want to see someone again, and
+ * there was previously no way to do that without leaving the feed.
  */
-export default function UserActionsMenu({ username, onBlocked, isAdmin = false }) {
+export default function UserActionsMenu({ username, onBlocked, isAdmin = false, hideReport = false }) {
     const { user } = useUser();
     const router = useRouter();
 
@@ -207,30 +213,33 @@ export default function UserActionsMenu({ username, onBlocked, isAdmin = false }
                         </div>
                     ) : (
                         <>
-                            <p className="px-3 py-2 text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                                Report
-                            </p>
-                            {reported ? (
-                                <p className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
-                                    Thanks — this has been sent to the moderators.
-                                </p>
-                            ) : (
-                                <div className="max-h-52 overflow-y-auto">
-                                    {REPORT_REASONS.map((reason) => (
-                                        <button
-                                            key={reason}
-                                            onClick={() => handleReport(reason)}
-                                            disabled={busy === "report"}
-                                            className={`${menuBtn} text-gray-700 dark:text-gray-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400`}
-                                        >
-                                            {reason}
-                                        </button>
-                                    ))}
-                                </div>
+                            {!hideReport && (
+                                <>
+                                    <p className="px-3 py-2 text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                                        Report
+                                    </p>
+                                    {reported ? (
+                                        <p className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
+                                            Thanks — this has been sent to the moderators.
+                                        </p>
+                                    ) : (
+                                        <div className="max-h-52 overflow-y-auto">
+                                            {REPORT_REASONS.map((reason) => (
+                                                <button
+                                                    key={reason}
+                                                    onClick={() => handleReport(reason)}
+                                                    disabled={busy === "report"}
+                                                    className={`${menuBtn} text-gray-700 dark:text-gray-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400`}
+                                                >
+                                                    {reason}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <div className="my-1.5 border-t border-gray-200 dark:border-gray-700" />
+                                </>
                             )}
-
-                            <div className="my-1.5 border-t border-gray-200 dark:border-gray-700" />
-
                             <button
                                 onClick={handleMute}
                                 disabled={busy === "mute"}

@@ -216,7 +216,7 @@ function SearchResults({ query, onClear, onHashtag }) {
     );
 }
 
-export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError, feedType, username, searchQuery, onClearSearch }) {
+export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError, feedType, username, searchQuery, onClearSearch, onToggleScheduled }) {
     const { user } = useUser();
     const [posts, setPosts]             = useState([]);
     const [ads, setAds]                 = useState([]);
@@ -224,6 +224,10 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
     const [loading, setLoading]         = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore]         = useState(true);
+    // Set to the number of posts the 60s tick found, so the reader is told rather
+    // than having the page silently reshuffle under them mid-read — which is what
+    // a silent prepend does to someone halfway down a thread.
+    const [newPostCount, setNewPostCount] = useState(0);
     const [filter, setFilter]           = useState("all");
     const [refreshing, setRefreshing]   = useState(false);
     const sentinelRef                   = useRef(null);
@@ -499,6 +503,10 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                 const ids = new Set(prev.map((p) => p._id));
                 const fresh = data.posts.filter((p) => p && p._id && !ids.has(p._id));
                 if (fresh.length === 0) return prev;
+                // Only count what is genuinely new. On the very first load the
+                // list is empty, so every post is "new" and the pill would claim
+                // there are 5 new posts before the reader has seen any.
+                if (prev.length > 0) setNewPostCount((n) => n + fresh.length);
                 // Cap the buffer. Prepending without ever trimming meant a tab
                 // left open grew an unbounded post list — and an unbounded
                 // number of ad slots with it.
@@ -618,6 +626,23 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
 
     return (
         <div>
+            {newPostCount > 0 && (
+                <div className="sticky top-12 z-20 flex justify-center pt-2 pointer-events-none">
+                    <button
+                        onClick={() => {
+                            setNewPostCount(0);
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                        className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 shadow-lg transition-colors animate-fade-up"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-3.5 h-3.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 19.5V4.5m0 0-6.75 6.75M12 4.5l6.75 6.75" />
+                        </svg>
+                        {newPostCount} new post{newPostCount !== 1 ? "s" : ""}
+                    </button>
+                </div>
+            )}
+
             {/* Feed toolbar: content-type filter, manual refresh, shortcut help. */}
             <div className="sticky top-0 z-10 flex items-center gap-2 py-2 px-1 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-100 dark:border-gray-800">
                 <div
@@ -642,6 +667,16 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                     ))}
                 </div>
                 <div className="ml-auto flex items-center gap-0.5 shrink-0">
+                    <button
+                        onClick={onToggleScheduled}
+                        aria-label="Scheduled posts"
+                        title="Scheduled posts"
+                        className="p-2 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                        </svg>
+                    </button>
                     <button
                         onClick={handleRefresh}
                         disabled={refreshing}

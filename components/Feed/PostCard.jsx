@@ -27,6 +27,8 @@ import { timeAgo } from "@/utils/timeAgo";
 import { trackImpression, trackHashtagClick } from "@/utils/postAnalytics";
 import { translateItem, translateItems } from "@/utils/translateApi";
 import { languageName } from "@/utils/languages";
+import ReactionListModal from "@/components/shared/ReactionListModal";
+import UserActionsMenu from "@/components/shared/UserActionsMenu";
 
 const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
@@ -352,7 +354,7 @@ function CommentReactionButton({ comment, user, postId, onReact }) {
     );
 }
 
-function CommentReactionCounts({ reactions }) {
+function CommentReactionCounts({ reactions, onClick }) {
     const counts = COMMENT_REACTIONS
         .map(r => ({ ...r, count: reactions[r.type]?.length || 0 }))
         .filter(r => r.count > 0);
@@ -360,16 +362,25 @@ function CommentReactionCounts({ reactions }) {
     return (
         <div className="flex gap-1 flex-wrap mt-0.5 px-1">
             {counts.map(r => (
-                <span key={r.type} className="inline-flex items-center gap-0.5 text-[10px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-full px-1.5 py-0.5">
+                // Was a plain <span>. These chips sit directly under the text they
+                // describe, so tapping one to see who reacted was the obvious
+                // thing to try and there was nothing to tap.
+                <button
+                    key={r.type}
+                    onClick={onClick ? () => onClick(r.type) : undefined}
+                    disabled={!onClick}
+                    title={onClick ? `Who reacted ${r.label || r.type}` : undefined}
+                    className={`inline-flex items-center gap-0.5 text-[10px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-full px-1.5 py-0.5 ${onClick ? "hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" : "cursor-default"}`}
+                >
                     <span className="text-xs">{r.emoji}</span>
                     <span>{r.count}</span>
-                </span>
+                </button>
             ))}
         </div>
     );
 }
 
-function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, postId, onDelete, onReactComment, onEditComment, sortComments, translationsById, translatingIds, onToggleTranslate, translateTargetName }) {
+function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, postId, onDelete, onReactComment, onEditComment, sortComments, translationsById, translatingIds, onToggleTranslate, translateTargetName, onShowReactions }) {
     // Replies honour the same ordering as the top level, so choosing "Newest"
     // does not leave the nested half of the thread in the old order.
     const replies = useMemo(
@@ -502,7 +513,10 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                         )}
                     </div>
                     {comment.reactions && (
-                        <CommentReactionCounts reactions={comment.reactions} />
+                        <CommentReactionCounts
+                            reactions={comment.reactions}
+                            onClick={(type) => onShowReactions?.(comment, type)}
+                        />
                     )}
                 </div>
             </div>
@@ -525,6 +539,7 @@ function ThreadComment({ comment, allComments, depth, onReply, onHashtag, user, 
                     translatingIds={translatingIds}
                     onToggleTranslate={onToggleTranslate}
                     translateTargetName={translateTargetName}
+                    onShowReactions={onShowReactions}
                 />
             ))}
         </div>
@@ -591,6 +606,11 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
     const [moderating, setModerating]         = useState(false);
     const [showReportMenu, setShowReportMenu]       = useState(false);
     const [reporting, setReporting]                 = useState(false);
+    const [showReactionList, setShowReactionList]   = useState(false);
+    // Which comment's reactions the modal is showing, and which single reaction
+    // was tapped. A comment usually has one reaction type, so opening scoped to
+    // that type skips the tab strip; `null` means "show all of this comment's".
+    const [commentReactionView, setCommentReactionView] = useState(null);
     // Comment translation, keyed by commentId. Kept separate from `translations`
     // (which is keyed for post/original/repost-comment) so clearing one never
     // disturbs the other.
@@ -995,6 +1015,15 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
     const translateTarget = user?.language || "en";
     const translateTargetName = languageName(translateTarget);
 
+    const handleShowCommentReactions = useCallback((comment, type) => {
+        // Scope to just the tapped reaction, so the modal opens on the group the
+        // reader asked for instead of defaulting to whichever sorts first.
+        const scoped = type
+            ? { [type]: comment.reactions?.[type] || [] }
+            : comment.reactions || {};
+        setCommentReactionView({ comment, reactions: scoped });
+    }, []);
+
     const handleTranslateComment = useCallback(async (commentId, text) => {
         // Same toggle semantics as the post-level button: pressing again on an
         // already-translated comment hides it rather than re-requesting.
@@ -1275,6 +1304,27 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                         <div className="ml-auto flex items-center gap-1">
                             {!isOwn && user && !author?.followers?.includes?.(user.username) && (
                                 <FollowButton username={post.sender} size="xs" />
+                            )}
+                            {/* Mute / block, straight from the feed.
+                                Previously the only way to stop seeing an account
+                                was to open their profile — the post itself, which
+                                is where you actually decide that, had no such
+                                control. `hideReport` because the report control
+                                sits right next to this one. Removing the post from
+                                this feed is the point: the server has already
+                                applied the exclusion to the query, and the
+                                mutation is what makes it visible here. */}
+                            {user && !isOwn && !post.isRemoved && (
+                                <UserActionsMenu
+                                    username={post.sender}
+                                    hideReport
+                                    // Fires for mute as well as block, and that is
+                                    // correct in both cases: a muted account's
+                                    // posts are excluded from the feed query too,
+                                    // so leaving this one on screen would show a
+                                    // post the reader can no longer see again.
+                                    onBlocked={() => onDelete?.(post._id)}
+                                />
                             )}
                             {user && !isOwn && !post.isRemoved && (
                                 <div className="relative">
@@ -1667,12 +1717,30 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                     </div>
 
                     {post.reactions && (
-                        <ReactionCounts 
+                        <ReactionCounts
                             reactions={post.reactions}
-                            onReactionClick={(reaction) => {
-                                // Could show who reacted in a modal
-                                console.log('Reaction clicked:', reaction);
-                            }}
+                            onReactionClick={() => setShowReactionList(true)}
+                        />
+                    )}
+
+                    {/* Who reacted. ReactionCounts already hands the full
+                        username array to its click handler and the feed
+                        projection already ships `reactions`, so this needed no
+                        endpoint — the handler was previously a console.log and
+                        the data was simply thrown away. */}
+                    {showReactionList && (
+                        <ReactionListModal
+                            reactions={post.reactions}
+                            title="Reactions"
+                            onClose={() => setShowReactionList(false)}
+                        />
+                    )}
+
+                    {commentReactionView && (
+                        <ReactionListModal
+                            reactions={commentReactionView.reactions}
+                            title={`Reactions on @${commentReactionView.comment.sender}'s comment`}
+                            onClose={() => setCommentReactionView(null)}
                         />
                     )}
 
@@ -1741,6 +1809,7 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
                                             translatingIds={translatingComments}
                                             onToggleTranslate={handleTranslateComment}
                                             translateTargetName={translateTargetName}
+                                            onShowReactions={handleShowCommentReactions}
                                         />
                                     ))}
                                 </div>

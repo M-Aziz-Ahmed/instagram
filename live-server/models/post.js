@@ -121,8 +121,15 @@ postSchema.index({ sender: 1, timeStamp: -1 });
 postSchema.index({ sender: 1, isRemoved: 1, timeStamp: -1 });
 postSchema.index({ hashtags: 1 });
 postSchema.index({ timeStamp: -1 });
+// Correct: "auto-delete this post at expiresAt" is exactly what a TTL index on
+// the post's own expiry means.
 postSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-postSchema.index({ "poll.expiresAt": 1 }, { expireAfterSeconds: 0 });
+// NOT indexed, deliberately. This used to be a TTL index on poll.expiresAt, which
+// is a data-loss bug: a TTL index deletes the whole document it is on, so when
+// a poll's expiry passed MongoDB deleted the post *and every comment on it*.
+// Closing a poll is a UI concern — PollCard reads poll.expiresAt, shows the
+// countdown, renders "Ended" and stops accepting votes — and it must never cost
+// anyone their post. See routes/posts.js for where poll.expiresAt is now set.
 postSchema.index({ likes: 1 });
 postSchema.index({ originalPostId: 1 });
 postSchema.index({ sender: 1, expiresAt: 1, isRemoved: 1, timeStamp: -1 });

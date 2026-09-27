@@ -35,7 +35,7 @@ export default function PollCard({ post, onPollUpdate }) {
     const isExpired = poll.expiresAt && new Date(poll.expiresAt) < new Date();
 
     const handleVote = async (idx) => {
-        if (!user || voting || isExpired || hasVoted) return;
+        if (!user || voting || isExpired) return;
         setVoting(true);
         try {
             const res = await fetch(`/api/posts/${post._id}/poll/vote`, {
@@ -56,6 +56,13 @@ export default function PollCard({ post, onPollUpdate }) {
         }
     };
 
+    // Changing a vote is allowed, and the affordance says so. The server has
+    // always moved the vote between options (it removes the username from every
+    // option before adding it to the new one), but this card used to disable
+    // itself after the first vote, so a misclick was permanent and a changed
+    // mind had no way out.
+    const canChange = hasVoted && !isExpired;
+
     return (
         <div className="mt-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3 space-y-2">
             {poll.options.map((opt, idx) => {
@@ -63,13 +70,12 @@ export default function PollCard({ post, onPollUpdate }) {
                 const isMyVote = idx === myVoteIdx;
                 return (
                     <button
-                        key={idx}
+                        key={opt.text ?? idx}
                         onClick={() => handleVote(idx)}
-                        disabled={!user || voting || isExpired || hasVoted}
+                        disabled={!user || voting || isExpired || isMyVote}
+                        title={isMyVote ? "Your vote" : canChange ? "Change your vote" : undefined}
                         className={`relative w-full text-left rounded-xl px-3 py-2.5 text-sm font-medium transition-colors overflow-hidden min-h-[44px] flex items-center ${
-                            hasVoted || isExpired
-                                ? "cursor-default"
-                                : "cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
+                            isMyVote ? "cursor-default" : "cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700"
                         } ${isMyVote ? "border border-blue-400 dark:border-blue-500" : ""}`}
                     >
                         {(hasVoted || isExpired) && (
@@ -96,9 +102,12 @@ export default function PollCard({ post, onPollUpdate }) {
             })}
 
             <div className="flex items-center justify-between pt-1">
-                <span className="text-[11px] text-gray-400 dark:text-gray-500">
-                    {totalVotes} vote{totalVotes !== 1 ? "s" : ""}
-                </span>
+                {totalVotes > 0 && (
+                    <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                        {totalVotes} vote{totalVotes !== 1 ? "s" : ""}
+                        {canChange && " · tap another option to change your vote"}
+                    </span>
+                )}
                 {poll.expiresAt && <Countdown expiresAt={poll.expiresAt} />}
             </div>
         </div>

@@ -150,6 +150,21 @@ function titleFor(type, fromUser) {
         case "voice_kicked":   return `You were kicked from voice chat`;
         case "voice_banned":   return `You were banned from voice chat`;
         case "voice_timeout":  return `You were timed out in voice chat`;
+        // Social activity. These had no title, so they fell through to the
+        // generic default and every like read "Notification from someone" — the
+        // in-app document said "liked your post" while the OS notification said
+        // nothing, which is why it was not worth turning on.
+        case "like":
+        case "love":
+        case "laugh":
+        case "fire":
+        case "sad":
+        case "angry":          return `${fromUser} reacted to your post`;
+        case "comment":        return `${fromUser} commented on your post`;
+        case "mention":        return `${fromUser} mentioned you`;
+        case "follow":         return `${fromUser} started following you`;
+        case "live":           return `${fromUser} is live now`;
+        case "story_reply":    return `${fromUser} replied to your story`;
         default:               return `Notification from ${fromUser || "system"}`;
     }
 }

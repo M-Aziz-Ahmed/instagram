@@ -10,6 +10,10 @@ const { requireFeature } = require("../lib/featureFlags");
 const { extractVideoLinks } = require("../lib/videoLinks");
 const { canUploadVideo } = require("../lib/videoUpload");
 const { trimComments, removeComment, displayCount } = require("../lib/postComments");
+// Bundles the in-app Notification document and the OS push into one call, so a
+// new notification type cannot be added to one channel and forgotten in the
+// other. See lib/notify.js.
+const { notify } = require("../lib/notify");
 const { logServer } = require("../logService");
 
 const router = express.Router();
@@ -294,6 +298,19 @@ router.get("/", async (req, res) => {
         query.$and = query.$and || [];
         query.$and.push({ $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] });
 
+        // A post scheduled for the future is not published yet, so it must never
+        // appear in a feed.
+        //
+        // It used to, and the field was explicitly *projected* below, which is
+        // what made the leak visible: a scheduled post carried
+        // timeStamp = creation time, so it sorted to the top of the feed at full
+        // recency score and was fully interactive, hours or days before its
+        // publish time. publishScheduledPosts() flips isScheduled to false when
+        // the moment arrives, which is the only thing that should make it
+        // visible. trending.js and social.js already filtered on this; the feed,
+        // the profile timeline and the bookmarks list did not.
+        query.isScheduled = { $ne: true };
+
         if (!viewerIsAdmin) {
             query.isRemoved = { $ne: true };
         }
@@ -533,7 +550,13 @@ router.get("/", async (req, res) => {
 // POST /
 router.post("/", verifyToken, requireFeature("posting"), async (req, res) => {
     try {
-        const { text, imageUrl, imageUrls, audioUrl, videoUrl, videoDuration, videoWidth, videoHeight, visibility, poll, theme, scheduledAt, communityId, flair } = req.body;
+        // `expiresIn` is a relative duration in milliseconds, which is what the
+        // composer's auto-delete picker sends ("10m", "1h"). It was never
+        // destructured here, so the value was silently dropped and `expiresAt`
+        // was never set — the picker was a no-op and the PostCountdown in the
+        // feed could never fire. `expiresAt` is still accepted for callers that
+        // compute an absolute time.
+        const { text, imageUrl, imageUrls, audioUrl, videoUrl, videoDuration, videoWidth, videoHeight, visibility, poll, theme, scheduledAt, communityId, flair, expiresIn, expiresAt } = req.body;
         const username = req.body.sender || req.session?.userId;
 
         const senderUser = await User.findById(req.userId).select("username avatarUrl suspended defaultTheme videoUploadAllowed").lean();
@@ -631,6 +654,48 @@ router.post("/", verifyToken, requireFeature("posting"), async (req, res) => {
         const mentions = extractMentions(sanitizedText, sender);
 
         const isScheduled = !!scheduledAt && new Date(scheduledAt) > new Date();
+        const hasPoll = !!(poll?.enabled && poll.options?.length >= 2);
+
+        // `expiresIn` is a relative duration in milliseconds, which is what the
+        // composer's auto-delete picker sends ("10m", "1h"). It was never
+        // destructured here, so the value was silently dropped: post.expiresAt
+        // was never set, and the PostCountdown in the feed could never fire. The
+        // picker was a no-op.
+        //
+        // The same field means two different things depending on whether the post
+        // has a poll, which is what the client intends (it sends `expiresIn` in
+        // both branches):
+        //   • with a poll    -> poll.expiresAt. Closes voting; the post survives.
+        //   • without a poll -> post.expiresAt. Auto-deletes the post, which is
+        //     what the TTL index on `expiresAt` is for.
+        //
+        // Both are bounded so a malformed or hostile client cannot ask for an
+        // expiry in 1970 (deleting the post before it is ever readable) or so far
+        // in the future it amounts to "never".
+        const EXPIRY_MIN_MS = 60 * 1000;          // 1 minute
+        const EXPIRY_MAX_MS = 30 * 24 * 3600 * 1000; // 30 days
+        let postExpiresAt = null;
+        if (expiresAt !== undefined && expiresAt !== null && !hasPoll) {
+            // An explicit absolute time, for callers that compute one themselves.
+            const abs = new Date(expiresAt);
+            if (!Number.isNaN(abs.getTime())) {
+                postExpiresAt = abs;
+            }
+        } else if (expiresIn !== undefined && expiresIn !== null && !hasPoll) {
+            const ms = Number(expiresIn);
+            if (Number.isFinite(ms) && ms > 0) {
+                const clamped = Math.min(Math.max(ms, EXPIRY_MIN_MS), EXPIRY_MAX_MS);
+                postExpiresAt = new Date(Date.now() + clamped);
+            }
+        }
+        let pollExpiresAt = null;
+        if (expiresIn !== undefined && expiresIn !== null && hasPoll) {
+            const ms = Number(expiresIn);
+            if (Number.isFinite(ms) && ms > 0) {
+                const clamped = Math.min(Math.max(ms, EXPIRY_MIN_MS), EXPIRY_MAX_MS);
+                pollExpiresAt = new Date(Date.now() + clamped);
+            }
+        }
 
         const post = await Post.create({
             text:      sanitizedText,
@@ -651,29 +716,31 @@ router.post("/", verifyToken, requireFeature("posting"), async (req, res) => {
             theme:     { type: theme || senderUser?.defaultTheme || "default", bg: "" },
             scheduledAt: isScheduled ? new Date(scheduledAt) : null,
             isScheduled,
+            expiresAt: postExpiresAt,
             communityId: communityId || null,
             flair: flair || {},
-            ...(poll?.enabled && poll.options?.length >= 2 ? {
+            ...(hasPoll ? {
                 poll: {
                     enabled: true,
                     options: poll.options.map((o) => ({ text: o.text.trim().slice(0, 100), votes: [] })),
-                    expiresAt: poll.expiresAt || null,
+                    expiresAt: pollExpiresAt,
                 },
             } : {}),
         });
 
         if (mentions.length > 0) {
-            const notifs = mentions.map((recipient) => ({
-                recipient,
-                type:      "mention",
-                fromUser:  sender,
-                fromColor: senderUser?.avatarColor || "#3b82f6",
-                postId:    post._id.toString(),
-                text:      text?.trim() ?? "",
-                postText:  text?.trim()?.slice(0, 120) ?? "",
-                postImageUrl: "",
-            }));
-            await Notification.insertMany(notifs);
+            // Both channels, and the author is skipped so tagging someone on
+            // your own post does not notify you about your own post.
+            notify({
+                recipients: mentions,
+                type: "mention",
+                fromUser: sender,
+                fromColor: senderUser?.avatarColor,
+                postId: post._id.toString(),
+                text: text?.trim() ?? "",
+                postText: text?.trim()?.slice(0, 120) ?? "",
+                actor: sender,
+            });
         }
 
         if (!isScheduled) {
@@ -852,17 +919,21 @@ router.patch("/:id", optionalAuth, async (req, res) => {
             await post.save();
 
             if (post.sender !== username) {
-                await Notification.create({
-                    recipient: post.sender,
-                    type:      parentId ? "reply" : "comment",
-                    fromUser:  username,
-                    fromColor: commenter?.avatarColor || color || "#3b82f6",
-                    fromAvatarUrl: commenter?.avatarUrl || "",
-                    postId:    id,
+                // Both channels. This is the comment path the feed actually
+                // uses, and it produced no OS push at all — so a reply to your
+                // post was invisible unless you happened to open the app.
+                notify({
+                    recipients: post.sender,
+                    type: parentId ? "reply" : "comment",
+                    fromUser: username,
+                    fromColor: commenter?.avatarColor || color,
+                    fromAvatarUrl: commenter?.avatarUrl,
+                    postId: id,
                     commentId: comment.commentId,
-                    text:      text?.trim() ?? "",
-                    postText:  post.text?.slice(0, 120) ?? "",
+                    text: text?.trim() ?? "",
+                    postText: post.text?.slice(0, 120) ?? "",
                     postImageUrl: post.imageUrl || "",
+                    actor: username,
                 });
             }
 
@@ -918,15 +989,20 @@ router.patch("/:id", optionalAuth, async (req, res) => {
                     post.likes.push(username);
                 }
                 if (post.sender !== username) {
-                    await Notification.create({
-                        recipient: post.sender,
-                        type:      reactionType,
-                        fromUser:  username,
-                        fromColor: color || "#3b82f6",
-                        postId:    id,
-                        text:      post.text?.slice(0, 80) ?? "",
-                        postText:  post.text?.slice(0, 120) ?? "",
+                    // Both channels, via the shared helper. This used to create
+                    // only the in-app document, so a reaction never produced an
+                    // OS notification and the author only found out by opening
+                    // the app.
+                    notify({
+                        recipients: post.sender,
+                        type: reactionType,
+                        fromUser: username,
+                        fromColor: color,
+                        postId: id,
+                        text: post.text?.slice(0, 80) ?? "",
+                        postText: post.text?.slice(0, 120) ?? "",
                         postImageUrl: post.imageUrl || "",
+                        actor: username,
                     });
                 }
             } else {
@@ -1192,17 +1268,21 @@ router.post("/:id/comment", verifyToken, requireFeature("comments"), async (req,
         await post.save();
 
         if (post.sender !== username) {
-            await Notification.create({
-                recipient: post.sender,
-                type:      parentId ? "reply" : "comment",
-                fromUser:  username,
-                fromColor: user.avatarColor || "#3b82f6",
-                fromAvatarUrl: user.avatarUrl || "",
-                postId:    id,
+            // Both channels. A comment on someone's post was the single most
+            // expected notification in the product and it produced no OS push at
+            // all — you only learned about replies by opening the app.
+            notify({
+                recipients: post.sender,
+                type: parentId ? "reply" : "comment",
+                fromUser: username,
+                fromColor: user.avatarColor,
+                fromAvatarUrl: user.avatarUrl,
+                postId: id,
                 commentId: comment.commentId,
-                text:      text?.trim() ?? "",
-                postText:  post.text?.slice(0, 120) ?? "",
+                text: text?.trim() ?? "",
+                postText: post.text?.slice(0, 120) ?? "",
                 postImageUrl: post.imageUrl || "",
+                actor: username,
             });
         }
 
@@ -1490,6 +1570,10 @@ router.get("/bookmarks", async (req, res) => {
             _id: { $in: ids },
             $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
             isRemoved: { $ne: true },
+            // A queued post has no business in someone's saved list, and this
+            // route is reachable by id, so the filter has to be explicit rather
+            // than inherited from the feed query.
+            isScheduled: { $ne: true },
         }).sort({ timeStamp: -1 }).lean();
         if (posts.length === 0) return res.json([]);
 
@@ -1596,6 +1680,10 @@ router.get("/user/:username", async (req, res) => {
         const query = {
             sender: username,
             $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
+            // Same reason as the feed: a scheduled post is unpublished until
+            // publishScheduledPosts() clears the flag, so showing it here would
+            // reveal a queued post to everyone who visits the profile.
+            isScheduled: { $ne: true },
         };
         if (!isAdmin) {
             query.isRemoved = { $ne: true };
@@ -1604,7 +1692,7 @@ router.get("/user/:username", async (req, res) => {
 
         const [rawPosts, totalPosts] = await Promise.all([
             Post.find(query).sort({ timeStamp: -1 }).limit(limit + 1).lean(),
-            Post.countDocuments({ sender: username }),
+            Post.countDocuments({ sender: username, isScheduled: { $ne: true } }),
         ]);
 
         const hasMore = rawPosts.length > limit;
