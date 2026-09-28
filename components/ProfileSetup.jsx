@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useUser } from "@/context/UserContext";
 import BrandLogo from "@/components/common/BrandLogo";
 
-export default function ProfileSetup({ onDone }) {
+export default function ProfileSetup({ onDone, allowNameChange = true }) {
     const { user, reloadUser, AVATAR_COLORS } = useUser();
     const [username, setUsername] = useState(user?.username ?? "");
     const [color, setColor]       = useState(user?.color ?? AVATAR_COLORS[0]);
@@ -13,10 +13,12 @@ export default function ProfileSetup({ onDone }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!username.trim()) { setError("Please enter a username."); return; }
-        if (username.trim().length < 2) { setError("Username must be at least 2 characters."); return; }
-        if (username.trim().length > 30) { setError("Username must be 30 characters or less."); return; }
-        if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) { setError("Username can only contain letters, numbers and underscores."); return; }
+        if (allowNameChange) {
+            if (!username.trim()) { setError("Please enter a username."); return; }
+            if (username.trim().length < 2) { setError("Username must be at least 2 characters."); return; }
+            if (username.trim().length > 30) { setError("Username must be 30 characters or less."); return; }
+            if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) { setError("Username can only contain letters, numbers and underscores."); return; }
+        }
         setSaving(true);
         setError("");
         try {
@@ -24,7 +26,12 @@ export default function ProfileSetup({ onDone }) {
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: username.trim(), avatarColor: color }),
+                body: JSON.stringify({
+                    // When a user has already picked a name it is read-only here:
+                    // send it back unchanged so the color still saves.
+                    username: allowNameChange ? username.trim() : user?.username,
+                    avatarColor: color,
+                }),
             });
             const data = await res.json();
             if (!res.ok) { setError(data.error || "Failed to save profile."); return; }
@@ -46,8 +53,14 @@ export default function ProfileSetup({ onDone }) {
                 <BrandLogo size={40} />
 
                 <div className="text-center">
-                    <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Set up your profile</h1>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">No account needed — just pick a name and color.</p>
+                    <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                        {allowNameChange ? "Set up your profile" : "Customize your profile"}
+                    </h1>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        {allowNameChange
+                            ? "No account needed — just pick a name and color."
+                            : "Pick an avatar color. Your name stays as you set it."}
+                    </p>
                 </div>
 
                 <div
@@ -58,18 +71,20 @@ export default function ProfileSetup({ onDone }) {
                 </div>
 
                 <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
-                    <div>
-                        <input
-                            type="text"
-                            value={username}
-                            onChange={(e) => { setUsername(e.target.value); setError(""); }}
-                            placeholder="Username"
-                            maxLength={30}
-                            autoFocus
-                            className="w-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-gray-500 dark:focus:border-gray-500 transition-colors"
-                        />
-                        {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
-                    </div>
+                    {allowNameChange && (
+                        <div>
+                            <input
+                                type="text"
+                                value={username}
+                                onChange={(e) => { setUsername(e.target.value); setError(""); }}
+                                placeholder="Username"
+                                maxLength={30}
+                                autoFocus
+                                className="w-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-gray-500 dark:focus:border-gray-500 transition-colors"
+                            />
+                            {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+                        </div>
+                    )}
 
                     <div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Avatar color</p>
@@ -86,6 +101,8 @@ export default function ProfileSetup({ onDone }) {
                             ))}
                         </div>
                     </div>
+
+                    {!allowNameChange && error && <p className="text-xs text-red-500">{error}</p>}
 
                     <button
                         type="submit"

@@ -162,7 +162,10 @@ export default function ChatBox({ onBack, recipient, recipientUser, archived = f
     }
 
     if (!user || editingProfile) {
-        return <ProfileSetup onDone={() => setEditingProfile(false)} />;
+        // First run has no username yet and `/api/auth/setup` rejects an empty
+        // one, so the name field stays; editing an existing profile is
+        // color-only and resubmits the unchanged username.
+        return <ProfileSetup allowNameChange={!user} onDone={() => setEditingProfile(false)} />;
     }
 
     return (

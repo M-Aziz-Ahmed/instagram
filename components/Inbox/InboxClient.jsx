@@ -1888,14 +1888,19 @@ export default function InboxClient() {
     );
 
     return (
-        <div className="flex h-[calc(100dvh-4rem)] lg:h-dvh bg-white dark:bg-gray-950 overflow-hidden">
+        // The bottom nav is `h-16` PLUS `.safe-bottom` padding, so on a phone
+        // with a home indicator it is taller than a flat 4rem. Reserving only
+        // `4rem` left the bottom `env(safe-area-inset-bottom)` pixels of the
+        // conversation list underneath the nav, and because that list is the
+        // page's scroll container there was no way to scroll its last row clear.
+        <div className="flex h-[calc(100dvh-4rem-env(safe-area-inset-bottom,0px))] lg:h-dvh bg-white dark:bg-gray-950 overflow-hidden">
             {/* `safe-top` for the status bar in standalone PWA mode — the page has
                 no header of its own, so this column is what sat under the clock. It
                 goes here rather than on the header row below because `.safe-top` is
                 an unlayered rule and would override that row's own `py-4`. */}
             <aside className={`
                 flex flex-col shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950
-                w-full md:w-80 safe-top
+                w-full md:w-80 xl:w-96 safe-top
                 ${view === "chat" ? "hidden md:flex" : "flex"}
             `}>
                 <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0">

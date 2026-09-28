@@ -657,10 +657,26 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                 feed scrolled the two sat at the same offset and the higher-z
                 header covered the toolbar completely: the content-type filters
                 and the refresh button were unreachable on mobile. The toolbar
-                now sticks directly beneath the header instead of under it. */}
+                now sticks directly beneath the header instead of under it.
+
+                The filters used to be a single-line `overflow-x-auto` scroller
+                sitting beside a `shrink-0` button group, so with the scrollbar
+                hidden the tail of the row (Polls, Text) looked like it was
+                tucked underneath those buttons and read as missing. On mobile
+                the chips now wrap onto as many lines as they need and the
+                buttons take a row of their own; from `sm` up it all stays on
+                one line as before.
+
+                The chips now wrap instead of scrolling horizontally, and they
+                are tightened up below `sm` so three fit per line. Both matter
+                for the same reason: the row sits beside a `shrink-0` button
+                group, so every pixel the chips are narrower is a pixel the bar
+                is shorter. Sharing the row previously squeezed them into three
+                lines; a 40px touch target is kept and only the horizontal
+                padding and label size change. */}
             <div className="sticky top-[calc(3rem+env(safe-area-inset-top,0px))] sm:top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-10 flex items-center gap-2 py-2 px-1 bg-white/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-100 dark:border-gray-800">
                 <div
-                    className="flex items-center gap-1 overflow-x-auto scrollbar-hide min-w-0"
+                    className="flex flex-1 min-w-0 flex-wrap items-center gap-1"
                     role="group"
                     aria-label="Filter feed by content type"
                 >
@@ -669,7 +685,7 @@ export default function Feed({ refreshTrigger, activeTag, onHashtag, onAuthError
                             key={f.value}
                             onClick={() => setFilter(f.value)}
                             aria-pressed={filter === f.value}
-                            className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors min-h-[40px] ${
+                            className={`shrink-0 inline-flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-colors min-h-[40px] ${
                                 filter === f.value
                                     ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
                                     : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
