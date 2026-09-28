@@ -392,14 +392,27 @@ router.get("/invites", async (req, res) => {
 
 router.post("/invites/issue", async (req, res) => {
     try {
-        const { username, code } = req.body || {};
+        const { username } = req.body || {};
         if (!username) return res.status(400).json({ error: "username required" });
         const user = await User.findOne({ username: String(username).trim() });
         if (!user) return res.status(404).json({ error: "User not found" });
-        const newCode = (code && String(code).trim().slice(0, 24)) || user.username.toUpperCase().slice(0, 12) || "CODE";
-        user.inviteCode = newCode;
-        await user.save();
-        return res.json({ ok: true, username: user.username, code: newCode });
+
+        // The code is no longer caller-supplied, and the fallback is no longer the
+        // username in capitals. Both mattered: a code IS the referral link and it
+        // is printed into a QR, so `USERNAME.toUpperCase()` handed every user's
+        // link to anyone who could guess their name, and an admin-supplied code
+        // bypassed the alphabet that keeps a code mistypeable-but-unambiguous.
+        // `newInviteCode` is the single generator now, and the unique index is the
+        // thing that actually settles a collision.
+        const { newInviteCode } = require("../lib/invites");
+        let newCode = newInviteCode();
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const taken = await User.findOne({ inviteCode: newCode }).select("_id").lean();
+            if (!taken) break;
+            newCode = newInviteCode();
+        }
+        await User.findByIdAndUpdate(user._id, { $set: { inviteCode: newCode } });
+        return res.json({ ok: true, username: user.username, code: newCode, url: `/invite/${newCode}` });
     } catch (err) {
         return res.status(500).json({ error: err.message });
     }

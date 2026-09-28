@@ -3860,6 +3860,17 @@ app.use("/api/trending", apiLimiter, require("./routes/trending"));
 app.use("/api/notifications", apiLimiter, require("./routes/notifications"));
 app.use("/api/typing", apiLimiter, require("./routes/typing"));
 app.use("/api/push", apiLimiter, require("./routes/push"));
+// QR invite codes and the referral dashboard. The per-endpoint rate limiters
+// are applied inside the invites router, because minting, resolving and
+// redeeming a code have very different risk profiles and one shared cap would be
+// wrong for two of the three.
+//
+// `/api/referrals` is registered here because `components/Profile/
+// ReferralsClient.jsx` has always called it from a page linked in the profile
+// and MeHub — the route simply did not exist, so that page could only ever
+// render its failure state.
+app.use("/api/invites", apiLimiter, require("./routes/invites"));
+app.use("/api/referrals", apiLimiter, require("./routes/referrals"));
 // Lets the service worker decline a call from its notification action while the
 // app is closed, and lets a page opened from that notification rebuild the
 // ringing state the socket never replayed. See routes/calls.js.

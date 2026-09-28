@@ -86,6 +86,12 @@ const userSchema = new mongoose.Schema({
     inviteCode:   { type: String, default: null },
     referredBy:   { type: String, default: null },
     inviteCount:  { type: Number, default: 0 },
+    // The invite code presented during signup, held until the account claims a
+    // username. `referredBy` is a username and a new account does not have one
+    // at OTP time, so the code has to survive until /api/auth/setup — otherwise
+    // there is nothing to attribute and the referral is silently lost, which is
+    // what used to happen. Cleared the moment it is credited.
+    pendingReferral: { type: String, default: null },
     isPrivate: { type: Boolean, default: false },
     pendingFollowRequests: [{ type: String, default: [] }],
     suspended:       { type: Boolean, default: false },
@@ -127,5 +133,12 @@ const userSchema = new mongoose.Schema({
 });
 
 userSchema.index({ username: 1 }, { sparse: true });
+
+// An invite code is looked up by value — that is the entire mechanism — so two
+// users holding the same one would make "who was I invited by?" ambiguous, and
+// the invite QR would resolve to whichever account answered first. The index is
+// the database's refusal of that, rather than a check in whichever route
+// happened to remember to make it. `sparse` because most rows leave it null.
+userSchema.index({ inviteCode: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.models.User || mongoose.model("User", userSchema);

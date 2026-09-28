@@ -54,7 +54,16 @@ const messagesSchema = new mongoose.Schema({
     // Delivery transport, so the renderer can show a distinct icon per kind.
     // Kept denormalised alongside the fields themselves rather than inferred,
     // because "audioUrl set" cannot distinguish a voice note from a file.
-    kind: { type: String, enum: ["text", "image", "video", "audio", "file", "location", "poll", "contact", "code"], default: "text" },
+    kind: {
+        type: String,
+        // "greeting" is an ordinary text DM that arrived through an invite code.
+        // It is a separate kind so the invite route can count greetings per
+        // inviter (abuse budget) and so the UI can style an opening message
+        // differently. It is not a different delivery path: every moderation,
+        // block and notification rule applies to it exactly as to "text".
+        enum: ["text", "image", "video", "audio", "file", "location", "poll", "contact", "code", "greeting"],
+        default: "text",
+    },
     // Non-image/video attachments. Declared here so it is not dropped.
     attachments: [{
         url:      { type: String, default: "" },

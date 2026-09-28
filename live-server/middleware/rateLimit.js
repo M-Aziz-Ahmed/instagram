@@ -101,6 +101,64 @@ const writeLimiter = rateLimit({
     message: { error: "Rate limit exceeded" },
 });
 
+// ── Invites ───────────────────────────────────────────────────────
+// An invite code is a bearer capability, so the endpoints that mint or redeem
+// one are the places worth being strict about.
+
+// Minting your own code: cheap, authenticated, and rate limited mainly to stop a
+// script churning documents. 10/min is far above what a person needs.
+const inviteCodeLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => tieredKeyGenerator(req, (r) => r.ip),
+    store: makeRedisStore("invite-code"),
+    message: { error: "Slow down a moment before requesting another code" },
+});
+
+// Resolving a code is the ONLY endpoint here that is public, which makes it the
+// enumeration surface: a caller can probe codes and learn which are live.
+//
+// The code is 10 symbols over a 30-symbol alphabet, so it carries about 49 bits
+// (10 * log2(30)), not enough to make a direct guess worthwhile but far more than
+// makes a sequential walk feasible. The cap is what bounds the walk anyway, and
+// it is the only thing that bounds it: the limiter's store is Redis when Redis is
+// configured and process memory otherwise, so a restart or a failover resets the
+// count. Keyed per account when signed in, and per IP when not, because an
+// anonymous caller has no account to key on and a shared NAT address is precisely
+// the case where the tighter anonymous cap is correct.
+const inviteResolveLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: (req) => decodeToken(req)?.userId ? 60 : 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => tieredKeyGenerator(req, (r) => r.ip),
+    store: makeRedisStore("invite-resolve"),
+    message: { error: "Too many scans, try again shortly" },
+});
+
+// Redeeming: each redemption starts a real conversation, so this is the endpoint
+// that can be used to mail strangers. 5/min per account is generous for a human
+// introducing themselves and hostile to a script. This limiter is NOT the only
+// backstop — it is the first one, and it is the only one keyed on the attacker.
+//
+// Two limits sit behind it: a per-inviter budget of 40 greetings per rolling 24h
+// (`GREET_BUDGET_PER_DAY`, enforced in lib/invites), and the ordinary DM path
+// itself, so every redemption is a block-checked, content-filtered message the
+// recipient can mute, block or delete. What does NOT exist, despite a comment
+// that used to claim otherwise, is a per-code use cap or a code expiry: a code
+// works until its owner rotates it. Do not assume one is enforced here.
+const inviteGreetLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => tieredKeyGenerator(req, (r) => r.ip),
+    store: makeRedisStore("invite-greet"),
+    message: { error: "Too many greetings sent — wait a minute and try again" },
+});
+
 // ── API key verification for Vercel → Live Server ───────────────
 function verifyApiKey(req, res, next) {
     const apiKey = req.headers["x-api-key"];
@@ -113,4 +171,9 @@ function verifyApiKey(req, res, next) {
     next();
 }
 
-module.exports = { apiLimiter, authLimiter, readLimiter, writeLimiter, verifyApiKey, initRedis };
+module.exports = {
+    apiLimiter, authLimiter, readLimiter, writeLimiter, verifyApiKey, initRedis,
+    // Built here rather than in the invite router so the caps sit beside every
+    // other limit in the file and can be compared at a glance.
+    inviteCodeLimiter, inviteResolveLimiter, inviteGreetLimiter,
+};

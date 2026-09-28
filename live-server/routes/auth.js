@@ -8,6 +8,7 @@ const { isProUserDoc } = require("../lib/economy");
 const { canUploadVideo } = require("../lib/videoUpload");
 const { logAuth } = require("../logService");
 const { isValidPin, hashPin, verifyPin } = require("../utils/pin");
+const { ensureInviteCode, creditReferral } = require("../lib/invites");
 
 const router = express.Router();
 const MAX_AGE = 31536000000;
@@ -177,7 +178,18 @@ router.post("/verify-otp", async (req, res) => {
                     return res.status(403).json({ error: "Signups are currently closed. Try again later." });
                 }
             }
-            user = await User.create({ email: email.toLowerCase(), isAdmin: isAdminEmail });
+            // The login form has always sent `inviteCode` here and the server
+            // has always dropped it, so no referral was ever recorded. It is
+            // only stored now: the account has no username yet, so the code is
+            // held in `pendingReferral` and credited by /api/auth/setup, which
+            // is where `referredBy` finally has something to point at.
+            const { normalizeCode } = require("../lib/invites");
+            const pending = normalizeCode(req.body?.inviteCode);
+            user = await User.create({
+                email: email.toLowerCase(),
+                isAdmin: isAdminEmail,
+                ...(pending ? { pendingReferral: pending } : {}),
+            });
         } else if (!user.isAdmin && email.toLowerCase() === (process.env.ADMIN_EMAIL || "").toLowerCase()) {
             user.isAdmin = true;
             await user.save();
@@ -396,6 +408,33 @@ router.post("/setup", verifyToken, async (req, res) => {
         if (avatarUrl) update.avatarUrl = avatarUrl;
 
         const user = await User.findByIdAndUpdate(req.userId, update, { returnDocument: 'after' }).populate("roles");
+
+        // This is the first moment the account has a username, so this is the
+        // first moment a referral can actually be attributed to anyone. Failures
+        // are swallowed: losing a referral counter must never cost the user the
+        // account they just successfully set up.
+        try {
+            const fresh = await User.findById(req.userId).select("pendingReferral").lean();
+            if (fresh?.pendingReferral) {
+                const credited = await creditReferral(fresh.pendingReferral, user.username);
+                await User.findByIdAndUpdate(req.userId, {
+                    $set: {
+                        pendingReferral: null,
+                        ...(credited ? { referredBy: credited.inviter } : {}),
+                    },
+                });
+            }
+        } catch (err) {
+            console.error("[auth] referral credit failed:", err.message);
+        }
+
+        // Mint this account's own invite code now, so the referrals page and the
+        // QR are never empty on a brand-new profile.
+        try {
+            await ensureInviteCode(user);
+        } catch (err) {
+            console.error("[auth] invite code mint failed:", err.message);
+        }
 
         return res.json({
             user: sendUserPayload(user),

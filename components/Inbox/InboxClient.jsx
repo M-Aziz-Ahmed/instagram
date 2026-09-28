@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import ChatBox from "./ChatBox";
 import GroupChatBox from "./GroupChatBox";
 import CreateGroup from "./CreateGroup";
+import InviteSheet from "@/components/Qr/InviteSheet";
 import { useSidebar } from "@/context/SidebarContext";
 import { useToast } from "@/context/ToastContext";
 import UserBadges from "@/components/shared/UserBadges";
@@ -737,6 +738,7 @@ export default function InboxClient() {
     const [selectedConvo, setSelectedConvo] = useState(null);
     const [selectedGroup, setSelectedGroup] = useState(null);
     const [showCreateGroup, setShowCreateGroup] = useState(false);
+    const [showInvite, setShowInvite] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     // Hits carry the query that produced them, so results from an earlier
     // keystroke are ignored by comparison rather than cleared inside an effect.
@@ -1213,7 +1215,15 @@ export default function InboxClient() {
         const onKey = (e) => { if (e.key === "Escape") closeMenu(); };
         // The panel is fixed, so a scroll would leave it floating over a list
         // that moved underneath it. Capture, so the list's own scroll counts.
-        const onReflow = () => closeMenu();
+        // The panel is itself a scroll container though — `PANEL` carries
+        // `overflow-y-auto` under a `max-h` — and scrolling it reaches this
+        // listener too, which made the menu disappear the instant you tried to
+        // scroll its options. Scrolling inside the panel is not reflow of the
+        // page underneath it, so it is left alone.
+        const onReflow = (e) => {
+            if (e.target instanceof Node && menuPanelRef.current?.contains(e.target)) return;
+            closeMenu();
+        };
         document.addEventListener("pointerdown", onPointerDown);
         document.addEventListener("keydown", onKey);
         window.addEventListener("scroll", onReflow, true);
@@ -1906,6 +1916,24 @@ export default function InboxClient() {
                 <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0">
                     <span className="font-semibold text-base tracking-tight text-gray-900 dark:text-gray-100">Inbox</span>
                     <div className="flex items-center gap-1">
+                        {/* Starting a conversation, not just answering one. This is
+                            the entry point for the invite flow, and it lives on the
+                            DM tab because "add a person" is a DM action; the group
+                            tab keeps its own compose button. It is always present
+                            rather than hidden on an empty list, so the feature is
+                            discoverable on a brand-new account that has no threads
+                            to show yet. */}
+                        {tab === "dm" && !user?.needsSetup && (
+                            <button
+                                onClick={() => setShowInvite(true)}
+                                className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                aria-label="Add people"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.5h16.5v15H3.75zM3.75 9.75h16.5M8.25 14.25h3" />
+                                </svg>
+                            </button>
+                        )}
                         {tab === "groups" && (
                             <button
                                 onClick={() => setShowCreateGroup(true)}
@@ -2262,6 +2290,21 @@ export default function InboxClient() {
                     />
                 )}
             </main>
+
+            {showInvite && (
+                <InviteSheet
+                    onClose={() => setShowInvite(false)}
+                    onScanned={(code) => {
+                        // The sheet only ever hands back a code, never a URL, so
+                        // there is nothing here that a hostile QR could point at.
+                        // Going through the invite route means the landing page
+                        // resolves the profile and writes the greeting, rather
+                        // than this file growing its own second send path.
+                        setShowInvite(false);
+                        router.push(`/invite/${code}`);
+                    }}
+                />
+            )}
 
             {showCreateGroup && (
                 <CreateGroup

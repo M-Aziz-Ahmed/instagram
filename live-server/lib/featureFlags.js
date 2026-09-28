@@ -23,6 +23,10 @@ const DEFAULT_FLAGS = {
     liveStreams: true,
     voiceChat: true,
     comments: true,
+    // QR invites. Its own switch rather than riding on `dms`, because it is
+    // the one messaging feature that lets a stranger start a thread with you,
+    // so it is the one most likely to need killing in a hurry.
+    invites: true,
 };
 
 // Flags a client is allowed to read. Anything not listed here stays

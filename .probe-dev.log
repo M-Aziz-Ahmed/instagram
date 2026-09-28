@@ -1312,3 +1312,544 @@ https://react.dev/link/hydration-mismatch
           ...
  
  GET /social 200 in 66ms (next.js: 4ms, proxy.ts: 3ms, application-code: 60ms)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+ GET /inbox 200 in 163ms (next.js: 4ms, proxy.ts: 6ms, application-code: 152ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+ GET /inbox 200 in 50ms (next.js: 2ms, proxy.ts: 2ms, application-code: 46ms)
+✓ Finished filesystem cache database compaction in 32.6s
+✓ Finished filesystem cache database compaction in 14.0s
+✓ Compiled in 2.2s
+✓ Finished filesystem cache database compaction in 16.8s
+✓ Compiled in 1354ms
+✓ Compiled in 1284ms
+✓ Compiled in 1163ms
+✓ Compiled in 1132ms
+✓ Compiled in 15.2s
+✓ Finished filesystem cache database compaction in 10.3s
+✓ Compiled in 1180ms
+✓ Compiled in 1125ms
+✓ Compiled in 1141ms
+✓ Compiled in 1206ms
+✓ Compiled in 1153ms
+✓ Compiled in 1128ms
+✓ Compiled in 1229ms
+✓ Compiled in 1164ms
+✓ Compiled in 1158ms
+○ Compiling /invite/[code] ...
+ GET /invite/7KQR3M9X2P 200 in 21.9s (next.js: 21.0s, proxy.ts: 3ms, application-code: 963ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+ GET /invite/AAAAAAAAAA 200 in 344ms (next.js: 282ms, proxy.ts: 4ms, application-code: 59ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+ GET /inbox 200 in 24.9s (next.js: 12.7s, proxy.ts: 4ms, application-code: 12.1s)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+○ Compiling /referrals ...
+✓ Finished writing to filesystem cache in 100s
+ GET /referrals 200 in 20.0s (next.js: 19.9s, proxy.ts: 8ms, application-code: 53ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+ GET /invite/7KQR3M9X2P 200 in 278ms (next.js: 67ms, proxy.ts: 4ms, application-code: 208ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+ GET /inbox?user=mira 200 in 12.2s (next.js: 11.8s, proxy.ts: 3ms, application-code: 468ms)
+ GET /invite/AAAAAAAAAA 200 in 7.9s (next.js: 7.8s, proxy.ts: 4ms, application-code: 59ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+ GET /inbox 200 in 62ms (next.js: 4ms, proxy.ts: 4ms, application-code: 54ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+✓ Finished writing to filesystem cache in 112s
+[browser] [QrScanner] start failed: NotFoundError: Requested device not found (utils/logInterceptor.js:45:14)
+ GET /invite/7KQR3M9X2P 200 in 29ms (next.js: 9ms, proxy.ts: 2ms, application-code: 18ms)
+ GET /referrals 200 in 51ms (next.js: 3ms, proxy.ts: 3ms, application-code: 44ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+✓ Finished filesystem cache database compaction in 32.7s
+ GET /invite/7KQR3M9X2P 200 in 100ms (next.js: 31ms, proxy.ts: 4ms, application-code: 66ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+ GET /inbox?user=mira 200 in 879ms (next.js: 164ms, proxy.ts: 3ms, application-code: 712ms)
+✓ Finished writing to filesystem cache in 68s
+✓ Finished filesystem cache database compaction in 16.1s
+ GET /invite/7KQR3M9X2P 200 in 80ms (next.js: 12ms, proxy.ts: 5ms, application-code: 63ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+ GET /inbox?user=mira 200 in 20ms (next.js: 2ms, proxy.ts: 3ms, application-code: 15ms)
+✓ Compiled in 17.3s
+ GET /invite/7KQR3M9X2P 200 in 200ms (next.js: 14ms, proxy.ts: 10ms, application-code: 176ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+ GET /inbox?user=mira 200 in 33ms (next.js: 3ms, proxy.ts: 4ms, application-code: 26ms)
+ GET /invite/AAAAAAAAAA 200 in 155ms (next.js: 11ms, proxy.ts: 6ms, application-code: 138ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+ GET /inbox 200 in 91ms (next.js: 4ms, proxy.ts: 4ms, application-code: 84ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+[browser] [QrScanner] start failed: NotFoundError: Requested device not found (utils/logInterceptor.js:45:14)
+ GET /invite/7KQR3M9X2P 200 in 31ms (next.js: 10ms, proxy.ts: 3ms, application-code: 19ms)
+ GET /referrals 200 in 84ms (next.js: 16ms, proxy.ts: 4ms, application-code: 63ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
