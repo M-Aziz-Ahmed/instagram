@@ -190,6 +190,26 @@ router.post("/verify-otp", async (req, res) => {
                 isAdmin: isAdminEmail,
                 ...(pending ? { pendingReferral: pending } : {}),
             });
+
+            // Account origin: where this account was created from. Written here
+            // because this is the first moment the account exists, and it has to
+            // be the first — the exact address is resolved with `precise`, since
+            // the /24 answer the aggregate globe uses is not good enough to say
+            // where an account was made from.
+            //
+            // Best-effort and never fatal: a geo provider being down must not
+            // stop someone creating an account, and the record is written by a
+            // separate guarded update so a failure here cannot leave a
+            // half-created user. `recordSignupOrigin` only ever sets the field if
+            // it is still empty, so a retried OTP cannot move the origin.
+            try {
+                const { resolveLocation } = require("../lib/geo");
+                const { recordSignupOrigin } = require("../lib/subscriberLocation");
+                const resolved = await resolveLocation(req, { precise: true });
+                await recordSignupOrigin(user._id, resolved);
+            } catch (geoErr) {
+                console.warn("[auth] signup origin not recorded:", geoErr.message);
+            }
         } else if (!user.isAdmin && email.toLowerCase() === (process.env.ADMIN_EMAIL || "").toLowerCase()) {
             user.isAdmin = true;
             await user.save();

@@ -8,6 +8,7 @@ import VoiceChat from "@/components/VoiceChat/VoiceChat";
 import { useSidebar } from "@/context/SidebarContext";
 import { useUser } from "@/context/UserContext";
 import { useVoiceChat } from "@/context/VoiceChatContext";
+import { trackPresence } from "@/utils/track";
 
 export default function LayoutWrapper({ children }) {
     const { collapsed, sidebarOpen, closeSidebar } = useSidebar();
@@ -43,6 +44,18 @@ export default function LayoutWrapper({ children }) {
         const id = setInterval(ping, 60000);
         return () => clearInterval(id);
     }, [user]);
+
+    // Where this account connected from, once per app open. Goes next to the
+    // `active` ping rather than into the page-view tracker because it is a
+    // different question with different rules: exact address, authenticated, and
+    // throttled to roughly half-hourly (client gate plus the route's own 30
+    // minute gate). Fire-and-forget and invisible to the user on failure — see
+    // utils/track.js. Gated on `username` because an account that has not
+    // finished setup is not yet an attributable subscriber.
+    useEffect(() => {
+        if (!user?.username) return;
+        trackPresence();
+    }, [user?.username]);
 
     // Centralized unread message polling — single source of truth
     const fetchUnread = useCallback(async () => {

@@ -1853,3 +1853,337 @@ https://react.dev/link/hydration-mismatch
             ...
           ...
  
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+✓ Compiled in 1708ms
+ GET /referrals 200 in 2.5s (next.js: 1805ms, proxy.ts: 557ms, application-code: 116ms)
+✓ Compiled in 1778ms
+ GET /referrals 200 in 358ms (next.js: 90ms, proxy.ts: 223ms, application-code: 44ms)
+[browser] Uncaught render error: ReferenceError: trackPresence is not defined
+    at LayoutWrapper.useEffect (components/Layout/LayoutWrapper.jsx:56:9)
+    at Providers (app/providers.jsx:85:29)
+    at RootLayout (app\layout.js:191:9)
+  54 |     useEffect(() => {
+  55 |         if (!user?.username) return;
+> 56 |         trackPresence();
+     |         ^
+  57 |     }, [user?.username]);
+  58 |
+  59 |     // Centralized unread message polling — single source of truth {
+  componentStack: [32m'\n'[39m +
+    [32m'    at LayoutWrapper (http://localhost:3000/_next/static/chunks/_1p5bqzc._.js?id=%255Bproject%255D%252Fcomponents%252FLayout%252FLayoutWrapper.jsx+%255Bapp-client%255D+%2528ecmascript%2529:28:26)\n'[39m +
+    [32m'    at CallProvider (http://localhost:3000/_next/static/chunks/_1p5bqzc._.js:1107:25)\n'[39m +
+    [32m'    at CallSocketProvider (http://localhost:3000/_next/static/chunks/_1p5bqzc._.js:2798:31)\n'[39m +
+    [32m'    at CallWrapper (http://localhost:3000/_next/static/chunks/_1p5bqzc._.js:2903:24)\n'[39m +
+    [32m'    at ErrorBoundary (http://localhost:3000/_next/static/chunks/_1p5bqzc._.js:2934:9)\n'[39m +
+    [32m'    at ToastProvider (http://localhost:3000/_next/static/chunks/_1p5bqzc._.js:234:26)\n'[39m +
+    [32m'    at VoiceChatProvider (http://localhost:3000/_next/static/chunks/_1p5bqzc._.js:494:30)\n'[39m +
+    [32m'    at UserProvider (http://localhost:3000/_next/static/chunks/_1p5bqzc._.js:37:25)\n'[39m +
+    [32m'    at SidebarProvider (http://localhost:3000/_next/static/chunks/_1p5bqzc._.js:365:28)\n'[39m +
+    [32m'    at ThemeProvider (http://localhost:3000/_next/static/chunks/_1p5bqzc._.js:153:26)\n'[39m +
+    [32m'    at Providers (http://localhost:3000/_next/static/chunks/_1p5bqzc._.js:4559:22)\n'[39m +
+    [32m'    at body (<anonymous>)\n'[39m +
+    [32m'    at html (<anonymous>)\n'[39m +
+    [32m'    at RootLayout [Server] (<anonymous>)\n'[39m +
+    [32m'    at SegmentViewNode (http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:3538:28)\n'[39m +
+    [32m'    at LoadingBoundaryProvider (http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e9_p6y._.js:522:36)\n'[39m +
+    [32m'    at __next_root_layout_boundary__ (http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2261:64)\n'[39m +
+    [32m'    at RedirectErrorBoundary (http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0r5nbpw._.js:12660:9)\n'[39m +
+    [32m'    at RedirectBoundary (http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0r5nbpw._.js:12702:29)\n'[39m +
+    [32m'    at HTTPAccessFallbackErrorBoundary (http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0r5nbpw._.js:13121:9)\n'[39m +
+    [32m'    at HTTPAccessFallbackBoundary (http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0r5nbpw._.js:13196:39)\n'[39m +
+    [32m'    at DevRootHTTPAccessFallbackBoundary (http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0r5nbpw._.js:13265:46)\n'[39m +
+    [32m'    at AppDevOverlayErrorBoundary (http://localhost:3000/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:3658:9)\n'[39m +
+    [32m'    at HotReload (http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0r5nbpw._.js:14228:22)\n'[39m +
+    [32m'    at Router (http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0r5nbpw._.js:14386:23)\n'[39m +
+    [32m'    at ErrorBoundaryHandler (http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0r5nbpw._.js:1495:9)\n'[39m +
+    [32m'    at ErrorBoundary (http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0r5nbpw._.js:1567:26)\n'[39m +
+    [32m'    at RootErrorBoundary (http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0r5nbpw._.js:12947:30)\n'[39m +
+    [32m'    at AppRouter (http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0r5nbpw._.js:14716:22)\n'[39m +
+    [32m'    at ServerRoot (http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0r5nbpw._.js:15201:23)\n'[39m +
+    [32m'    at Root (http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0r5nbpw._.js:15219:17)'[39m
+} (utils/logInterceptor.js:45:14)
+✓ Compiled in 5.9s
+ GET /referrals 200 in 744ms (next.js: 340ms, proxy.ts: 4ms, application-code: 400ms)
+ GET /referrals 200 in 461ms (next.js: 62ms, proxy.ts: 53ms, application-code: 345ms)
+ GET /referrals 200 in 164ms (next.js: 7ms, proxy.ts: 15ms, application-code: 142ms)
+ GET /referrals 200 in 79ms (next.js: 33ms, proxy.ts: 19ms, application-code: 27ms)
+ GET /referrals 200 in 650ms (next.js: 27ms, proxy.ts: 109ms, application-code: 514ms)
+ GET /referrals 200 in 651ms (next.js: 55ms, proxy.ts: 108ms, application-code: 488ms)
+ GET /referrals 200 in 70ms (next.js: 33ms, proxy.ts: 7ms, application-code: 31ms)
+ GET /referrals 200 in 58ms (next.js: 26ms, proxy.ts: 7ms, application-code: 25ms)
+ GET /referrals 200 in 219ms (next.js: 7ms, proxy.ts: 23ms, application-code: 190ms)
+ GET /referrals 200 in 76ms (next.js: 44ms, proxy.ts: 6ms, application-code: 25ms)
+ GET /referrals 200 in 212ms (next.js: 6ms, proxy.ts: 7ms, application-code: 198ms)
+ GET /referrals 200 in 150ms (next.js: 5ms, proxy.ts: 7ms, application-code: 138ms)
+ GET /referrals 200 in 54ms (next.js: 25ms, proxy.ts: 6ms, application-code: 23ms)
+ GET /referrals 200 in 145ms (next.js: 11ms, proxy.ts: 6ms, application-code: 128ms)
+ GET /referrals 200 in 55ms (next.js: 7ms, proxy.ts: 8ms, application-code: 39ms)
+ GET /referrals 200 in 164ms (next.js: 5ms, proxy.ts: 7ms, application-code: 152ms)
+ GET /referrals 200 in 126ms (next.js: 6ms, proxy.ts: 7ms, application-code: 114ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+✓ Finished writing to filesystem cache in 92s
+✓ Compiled in 6s
+✓ Compiled in 1298ms
+✓ Finished filesystem cache database compaction in 41s
+✓ Finished filesystem cache database compaction in 44s
+○ Compiling /admin ...
+ GET /admin 200 in 13.4s (next.js: 12.9s, proxy.ts: 7ms, application-code: 503ms)
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:354:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:454:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  352 |         s.lastX = e.clientX;
+  353 |         s.lastY = e.clientY;
+> 354 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  355 |     };
+  356 |     const onPointerMove = (e) => {
+  357 |         const s = stateRef.current;
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:354:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:454:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  352 |         s.lastX = e.clientX;
+  353 |         s.lastY = e.clientY;
+> 354 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  355 |     };
+  356 |     const onPointerMove = (e) => {
+  357 |         const s = stateRef.current;
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:354:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:454:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  352 |         s.lastX = e.clientX;
+  353 |         s.lastY = e.clientY;
+> 354 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  355 |     };
+  356 |     const onPointerMove = (e) => {
+  357 |         const s = stateRef.current;
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:354:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:454:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  352 |         s.lastX = e.clientX;
+  353 |         s.lastY = e.clientY;
+> 354 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  355 |     };
+  356 |     const onPointerMove = (e) => {
+  357 |         const s = stateRef.current;
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:354:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:454:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  352 |         s.lastX = e.clientX;
+  353 |         s.lastY = e.clientY;
+> 354 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  355 |     };
+  356 |     const onPointerMove = (e) => {
+  357 |         const s = stateRef.current;
+○ Compiling /admin/manage ...
+ GET /admin/manage 200 in 35.7s (next.js: 35.5s, proxy.ts: 6ms, application-code: 167ms)
+✓ Finished writing to filesystem cache in 74s
+✓ Finished writing to filesystem cache in 84s
+✓ Compiled in 54.7s
+ GET /admin/manage 200 in 1654ms (next.js: 1083ms, proxy.ts: 354ms, application-code: 217ms)
+✓ Finished filesystem cache database compaction in 32.5s
+✓ Finished filesystem cache database compaction in 10.1s
+ GET /admin 200 in 708ms (next.js: 197ms, proxy.ts: 4ms, application-code: 507ms)
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:352:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:432:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  350 |         s.lastX = e.clientX;
+  351 |         s.lastY = e.clientY;
+> 352 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  353 |     };
+  354 |     const onPointerMove = (e) => {
+  355 |         const s = stateRef.current;
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:352:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:432:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  350 |         s.lastX = e.clientX;
+  351 |         s.lastY = e.clientY;
+> 352 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  353 |     };
+  354 |     const onPointerMove = (e) => {
+  355 |         const s = stateRef.current;
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:352:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:432:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  350 |         s.lastX = e.clientX;
+  351 |         s.lastY = e.clientY;
+> 352 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  353 |     };
+  354 |     const onPointerMove = (e) => {
+  355 |         const s = stateRef.current;
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:352:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:432:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  350 |         s.lastX = e.clientX;
+  351 |         s.lastY = e.clientY;
+> 352 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  353 |     };
+  354 |     const onPointerMove = (e) => {
+  355 |         const s = stateRef.current;
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:352:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:432:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  350 |         s.lastX = e.clientX;
+  351 |         s.lastY = e.clientY;
+> 352 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  353 |     };
+  354 |     const onPointerMove = (e) => {
+  355 |         const s = stateRef.current;
+ GET /admin/manage 200 in 215ms (next.js: 5ms, proxy.ts: 7ms, application-code: 203ms)
+ GET /admin 200 in 117ms (next.js: 4ms, proxy.ts: 4ms, application-code: 110ms)
+✓ Finished writing to filesystem cache in 58s
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:352:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:432:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  350 |         s.lastX = e.clientX;
+  351 |         s.lastY = e.clientY;
+> 352 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  353 |     };
+  354 |     const onPointerMove = (e) => {
+  355 |         const s = stateRef.current;
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:352:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:432:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  350 |         s.lastX = e.clientX;
+  351 |         s.lastY = e.clientY;
+> 352 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  353 |     };
+  354 |     const onPointerMove = (e) => {
+  355 |         const s = stateRef.current;
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:352:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:432:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  350 |         s.lastX = e.clientX;
+  351 |         s.lastY = e.clientY;
+> 352 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  353 |     };
+  354 |     const onPointerMove = (e) => {
+  355 |         const s = stateRef.current;
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:352:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:432:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  350 |         s.lastX = e.clientX;
+  351 |         s.lastY = e.clientY;
+> 352 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  353 |     };
+  354 |     const onPointerMove = (e) => {
+  355 |         const s = stateRef.current;
+[browser] Uncaught NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.
+    at onPointerDown (components/Admin/Globe.jsx:352:25)
+    at <unknown> (<anonymous>:7:7)
+    at <unknown> (<anonymous>:12:3)
+    at canvas (<anonymous>)
+    at Globe (components/Admin/Globe.jsx:432:13)
+    at AdminDashboard (app/admin/page.jsx:115:21)
+  350 |         s.lastX = e.clientX;
+  351 |         s.lastY = e.clientY;
+> 352 |         e.currentTarget.setPointerCapture(e.pointerId);
+      |                         ^
+  353 |     };
+  354 |     const onPointerMove = (e) => {
+  355 |         const s = stateRef.current;
+✓ Finished filesystem cache database compaction in 12.3s
+ GET /admin/manage 200 in 181ms (next.js: 3ms, proxy.ts: 6ms, application-code: 172ms)
+ GET /admin/manage 200 in 126ms (next.js: 4ms, proxy.ts: 4ms, application-code: 118ms)

@@ -159,6 +159,23 @@ const inviteGreetLimiter = rateLimit({
     message: { error: "Too many greetings sent — wait a minute and try again" },
 });
 
+// ── Subscriber location presence ───────────────────────────────────────────
+// POST /api/presence records where a signed-in account connected from, and is
+// the only write path into SubscriberLocation. It is deliberately much tighter
+// than the write limiter: the route already refuses to re-record inside 30
+// minutes, so a well-behaved client calls this roughly once per half hour, and
+// anything above this ceiling is a loop rather than someone opening an app.
+// Keyed per account, falling back to the address only when there is no session.
+const presenceLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 6,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => tieredKeyGenerator(req, (r) => r.ip),
+    store: makeRedisStore("presence"),
+    message: { error: "Too many presence checks, slow down" },
+});
+
 // ── API key verification for Vercel → Live Server ───────────────
 function verifyApiKey(req, res, next) {
     const apiKey = req.headers["x-api-key"];
@@ -176,4 +193,5 @@ module.exports = {
     // Built here rather than in the invite router so the caps sit beside every
     // other limit in the file and can be compared at a glance.
     inviteCodeLimiter, inviteResolveLimiter, inviteGreetLimiter,
+    presenceLimiter,
 };

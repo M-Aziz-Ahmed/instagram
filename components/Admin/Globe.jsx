@@ -96,6 +96,7 @@ export default function Globe({
     const canvasRef = useRef(null);
     const [zoom, setZoom] = useState(1);
     const [hover, setHover] = useState(null);
+    const [selected, setSelected] = useState(null);
     const [paused, setPaused] = useState(!autoRotate);
     const stateRef = useRef({
         yaw: 0,
@@ -250,11 +251,32 @@ export default function Globe({
             ctx.fillStyle = "#ffffff";
             ctx.fill();
 
+            // A ring on the selected dot, so the current selection survives
+            // zooming, auto-rotation and changing tier — the only state that
+            // makes a selection legible is a selected state you can see.
+            if (selected && selected.code === pt.code && selected.name === (tier === "city" ? pt.name || pt.city || pt.label : pt.name)) {
+                ctx.beginPath();
+                ctx.arc(sx, sy, rr + 7, 0, Math.PI * 2);
+                ctx.strokeStyle = "rgba(255,255,255,0.95)";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(sx, sy, rr + 10, 0, Math.PI * 2);
+                ctx.strokeStyle = "rgba(37,99,235,0.85)";
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
+
             saved.push({
                 code: pt.code,
+                key: pt.key || "",
                 name: tier === "city" ? pt.name || pt.city || pt.label : pt.name,
                 sub: tier === "city" ? [pt.region, pt.country].filter(Boolean).join(", ") : tier === "region" ? pt.country || "" : "",
                 count: pt.count || 1,
+                // Carried through so a clicked dot can be re-centred and looked up
+                // by coordinate, instead of the click only producing a name.
+                lat: pt.lat,
+                lon: pt.lon,
                 sx, sy, r: rr,
             });
         }
@@ -297,7 +319,7 @@ export default function Globe({
             ctx.fillStyle = grad;
             ctx.fill();
         }
-    }, [countries, regions, cities, width, height]);
+    }, [countries, regions, cities, width, height, selected]);
 
     useEffect(() => {
         let raf;
@@ -309,7 +331,7 @@ export default function Globe({
             setHover((prev) => {
                 if (prev == null && h == null) return prev;
                 if (prev && h && prev.code === h.code && prev.name === h.name && prev.sub === h.sub && prev.count === h.count) return prev;
-                return h ? { code: h.code, name: h.name, sub: h.sub, count: h.count, sx: h.sx, sy: h.sy } : null;
+                return h ? { code: h.code, key: h.key, name: h.name, sub: h.sub, count: h.count, lat: h.lat, lon: h.lon, sx: h.sx, sy: h.sy } : null;
             });
             raf = requestAnimationFrame(loop);
         };
@@ -323,6 +345,8 @@ export default function Globe({
     const onPointerDown = (e) => {
         const s = stateRef.current;
         s.drag = true;
+        s.downX = e.clientX;
+        s.downY = e.clientY;
         s.lastX = e.clientX;
         s.lastY = e.clientY;
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -355,6 +379,7 @@ export default function Globe({
         stateRef.current.pitchDeg = TILT;
         setZoomS(1);
         setHover(null);
+        setSelected(null);
         stateRef.current.hover = null;
     };
     const zoomToPointer = (e) => {
@@ -379,6 +404,26 @@ export default function Globe({
         s.hover = null;
     };
 
+    /**
+     * Click a dot to select its place.
+     *
+     * A click is only treated as a selection when the pointer did not drag: the
+     * same element handles spinning, so every drag would otherwise end in a
+     * "selected" place the user never chose. The drag distance is measured
+     * because a slow drag can still end inside the same pixel.
+     *
+     * Selection is internal state on purpose. The globe is a population view, and
+     * the per-account records live behind the admin's Locations tab; handing a
+     * callback out for a parent to implement and then not implementing it would
+     * be an extension point nobody uses.
+     */
+    const onClick = (e) => {
+        const s = stateRef.current;
+        const moved = Math.hypot(e.clientX - (s.downX ?? e.clientX), e.clientY - (s.downY ?? e.clientY));
+        if (moved > 5) return;
+        setSelected(s.hover || null);
+    };
+
     const tier = zoom >= Z_CITIES ? "city" : zoom >= Z_REGIONS ? "region" : "country";
     const tierCount = tier === "city" ? (cities || []).length : tier === "region" ? (regions || []).length : (countries || []).length;
 
@@ -392,6 +437,7 @@ export default function Globe({
                 onPointerUp={onPointerUp}
                 onPointerLeave={onLeave}
                 onWheel={onWheel}
+                onClick={onClick}
                 onDoubleClick={zoomToPointer}
             />
 
@@ -448,6 +494,40 @@ export default function Globe({
             <div className="absolute bottom-2 right-3 text-[11px] text-gray-400 dark:text-gray-500 font-medium">
                 {paused ? "▶ paused" : "auto-rotating"}
             </div>
+
+            {/* The selected place, pinned to the corner. The hover tooltip
+                disappears as soon as the pointer moves off a dot, which meant
+                there was previously no way to see what you had just clicked. */}
+            {selected && (
+                <div className="absolute top-2 left-2 max-w-[14rem] bg-white/95 dark:bg-gray-900/95 backdrop-blur border border-blue-300 dark:border-blue-800 rounded-xl px-3 py-2 shadow-sm">
+                    <div className="flex items-start gap-2">
+                        <div className="min-w-0">
+                            <p className="text-xs font-bold text-gray-900 dark:text-gray-100 truncate">
+                                {selected.name}
+                            </p>
+                            {selected.sub && (
+                                <p className="text-[10px] text-gray-400 truncate">{selected.sub}</p>
+                            )}
+                            <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                                {selected.count} event{selected.count === 1 ? "" : "s"}
+                                {Number.isFinite(selected.lat) && Number.isFinite(selected.lon)
+                                    ? ` · ${Number(selected.lat).toFixed(2)}, ${Number(selected.lon).toFixed(2)}`
+                                    : ""}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setSelected(null)}
+                            aria-label="Clear selection"
+                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
+                        </button>
+                    </div>
+                    <p className="text-[10px] text-blue-500 dark:text-blue-400 mt-1">
+                        Selected — the admin&apos;s Locations tab lists the accounts seen here
+                    </p>                </div>
+            )}
 
             {hover && (
                 <div

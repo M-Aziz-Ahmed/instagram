@@ -102,3 +102,58 @@ export function trackEvent(type, extra = {}) {
 export function trackPage() {
     send({ type: "page_view" });
 }
+
+// ─────────────────────────────────────────────────────────────
+// Presence: the write behind the admin's "last known location".
+//
+// Separate from the beacon above, and called only when the app opens. Three
+// reasons it cannot just be another analytics event:
+//
+//   * it needs the EXACT address, while /api/track deliberately resolves a /24
+//     network because a population counter only needs "roughly where";
+//   * it is authenticated, so a location can never be recorded against an
+//     account the caller is not signed in as;
+//   * it is throttled hard (the route refuses to re-record within 30 minutes and
+//     a rate limiter caps the rest), so it must fire on app open rather than on
+//     every navigation — this is what "last known location" means anyway.
+//
+// Nothing is read back to the browser. The response is deliberately not used for
+// anything, and a failure here is invisible to the user by design: recording
+// where someone is must never be the reason something breaks.
+// ─────────────────────────────────────────────────────────────
+
+const PRESENCE_STORAGE_KEY = "at_presence_at";
+// Slightly under the server's 30-minute gate, so a client that drifts a little
+// still gets recorded rather than being permanently throttled.
+const PRESENCE_MIN_INTERVAL_MS = 25 * 60 * 1000;
+
+export function trackPresence() {
+    if (typeof window === "undefined") return;
+    if (window.navigator?.onLine === false) return;
+
+    // Only signed-in callers: the route 401s otherwise, and an unauthenticated
+    // attempt would just be noise in the logs.
+    try {
+        if (!document.cookie.includes("af_session=")) return;
+    } catch { return; }
+
+    const now = Date.now();
+    try {
+        const last = Number(window.localStorage.getItem(PRESENCE_STORAGE_KEY) || 0);
+        if (now - last < PRESENCE_MIN_INTERVAL_MS) return;
+        window.localStorage.setItem(PRESENCE_STORAGE_KEY, String(now));
+    } catch { /* private mode: the server-side gate still applies */ }
+
+    try {
+        if (navigator.sendBeacon) {
+            navigator.sendBeacon("/api/presence", new Blob(["{}"], { type: "application/json" }));
+            return;
+        }
+        fetch("/api/presence", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}",
+            keepalive: true,
+        }).catch(() => {});
+    } catch {}
+}

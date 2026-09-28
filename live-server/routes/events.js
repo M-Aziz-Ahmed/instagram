@@ -24,12 +24,17 @@ router.post("/", optionalAuth, async (req, res) => {
         // alongside the validation instead of serially ahead of the write.
         const locationPromise = resolveLocation(req);
 
-        let location = null;
+        let resolved = null;
         try {
-            location = await locationPromise;
+            resolved = await locationPromise;
         } catch {
-            location = null;
+            resolved = null;
         }
+        // Deliberately NOT precise: this is the aggregate globe's source, and a
+        // per-/24 answer is both cheaper and a truthful "somewhere in this
+        // network". Individual subscribers are recorded by
+        // lib/subscriberLocation.js, which asks for the exact address.
+        const location = resolved?.location || null;
 
         const ev = new AnalyticsEvent({
             type: typeof type === "string" && type.length <= 32 ? type : "page_view",

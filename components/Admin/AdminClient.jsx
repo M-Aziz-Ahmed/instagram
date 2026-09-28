@@ -28,6 +28,7 @@ import LivePanel from "@/components/Admin/LivePanel";
 import ContentFilterPanelV2 from "@/components/Admin/ContentFilterPanelV2";
 import MediaSafetyPanel from "@/components/Admin/MediaSafetyPanel";
 import SafetyOpsPanel from "@/components/Admin/SafetyOpsPanel";
+import SubscriberLocationsTab from "@/components/Admin/SubscriberLocationsTab";
 
 const EMOJI_PRESETS = ["⭐","🛡️","👑","💎","🔥","🎯","🏆","🎨","🧪","🤖","💡","🌟"];
 
@@ -35,6 +36,9 @@ export default function AdminClient() {
     const { user: me, ready } = useUser();
     const router = useRouter();
     const [tab, setTab] = useState("users");
+    // Shared between the two halves of the Locations tab, so going from an
+    // account to a place and back keeps the subject being worked on.
+    const [locationUsername, setLocationUsername] = useState("");
     const { openSidebar } = useSidebar();
 
     if (!ready || !me) {
@@ -165,9 +169,19 @@ export default function AdminClient() {
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "live" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
                         ⚡ Live
                     </button>
+                    <button onClick={() => setTab("locations")}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${tab === "locations" ? "bg-black dark:bg-gray-100 text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                        📍 Locations
+                    </button>
                 </div>
 
                 {tab === "users" && <UsersPanel />}
+                {tab === "locations" && (
+                    <SubscriberLocationsTab
+                        initialUsername={locationUsername}
+                        onUsernameChange={setLocationUsername}
+                    />
+                )}
                 {tab === "roles" && <RolesPanel />}
                 {tab === "permissions" && <PermissionsPanel />}
                 {tab === "moderation" && <ModerationPanel />}

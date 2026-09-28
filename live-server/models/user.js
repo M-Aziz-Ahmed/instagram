@@ -83,6 +83,32 @@ const userSchema = new mongoose.Schema({
     autoTranslate: { type: Boolean, default: false },
     lastActive:   { type: Date, default: Date.now },
     isOnline:     { type: Boolean, default: false },
+
+    // ── Account origin (permanent) ─────────────────────────────────────────
+    // Where the account was created from, captured once at signup and never
+    // overwritten. It is a permanent field on purpose: the account origin is a
+    // fact about the account, not a rolling observation, and the observations
+    // that answer "where are they now" live in SubscriberLocation with a 30-day
+    // TTL. Keeping origin here means a dormant account still has it, which is
+    // exactly the account an old warrant would be about.
+    //
+    // `ip` is the full address because an ISP is the only party that can turn it
+    // into a person; the derived place is a convenience. Both are admin-only and
+    // never returned by any public user endpoint.
+    signupLocation: {
+        ip:          { type: String, default: null },
+        network:     { type: String, default: null },
+        country:     { type: String, default: "" },
+        countryCode: { type: String, default: "" },
+        region:      { type: String, default: "" },
+        city:        { type: String, default: "" },
+        lat:         { type: Number, default: null },
+        lon:         { type: Number, default: null },
+        tz:          { type: String, default: "" },
+        device:      { type: String, default: "" },
+        at:          { type: Date, default: null },
+    },
+
     inviteCode:   { type: String, default: null },
     referredBy:   { type: String, default: null },
     inviteCount:  { type: Number, default: 0 },

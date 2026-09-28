@@ -3829,6 +3829,10 @@ app.use("/api/auth", authLimiter, require("./routes/auth"));
 app.use("/api/posts", require("./routes/posts"));
 // Telemetry beacon — generous limit, high frequency but tiny.
 app.use("/api/track", readLimiter, require("./routes/events"));
+// Records where a signed-in account connected from. Separate from /api/track
+// because it needs the exact address, must be authenticated, and is throttled
+// far harder — see routes/presence.js.
+app.use("/api/presence", readLimiter, require("./routes/presence"));
 // Other routes use apiLimiter
 // NOTE: /api/feed (routes/feed.js) was removed. It registered no handlers at
 // all — only unused helpers — and getRecommendedPosts() referenced an undefined
@@ -3842,6 +3846,9 @@ app.use("/api/admin/safety-ops", apiLimiter, require("./routes/adminSafetyOps"))
 app.use("/api/admin/insights", apiLimiter, require("./routes/adminInsights"));
 app.use("/api/admin/network", apiLimiter, require("./routes/adminNetwork"));
 app.use("/api/admin/games", apiLimiter, require("./routes/adminGames"));
+// Subscriber location disclosure. Before the two general /api/admin routers,
+// because those would otherwise match `/api/admin/subscribers/...` first.
+app.use("/api/admin/subscribers", apiLimiter, require("./routes/adminSubscribers"));
 app.use("/api/admin", apiLimiter, require("./routes/admin"));
 app.use("/api/admin", apiLimiter, require("./routes/adminPower"));
 app.use("/api/admin/system-logs", apiLimiter, require("./routes/systemLogs"));
