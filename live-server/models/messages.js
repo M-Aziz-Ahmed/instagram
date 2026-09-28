@@ -128,24 +128,22 @@ messagesSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
  * rather than 500. `skipContentFilter: true` is the documented escape hatch for
  * trusted server-to-server writes.
  */
-messagesSchema.pre("save", async function enforceContentFilter(next) {
-    try {
-        if (this.skipContentFilter) return next();
-        // A soft-deleted message keeps its original text for the tombstone, so
-        // re-checking it would block a delete.
-        if (this.deleted) return next();
-        const { checkText } = require("../lib/textFilter");
-        const result = await checkText(this.text, "dm");
-        if (result.blocked) {
-            const err = new Error("Message contains content that is not allowed");
-            err.statusCode = 400;
-            err.filtered = true;
-            err.matchedTerms = result.matches;
-            return next(err);
-        }
-        return next();
-    } catch (err) {
-        return next(err);
+// Async pre-save hooks must NOT take a `next` callback: Mongoose (Kareem) skips
+// `next` for async middleware, so calling it threw `TypeError: next is not a
+// function` on every `Message.create`. Throwing rejects the save instead.
+messagesSchema.pre("save", async function enforceContentFilter() {
+    if (this.skipContentFilter) return;
+    // A soft-deleted message keeps its original text for the tombstone, so
+    // re-checking it would block a delete.
+    if (this.deleted) return;
+    const { checkText } = require("../lib/textFilter");
+    const result = await checkText(this.text, "dm");
+    if (result.blocked) {
+        const err = new Error("Message contains content that is not allowed");
+        err.statusCode = 400;
+        err.filtered = true;
+        err.matchedTerms = result.matches;
+        throw err;
     }
 });
 

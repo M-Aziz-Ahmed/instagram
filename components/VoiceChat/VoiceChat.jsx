@@ -6,6 +6,11 @@ import { useVoiceChat } from "@/context/VoiceChatContext";
 import MusicPanel from "./MusicPanel";
 import { ICE_SERVERS, RELAY_ONLY_ICE_SERVERS } from "@/utils/iceServers";
 
+// Fixed per-bar heights rather than Math.random(): randomising during render
+// is impure (breaks hydration and the React Compiler). `animationDelay` still
+// staggers the bars, so the pulsing meter reads as live.
+const SPEAKING_BAR_HEIGHTS = [11, 8, 13];
+
 function SpeakingIndicator({ speaking }) {
     return (
         <div className="flex items-center gap-[2px] h-3">
@@ -16,7 +21,7 @@ function SpeakingIndicator({ speaking }) {
                         speaking ? "bg-green-400 animate-pulse" : "bg-gray-400 dark:bg-gray-600"
                     }`}
                     style={{
-                        height: speaking ? `${8 + Math.random() * 6}px` : "3px",
+                        height: speaking ? `${SPEAKING_BAR_HEIGHTS[i]}px` : "3px",
                         animationDelay: `${i * 100}ms`,
                     }}
                 />
@@ -213,7 +218,11 @@ export default function VoiceChat({ isOpen, onClose }) {
     const [notification, setNotification] = useState(null);
     const [micError, setMicError] = useState(null);
     const [audioBlocked, setAudioBlocked] = useState(false);
-    const [socketConnected, setSocketConnected] = useState(false);
+    // Seed from the socket's current state instead of a synchronous
+    // `setSocketConnected(socket.connected)` in the effect (the React lint rule
+    // bans setState directly in an effect body). Every later change flows
+    // through the "connect"/"disconnect" handlers below.
+    const [socketConnected, setSocketConnected] = useState(() => Boolean(socket?.connected));
     const [screenStream, setScreenStream] = useState(null);
     const [sharing, setSharing] = useState(false);
     const [remoteScreenSharer, setRemoteScreenSharer] = useState(null);
@@ -324,307 +333,6 @@ export default function VoiceChat({ isOpen, onClose }) {
         }
     }, []);
 
-    // The one recovery path shared by every way back into a channel: a
-    // socket.io "reconnect", a fresh "connect" after a socket was replaced or
-    // its reconnection attempts ran out, and the app coming back to the
-    // foreground. All of them need the same three things — a live mic, a fresh
-    // speaking detector, and a new `voice:join`, because the server keys
-    // participants by socket id and none of that survives a new socket.
-    //
-    // socket.io emits "connect" immediately before "reconnect" on a Manager
-    // recovery, and a lock/unlock cycle can add the lifecycle handler on top of
-    // that, so overlapping paths are collapsed here rather than opening a second
-    // capture and re-joining twice.
-    const rejoinLastChannel = useCallback(async () => {
-        const s = socketRef.current;
-        const u = userRef.current;
-        const ch = lastJoinedChannelRef.current;
-        if (!s || !u || !ch || !s.connected) return false;
-        if (rejoinInFlightRef.current) return false;
-        if (Date.now() - lastRejoinAtRef.current < 2000) return false;
-        rejoinInFlightRef.current = true;
-        lastRejoinAtRef.current = Date.now();
-
-        try {
-            localStreamRef.current?.getTracks().forEach((t) => t.stop());
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            localStreamRef.current = stream;
-            if (!deafenedRef.current) {
-                startSpeakingDetection(stream);
-            }
-        } catch (err) {
-            // Never joined, so do not leave a channel id behind for the next
-            // recovery to chase.
-            lastJoinedChannelRef.current = null;
-            reportMicError(err);
-            return false;
-        } finally {
-            rejoinInFlightRef.current = false;
-        }
-
-        s.emit("voice:join", {
-            channelId: ch,
-            username: u.username,
-            avatarUrl: u.avatarUrl,
-            color: u.avatarColor || u.color || "#3b82f6",
-        });
-        showNotif("Reconnected to voice chat");
-        return true;
-    }, [reportMicError, showNotif, startSpeakingDetection]);
-
-    // When panel closes, keep the user in the channel but hide the UI
-    // Voice:leave only happens on explicit disconnect (leaveChannel button)
-
-    // Socket event listeners
-    useEffect(() => {
-        if (!socket || !isOpen) return;
-
-        const handleChannels = (chans) => setChannels(chans);
-        const handleJoined = (state) => {
-            setActiveChannel(state.id);
-            setParticipants(state.participants);
-            setMicError(null);
-            if (state.music) {
-                setInitialMusicState(state.music);
-            }
-        };
-        const handleChannelUpdate = (state) => {
-            setParticipants(state.participants);
-        };
-        const handleUserLeft = ({ username }) => {
-            const pc = pcsRef.current.get(username);
-            if (pc) { try { pc.close(); } catch {} }
-            pcsRef.current.delete(username);
-            const ps = peerStreamsRef.current.get(username);
-            if (ps) ps.getTracks().forEach((t) => t.stop());
-            peerStreamsRef.current.delete(username);
-            const el = audioElementsRef.current.get(username);
-            if (el) { el.srcObject = null; el.remove(); }
-            audioElementsRef.current.delete(username);
-            iceCandidateBufferRef.current.delete(username);
-            if (remoteScreenSharerRef.current === username) {
-                setRemoteScreenSharer(null);
-                setRemoteScreenStream(null);
-            }
-        };
-        const handleUserSpeaking = ({ username, speaking }) => {
-            setParticipants((prev) =>
-                prev.map((p) => p.username === username ? { ...p, speaking } : p)
-            );
-        };
-        const handleVoiceSignal = async ({ from, fromUsername, type, data }) => {
-            const s = socketRef.current;
-            const u = userRef.current;
-            if (!s || !u) return;
-
-            if (type === "offer") {
-                let pc = pcsRef.current.get(fromUsername);
-                const needsNewPC = !pc || pc.signalingState === "closed";
-
-                if (needsNewPC) {
-                    pc = new RTCPeerConnection(ICE_SERVERS);
-                    pc._remoteSocketId = from;
-                    attachNegotiationHandler(pc, from);
-                    pcsRef.current.set(fromUsername, pc);
-
-                    const localStream = localStreamRef.current;
-                    if (localStream) {
-                        localStream.getTracks().forEach((track) => {
-                            pc.addTrack(track, localStream);
-                        });
-                    }
-                    if (screenStreamRef.current) {
-                        const vt = screenStreamRef.current.getVideoTracks()[0];
-                        if (vt) pc.addTrack(vt, screenStreamRef.current);
-                    }
-
-                    pc.ontrack = (e) => handlePeerTrack(fromUsername, e);
-
-                    pc.onicecandidate = (e) => {
-                        if (e.candidate) {
-                            s.emit("voice:signal", { to: from, from: s.id, fromUsername: u.username, type: "ice-candidate", data: e.candidate.toJSON() });
-                        }
-                    };
-                }
-
-                if (pc.signalingState === "stable") {
-                    await pc.setRemoteDescription(new RTCSessionDescription(data));
-                    flushIceBuffer(fromUsername);
-                    const answer = await pc.createAnswer();
-                    await pc.setLocalDescription(answer);
-                    pc._remoteSocketId = from;
-                    s.emit("voice:signal", { to: from, from: s.id, fromUsername: u.username, type: "answer", data: { type: answer.type, sdp: answer.sdp } });
-                } else if (pc.signalingState === "have-local-offer") {
-                    // Offer glare: both sides sent offers simultaneously.
-                    // Resolve with username tiebreaker — higher username wins (rolls back).
-                    if (u.username > fromUsername) {
-                        await pc.setLocalDescription({ type: "rollback" });
-                        await pc.setRemoteDescription(new RTCSessionDescription(data));
-                        flushIceBuffer(fromUsername);
-                        const answer = await pc.createAnswer();
-                        await pc.setLocalDescription(answer);
-                        pc._remoteSocketId = from;
-                        s.emit("voice:signal", { to: from, from: s.id, fromUsername: u.username, type: "answer", data: { type: answer.type, sdp: answer.sdp } });
-                    }
-                    // If we lose the tiebreak, our offer is still in flight — the remote side will rollback and answer ours
-                }
-                // Ignore duplicate offers (have-remote-offer)
-            } else if (type === "answer") {
-                const pc = pcsRef.current.get(fromUsername);
-                if (pc && pc.signalingState === "have-local-offer") {
-                    await pc.setRemoteDescription(new RTCSessionDescription(data));
-                    flushIceBuffer(fromUsername);
-                }
-            } else if (type === "ice-candidate") {
-                const pc = pcsRef.current.get(fromUsername);
-                if (pc && pc.signalingState === "closed") return;
-                if (pc && (pc.signalingState === "stable" || pc.remoteDescription)) {
-                    try { await pc.addIceCandidate(new RTCIceCandidate(data)); } catch {}
-                } else {
-                    // Buffer until setRemoteDescription is called
-                    if (!iceCandidateBufferRef.current.has(fromUsername)) {
-                        iceCandidateBufferRef.current.set(fromUsername, []);
-                    }
-                    iceCandidateBufferRef.current.get(fromUsername).push(data);
-                }
-            }
-        };
-
-        const handleKicked = ({ reason }) => {
-            showNotif(`You were ${reason?.toLowerCase() || "removed"}`);
-            cleanup();
-        };
-        const handleAdminMuted = ({ muted: isMuted }) => {
-            setMuted(isMuted);
-            localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = !isMuted; });
-            showNotif(isMuted ? "You have been muted by an admin" : "You have been unmuted by an admin");
-        };
-        const handleVoiceError = ({ message }) => {
-            showNotif(message || "Voice chat error");
-        };
-
-        let disconnectTimer = null;
-        const DISCONNECT_GRACE_MS = 5000;
-
-        const handleDisconnect = (reason) => {
-            setSocketConnected(false);
-            if (reason === "io server disconnect") {
-                cleanup();
-                return;
-            }
-            disconnectTimer = setTimeout(() => {
-                disconnectTimer = null;
-                cleanup();
-            }, DISCONNECT_GRACE_MS);
-        };
-        const handleReconnect = async () => {
-            if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
-            setSocketConnected(true);
-
-            const s = socketRef.current;
-            if (!s) return;
-
-            s.emit("voice:get-channels");
-
-            // Re-join through the shared recovery path, which debounces itself
-            // because socket.io also fires "connect" just before "reconnect".
-            await rejoinLastChannel();
-        };
-
-        const fetchChannels = () => { if (socket.connected) socket.emit("voice:get-channels"); };
-
-        // Re-hydrate on *every* connect, not just a transport-level reconnect.
-        // socket.io only emits "reconnect" when an established Manager recovers;
-        // a fresh connect (first mount, reconnectionAttempts exhausted, a new
-        // socket object) emits "connect" instead, and the server derives
-        // community channels from Mongo on each `voice:get-channels`.
-        //
-        // A fresh socket also has no channel membership: the server keys
-        // participants by socket id, so after an in-place recovery the old
-        // socket.io session is gone and our `voice:join` is gone with it. This
-        // is exactly what iOS hands us after a screen lock. Without re-joining
-        // here, `activeChannel` stays null, the mic bar disappears and the
-        // MusicPanel unmounts — a connected ghost who is in nobody's channel.
-        const handleConnect = async () => {
-            setSocketConnected(true);
-            fetchChannels();
-            await rejoinLastChannel();
-        };
-
-        setSocketConnected(socket.connected);
-        socket.on("connect", handleConnect);
-        socket.on("disconnect", handleDisconnect);
-        socket.on("reconnect", handleReconnect);
-        socket.on("voice:channels", handleChannels);
-        socket.on("voice:joined", handleJoined);
-        socket.on("voice:channel-update", handleChannelUpdate);
-        socket.on("voice:user-left", handleUserLeft);
-        socket.on("voice:user-speaking", handleUserSpeaking);
-        socket.on("voice:signal", handleVoiceSignal);
-        socket.on("voice:kicked", handleKicked);
-        socket.on("voice:admin-muted", handleAdminMuted);
-        socket.on("voice:error", handleVoiceError);
-
-        const handleScreenShare = ({ username: sharer, sharing: isSharing }) => {
-            if (!isSharing && remoteScreenSharerRef.current === sharer) {
-                setRemoteScreenSharer(null);
-                setRemoteScreenStream(null);
-            }
-        };
-        socket.on("voice:screen-share", handleScreenShare);
-
-        const handleMusicState = (state) => {
-            if (state.addedSong) showNotif(`${state.addedBy} added a song to the queue`);
-        };
-        const handleMusicQueueAdd = (data) => {
-            if (data.addedBy !== userRef.current?.username) showNotif(`${data.addedBy} added "${data.song?.title || "a song"}" to queue`);
-        };
-        const handleMusicQueueRemove = (data) => {
-            if (data.removedBy !== userRef.current?.username) showNotif(`${data.removedBy} removed "${data.song?.title || "a song"}" from queue`);
-        };
-        socket.on("voice:music:state", handleMusicState);
-        socket.on("voice:music:queue-add", handleMusicQueueAdd);
-        socket.on("voice:music:queue-remove", handleMusicQueueRemove);
-
-        // Initial fetch. A "connect" handler above covers the not-yet-connected
-        // case, so there is no need for a one-shot `once("connect")` here.
-        fetchChannels();
-
-        // Keep the list fresh. Community channels are derived from Mongo on the
-        // server, so joining/leaving a community, having a channel created or
-        // deleted, or any transient broadcast being dropped all self-heal on
-        // the next tick. The previous self-cancelling 2s retry gave up after the
-        // first connected tick and never polled again, which is why a truncated
-        // list could stick until the panel was closed and reopened.
-        const pollTimer = setInterval(fetchChannels, CHANNEL_POLL_MS);
-
-        return () => {
-            if (pollTimer) clearInterval(pollTimer);
-            if (disconnectTimer) clearTimeout(disconnectTimer);
-            socket.off("connect", handleConnect);
-            socket.off("disconnect", handleDisconnect);
-            socket.off("reconnect", handleReconnect);
-            socket.off("voice:channels", handleChannels);
-            socket.off("voice:joined", handleJoined);
-            socket.off("voice:channel-update", handleChannelUpdate);
-            socket.off("voice:user-left", handleUserLeft);
-            socket.off("voice:user-speaking", handleUserSpeaking);
-            socket.off("voice:signal", handleVoiceSignal);
-            socket.off("voice:kicked", handleKicked);
-            socket.off("voice:admin-muted", handleAdminMuted);
-            socket.off("voice:error", handleVoiceError);
-            socket.off("voice:screen-share", handleScreenShare);
-            socket.off("voice:music:state", handleMusicState);
-            socket.off("voice:music:queue-add", handleMusicQueueAdd);
-            socket.off("voice:music:queue-remove", handleMusicQueueRemove);
-        };
-    }, [socket, isOpen, cleanup, showNotif]);
-
-    // iOS rejects `play()` with NotAllowedError whenever the element was
-    // attached outside a user gesture, which for a peer joining mid-call is
-    // almost always. Swallowing that left the user in a silent call with no
-    // indication of why, so the rejection is recorded and surfaced as a "Tap
-    // for sound" affordance that retries on the next gesture.
     const retryBlockedAudio = useCallback(async () => {
         if (blockedAudioRef.current.size === 0) {
             setAudioBlocked(false);
@@ -812,6 +520,312 @@ export default function VoiceChat({ isOpen, onClose }) {
         } catch {}
     }, [armAudioUnlock, resumeAudioContext]);
 
+    // The one recovery path shared by every way back into a channel: a
+    // socket.io "reconnect", a fresh "connect" after a socket was replaced or
+    // its reconnection attempts ran out, and the app coming back to the
+    // foreground. All of them need the same three things — a live mic, a fresh
+    // speaking detector, and a new `voice:join`, because the server keys
+    // participants by socket id and none of that survives a new socket.
+    //
+    // socket.io emits "connect" immediately before "reconnect" on a Manager
+    // recovery, and a lock/unlock cycle can add the lifecycle handler on top of
+    // that, so overlapping paths are collapsed here rather than opening a second
+    // capture and re-joining twice.
+    //
+    // This has to be declared *after* startSpeakingDetection above, not next to
+    // the other socket handlers. React evaluates a dependency array eagerly
+    // during render, so naming a `const` that is still below throws
+    // "Cannot access 'startSpeakingDetection' before initialization" and takes
+    // the whole panel down on every render.
+    const rejoinLastChannel = useCallback(async () => {
+        const s = socketRef.current;
+        const u = userRef.current;
+        const ch = lastJoinedChannelRef.current;
+        if (!s || !u || !ch || !s.connected) return false;
+        if (rejoinInFlightRef.current) return false;
+        if (Date.now() - lastRejoinAtRef.current < 2000) return false;
+        rejoinInFlightRef.current = true;
+        lastRejoinAtRef.current = Date.now();
+
+        try {
+            localStreamRef.current?.getTracks().forEach((t) => t.stop());
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            localStreamRef.current = stream;
+            if (!deafenedRef.current) {
+                startSpeakingDetection(stream);
+            }
+        } catch (err) {
+            // Never joined, so do not leave a channel id behind for the next
+            // recovery to chase.
+            lastJoinedChannelRef.current = null;
+            reportMicError(err);
+            return false;
+        } finally {
+            rejoinInFlightRef.current = false;
+        }
+
+        s.emit("voice:join", {
+            channelId: ch,
+            username: u.username,
+            avatarUrl: u.avatarUrl,
+            color: u.avatarColor || u.color || "#3b82f6",
+        });
+        showNotif("Reconnected to voice chat");
+        return true;
+    }, [reportMicError, showNotif, startSpeakingDetection]);
+    // When panel closes, keep the user in the channel but hide the UI
+    // Voice:leave only happens on explicit disconnect (leaveChannel button)
+
+    // Socket event listeners
+    useEffect(() => {
+        if (!socket || !isOpen) return;
+
+        const handleChannels = (chans) => setChannels(chans);
+        const handleJoined = (state) => {
+            setActiveChannel(state.id);
+            setParticipants(state.participants);
+            setMicError(null);
+            if (state.music) {
+                setInitialMusicState(state.music);
+            }
+        };
+        const handleChannelUpdate = (state) => {
+            setParticipants(state.participants);
+        };
+        const handleUserLeft = ({ username }) => {
+            const pc = pcsRef.current.get(username);
+            if (pc) { try { pc.close(); } catch {} }
+            pcsRef.current.delete(username);
+            const ps = peerStreamsRef.current.get(username);
+            if (ps) ps.getTracks().forEach((t) => t.stop());
+            peerStreamsRef.current.delete(username);
+            const el = audioElementsRef.current.get(username);
+            if (el) { el.srcObject = null; el.remove(); }
+            audioElementsRef.current.delete(username);
+            iceCandidateBufferRef.current.delete(username);
+            if (remoteScreenSharerRef.current === username) {
+                setRemoteScreenSharer(null);
+                setRemoteScreenStream(null);
+            }
+        };
+        const handleUserSpeaking = ({ username, speaking }) => {
+            setParticipants((prev) =>
+                prev.map((p) => p.username === username ? { ...p, speaking } : p)
+            );
+        };
+        const handleVoiceSignal = async ({ from, fromUsername, type, data }) => {
+            const s = socketRef.current;
+            const u = userRef.current;
+            if (!s || !u) return;
+
+            if (type === "offer") {
+                let pc = pcsRef.current.get(fromUsername);
+                const needsNewPC = !pc || pc.signalingState === "closed";
+
+                if (needsNewPC) {
+                    pc = new RTCPeerConnection(ICE_SERVERS);
+                    pc._remoteSocketId = from;
+                    attachNegotiationHandler(pc, from);
+                    pcsRef.current.set(fromUsername, pc);
+
+                    const localStream = localStreamRef.current;
+                    if (localStream) {
+                        localStream.getTracks().forEach((track) => {
+                            pc.addTrack(track, localStream);
+                        });
+                    }
+                    if (screenStreamRef.current) {
+                        const vt = screenStreamRef.current.getVideoTracks()[0];
+                        if (vt) pc.addTrack(vt, screenStreamRef.current);
+                    }
+
+                    pc.ontrack = (e) => handlePeerTrack(fromUsername, e);
+
+                    pc.onicecandidate = (e) => {
+                        if (e.candidate) {
+                            s.emit("voice:signal", { to: from, from: s.id, fromUsername: u.username, type: "ice-candidate", data: e.candidate.toJSON() });
+                        }
+                    };
+                }
+
+                if (pc.signalingState === "stable") {
+                    await pc.setRemoteDescription(new RTCSessionDescription(data));
+                    flushIceBuffer(fromUsername);
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    pc._remoteSocketId = from;
+                    s.emit("voice:signal", { to: from, from: s.id, fromUsername: u.username, type: "answer", data: { type: answer.type, sdp: answer.sdp } });
+                } else if (pc.signalingState === "have-local-offer") {
+                    // Offer glare: both sides sent offers simultaneously.
+                    // Resolve with username tiebreaker — higher username wins (rolls back).
+                    if (u.username > fromUsername) {
+                        await pc.setLocalDescription({ type: "rollback" });
+                        await pc.setRemoteDescription(new RTCSessionDescription(data));
+                        flushIceBuffer(fromUsername);
+                        const answer = await pc.createAnswer();
+                        await pc.setLocalDescription(answer);
+                        pc._remoteSocketId = from;
+                        s.emit("voice:signal", { to: from, from: s.id, fromUsername: u.username, type: "answer", data: { type: answer.type, sdp: answer.sdp } });
+                    }
+                    // If we lose the tiebreak, our offer is still in flight — the remote side will rollback and answer ours
+                }
+                // Ignore duplicate offers (have-remote-offer)
+            } else if (type === "answer") {
+                const pc = pcsRef.current.get(fromUsername);
+                if (pc && pc.signalingState === "have-local-offer") {
+                    await pc.setRemoteDescription(new RTCSessionDescription(data));
+                    flushIceBuffer(fromUsername);
+                }
+            } else if (type === "ice-candidate") {
+                const pc = pcsRef.current.get(fromUsername);
+                if (pc && pc.signalingState === "closed") return;
+                if (pc && (pc.signalingState === "stable" || pc.remoteDescription)) {
+                    try { await pc.addIceCandidate(new RTCIceCandidate(data)); } catch {}
+                } else {
+                    // Buffer until setRemoteDescription is called
+                    if (!iceCandidateBufferRef.current.has(fromUsername)) {
+                        iceCandidateBufferRef.current.set(fromUsername, []);
+                    }
+                    iceCandidateBufferRef.current.get(fromUsername).push(data);
+                }
+            }
+        };
+
+        const handleKicked = ({ reason }) => {
+            showNotif(`You were ${reason?.toLowerCase() || "removed"}`);
+            cleanup();
+        };
+        const handleAdminMuted = ({ muted: isMuted }) => {
+            setMuted(isMuted);
+            localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = !isMuted; });
+            showNotif(isMuted ? "You have been muted by an admin" : "You have been unmuted by an admin");
+        };
+        const handleVoiceError = ({ message }) => {
+            showNotif(message || "Voice chat error");
+        };
+
+        let disconnectTimer = null;
+        const DISCONNECT_GRACE_MS = 5000;
+
+        const handleDisconnect = (reason) => {
+            setSocketConnected(false);
+            if (reason === "io server disconnect") {
+                cleanup();
+                return;
+            }
+            disconnectTimer = setTimeout(() => {
+                disconnectTimer = null;
+                cleanup();
+            }, DISCONNECT_GRACE_MS);
+        };
+        const handleReconnect = async () => {
+            if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
+            setSocketConnected(true);
+
+            const s = socketRef.current;
+            if (!s) return;
+
+            s.emit("voice:get-channels");
+
+            // Re-join through the shared recovery path, which debounces itself
+            // because socket.io also fires "connect" just before "reconnect".
+            await rejoinLastChannel();
+        };
+
+        const fetchChannels = () => { if (socket.connected) socket.emit("voice:get-channels"); };
+
+        // Re-hydrate on *every* connect, not just a transport-level reconnect.
+        // socket.io only emits "reconnect" when an established Manager recovers;
+        // a fresh connect (first mount, reconnectionAttempts exhausted, a new
+        // socket object) emits "connect" instead, and the server derives
+        // community channels from Mongo on each `voice:get-channels`.
+        //
+        // A fresh socket also has no channel membership: the server keys
+        // participants by socket id, so after an in-place recovery the old
+        // socket.io session is gone and our `voice:join` is gone with it. This
+        // is exactly what iOS hands us after a screen lock. Without re-joining
+        // here, `activeChannel` stays null, the mic bar disappears and the
+        // MusicPanel unmounts — a connected ghost who is in nobody's channel.
+        const handleConnect = async () => {
+            setSocketConnected(true);
+            fetchChannels();
+            await rejoinLastChannel();
+        };
+
+        socket.on("connect", handleConnect);
+        socket.on("disconnect", handleDisconnect);
+        socket.on("reconnect", handleReconnect);
+        socket.on("voice:channels", handleChannels);
+        socket.on("voice:joined", handleJoined);
+        socket.on("voice:channel-update", handleChannelUpdate);
+        socket.on("voice:user-left", handleUserLeft);
+        socket.on("voice:user-speaking", handleUserSpeaking);
+        socket.on("voice:signal", handleVoiceSignal);
+        socket.on("voice:kicked", handleKicked);
+        socket.on("voice:admin-muted", handleAdminMuted);
+        socket.on("voice:error", handleVoiceError);
+
+        const handleScreenShare = ({ username: sharer, sharing: isSharing }) => {
+            if (!isSharing && remoteScreenSharerRef.current === sharer) {
+                setRemoteScreenSharer(null);
+                setRemoteScreenStream(null);
+            }
+        };
+        socket.on("voice:screen-share", handleScreenShare);
+
+        const handleMusicState = (state) => {
+            if (state.addedSong) showNotif(`${state.addedBy} added a song to the queue`);
+        };
+        const handleMusicQueueAdd = (data) => {
+            if (data.addedBy !== userRef.current?.username) showNotif(`${data.addedBy} added "${data.song?.title || "a song"}" to queue`);
+        };
+        const handleMusicQueueRemove = (data) => {
+            if (data.removedBy !== userRef.current?.username) showNotif(`${data.removedBy} removed "${data.song?.title || "a song"}" from queue`);
+        };
+        socket.on("voice:music:state", handleMusicState);
+        socket.on("voice:music:queue-add", handleMusicQueueAdd);
+        socket.on("voice:music:queue-remove", handleMusicQueueRemove);
+
+        // Initial fetch. A "connect" handler above covers the not-yet-connected
+        // case, so there is no need for a one-shot `once("connect")` here.
+        fetchChannels();
+
+        // Keep the list fresh. Community channels are derived from Mongo on the
+        // server, so joining/leaving a community, having a channel created or
+        // deleted, or any transient broadcast being dropped all self-heal on
+        // the next tick. The previous self-cancelling 2s retry gave up after the
+        // first connected tick and never polled again, which is why a truncated
+        // list could stick until the panel was closed and reopened.
+        const pollTimer = setInterval(fetchChannels, CHANNEL_POLL_MS);
+
+        return () => {
+            if (pollTimer) clearInterval(pollTimer);
+            if (disconnectTimer) clearTimeout(disconnectTimer);
+            socket.off("connect", handleConnect);
+            socket.off("disconnect", handleDisconnect);
+            socket.off("reconnect", handleReconnect);
+            socket.off("voice:channels", handleChannels);
+            socket.off("voice:joined", handleJoined);
+            socket.off("voice:channel-update", handleChannelUpdate);
+            socket.off("voice:user-left", handleUserLeft);
+            socket.off("voice:user-speaking", handleUserSpeaking);
+            socket.off("voice:signal", handleVoiceSignal);
+            socket.off("voice:kicked", handleKicked);
+            socket.off("voice:admin-muted", handleAdminMuted);
+            socket.off("voice:error", handleVoiceError);
+            socket.off("voice:screen-share", handleScreenShare);
+            socket.off("voice:music:state", handleMusicState);
+            socket.off("voice:music:queue-add", handleMusicQueueAdd);
+            socket.off("voice:music:queue-remove", handleMusicQueueRemove);
+        };
+    }, [socket, isOpen, cleanup, showNotif, attachNegotiationHandler, flushIceBuffer, handlePeerTrack, rejoinLastChannel]);
+
+    // iOS rejects `play()` with NotAllowedError whenever the element was
+    // attached outside a user gesture, which for a peer joining mid-call is
+    // almost always. Swallowing that left the user in a silent call with no
+    // indication of why, so the rejection is recorded and surfaced as a "Tap
+    // for sound" affordance that retries on the next gesture.
+
 const createPeerConnections = useCallback(async (channelParticipants) => {
         const s = socketRef.current;
         const u = userRef.current;
@@ -939,7 +953,7 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
                 });
             } catch {}
         }
-    }, [attachRemoteAudio, attachNegotiationHandler, handlePeerTrack]);
+    }, [attachNegotiationHandler, handlePeerTrack]);
 
     const joinChannel = useCallback(async (channelId) => {
         const s = socketRef.current;

@@ -29,21 +29,19 @@ storySchema.index({ createdAt: -1 });
  * lib/mediaModeration.js) because that needs network I/O plus asset rollback,
  * which does not belong in a document hook.
  */
-storySchema.pre("save", async function enforceContentFilter(next) {
-    try {
-        if (this.skipContentFilter) return next();
-        const { checkText } = require("../lib/textFilter");
-        const result = await checkText(this.text, "story");
-        if (result.blocked) {
-            const err = new Error("Story contains content that is not allowed");
-            err.statusCode = 400;
-            err.filtered = true;
-            err.matchedTerms = result.matches;
-            return next(err);
-        }
-        return next();
-    } catch (err) {
-        return next(err);
+// Async pre-save hooks must NOT take a `next` callback: Mongoose (Kareem) skips
+// `next` for async middleware, so calling it threw `TypeError: next is not a
+// function` on every Story.create. Throwing rejects the save instead.
+storySchema.pre("save", async function enforceContentFilter() {
+    if (this.skipContentFilter) return;
+    const { checkText } = require("../lib/textFilter");
+    const result = await checkText(this.text, "story");
+    if (result.blocked) {
+        const err = new Error("Story contains content that is not allowed");
+        err.statusCode = 400;
+        err.filtered = true;
+        err.matchedTerms = result.matches;
+        throw err;
     }
 });
 

@@ -1,0 +1,41 @@
+
+> anontweet@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.10 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.100.50:3000
+- Environments: .env
+✓ Ready in 8.2s
+⚠ Slow filesystem detected. The benchmark took 781ms. If D:\Work\instagram-clone\.next/dev is a network drive, consider moving it to a local folder.
+See more: https://nextjs.org/docs/app/guides/local-development
+○ Compiling proxy ...
+
+○ Compiling /inbox ...
+ GET /inbox 200 in 80s (next.js: 79s, proxy.ts: 3ms, application-code: 245ms)
+✓ Finished writing to filesystem cache in 86s
+✓ Finished filesystem cache database compaction in 15.7s
+ GET /inbox 200 in 65ms (next.js: 3ms, proxy.ts: 4ms, application-code: 58ms)
+✓ Finished writing to filesystem cache in 70s
+✓ Finished filesystem cache database compaction in 15.9s
+ GET /inbox 200 in 72ms (next.js: 6ms, proxy.ts: 7ms, application-code: 59ms)
+ GET /inbox 200 in 100ms (next.js: 10ms, proxy.ts: 6ms, application-code: 84ms)
+ GET /inbox?user=Abbubakr 200 in 59ms (next.js: 12ms, proxy.ts: 7ms, application-code: 39ms)
+ GET /inbox?user=Abbubakr 200 in 155ms (next.js: 7ms, proxy.ts: 5ms, application-code: 143ms)
+✓ Compiled in 1710ms
+ GET /inbox?user=Abbubakr 200 in 4.7s (next.js: 3.8s, proxy.ts: 820ms, application-code: 59ms)
+✓ Compiled in 1070ms
+ GET /inbox?user=Abbubakr 200 in 145ms (next.js: 68ms, proxy.ts: 37ms, application-code: 41ms)
+✓ Compiled in 977ms
+ GET /inbox?user=Abbubakr 200 in 156ms (next.js: 76ms, proxy.ts: 40ms, application-code: 39ms)
+○ Compiling / ...
+ GET / 200 in 3.3s (next.js: 3.2s, proxy.ts: 1887µs, application-code: 142ms)
+✓ Finished writing to filesystem cache in 65s
+ GET /inbox 200 in 124ms (next.js: 2ms, proxy.ts: 3ms, application-code: 119ms)
+✓ Finished filesystem cache database compaction in 25.2s
+ GET / 200 in 149ms (next.js: 6ms, proxy.ts: 5ms, application-code: 138ms)
+ GET /inbox 200 in 77ms (next.js: 2ms, proxy.ts: 2ms, application-code: 72ms)
+ GET / 200 in 123ms (next.js: 5ms, proxy.ts: 5ms, application-code: 114ms)
+ GET /inbox 200 in 75ms (next.js: 2ms, proxy.ts: 3ms, application-code: 70ms)
+ GET / 200 in 91ms (next.js: 5ms, proxy.ts: 4ms, application-code: 83ms)
+ GET /inbox 200 in 56ms (next.js: 2ms, proxy.ts: 2ms, application-code: 52ms)

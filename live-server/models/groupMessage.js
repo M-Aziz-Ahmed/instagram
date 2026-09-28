@@ -100,22 +100,20 @@ groupMessageSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
  * so it cannot be bypassed by a route that forgets it; routes still check first
  * to return a clean 400.
  */
-groupMessageSchema.pre("save", async function enforceContentFilter(next) {
-    try {
-        if (this.skipContentFilter) return next();
-        if (this.deleted) return next();
-        const { checkText } = require("../lib/textFilter");
-        const result = await checkText(this.text, "group");
-        if (result.blocked) {
-            const err = new Error("Message contains content that is not allowed");
-            err.statusCode = 400;
-            err.filtered = true;
-            err.matchedTerms = result.matches;
-            return next(err);
-        }
-        return next();
-    } catch (err) {
-        return next(err);
+// Async pre-save hooks must NOT take a `next` callback: Mongoose (Kareem) skips
+// `next` for async middleware, so calling it threw `TypeError: next is not a
+// function` on every GroupMessage.create. Throwing rejects the save instead.
+groupMessageSchema.pre("save", async function enforceContentFilter() {
+    if (this.skipContentFilter) return;
+    if (this.deleted) return;
+    const { checkText } = require("../lib/textFilter");
+    const result = await checkText(this.text, "group");
+    if (result.blocked) {
+        const err = new Error("Message contains content that is not allowed");
+        err.statusCode = 400;
+        err.filtered = true;
+        err.matchedTerms = result.matches;
+        throw err;
     }
 });
 
