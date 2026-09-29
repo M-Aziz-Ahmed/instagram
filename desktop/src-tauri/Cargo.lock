@@ -43,7 +43,7 @@ dependencies = [
 
 [[package]]
 name = "anontweet"
-version = "0.2.65"
+version = "0.2.67"
 dependencies = [
  "serde",
  "serde_json",

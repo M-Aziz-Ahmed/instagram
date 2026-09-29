@@ -20,9 +20,18 @@ router.post("/", optionalAuth, async (req, res) => {
     try {
         const { type, path, referrer, sessionId, device } = req.body || {};
 
+        // The device shape is client-reported, and the client flags its own
+        // crawlers (utils/track.js matches /bot|spider|crawl|slurp|headless/).
+        // A crawler is not a visitor: it never reads the map, and asking the geo
+        // provider where it is burns a request from a budget shared with real
+        // people — on a keyless provider that budget is 45 a minute. So a bot
+        // event is still stored, and still counts towards the traffic totals,
+        // but it is never looked up.
+        const isBot = device?.type === "bot";
+
         // Resolving geo can mean a (cached) outbound call, so kick it off
         // alongside the validation instead of serially ahead of the write.
-        const locationPromise = resolveLocation(req);
+        const locationPromise = isBot ? Promise.resolve(null) : resolveLocation(req);
 
         let resolved = null;
         try {

@@ -16,6 +16,7 @@ const ModerationLog = require("../models/moderationLog");
 const Community = require("../models/community");
 const AnalyticsEvent = require("../models/analyticsEvent");
 const A = require("../analyticsHelpers");
+const geo = require("../lib/geo");
 const { requireAdmin, requirePermission } = require("../middleware/auth");
 const { getLogs } = require("../logBuffer");
 const { VALID_PERMISSIONS } = require("../models/role");
@@ -557,72 +558,116 @@ router.post("/ads/:id/track", async (req, res) => {
 // GET /analytics
 // Admin-only: this rollup reports every user, every post and the site-wide
 // leaderboards, so it was readable by anyone who asked for it.
+//
+// Every number here is aggregated by Mongo. It used to load every user and every
+// post into the Node heap and reduce them in JavaScript, which meant the admin
+// dashboard's cost grew with the entire history of the site and would eventually
+// take the API process down rather than just get slow. One $facet over posts
+// produces all of the post-derived figures in a single pass.
+const DAY_FMT = { format: "%Y-%m-%d", date: "$timeStamp" };
+const USER_DAY_FMT = { format: "%Y-%m-%d", date: "$createdAt" };
+const LEADERBOARD_N = 10;
+
 router.get("/analytics", requireAdmin, async (req, res) => {
     try {
-        const totalUsers = await User.countDocuments();
-        const totalPosts = await Post.countDocuments();
+        const [totalUsers, totalPosts, postRollup, userDays] = await Promise.all([
+            User.countDocuments(),
+            Post.countDocuments(),
+            Post.aggregate([
+                {
+                    $facet: {
+                        totals: [{
+                            $group: {
+                                _id: null,
+                                // `commentCount` is the authoritative comment
+                                // total. `comments` is only a bounded window of
+                                // the most recent ones (see models/post.js), so
+                                // counting it here under-reported comments by
+                                // however many had scrolled off the end.
+                                likes: { $sum: { $size: { $ifNull: ["$likes", []] } } },
+                                comments: { $sum: { $ifNull: ["$commentCount", 0] } },
+                                views: { $sum: { $ifNull: ["$viewCount", 0] } },
+                            },
+                        }],
+                        postsByDay: [{ $group: { _id: { $dateToString: DAY_FMT }, n: { $sum: 1 } } }, { $sort: { _id: 1 } }],
+                        likesByDay: [{
+                            $group: {
+                                _id: { $dateToString: DAY_FMT },
+                                n: { $sum: { $size: { $ifNull: ["$likes", []] } } },
+                            },
+                        }, { $sort: { _id: 1 } }],
+                        commentsByDay: [{
+                            $group: { _id: { $dateToString: DAY_FMT }, n: { $sum: { $ifNull: ["$commentCount", 0] } } },
+                        }, { $sort: { _id: 1 } }],
+                        topPosters: [
+                            { $group: { _id: "$sender", n: { $sum: 1 } } },
+                            { $sort: { n: -1 } }, { $limit: LEADERBOARD_N },
+                        ],
+                        topLikers: [
+                            { $unwind: "$likes" },
+                            { $group: { _id: "$likes", n: { $sum: 1 } } },
+                            { $sort: { n: -1 } }, { $limit: LEADERBOARD_N },
+                        ],
+                        topHashtags: [
+                            { $unwind: "$hashtags" },
+                            { $group: { _id: "$hashtags", n: { $sum: 1 } } },
+                            { $sort: { n: -1 } }, { $limit: LEADERBOARD_N },
+                        ],
+                        topPosts: [
+                            {
+                                // likes/commentCount are kept in the projection as
+                                // well as folded into `score`, because the response
+                                // reports them per post and a $project that drops
+                                // them would render every top post as 0 likes.
+                                $project: {
+                                    sender: 1, text: 1, timeStamp: 1, viewCount: 1,
+                                    likes: 1, commentCount: 1,
+                                    score: {
+                                        $add: [
+                                            { $size: { $ifNull: ["$likes", []] } },
+                                            { $ifNull: ["$commentCount", 0] },
+                                        ],
+                                    },
+                                },
+                            },
+                            { $sort: { score: -1 } }, { $limit: LEADERBOARD_N },
+                        ],
+                    },
+                },
+            ]).allowDiskUse(true),
+            User.aggregate([
+                { $group: { _id: { $dateToString: USER_DAY_FMT }, n: { $sum: 1 } } },
+                { $sort: { _id: 1 } },
+            ]).allowDiskUse(true),
+        ]);
 
-        const users = await User.find().select("username createdAt").lean();
-        const posts = await Post.find()
-            .select("sender likes comments viewCount timeStamp hashtags mentions")
-            .lean();
-
-        const totalLikes = posts.reduce((sum, p) => sum + (p.likes?.length || 0), 0);
-        const totalComments = posts.reduce((sum, p) => sum + (p.comments?.length || 0), 0);
-        const totalViews = posts.reduce((sum, p) => sum + (p.viewCount || 0), 0);
-
-        const postsByDay = {}, usersByDay = {}, likesByDay = {}, commentsByDay = {};
-
-        posts.forEach((post) => {
-            const date = new Date(post.timeStamp).toISOString().split("T")[0];
-            postsByDay[date] = (postsByDay[date] || 0) + 1;
-            likesByDay[date] = (likesByDay[date] || 0) + (post.likes?.length || 0);
-            commentsByDay[date] = (commentsByDay[date] || 0) + (post.comments?.length || 0);
-        });
-
-        users.forEach((user) => {
-            const date = new Date(user.createdAt).toISOString().split("T")[0];
-            usersByDay[date] = (usersByDay[date] || 0) + 1;
-        });
-
-        const postCounts = {};
-        posts.forEach((post) => { postCounts[post.sender] = (postCounts[post.sender] || 0) + 1; });
-        const topPosters = Object.entries(postCounts)
-            .sort(([, a], [, b]) => b - a).slice(0, 10)
-            .map(([username, count]) => ({ username, count }));
-
-        const likeCounts = {};
-        posts.forEach((post) => {
-            (post.likes || []).forEach((username) => { likeCounts[username] = (likeCounts[username] || 0) + 1; });
-        });
-        const topLikers = Object.entries(likeCounts)
-            .sort(([, a], [, b]) => b - a).slice(0, 10)
-            .map(([username, count]) => ({ username, count }));
-
-        const hashtagCount = {};
-        posts.forEach((post) => {
-            (post.hashtags || []).forEach((tag) => { hashtagCount[tag] = (hashtagCount[tag] || 0) + 1; });
-        });
-        const topHashtags = Object.entries(hashtagCount)
-            .sort(([, a], [, b]) => b - a).slice(0, 10)
-            .map(([tag, count]) => ({ tag, count }));
-
-        const topPosts = [...posts]
-            .sort((a, b) => ((b.likes?.length || 0) + (b.comments?.length || 0)) - ((a.likes?.length || 0) + (a.comments?.length || 0)))
-            .slice(0, 10)
-            .map((p) => ({
-                id: p._id, sender: p.sender, text: p.text?.slice(0, 100) || "",
-                likes: p.likes?.length || 0, comments: p.comments?.length || 0,
-                views: p.viewCount || 0, timeStamp: p.timeStamp,
-            }));
+        const f = postRollup?.[0] || {};
+        const totals = f.totals?.[0] || { likes: 0, comments: 0, views: 0 };
+        const toSeries = (rows) => Object.fromEntries((rows || []).map((r) => [r._id, r.n]));
 
         return res.json({
             stats: {
-                totalUsers, totalPosts, totalLikes, totalComments, totalViews,
+                totalUsers, totalPosts,
+                totalLikes: totals.likes || 0,
+                totalComments: totals.comments || 0,
+                totalViews: totals.views || 0,
                 avgPostsPerUser: totalUsers > 0 ? (totalPosts / totalUsers).toFixed(1) : 0,
             },
-            charts: { postsByDay, usersByDay, likesByDay, commentsByDay },
-            topPosters, topLikers, topHashtags, topPosts,
+            charts: {
+                postsByDay: toSeries(f.postsByDay),
+                usersByDay: toSeries(userDays),
+                likesByDay: toSeries(f.likesByDay),
+                commentsByDay: toSeries(f.commentsByDay),
+            },
+            topPosters: (f.topPosters || []).map((r) => ({ username: r._id, count: r.n })),
+            topLikers: (f.topLikers || []).map((r) => ({ username: r._id, count: r.n })),
+            topHashtags: (f.topHashtags || []).map((r) => ({ tag: r._id, count: r.n })),
+            topPosts: (f.topPosts || []).map((p) => ({
+                id: p._id, sender: p.sender, text: p.text?.slice(0, 100) || "",
+                likes: p.likes?.length || 0,
+                comments: p.commentCount || 0,
+                views: p.viewCount || 0, timeStamp: p.timeStamp,
+            })),
         });
     } catch (error) {
         console.error(error);
@@ -723,9 +768,16 @@ router.get("/analytics/devices", requireAdmin, async (req, res) => {
     try {
         const days = Math.max(1, Math.min(parseInt(req.query.days, 10) || 30, 365));
         const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-        const events = await AnalyticsEvent.find({ createdAt: { $gte: from } })
-            .select("device").lean().limit(30000);
-        return res.json({ days, ...A.deviceBreakdown(events), tracked: events.length });
+        // Rolled up by Mongo in a single $facet pass. This used to fetch up to
+        // 30,000 event documents into Node and count them in JS, so past 30,000
+        // events the donut silently began drawing percentages of a partial set
+        // while still reporting the full total, and every event cost a
+        // serialised document to produce three numbers.
+        const [rows] = await AnalyticsEvent.aggregate(
+            A.deviceBreakdownPipeline({ createdAt: { $gte: from } }),
+        ).allowDiskUse(true);
+        const breakdown = A.mapDeviceBreakdown(rows);
+        return res.json({ days, ...breakdown, tracked: breakdown.total });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed to fetch device analytics" });
@@ -841,6 +893,10 @@ router.get("/analytics/locations", requireAdmin, async (req, res) => {
             totalEvents,
             locatedShare: totalEvents > 0 ? Number(((total / totalEvents) * 100).toFixed(1)) : 0,
             unlocatedByType: unlocated.map((r) => ({ type: r._id || "unknown", count: r.count })),
+            // Why the located share is what it is. Without this the only visible
+            // symptom of a throttled or unreachable geo provider is a number
+            // quietly drifting down on the globe.
+            geoProvider: geo.providerHealth(),
         });
     } catch (error) {
         console.error(error);

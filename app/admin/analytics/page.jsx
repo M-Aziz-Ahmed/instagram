@@ -208,7 +208,10 @@ export default function AdminAnalytics() {
                                         onPick={openCountry}
                                         emptyLabel="No location data yet."
                                     />
-                                    <GeoCoverage missing={locations?.unlocatedByType || []} />
+                                    <GeoCoverage
+                                        missing={locations?.unlocatedByType || []}
+                                        provider={locations?.geoProvider}
+                                    />
                                 </>
                             )}
                         </div>
@@ -270,10 +273,14 @@ function GeoList({ rows, onPick, secondary, emptyLabel }) {
 
 /* "Where did the other events go?" The Events stat card counts every event;
    the globe only counts the ones geo could place. Naming the difference is the
-   difference between a bug report and an answer. */
-function GeoCoverage({ missing }) {
+   difference between a bug report and an answer — and when the geo provider is
+   throttled or unreachable, the events have no country for a reason that is
+   worth being able to see. */
+function GeoCoverage({ missing, provider }) {
     if (!missing?.length) return null;
     const total = missing.reduce((s, m) => s + m.count, 0);
+    const reasons = Object.entries(provider?.failuresByReason || {});
+    const unhealthy = provider?.breakerOpen || (provider?.failuresLastHour || 0) > 0;
     return (
         <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
             <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2">
@@ -290,6 +297,30 @@ function GeoCoverage({ missing }) {
                     </span>
                 ))}
             </div>
+
+            {unhealthy ? (
+                <div className="mt-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 px-3 py-2">
+                    <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                        {provider?.breakerOpen ? "Geo lookups paused" : "Geo lookup problems"} — {provider?.provider}
+                    </p>
+                    {provider?.breakerOpen ? (
+                        <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">
+                            The provider is refusing requests, so no new lookups are being attempted.
+                            It will retry in {Math.ceil((provider.breakerOpenForMs || 0) / 60000)} min. Events
+                            during this window are stored without a country.
+                        </p>
+                    ) : (
+                        <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">
+                            {provider?.failuresLastHour} failed lookups in the last hour
+                            {reasons.length ? ` — ${reasons.map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`).join(", ")}` : ""}.
+                        </p>
+                    )}
+                    <p className="text-[10px] text-amber-700/80 dark:text-amber-500/80 mt-1">
+                        A keyless provider allows only 45 lookups a minute. Set GEO_LOOKUP_URL in the
+                        server environment to a keyed provider to fix this at the source.
+                    </p>
+                </div>
+            ) : null}
         </div>
     );
 }
@@ -299,7 +330,7 @@ function GeoCoverage({ missing }) {
    one author's own posts. */
 const POST_SORTS = [
     { key: "impressions", label: "Impressions" },
-    { key: "reach", label: "Reach" },
+    { key: "reach", label: "People" },
     { key: "clicks", label: "Clicks" },
     { key: "likes", label: "Likes" },
 ];
@@ -338,7 +369,12 @@ function TopPosts({ days }) {
                     ))}
                 </div>
             </div>
-            <p className="text-xs text-gray-400 mb-4">Last {days || 30} days · every post on the site</p>
+            <p className="text-xs text-gray-400 mb-4">
+                Last {days || 30} days · every post on the site
+                <span className="hidden sm:inline">
+                    {" "}· “People” is unique viewers: one per signed-in account, or one per browser session for signed-out visitors
+                </span>
+            </p>
 
             {!data && !failed ? (
                 <div className="flex justify-center py-10">
@@ -364,7 +400,7 @@ function TopPosts({ days }) {
                             </span>
                             <span className="hidden sm:flex items-center gap-3 shrink-0 text-[11px] tabular-nums">
                                 <span title="Impressions"><span className="text-gray-400">👁</span> {p.impressions.toLocaleString()}</span>
-                                <span title="Reach (unique viewers)"><span className="text-gray-400">◎</span> {p.reach.toLocaleString()}</span>
+                                <span title="Unique viewers — one per account, or per session when signed out"><span className="text-gray-400">◎</span> {p.reach.toLocaleString()}</span>
                                 <span title="Clicks"><span className="text-gray-400">✱</span> {p.clicks.toLocaleString()}</span>
                                 <span title="CTR"><span className="text-gray-400">%</span> {p.clickThroughRate ?? "—"}</span>
                                 <span title="Likes"><span className="text-gray-400">♥</span> {p.likes.toLocaleString()}</span>

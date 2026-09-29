@@ -1,90 +1,39 @@
 "use client";
 
-// Dependency-free interactive 3D globe on <canvas>.
+// Interactive 3D globe on <canvas>, drawn as an actual map rather than a
+// wireframe.
 //   • Drag to spin (yaw) and tilt (pitch) — full 360° view.
 //   • Scroll / +− to zoom; the projection radius actually scales with zoom, so
 //     zooming in moves you from whole-world → country → state/region →
 //     city/town, revealing progressively smaller places.
 //   • ⏸ stops the auto-rotation, ▶ resumes it; ⟲ resets the view.
 //
+// The basemap comes from components/Admin/worldData.js, which carries one entry
+// per country with its rings AND its identity. That identity is the whole point:
+// with it the globe can print country names, draw real borders, and tint the
+// countries that actually have traffic, instead of showing an anonymous
+// coastline that cannot be read.
+//
 // Dot selection is tiered by zoom, and culling is done by projecting candidates
 // and testing them against the canvas rect — not by approximating a
 // centre/window in degrees — so what you see is exactly what is on screen.
-import { useCallback, useEffect, useRef, useState } from "react";
-import WORLD_RINGS from "./worldData";
-
-const DEG = Math.PI / 180;
-const TILT = -22;
-const LAND = "rgba(108, 122, 137, 0.55)";
-const GRID = "rgba(148, 163, 184, 0.16)";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+    DEG, LABEL_HALO, TILT, ZOOM_BAND_MAX,
+    clampDeg, paintBasemap, project, unproject,
+} from "./globeMap";
 
 const ZOOM_MIN = 0.7;
 const ZOOM_MAX = 40;   // deep enough to isolate a single town
 const Z_REGIONS = 1.6; // zoom at which country dots give way to state/region dots
 const Z_CITIES = 4.5;  // zoom at which region dots give way to city/town dots
 
-// Zoom bands. A place is drawn once the zoom is deep enough to read it, and
-// hidden again past ZOOM_BAND_MAX so the view doesn't turn into confetti.
-const ZOOM_BAND_MAX = 14;
 // Below a place's event count drops under this zoom-dependent floor it is
 // hidden, so zooming in progressively reveals smaller towns.
 const minVisibleCount = (z) => Math.max(1, Math.round(60 / (z * z)));
 // Cap on dots actually drawn per frame; keeps the canvas cheap regardless of
 // how many distinct places exist.
 const MAX_DOTS = 420;
-
-function toVec(lon, lat) {
-    const phi = (lon * Math.PI) / 180;
-    const theta = (lat * Math.PI) / 180;
-    return {
-        x: Math.cos(theta) * Math.sin(phi),
-        y: Math.sin(theta),
-        z: Math.cos(theta) * Math.cos(phi),
-    };
-}
-
-function rot(v, yaw, pitch) {
-    const cy = Math.cos(yaw), sy = Math.sin(yaw);
-    const cp = Math.cos(pitch), sp = Math.sin(pitch);
-    const x = v.x * cy + v.z * sy;
-    const z1 = v.z * cy - v.x * sy;
-    return { x, y: v.y * cp - z1 * sp, z: v.y * sp + z1 * cp };
-}
-
-// Forward projection onto the canvas. `r` is the *scaled* sphere radius — this
-// is the value zoom multiplies. Passing the canvas centre as the radius (as
-// this used to) made the globe a fixed size, so zoom only ever grew the dots.
-function project(lon, lat, yaw, pitch, cx, cy, r) {
-    const v = rot(toVec(lon, lat), yaw, pitch);
-    if (v.z <= 0.02) return null;
-    return { sx: cx + v.x * r, sy: cy - v.y * r, z: v.z };
-}
-
-// Inverse projection: which lon/lat lands on this canvas point? Used to centre
-// the view (double-click) and to label the current focus.
-function unproject(sx, sy, yaw, pitch, cx, cy, r) {
-    const ux = (sx - cx) / r;
-    const uy = (cy - sy) / r;
-    const d = 1 - ux * ux - uy * uy;
-    if (d <= 0) return null; // outside the sphere's silhouette
-    const uz = Math.sqrt(d);
-    const cp = Math.cos(pitch), sp = Math.sin(pitch);
-    const cyf = Math.cos(yaw), syf = Math.sin(yaw);
-    const y = cp * uy + sp * uz;
-    const z1 = -sp * uy + cp * uz;
-    const x = ux * cyf - z1 * syf;
-    const z = z1 * cyf + ux * syf;
-    return {
-        lon: Math.atan2(x, z) / DEG,
-        lat: Math.asin(Math.max(-1, Math.min(1, y))) / DEG,
-    };
-}
-
-function clampDeg(v, lo, hi) {
-    let d = ((v + 180) % 360 + 360) % 360 - 180;
-    return Math.max(lo, Math.min(hi, d));
-}
-
 export default function Globe({
     countries = [],
     regions = [],
@@ -112,6 +61,19 @@ export default function Globe({
     // pauseable helicopter torque… just so the loop knows whether to spin
     const ROT_PER_FRAME = (Math.PI * 2) / (75 * 60); // full turn ~75s at 60fps
 
+    // Which countries have traffic, keyed by ISO alpha-2. The globe's basemap is
+    // static geometry, so this is the join that lets it know Pakistan is worth
+    // pointing at and Mongolia is not. Countries with traffic are always named
+    // and always tinted, however small they are — a small country with visitors
+    // is the interesting case, not an edge case.
+    const hotByIso = useMemo(() => {
+        const map = new Map();
+        for (const c of countries) {
+            if (c?.code) map.set(c.code, c);
+        }
+        return map;
+    }, [countries]);
+
     const draw = useCallback(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -138,61 +100,22 @@ export default function Globe({
         const yaw = s.yaw;
         const pitch = s.pitchDeg * DEG;
         // Once the sphere is much larger than the viewport its silhouette is
-        // off-screen, so the decorative ring/limb would be meaningless.
+        // off-screen, so the decorative limb shading would be meaningless.
         const wholeGlobeInView = R * 1.04 <= Math.min(cw, ch) / 2;
 
-        if (wholeGlobeInView) {
-            ctx.setLineDash([3, 7]);
-            ctx.strokeStyle = "rgba(59,130,246,0.22)";
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.arc(cx, cy, R + 8, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
+        // Keep dots a readable size on screen as we zoom, rather than letting
+        // them balloon with the sphere. Hoisted above the basemap call so the
+        // map painter can place a country's name clear of the biggest dot that
+        // will land on it.
+        const sizeK = Math.max(0.85, Math.min(2.2, Math.pow(z, 0.22)));
 
-        // graticule
-        ctx.strokeStyle = GRID;
-        ctx.lineWidth = 1;
-        for (let lat = -60; lat <= 60; lat += 30) {
-            ctx.beginPath();
-            let pen = false;
-            for (let lon = -180; lon <= 180; lon += 6) {
-                const p = project(lon, lat, yaw, pitch, cx, cy, R);
-                if (p) { if (!pen) { ctx.moveTo(p.sx, p.sy); pen = true; } else ctx.lineTo(p.sx, p.sy); }
-                else pen = false;
-            }
-            ctx.stroke();
-        }
-        for (let lon = -180; lon < 180; lon += 30) {
-            ctx.beginPath();
-            let pen = false;
-            for (let lat = -90; lat <= 90; lat += 4) {
-                const p = project(lon, lat, yaw, pitch, cx, cy, R);
-                if (p) { if (!pen) { ctx.moveTo(p.sx, p.sy); pen = true; } else ctx.lineTo(p.sx, p.sy); }
-                else pen = false;
-            }
-            ctx.stroke();
-        }
-
-        // landmasses (front-facing polylines); thin out when deeply zoomed so
-        // the coastline doesn't drown the dots.
-        if (z < ZOOM_BAND_MAX) {
-            ctx.strokeStyle = LAND;
-            ctx.lineWidth = 1.25 + Math.min(0.9, z * 0.12);
-            ctx.lineJoin = "round";
-            const step = z > 3 ? 3 : 1; // sub-sample the rings when zoomed in
-            for (const ring of WORLD_RINGS) {
-                ctx.beginPath();
-                let pen = false;
-                for (let i = 0; i < ring.length; i += step) {
-                    const [lon, lat] = ring[i];
-                    const p = project(lon, lat, yaw, pitch, cx, cy, R);
-                    if (p) { if (!pen) { ctx.moveTo(p.sx, p.sy); pen = true; } else ctx.lineTo(p.sx, p.sy); }
-                    else pen = false;
-                }
-                ctx.stroke();
-            }
+        // The map itself — ocean, coastlines, borders and country names — lives
+        // in globeMap.js so it can be rendered and asserted on without a browser.
+        // Skipped once the sphere is so large that a hairline coastline is just
+        // noise over the dots.
+        if (z <= ZOOM_BAND_MAX) {
+            // Widest dot the country tier can draw: base 2 + full span 5.5.
+            paintBasemap(ctx, { cw, ch, R, yaw, pitch, z, hotByIso, dotClearance: 7.5 * sizeK });
         }
 
         // Which tier of place do we draw? Zoomed out → countries, then
@@ -220,12 +143,9 @@ export default function Globe({
         candidates.sort((a, b) => (b.pt.count || 1) - (a.pt.count || 1));
         const shown = candidates.slice(0, MAX_DOTS);
 
-        const col = tier === "country" ? "88, 204, 2" : tier === "region" ? "168, 85, 247" : "59, 130, 246";
+        const col = tier === "country" ? "163, 230, 53" : tier === "region" ? "168, 85, 247" : "59, 130, 246";
         const baseR0 = tier === "country" ? 2 : tier === "region" ? 1.8 : 1.6;
         const spanR = tier === "country" ? 5.5 : tier === "region" ? 4 : 3.4;
-        // Keep dots a readable size on screen as we zoom, rather than letting
-        // them balloon with the sphere.
-        const sizeK = Math.max(0.85, Math.min(2.2, Math.pow(z, 0.22)));
 
         const maxCount = Math.max(1, ...shown.map((c) => c.pt.count || 1));
         const saved = [];
@@ -281,7 +201,28 @@ export default function Globe({
             });
         }
 
-        // place labels at the deeper tiers (most visited first)
+        // A count next to every dot, not just at the deeper tiers. The previous
+        // version drew no label at all on the country tier, so the zoomed-out
+        // default view was a globe of coloured dots with no numbers on it — the
+        // one view where the numbers matter most.
+        if (shown.length) {
+            ctx.textAlign = "left";
+            for (const d of saved) {
+                const text = (d.count || 1).toLocaleString();
+                ctx.font = `600 ${Math.max(9, Math.min(12, 9 + Math.log2(Math.max(1, z)) * 1.6))}px ui-sans-serif, system-ui, sans-serif`;
+                const w = ctx.measureText(text).width;
+                const x = d.sx + d.r + 4;
+                const y = d.sy + 3.5;
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = LABEL_HALO;
+                ctx.strokeText(text, x, y);
+                ctx.fillStyle = "#ffffff";
+                ctx.fillText(text, x, y);
+            }
+        }
+
+        // Place names for the deeper tiers, now that the country tier has the
+        // basemap's own names above it.
         if (tier !== "country" && z >= (tier === "city" ? 2.4 : 1.15)) {
             const labelMin = Math.max(1, Math.round(30 / z));
             const labelShown = saved.filter((d) => (d.count || 1) >= labelMin).slice(0, 45);
@@ -290,15 +231,13 @@ export default function Globe({
             for (const d of labelShown) {
                 const lab = (d.name || d.code || "").slice(0, 20);
                 if (!lab) continue;
-                ctx.beginPath();
-                ctx.fillStyle = "rgba(15,23,42,0.72)";
-                const tw = ctx.measureText(lab).width;
-                if (ctx.roundRect) ctx.roundRect(d.sx - tw / 2 - 3, d.sy + d.r + 2, tw + 6, 13, 3);
-                else ctx.rect(d.sx - tw / 2 - 3, d.sy + d.r + 2, tw + 6, 13);
-                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = LABEL_HALO;
+                ctx.strokeText(lab, d.sx, d.sy + d.r + 12);
                 ctx.fillStyle = "#dbeafe";
                 ctx.fillText(lab, d.sx, d.sy + d.r + 12);
             }
+            ctx.textAlign = "left";
         }
 
         // hit-test against the last known pointer position
@@ -313,13 +252,13 @@ export default function Globe({
         if (wholeGlobeInView) {
             const grad = ctx.createRadialGradient(cx, cy, R * 0.55, cx, cy, R * 1.02);
             grad.addColorStop(0, "rgba(0,0,0,0)");
-            grad.addColorStop(1, "rgba(0,0,0,0.07)");
+            grad.addColorStop(1, "rgba(0,0,0,0.16)");
             ctx.beginPath();
             ctx.arc(cx, cy, R * 1.02, 0, Math.PI * 2);
             ctx.fillStyle = grad;
             ctx.fill();
         }
-    }, [countries, regions, cities, width, height, selected]);
+    }, [countries, regions, cities, width, height, selected, hotByIso]);
 
     useEffect(() => {
         let raf;
@@ -483,15 +422,29 @@ export default function Globe({
                 </button>
             </div>
 
+            {/* legend: what the bright countries mean */}
+            {hotByIso.size > 0 && (
+                <div className="absolute bottom-8 left-3 flex items-center gap-2 text-[10px] font-semibold text-gray-300 dark:text-gray-400">
+                    <span className="inline-flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded-sm" style={{ background: "rgba(122,196,96,0.9)", border: "1px solid rgba(163,230,53,0.95)" }} />
+                        country with traffic
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: "rgb(163,230,53)" }} />
+                        {hotByIso.size} total
+                    </span>
+                </div>
+            )}
+
             {/* mode hint */}
-            <div className="absolute bottom-2 left-3 text-[11px] text-gray-400 dark:text-gray-500 font-medium">
+            <div className="absolute bottom-2 left-3 text-[11px] text-gray-300 dark:text-gray-500 font-medium">
                 {tier === "country" && `🌍 countries · ${tierCount} with data · zoom ${zoom.toFixed(2)}`}
                 {tier === "region" && `🗺️ states / regions · ${tierCount} · ≥ ${minVisibleCount(zoom)} events · zoom ${zoom.toFixed(2)}`}
                 {tier === "city" && `📍 cities / towns · ${tierCount} · ≥ ${minVisibleCount(zoom)} events · zoom ${zoom.toFixed(2)}`}
                 <span className="hidden sm:inline"> · drag to spin</span>
                 <span className="hidden md:inline"> · scroll or +/− to zoom · double-click to dive in</span>
             </div>
-            <div className="absolute bottom-2 right-3 text-[11px] text-gray-400 dark:text-gray-500 font-medium">
+            <div className="absolute bottom-2 right-3 text-[11px] text-gray-300 dark:text-gray-500 font-medium">
                 {paused ? "▶ paused" : "auto-rotating"}
             </div>
 

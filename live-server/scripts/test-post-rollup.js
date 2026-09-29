@@ -82,14 +82,13 @@ ok("reach: emptiness is tested against both \"\" and null",
 // must contribute nothing rather than a placeholder key.
 check("reach: unidentified viewers are removed, not keyed", cond[2], "$$REMOVE");
 
-// The key is session-first. Keying on userId looks more like "unique people",
-// but a visitor who signs in mid-session emits both an anonymous event and a
-// userId event, and reach counts them twice. The prefix keeps the account
-// fallback from colliding with a session id.
 const keyExpr = JSON.stringify(cond[1]);
-ok("reach: key is session-first, not userId-first", keyExpr.indexOf("sessionId") < keyExpr.indexOf("userId"));
-ok("reach: account fallback is namespaced so it cannot collide with a session id",
-    keyExpr.includes('"u:"'));
+
+// The key is the account when there is one, so one person on a phone AND a
+// laptop is one viewer rather than two. That is the whole difference between
+// "reach" and "how many browsers opened this".
+ok("reach: account is preferred over session", keyExpr.indexOf("userId") < keyExpr.indexOf("sessionId"));
+ok("reach: account and session keys are namespaced apart", keyExpr.includes('"u:"') && keyExpr.includes('"s:"'));
 ok("reach: no empty-string join can produce a bare separator key",
     !cond[1].$concat.some((part) => part === "|"));
 

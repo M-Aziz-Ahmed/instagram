@@ -105,16 +105,82 @@ export default function AdminDashboard() {
 
             {/* Globe */}
             <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                     <div>
                         <h3 className="font-bold text-sm text-gray-900 dark:text-gray-100">Where your users are 🌍</h3>
-                        <p className="text-xs text-gray-400 mt-0.5">Live usage map — {globeCountries.length} countries · {globeRegions.length} states/regions · {globeCities.length} cities/towns · {locations?.totalLocated || 0} located events</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                            {globeCountries.length} countries · {globeRegions.length} states/regions ·{" "}
+                            {globeCities.length} cities/towns ·{" "}
+                            {locations?.totalLocated || 0} located events
+                            {typeof locations?.locatedShare === "number" && locations.totalEvents > 0 ? (
+                                <span className="text-gray-400">
+                                    {" "}({locations.locatedShare}% of {locations.totalEvents.toLocaleString()} tracked
+                                    events could be placed)
+                                </span>
+                            ) : null}
+                        </p>
                     </div>
                 </div>
                 <div className="mx-auto" style={{ maxWidth: 640 }}>
                     <Globe countries={globeCountries} regions={globeRegions} cities={globeCities} width={640} height={440} />
                 </div>
+                <DashboardGeoCoverage locations={locations} />
             </div>
+        </div>
+    );
+}
+
+/* The dashboard's counterpart to the analytics page's coverage panel.
+ *
+ * This page is the first one an admin looks at, and it showed a bare
+ * "531 located events" next to a total of thousands with no explanation and no
+ * way to tell a quiet map from a broken one. When the geo provider is refusing
+ * requests — which is the normal state of affairs on a keyless provider under
+ * any real traffic — that is the single most useful thing to say. */
+function DashboardGeoCoverage({ locations }) {
+    const missing = locations?.unlocatedByType || [];
+    const provider = locations?.geoProvider;
+    const unhealthy = provider?.breakerOpen || (provider?.failuresLastHour || 0) > 0;
+    if (!missing.length && !unhealthy) return null;
+
+    const total = missing.reduce((s, m) => s + m.count, 0);
+    return (
+        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+            {unhealthy ? (
+                <div className="mb-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 px-3 py-2">
+                    <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                        {provider?.breakerOpen ? "Geo lookups paused" : "Geo lookup problems"} — {provider?.provider}
+                    </p>
+                    <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">
+                        {provider?.breakerOpen
+                            ? `The provider is refusing requests, so no new lookups are being attempted. It will retry in ${Math.ceil((provider.breakerOpenForMs || 0) / 60000)} min. Events recorded during this window are stored without a country.`
+                            : `${provider?.failuresLastHour || 0} failed lookups in the last hour${Object.keys(provider?.failuresByReason || {}).length ? ` — ${Object.entries(provider.failuresByReason).map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`).join(", ")}` : ""}.`}
+                    </p>
+                    <p className="text-[10px] text-amber-700/80 dark:text-amber-500/80 mt-1">
+                        A keyless provider allows only 45 lookups a minute. Set GEO_LOOKUP_URL in the
+                        server environment to a keyed provider to fix this at the source.
+                    </p>
+                </div>
+            ) : null}
+
+            {missing.length ? (
+                <>
+                    <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2">
+                        Not placeable — {total.toLocaleString()} events with no resolved country
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                        {missing.map((m) => (
+                            <span
+                                key={m.type}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-[10px] font-semibold text-gray-500 dark:text-gray-400"
+                            >
+                                {m.type}
+                                <span className="tabular-nums text-gray-400">{m.count.toLocaleString()}</span>
+                            </span>
+                        ))}
+                    </div>
+                </>
+            ) : null}
         </div>
     );
 }

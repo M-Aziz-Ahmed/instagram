@@ -34,6 +34,75 @@ const inflight = new Map(); // network -> Promise
 const preciseCache = new Map(); // exact address -> { value, expiresAt }
 const preciseInflight = new Map(); // exact address -> Promise
 
+// ── provider health ────────────────────────────────────────────────────────
+//
+// The provider this defaults to (keyless ip-api.com) allows 45 requests a
+// minute. Exceeding it returns 429 for the rest of the window, and every one of
+// those events is then stored with an EMPTY country — silently, because the
+// beacon is fire-and-forget and never reports failure. The symptom is an admin
+// page where the "Events" total is four times the located total and nobody can
+// tell why.
+//
+// So a 429 (or any burst of failures) trips a breaker: outbound calls stop for
+// a cool-off instead of each one burning a negative-cache entry and hammering a
+// provider that has already said no. Real failures are counted by reason and
+// exposed on the admin panel, so "geo is broken" is a number rather than a
+// mystery.
+const BREAKER_THRESHOLD = 8;      // consecutive failures before opening
+const BREAKER_COOLOFF_MS = 5 * 60 * 1000;
+const HEALTH_WINDOW_MS = 60 * 60 * 1000;
+
+let consecutiveFailures = 0;
+let breakerOpenUntil = 0;
+// Rolling per-reason tallies, trimmed by age on read so the map stays bounded
+// without a background timer.
+const failureLog = new Map();
+
+function recordFailure(reason) {
+    consecutiveFailures++;
+    failureLog.set(reason, { count: (failureLog.get(reason)?.count || 0) + 1, lastAt: Date.now() });
+    if (consecutiveFailures >= BREAKER_THRESHOLD) {
+        breakerOpenUntil = Date.now() + BREAKER_COOLOFF_MS;
+        consecutiveFailures = 0;
+    }
+}
+
+function recordSuccess() {
+    consecutiveFailures = 0;
+}
+
+function breakerOpen() {
+    return Date.now() < breakerOpenUntil;
+}
+
+/** Provider health, for the admin panel. No IPs, no addresses — counts only. */
+function providerHealth() {
+    const now = Date.now();
+    const failures = {};
+    let total = 0;
+    for (const [reason, entry] of failureLog) {
+        if (now - entry.lastAt > HEALTH_WINDOW_MS) continue;
+        failures[reason] = entry.count;
+        total += entry.count;
+    }
+    return {
+        provider: LOOKUP_URL.replace(/\{ip\}/, "{ip}").replace(/^https?:\/\//, "").split("/")[0],
+        breakerOpen: breakerOpen(),
+        breakerOpenForMs: Math.max(0, breakerOpenUntil - now),
+        failuresLastHour: total,
+        failuresByReason: failures,
+        cacheSize: cache.size,
+        note: "Failures are stored events with no country. Bot traffic is counted here only if the provider was asked about it.",
+    };
+}
+
+/** Test hook: clears health + breaker state. */
+function resetProviderHealth() {
+    consecutiveFailures = 0;
+    breakerOpenUntil = 0;
+    failureLog.clear();
+}
+
 /** Bucket an address to its /24 so a whole network shares one lookup. */
 function networkKey(ip) {
     if (!ip) return "";
@@ -77,7 +146,7 @@ function isRoutable(ip) {
     return true;
 }
 
-/** One provider call, shared by both caching strategies. */
+/** One provider answer, normalised. Only country/region/city/timezone survive. */
 function shapeLocation(d) {
     if (!d || d.status !== "success" || !(d.country || d.countryCode)) return null;
     return {
@@ -91,16 +160,36 @@ function shapeLocation(d) {
     };
 }
 
+/**
+ * One provider call. Resolves to a location or to { fail: "<reason>" }.
+ *
+ * The reason matters and used to be thrown away: a 429 (throttled), a 5xx, a
+ * network error and a "this address is not in the database" answer all used to
+ * collapse into the same `null`, so the admin page could only ever report that
+ * some events had no country. The admin panel now shows the split.
+ */
 function fetchLocation(ip) {
     const url = LOOKUP_URL.replace("{ip}", encodeURIComponent(ip));
     return fetch(url, {
         headers: { accept: "application/json" },
         signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
     })
-        .then((r) => (r.ok ? r.json() : null))
-        .then(shapeLocation)
-        .catch(() => null);
+        .then((r) => {
+            if (r.status === 429) return { fail: "throttled" };
+            if (!r.ok) return { fail: `http_${r.status}` };
+            return r.json().then((d) => {
+                const value = shapeLocation(d);
+                return value ? { value } : { fail: "not_found" };
+            });
+        })
+        .catch((err) => {
+            // A timeout is its own bucket: it means the provider is slow or
+            // unreachable, which is a different problem from being rate-limited.
+            if (err?.name === "TimeoutError" || err?.name === "AbortError") return { fail: "timeout" };
+            return { fail: "network_error" };
+        });
 }
+
 
 /** Bounded insertion, so a long-running process cannot grow without limit. */
 function remember(map, key, entry, max) {
@@ -118,9 +207,8 @@ async function lookup(network) {
     // a private range is something like 192.168.1.0 — an address that can never
     // geolocate to anything. Bailing here rather than asking keeps those calls
     // out of the request budget, which matters because the free tier this
-    // defaults to allows only 45 requests a minute and a throttle is negative-
-    // cached for an hour (see NEGATIVE_TTL_MS). Wasting quota on addresses that
-    // were always going to fail starves the real ones.
+    // defaults to allows only 45 requests a minute. Wasting quota on addresses
+    // that were always going to fail starves the real ones.
     const probe = network.replace(/\/(24|64)$/, "");
     if (!isRoutable(probe)) return null;
 
@@ -130,13 +218,21 @@ async function lookup(network) {
     const pending = inflight.get(network);
     if (pending) return pending;
 
+    // The provider has already refused us in bulk. Asking again would only add
+    // load, and a throttled provider does not recover faster because we keep
+    // knocking.
+    if (breakerOpen()) return null;
+
     const promise = fetchLocation(probe)
-        .then((value) => {
-            remember(cache, network, {
-                value,
-                expiresAt: Date.now() + (value ? CACHE_TTL_MS : NEGATIVE_TTL_MS),
-            }, CACHE_MAX);
-            return value;
+        .then((result) => {
+            if (result.fail) {
+                recordFailure(result.fail);
+                remember(cache, network, { value: null, expiresAt: Date.now() + NEGATIVE_TTL_MS }, CACHE_MAX);
+                return null;
+            }
+            recordSuccess();
+            remember(cache, network, { value: result.value, expiresAt: Date.now() + CACHE_TTL_MS }, CACHE_MAX);
+            return result.value;
         })
         .finally(() => inflight.delete(network));
 
@@ -160,13 +256,19 @@ async function lookupPrecise(ip) {
     const pending = preciseInflight.get(ip);
     if (pending) return pending;
 
+    // A subscriber record is worth one request even under load, so the breaker
+    // is deliberately not consulted here. Only the aggregate globe, which asks
+    // about every visitor on every page view, is allowed to give up.
     const promise = fetchLocation(ip)
-        .then((value) => {
-            remember(preciseCache, ip, {
-                value,
-                expiresAt: Date.now() + (value ? PRECISE_TTL_MS : NEGATIVE_TTL_MS),
-            }, PRECISE_CACHE_MAX);
-            return value;
+        .then((result) => {
+            if (result.fail) {
+                recordFailure(result.fail);
+                remember(preciseCache, ip, { value: null, expiresAt: Date.now() + NEGATIVE_TTL_MS }, PRECISE_CACHE_MAX);
+                return null;
+            }
+            recordSuccess();
+            remember(preciseCache, ip, { value: result.value, expiresAt: Date.now() + PRECISE_TTL_MS }, PRECISE_CACHE_MAX);
+            return result.value;
         })
         .finally(() => preciseInflight.delete(ip));
 
@@ -195,4 +297,8 @@ async function resolveLocation(req, opts = {}) {
     }
 }
 
-module.exports = { resolveLocation, networkKey, clientIp, isRoutable };
+module.exports = {
+    resolveLocation, networkKey, clientIp, isRoutable,
+    providerHealth, resetProviderHealth,
+};
+

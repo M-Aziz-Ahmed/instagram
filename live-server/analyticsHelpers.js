@@ -122,25 +122,64 @@ function toSeries(bucketList, ...maps) {
 
 // ── Device / location roll-ups (from lean AnalyticsEvent docs) ──
 
-function deviceBreakdown(events) {
-    const groups = { type: {}, os: {}, browser: {} };
-    for (const ev of events) {
-        const d = ev.device || {};
-        const t = d.type || "";
-        const os = d.os || "Unknown";
-        const b = d.browser || "Unknown";
-        groups.type[t || "unknown"] = (groups.type[t || "unknown"] || 0) + 1;
-        groups.os[os] = (groups.os[os] || 0) + 1;
-        groups.browser[b] = (groups.browser[b] || 0) + 1;
-    }
-    const sortDesc = (obj) => Object.entries(obj)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 12)
-        .map(([label, count]) => ({ label, count }));
+// Only the top N labels per dimension are ever drawn, and a $group over an
+// unbounded number of distinct strings is the one thing that can still grow
+// with traffic. Matches the caps on the location roll-ups.
+const DEVICE_TOP_N = 12;
+
+// Device / OS / browser mix as a Mongo aggregate.
+//
+// This replaced a query that pulled 30,000 event documents into Node and counted
+// them in JavaScript. That had two problems: it capped silently, so past 30,000
+// events the donut was drawing percentages of a partial set while still claiming
+// a total, and it cost one document per event to produce three numbers.
+//
+// A $facet does all three dimensions in a single pass over the matched events,
+// so the cost is proportional to the events scanned rather than to the number of
+// documents serialised into the Node heap, and the total is exact at any volume.
+//
+// The "unknown"/"Unknown" buckets are deliberate and not cosmetic: they are how
+// an event that arrived without a usable device — or, before per-post tracking
+// recorded a device at all, every post event — shows up in the breakdown instead
+// of vanishing.
+const UNKNOWN_TYPE = "unknown";
+const UNKNOWN_LABEL = "Unknown";
+
+// "" is the schema default, and $ifNull only replaces null/missing, so the empty
+// string has to be folded in explicitly or every default-valued event would form
+// its own bucket instead of landing in Unknown.
+function labelOr(field, fallback) {
+    return { $cond: [{ $eq: [{ $ifNull: [field, ""] }, ""] }, fallback, field] };
+}
+
+function deviceBreakdownPipeline(match, topN = DEVICE_TOP_N) {
+    const facet = (field, fallback) => ([
+        { $group: { _id: labelOr(field, fallback), count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: topN },
+    ]);
+    return [
+        { $match: match },
+        {
+            $facet: {
+                type: facet("$device.type", UNKNOWN_TYPE),
+                os: facet("$device.os", UNKNOWN_LABEL),
+                browser: facet("$device.browser", UNKNOWN_LABEL),
+                total: [{ $count: "n" }],
+            },
+        },
+    ];
+}
+
+// Shape the $facet output into the flat arrays the charts consume.
+function mapDeviceBreakdown(rows) {
+    const f = rows || {};
+    const toList = (arr) => (arr || []).map((r) => ({ label: r._id, count: r.count }));
     return {
-        type: sortDesc(groups.type),
-        os: sortDesc(groups.os),
-        browser: sortDesc(groups.browser),
+        type: toList(f.type),
+        os: toList(f.os),
+        browser: toList(f.browser),
+        total: f.total?.[0]?.n || 0,
     };
 }
 
@@ -241,12 +280,19 @@ function postCountsPipeline(match) {
 // expression; the aggregation spelling of "is neither empty nor missing" is
 // $not + $in.
 //
-// The key is session-first, deliberately. Keying on userId looks more like
-// "unique people", but a visitor who signs in partway through a session then
-// produces an anonymous event and a userId event for the same browser, and
-// reach counts them twice. A session is also the unit the client already
-// de-duplicates impressions against (utils/postAnalytics.js), so this matches
-// how the event stream was actually produced.
+// The key is the ACCOUNT when there is one, falling back to the browser session.
+// Keying on sessionId alone is the obvious cheap choice and it counts browsers,
+// not people: someone who reads the site on a phone and a laptop becomes two
+// viewers, which is exactly the inflation "reach" is supposed to not have.
+//
+// THE RESIDUAL CASE, stated plainly rather than hidden: a visitor who browses
+// anonymously and then signs in emits an anonymous event (keyed by session) and
+// a signed-in event (keyed by account) for the same post, and is counted twice.
+// Folding those together needs a session→account map across the whole window,
+// which means materialising every distinct viewer in memory — the same thing
+// this roll-up was rewritten to avoid. The trade is deliberate: account-first
+// fixes the common case (one person, several devices) and leaves the rare one
+// (one person, one session, signing in halfway) counted twice.
 function viewerSetPipeline(match) {
     return [
         { $match: match },
@@ -257,22 +303,18 @@ function viewerSetPipeline(match) {
                     $addToSet: {
                         $cond: [
                             { $or: [
-                                { $not: { $in: [{ $ifNull: ["$sessionId", ""] }, ["", null]] } },
                                 { $not: { $in: [{ $ifNull: ["$userId", ""] }, ["", null]] } },
+                                { $not: { $in: [{ $ifNull: ["$sessionId", ""] }, ["", null]] } },
                             ] },
                             { $concat: [
                                 { $cond: [
-                                    { $not: { $in: [{ $ifNull: ["$sessionId", ""] }, ["", null]] } },
-                                    { $ifNull: ["$sessionId", ""] },
-                                    // No session (a server-side or logged-out
-                                    // write): fall back to the account.
-                                    { $ifNull: ["$userId", ""] },
+                                    { $not: { $in: [{ $ifNull: ["$userId", ""] }, ["", null]] } },
+                                    "u:", "s:",
                                 ] },
-                                // Prefixed so a session id can never collide with
-                                // a user id.
                                 { $cond: [
-                                    { $not: { $in: [{ $ifNull: ["$sessionId", ""] }, ["", null]] } },
-                                    "", "u:",
+                                    { $not: { $in: [{ $ifNull: ["$userId", ""] }, ["", null]] } },
+                                    { $ifNull: ["$userId", ""] },
+                                    { $ifNull: ["$sessionId", ""] },
                                 ] },
                             ] },
                             "$$REMOVE",
@@ -288,7 +330,7 @@ function viewerSetPipeline(match) {
 module.exports = {
     pad, dayKey, bucketKey, buckets, labelForKey,
     bucketCounts, bucketDistinct, toSeries,
-    deviceBreakdown, growthPercent,
+    deviceBreakdownPipeline, mapDeviceBreakdown, growthPercent,
     mapCountryRollup, mapRegionRollup, mapCityRollup, backfillCountryCoords,
     POST_CLICK_TYPES, postCountsPipeline, viewerSetPipeline,
 };
