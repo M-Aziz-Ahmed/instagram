@@ -28,9 +28,7 @@ import { translateItem, translateItems } from "@/utils/translateApi";
 import { languageName } from "@/utils/languages";
 import ReactionListModal from "@/components/shared/ReactionListModal";
 import UserActionsMenu from "@/components/shared/UserActionsMenu";
-
-const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+import useMediaUploader from "./useMediaUploader";
 
 // The swipe handlers and the tap handler are the same ones the single-image
 // path uses, passed down rather than re-implemented. That matters for two
@@ -204,21 +202,14 @@ function CommentComposer({ user, onSubmit, onCancel, placeholder, submitting }) 
     const [showEmoji, setShowEmoji] = useState(false);
     const [showGif, setShowGif]     = useState(false);
     const fileRef = useRef(null);
+    // Comment images and poll media follow the same storage decision as posts.
+    const uploader = useMediaUploader();
 
-    const uploadToCloudinary = (file) =>
-        new Promise((resolve, reject) => {
-            const fd = new FormData();
-            fd.append("file", file);
-            fd.append("upload_preset", UPLOAD_PRESET);
-            fd.append("folder", "anon-feed");
-            const xhr = new XMLHttpRequest();
-            xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`);
-            xhr.onload = () => xhr.status === 200
-                ? resolve(JSON.parse(xhr.responseText).secure_url)
-                : reject(new Error("Upload failed"));
-            xhr.onerror = () => reject(new Error("Network error"));
-            xhr.send(fd);
-        });
+    const uploadToCloudinary = async (file) => {
+        // Comment images go to the same place the account's posts do.
+        const { url } = await uploader.upload(file, { folder: "anon-feed" });
+        return url;
+    };
 
     const handleFile = async (e) => {
         const file = e.target.files?.[0];

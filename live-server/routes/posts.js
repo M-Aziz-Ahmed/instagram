@@ -8,6 +8,7 @@ const { isProUserDoc } = require("../lib/economy");
 const { requireFeature } = require("../lib/featureFlags");
 const { extractVideoLinks } = require("../lib/videoLinks");
 const { canUploadVideo } = require("../lib/videoUpload");
+const { resolveMediaTarget, getConnection, assertWithinQuota } = require("../lib/mediaVault");
 const { trimComments, removeComment, displayCount } = require("../lib/postComments");
 // Bundles the in-app Notification document and the OS push into one call, so a
 // new notification type cannot be added to one channel and forgotten in the
@@ -579,6 +580,32 @@ router.post("/", verifyToken, requireFeature("posting"), async (req, res) => {
         const finalImageUrls = Array.isArray(imageUrls) && imageUrls.length > 0
             ? imageUrls.filter(Boolean).slice(0, 10)
             : (imageUrl ? [imageUrl] : []);
+
+        // ── Storage allowance, checked at attach time ────────────────────────
+        //
+        // Uploads go browser → provider with an unsigned preset, so the bytes
+        // never pass through here and their size is not known at this point.
+        // The running total is maintained by POST /api/media-vault/usage, which
+        // refuses a single upload that would cross the allowance; this check
+        // closes the remaining gap, which is that an upload that succeeded
+        // before the allowance ran out could still be attached afterwards.
+        //
+        // Only the site tier is subject to it. Media in a user's own connected
+        // storage is on their bill, so refusing to post it would be refusing to
+        // publish content we are not paying for.
+        if (finalImageUrls.length > 0 || videoUrl) {
+            // `getUserPermissions` returns `{ isAdmin, permissions }` — not
+            // `roles` — so the same flat list the post gate already uses is
+            // passed here, and the two cannot resolve a different tier.
+            const { isAdmin: isAdminUser, permissions } = await getUserPermissions(req.userId);
+            const gateUser = { ...senderUser, isAdmin: isAdminUser, permissions };
+            const conn = await getConnection(req.userId);
+            const target = resolveMediaTarget(gateUser, conn);
+            const refusal = assertWithinQuota(target, conn?.usage, 0);
+            if (refusal) {
+                return res.status(refusal.status).json(refusal);
+            }
+        }
 
         // Media is screened BEFORE the post is written. On rejection the assets
         // are destroyed from Cloudinary, because the bytes were uploaded straight

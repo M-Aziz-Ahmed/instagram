@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npm run test:globe && npm run test:rollup && npm run test:translate && npm run test:toxic && npm run test:safety && npm run test:games && npm run test:invites && npm run test:invitePayload && npm run test:subscriberLocation && npm run test:mediaVault",
+    "test": "npm run test:globe && npm run test:rollup && npm run test:translate && npm run test:toxic && npm run test:safety && npm run test:games && npm run test:invites && npm run test:invitePayload && npm run test:subscriberLocation && npm run test:mediaVault && npm run test:mediaVaultWiring",
     "test:globe": "node components/Admin/globeProjection.test.mjs",
     "test:rollup": "node live-server/scripts/test-location-rollup.js",
     "test:translate": "node utils/translateApi.test.mjs",
@@ -18,6 +18,7 @@
     "test:invitePayload": "node utils/invitePayload.test.mjs",
     "test:subscriberLocation": "node live-server/lib/subscriberLocation.test.mjs",
     "test:mediaVault": "node live-server/lib/mediaVault.test.mjs",
+    "test:mediaVaultWiring": "node live-server/lib/mediaVaultWiring.test.mjs",
     "gen:icons": "node tools/gen-icons.mjs"
   },
   "dependencies": {

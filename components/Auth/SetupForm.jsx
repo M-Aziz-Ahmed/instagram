@@ -2,12 +2,15 @@
 
 import { useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
-
-const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+import useMediaUploader from "@/components/Feed/useMediaUploader";
 
 export default function SetupForm({ onDone }) {
     const { reloadUser, AVATAR_COLORS } = useUser();
+    // The onboarding avatar goes to the same place as everything else. At this
+    // point the account has no username yet, so the status lookup is skipped and
+    // the site cloud is used — the user can move storage afterwards, and their
+    // first picture is not worth a failed signup over.
+    const uploader = useMediaUploader();
     const [username, setUsername]       = useState("");
     const [bio, setBio]                 = useState("");
     const [color, setColor]             = useState(AVATAR_COLORS[0]);
@@ -26,14 +29,8 @@ export default function SetupForm({ onDone }) {
         setUploading(true);
         setError("");
         try {
-            const fd = new FormData();
-            fd.append("file", file);
-            fd.append("upload_preset", UPLOAD_PRESET);
-            fd.append("folder", "anon-avatars");
-            const res  = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: fd });
-            const json = await res.json();
-            if (!res.ok) throw new Error(json.error?.message ?? "Upload failed");
-            setAvatarUrl(json.secure_url);
+            const { url } = await uploader.upload(file, { folder: "anon-avatars" });
+            setAvatarUrl(url);
         } catch (err) {
             setError(err.message ?? "Upload failed.");
         } finally {

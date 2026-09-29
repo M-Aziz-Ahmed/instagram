@@ -56,8 +56,8 @@ import EmojiPicker from "@/components/shared/EmojiPicker";
 import GifPicker from "@/components/shared/GifPicker";
 import LinkPreviewCard from "@/components/shared/LinkPreviewCard";
 
-const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+import { getCloudName, getUploadPreset, noteUploadedBytes } from "@/components/Feed/mediaTargetStore";
+import useMediaTarget from "@/components/Feed/useMediaTarget";
 
 // ── Limits ────────────────────────────────────────────────────────────────
 const MAX_TEXT = 4000;                       // see file header
@@ -169,25 +169,34 @@ function describeCloudinaryError(xhr) {
 
 function uploadToCloudinary(file, { resourceType = "image", onProgress, onXhr } = {}) {
     return new Promise((resolve, reject) => {
-        if (!CLOUD_NAME || !UPLOAD_PRESET) {
+        // Read at CALL time. These used to be module-level constants, which froze
+        // the site's cloud into every DM attachment: a user who moved their media
+        // to their own storage kept paying for their direct messages here.
+        const cloudName = getCloudName();
+        const uploadPreset = getUploadPreset();
+        if (!cloudName || !uploadPreset) {
             reject(new Error("Uploads are not configured on this deployment"));
             return;
         }
         const fd = new FormData();
         fd.append("file", file, file.name || "upload");
-        fd.append("upload_preset", UPLOAD_PRESET);
+        fd.append("upload_preset", uploadPreset);
         fd.append("folder", "anon-feed");
         fd.append("resource_type", resourceType);
 
         const xhr = new XMLHttpRequest();
-        xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`);
+        xhr.open("POST", `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`);
         xhr.timeout = UPLOAD_TIMEOUT_MS;
         xhr.onload = () => {
             onXhr?.(null);
             if (xhr.status !== 200) { reject(new Error(describeCloudinaryError(xhr))); return; }
             try {
-                const url = JSON.parse(xhr.responseText)?.secure_url;
-                if (url) resolve(url);
+                const result = JSON.parse(xhr.responseText);
+                const url = result?.secure_url;
+                if (url) {
+                    noteUploadedBytes(result.bytes || file.size);
+                    resolve(url);
+                }
                 else reject(new Error("Upload finished but returned no URL"));
             } catch {
                 reject(new Error("Upload returned a response that could not be read"));
@@ -335,6 +344,9 @@ const panelInput = "w-full bg-gray-100 dark:bg-gray-800 text-base sm:text-sm tex
 export default function Input({ onMessageSent, recipient, replyingTo, setReplyingTo }) {
     const { user } = useUser();
     const { showToast } = useToast();
+    // The upload helper above is module-level, so the resolved storage target is
+    // published here rather than passed into it.
+    useMediaTarget({ enabled: !!user?.username });
 
     // ── Composer content ──────────────────────────────────────────────────
     const [text, setText]           = useState("");

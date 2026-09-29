@@ -29,8 +29,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useToast } from "@/context/ToastContext";
 import { timeAgo } from "@/utils/timeAgo";
 
-const CLOUDINARY_UPLOAD = `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`;
-const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+import { getCloudName, getUploadPreset, noteUploadedBytes } from "@/components/Feed/mediaTargetStore";
+import useMediaTarget from "@/components/Feed/useMediaTarget";
 
 const MAX_SLOW_MODE_SECONDS = 86400;   // the server's own ceiling
 const MAX_LIMIT = 1000;                // the server's own ceiling for maxMembers
@@ -148,6 +148,8 @@ function Note({ tone = "info", children }) {
 }
 
 export default function GroupSettings({ group, user, onClose, onGroupUpdated, onLeave }) {
+    // Publishes the resolved storage target for the group avatar upload.
+    useMediaTarget({ enabled: !!user?.username });
     const { showToast } = useToast();
     const me = (group.members || []).find((m) => (m.username || m) === user.username) || null;
     const isAdmin = me?.role === "admin";
@@ -239,10 +241,13 @@ export default function GroupSettings({ group, user, onClose, onGroupUpdated, on
         try {
             const fd = new FormData();
             fd.append("file", file);
-            fd.append("upload_preset", UPLOAD_PRESET);
-            const res = await fetch(CLOUDINARY_UPLOAD, { method: "POST", body: fd });
+            fd.append("upload_preset", getUploadPreset());
+            const res = await fetch(`https://api.cloudinary.com/v1_1/${getCloudName()}/image/upload`, { method: "POST", body: fd });
             const data = await res.json();
-            if (data.secure_url) setAvatarUrl(data.secure_url);
+            if (data.secure_url) {
+                noteUploadedBytes(data.bytes || file.size);
+                setAvatarUrl(data.secure_url);
+            }
             else showToast(data?.error?.message || "Upload failed", "error");
         } catch {
             showToast("Upload failed", "error");

@@ -6,9 +6,8 @@ import { useUser } from "@/context/UserContext";
 import { useVoiceChat } from "@/context/VoiceChatContext";
 import Link from "next/link";
 import InviteModal from "./InviteModal";
-
-const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+import { getCloudName, getUploadPreset, noteUploadedBytes } from "@/components/Feed/mediaTargetStore";
+import useMediaTarget from "@/components/Feed/useMediaTarget";
 
 const ROLE_BADGES = { owner: "Owner", admin: "Admin", moderator: "Mod", member: "" };
 const ROLE_COLORS = { owner: "text-yellow-500", admin: "text-blue-500", moderator: "text-green-500" };
@@ -24,6 +23,8 @@ export default function CommunityDetailClient() {
     const router = useRouter();
     const { user } = useUser();
     const { openVoiceChat } = useVoiceChat();
+    // Community images follow the same storage decision as the rest of the app.
+    useMediaTarget({ enabled: !!user?.username });
     const [community, setCommunity] = useState(null);
     const [members, setMembers] = useState([]);
     const [posts, setPosts] = useState([]);
@@ -90,10 +91,17 @@ export default function CommunityDetailClient() {
         return new Promise((resolve, reject) => {
             const fd = new FormData();
             fd.append("file", file);
-            fd.append("upload_preset", UPLOAD_PRESET);
+            fd.append("upload_preset", getUploadPreset());
             const xhr = new XMLHttpRequest();
-            xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`);
-            xhr.onload = () => xhr.status === 200 ? resolve(JSON.parse(xhr.responseText).secure_url) : reject(new Error("Upload failed"));
+            xhr.open("POST", `https://api.cloudinary.com/v1_1/${getCloudName()}/image/upload`);
+            xhr.onload = () => {
+                if (xhr.status !== 200) { reject(new Error("Upload failed")); return; }
+                try {
+                    const result = JSON.parse(xhr.responseText);
+                    noteUploadedBytes(result.bytes || file.size);
+                    resolve(result.secure_url);
+                } catch { reject(new Error("Upload response could not be read")); }
+            };
             xhr.onerror = () => reject(new Error("Network error"));
             xhr.send(fd);
         });

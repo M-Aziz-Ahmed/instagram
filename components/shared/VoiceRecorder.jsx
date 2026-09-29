@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-
-const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+import { getCloudName, getUploadPreset, noteUploadedBytes } from "@/components/Feed/mediaTargetStore";
+import useMediaTarget from "@/components/Feed/useMediaTarget";
 
 const MIME_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac"];
 
@@ -18,14 +17,18 @@ function uploadAudioToCloudinary(blob) {
     return new Promise((resolve, reject) => {
         const fd = new FormData();
         fd.append("file", blob, `voice-${Date.now()}.webm`);
-        fd.append("upload_preset", UPLOAD_PRESET);
+        fd.append("upload_preset", getUploadPreset());
         fd.append("folder", "anon-feed");
         fd.append("resource_type", "video");
         const xhr = new XMLHttpRequest();
-        xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`);
+        xhr.open("POST", `https://api.cloudinary.com/v1_1/${getCloudName()}/video/upload`);
         xhr.onload = () => {
             if (xhr.status === 200) {
-                resolve(JSON.parse(xhr.responseText).secure_url);
+                try {
+                    const result = JSON.parse(xhr.responseText);
+                    noteUploadedBytes(result.bytes || blob.size);
+                    resolve(result.secure_url);
+                } catch { reject(new Error("Upload response could not be read")); }
             } else {
                 reject(new Error("Upload failed"));
             }
@@ -36,6 +39,8 @@ function uploadAudioToCloudinary(blob) {
 }
 
 export default function VoiceRecorder({ onRecorded, maxDuration = 60, onCancel, recipient, username }) {
+    // The audio helper above is module-level; this publishes the target.
+    useMediaTarget({ enabled: !!username });
     const [recording, setRecording]       = useState(false);
     const [elapsed, setElapsed]           = useState(0);
     const [uploading, setUploading]       = useState(false);

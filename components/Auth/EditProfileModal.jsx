@@ -4,14 +4,17 @@ import { useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/context/ToastContext";
 import NotificationSettings from "@/components/Notifications/NotificationSettings";
+import MediaVaultPanel from "@/components/Settings/MediaVaultPanel";
+import useMediaTarget from "@/components/Feed/useMediaTarget";
 import { LANGUAGES } from "@/utils/languages";
-
-const CLOUD_NAME    = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
 export default function SettingsModal({ onClose }) {
     const { user, reloadUser, AVATAR_COLORS } = useUser();
     const { showToast } = useToast();
+    // Avatars go to the same place posts do. A user who moved their media to
+    // their own storage and then uploaded a profile picture to ours has exactly
+    // the inconsistency this is meant to remove.
+    const media = useMediaTarget({ enabled: !!user?.username });
     const [tab, setTab] = useState("profile"); // profile | notifications
     const [bio, setBio]             = useState(user?.bio ?? "");
     const [color, setColor]         = useState(user?.avatarColor ?? AVATAR_COLORS[0]);
@@ -37,11 +40,13 @@ export default function SettingsModal({ onClose }) {
         try {
             const fd = new FormData();
             fd.append("file", file);
-            fd.append("upload_preset", UPLOAD_PRESET);
+            fd.append("upload_preset", media.uploadPreset);
             fd.append("folder", "anon-avatars");
-            const res  = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: "POST", body: fd });
+            const res  = await fetch(`https://api.cloudinary.com/v1_1/${media.cloudName}/image/upload`, { method: "POST", body: fd });
             const json = await res.json();
             if (!res.ok) throw new Error(json.error?.message ?? "Upload failed");
+            // Counted against the site-tier allowance, same as any other upload.
+            media.noteUsage(json.bytes || file.size);
             setAvatarUrl(json.secure_url);
         } catch (err) {
             setError(err.message ?? "Upload failed.");
@@ -146,6 +151,21 @@ export default function SettingsModal({ onClose }) {
                         }`}
                     >
                         Notifications
+                    </button>
+                    {/* Storage lives here rather than only on /settings so it is
+                        found where people already look for account options. The
+                        standalone page still exists because the Google Drive
+                        OAuth callback has to redirect somewhere stable, and
+                        because the composer's "manage" link needs a deep link. */}
+                    <button
+                        onClick={() => setTab("storage")}
+                        className={`px-3 py-2.5 text-sm font-semibold transition-colors -mb-px ${
+                            tab === "storage"
+                                ? "text-gray-900 dark:text-gray-100 border-b-2 border-gray-900 dark:border-gray-100"
+                                : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                        }`}
+                    >
+                        Storage
                     </button>
                 </div>
 
@@ -316,6 +336,8 @@ export default function SettingsModal({ onClose }) {
                                 </button>
                             </form>
                         </>
+                    ) : tab === "storage" ? (
+                        <MediaVaultPanel />
                     ) : (
                         <NotificationSettings />
                     )}

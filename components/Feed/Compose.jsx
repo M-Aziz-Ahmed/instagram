@@ -9,12 +9,16 @@ import EmojiPicker from "@/components/shared/EmojiPicker";
 import GifPicker from "@/components/shared/GifPicker";
 import { useDraftSync } from "@/utils/useDraftSync";
 import SchedulePicker, { formatScheduleLabel } from "./SchedulePicker";
-
-const CLOUD_NAME     = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET  = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+import useMediaTarget from "./useMediaTarget";
+import StorageHint from "./StorageHint";
 
 export default function Compose({ onPosted }) {
     const { user } = useUser();
+// Where this account's uploads go, and what it has spent. Resolved from
+// /api/media-vault/status so an account that connected its own storage uploads
+// there; falls back to the site cloud while that call is in flight, which keeps
+// the composer working rather than blocking it on a settings lookup.
+const media = useMediaTarget({ enabled: !!user?.username });
 // Whether this account may upload video directly. Sent by /api/auth/me as
 // `canUploadVideo`, resolved server-side by the same helper that gates
 // POST /api/posts, so the two can't disagree. Defaults to false: someone who
@@ -213,19 +217,29 @@ const canUploadVideo = user?.canUploadVideo === true;
         new Promise((resolve, reject) => {
             const fd = new FormData();
             fd.append("file", file);
-            fd.append("upload_preset", UPLOAD_PRESET);
+            fd.append("upload_preset", media.uploadPreset);
             fd.append("folder", "anon-reels");
 
             const xhr = new XMLHttpRequest();
-            xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`);
+            xhr.open("POST", `https://api.cloudinary.com/v1_1/${media.cloudName}/video/upload`);
             xhr.upload.onprogress = (e) => {
                 if (e.lengthComputable) {
                     setUploadProgress(Math.round((e.loaded / e.total) * 100));
                 }
             };
-            xhr.onload  = () => xhr.status === 200
-                ? resolve(JSON.parse(xhr.responseText).secure_url)
-                : reject(new Error("Cloudinary upload failed"));
+            // The whole result is read, not just the URL: `bytes` comes from
+            // Cloudinary, so the running total is never a number the browser
+            // invented.
+            xhr.onload  = () => {
+                if (xhr.status !== 200) return reject(new Error("Upload failed"));
+                try {
+                    const result = JSON.parse(xhr.responseText);
+                    media.noteUsage(result.bytes || file.size);
+                    resolve(result.secure_url);
+                } catch {
+                    reject(new Error("Upload response could not be read"));
+                }
+            };
             xhr.onerror = () => reject(new Error("Network error during upload"));
             xhr.send(fd);
         });
@@ -234,20 +248,26 @@ const canUploadVideo = user?.canUploadVideo === true;
         new Promise((resolve, reject) => {
             const fd = new FormData();
             fd.append("file", file);
-            fd.append("upload_preset", UPLOAD_PRESET);
+            fd.append("upload_preset", media.uploadPreset);
             fd.append("folder", "anon-feed");
 
             const xhr = new XMLHttpRequest();
-            xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`);
-
+            xhr.open("POST", `https://api.cloudinary.com/v1_1/${media.cloudName}/image/upload`);
             xhr.upload.onprogress = (e) => {
                 if (e.lengthComputable) {
                     setUploadProgress(Math.round((e.loaded / e.total) * 100));
                 }
             };
-            xhr.onload  = () => xhr.status === 200
-                ? resolve(JSON.parse(xhr.responseText).secure_url)
-                : reject(new Error("Cloudinary upload failed"));
+            xhr.onload  = () => {
+                if (xhr.status !== 200) return reject(new Error("Upload failed"));
+                try {
+                    const result = JSON.parse(xhr.responseText);
+                    media.noteUsage(result.bytes || file.size);
+                    resolve(result.secure_url);
+                } catch {
+                    reject(new Error("Upload response could not be read"));
+                }
+            };
             xhr.onerror = () => reject(new Error("Network error during upload"));
             xhr.send(fd);
         });
@@ -767,6 +787,18 @@ const canUploadVideo = user?.canUploadVideo === true;
 
                         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFile} />
                 <input ref={videoRef} type="file" accept="video/*" className="hidden" onChange={handleVideo} />
+
+                        {/* Where the upload will land, and how much is left.
+                            Deliberately small and only rendered once the status
+                            call has resolved — a spinner next to the composer
+                            would be noise, and the fallback silently uses the
+                            site storage in the meantime. */}
+                        {media.status && (
+                            <StorageHint
+                                media={media}
+                                hasMedia={imageFiles.length > 0 || !!video || previews.some((u) => !u.includes("media.giphy.com"))}
+                            />
+                        )}
 
                         <button
                             onClick={handlePost}

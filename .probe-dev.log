@@ -2193,3 +2193,533 @@ https://react.dev/link/hydration-mismatch
 ✓ Finished filesystem cache database compaction in 32.5s
 ✓ Finished filesystem cache database compaction in 12.4s
 ✓ Compiled in 3s
+✓ Finished filesystem cache database compaction in 41s
+✓ Finished filesystem cache database compaction in 23.0s
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+ GET /admin/manage 200 in 4.8s (next.js: 3.4s, proxy.ts: 596ms, application-code: 816ms)
+ GET /admin/manage 200 in 236ms (next.js: 69ms, proxy.ts: 46ms, application-code: 121ms)
+ GET /admin/manage 200 in 189ms (next.js: 56ms, proxy.ts: 65ms, application-code: 68ms)
+✓ Finished writing to filesystem cache in 89s
+ GET /admin/manage 200 in 687ms (next.js: 56ms, proxy.ts: 261ms, application-code: 369ms)
+✓ Finished filesystem cache database compaction in 11.1s
+✓ Finished filesystem cache database compaction in 10.8s
+✓ Compiled in 6.1s
+ GET /admin/manage 200 in 622ms (next.js: 73ms, proxy.ts: 148ms, application-code: 402ms)
+ GET /admin/manage 200 in 226ms (next.js: 113ms, proxy.ts: 45ms, application-code: 67ms)
+ GET /admin/manage 200 in 218ms (next.js: 53ms, proxy.ts: 39ms, application-code: 126ms)
+✓ Finished writing to filesystem cache in 93s
+✓ Finished filesystem cache database compaction in 27.5s
+ GET /admin/manage 200 in 57s (next.js: 55s, proxy.ts: 1489ms, application-code: 511ms)
+ GET /admin/manage 200 in 484ms (next.js: 2ms, proxy.ts: 36ms, application-code: 445ms)
+ GET /admin/manage 200 in 426ms (next.js: 11ms, proxy.ts: 4ms, application-code: 411ms)
+ GET /admin/manage 200 in 316ms (next.js: 76ms, proxy.ts: 9ms, application-code: 231ms)
+ GET /admin/manage 200 in 317ms (next.js: 6ms, proxy.ts: 9ms, application-code: 302ms)
+ GET /admin/manage 200 in 316ms (next.js: 112ms, proxy.ts: 9ms, application-code: 196ms)
+ GET /admin/manage 200 in 316ms (next.js: 139ms, proxy.ts: 9ms, application-code: 168ms)
+ GET /admin/manage 200 in 236ms (next.js: 6ms, proxy.ts: 13ms, application-code: 217ms)
+ GET /admin/manage 200 in 236ms (next.js: 27ms, proxy.ts: 13ms, application-code: 196ms)
+ GET /admin/manage 200 in 237ms (next.js: 49ms, proxy.ts: 13ms, application-code: 174ms)
+ GET /admin/manage 200 in 236ms (next.js: 159ms, proxy.ts: 13ms, application-code: 64ms)
+ GET /admin/manage 200 in 237ms (next.js: 139ms, proxy.ts: 13ms, application-code: 85ms)
+ GET /admin/manage 200 in 430ms (next.js: 116ms, proxy.ts: 13ms, application-code: 302ms)
+ GET /admin/manage 200 in 200ms (next.js: 6ms, proxy.ts: 11ms, application-code: 183ms)
+ GET /admin/manage 200 in 234ms (next.js: 34ms, proxy.ts: 10ms, application-code: 190ms)
+ GET /admin/manage 200 in 233ms (next.js: 109ms, proxy.ts: 9ms, application-code: 115ms)
+ GET /admin/manage 200 in 233ms (next.js: 130ms, proxy.ts: 9ms, application-code: 93ms)
+ GET /admin/manage 200 in 234ms (next.js: 68ms, proxy.ts: 9ms, application-code: 156ms)
+ GET /admin/manage 200 in 367ms (next.js: 4ms, proxy.ts: 4ms, application-code: 360ms)
+ GET /admin/manage 200 in 331ms (next.js: 7ms, proxy.ts: 9ms, application-code: 315ms)
+ GET /admin/manage 200 in 353ms (next.js: 31ms, proxy.ts: 9ms, application-code: 313ms)
+ GET /admin/manage 200 in 352ms (next.js: 81ms, proxy.ts: 8ms, application-code: 263ms)
+ GET /admin/manage 200 in 353ms (next.js: 52ms, proxy.ts: 9ms, application-code: 293ms)
+ GET /admin/manage 200 in 359ms (next.js: 263ms, proxy.ts: 8ms, application-code: 88ms)
+ GET /admin/manage 200 in 283ms (next.js: 3ms, proxy.ts: 4ms, application-code: 276ms)
+ GET /admin/manage 200 in 255ms (next.js: 6ms, proxy.ts: 10ms, application-code: 238ms)
+ GET /admin/manage 200 in 255ms (next.js: 36ms, proxy.ts: 9ms, application-code: 210ms)
+ GET /admin/manage 200 in 255ms (next.js: 142ms, proxy.ts: 9ms, application-code: 105ms)
+ GET /admin/manage 200 in 256ms (next.js: 66ms, proxy.ts: 9ms, application-code: 182ms)
+ GET /admin/manage 200 in 223ms (next.js: 2ms, proxy.ts: 4ms, application-code: 217ms)
+ GET /admin/manage 200 in 217ms (next.js: 2ms, proxy.ts: 4ms, application-code: 210ms)
+ GET /admin/manage 200 in 192ms (next.js: 5ms, proxy.ts: 9ms, application-code: 179ms)
+ GET /admin/manage 200 in 193ms (next.js: 52ms, proxy.ts: 9ms, application-code: 132ms)
+ GET /admin/manage 200 in 194ms (next.js: 29ms, proxy.ts: 9ms, application-code: 156ms)
+ GET /admin/manage 200 in 194ms (next.js: 80ms, proxy.ts: 9ms, application-code: 105ms)
+ GET /admin/manage 200 in 266ms (next.js: 3ms, proxy.ts: 4ms, application-code: 259ms)
+ GET /admin/manage 200 in 269ms (next.js: 6ms, proxy.ts: 5ms, application-code: 258ms)
+ GET /admin/manage 200 in 215ms (next.js: 6ms, proxy.ts: 33ms, application-code: 175ms)
+ GET /admin/manage 200 in 195ms (next.js: 29ms, proxy.ts: 14ms, application-code: 152ms)
+ GET /admin/manage 200 in 246ms (next.js: 55ms, proxy.ts: 14ms, application-code: 177ms)
+ GET /admin/manage 200 in 241ms (next.js: 82ms, proxy.ts: 9ms, application-code: 150ms)
+ GET /admin/manage 200 in 254ms (next.js: 3ms, proxy.ts: 4ms, application-code: 248ms)
+ GET /admin/manage 200 in 217ms (next.js: 4ms, proxy.ts: 4ms, application-code: 209ms)
+ GET /admin/manage 200 in 194ms (next.js: 6ms, proxy.ts: 13ms, application-code: 175ms)
+ GET /admin/manage 200 in 221ms (next.js: 33ms, proxy.ts: 13ms, application-code: 175ms)
+ GET /admin/manage 200 in 220ms (next.js: 62ms, proxy.ts: 8ms, application-code: 150ms)
+ GET /admin/manage 200 in 222ms (next.js: 101ms, proxy.ts: 8ms, application-code: 113ms)
+ GET /admin/manage 200 in 220ms (next.js: 4ms, proxy.ts: 4ms, application-code: 213ms)
+ GET /admin/manage 200 in 193ms (next.js: 3ms, proxy.ts: 4ms, application-code: 185ms)
+ GET /admin/manage 200 in 204ms (next.js: 8ms, proxy.ts: 12ms, application-code: 184ms)
+ GET /admin/manage 200 in 234ms (next.js: 36ms, proxy.ts: 9ms, application-code: 189ms)
+ GET /admin/manage 200 in 234ms (next.js: 64ms, proxy.ts: 9ms, application-code: 161ms)
+ GET /admin/manage 200 in 232ms (next.js: 72ms, proxy.ts: 34ms, application-code: 126ms)
+ GET /admin/manage 200 in 292ms (next.js: 4ms, proxy.ts: 4ms, application-code: 284ms)
+ GET /admin/manage 200 in 265ms (next.js: 4ms, proxy.ts: 17ms, application-code: 244ms)
+ GET /admin/manage 200 in 244ms (next.js: 7ms, proxy.ts: 68ms, application-code: 169ms)
+ GET /admin/manage 200 in 268ms (next.js: 36ms, proxy.ts: 68ms, application-code: 164ms)
+ GET /admin/manage 200 in 208ms (next.js: 37ms, proxy.ts: 35ms, application-code: 136ms)
+ GET /admin/manage 200 in 206ms (next.js: 59ms, proxy.ts: 38ms, application-code: 110ms)
+ GET /admin/manage 200 in 210ms (next.js: 4ms, proxy.ts: 4ms, application-code: 202ms)
+ GET /admin/manage 200 in 210ms (next.js: 3ms, proxy.ts: 32ms, application-code: 174ms)
+ GET /admin/manage 200 in 187ms (next.js: 7ms, proxy.ts: 8ms, application-code: 173ms)
+ GET /admin/manage 200 in 214ms (next.js: 11ms, proxy.ts: 36ms, application-code: 167ms)
+ GET /admin/manage 200 in 213ms (next.js: 30ms, proxy.ts: 39ms, application-code: 144ms)
+ GET /admin/manage 200 in 213ms (next.js: 52ms, proxy.ts: 39ms, application-code: 122ms)
+ GET /admin/manage 200 in 205ms (next.js: 5ms, proxy.ts: 4ms, application-code: 196ms)
+ GET /admin/manage 200 in 180ms (next.js: 5ms, proxy.ts: 8ms, application-code: 168ms)
+ GET /admin/manage 200 in 205ms (next.js: 7ms, proxy.ts: 35ms, application-code: 162ms)
+ GET /admin/manage 200 in 197ms (next.js: 34ms, proxy.ts: 7ms, application-code: 156ms)
+ GET /admin/manage 200 in 214ms (next.js: 32ms, proxy.ts: 36ms, application-code: 146ms)
+ GET /admin/manage 200 in 213ms (next.js: 55ms, proxy.ts: 36ms, application-code: 123ms)
+ GET /admin/manage 200 in 263ms (next.js: 4ms, proxy.ts: 4ms, application-code: 255ms)
+ GET /admin/manage 200 in 269ms (next.js: 4ms, proxy.ts: 8ms, application-code: 257ms)
+ GET /admin/manage 200 in 270ms (next.js: 6ms, proxy.ts: 22ms, application-code: 242ms)
+ GET /admin/manage 200 in 333ms (next.js: 40ms, proxy.ts: 7ms, application-code: 285ms)
+ GET /admin/manage 200 in 330ms (next.js: 46ms, proxy.ts: 40ms, application-code: 244ms)
+ GET /admin/manage 200 in 331ms (next.js: 82ms, proxy.ts: 40ms, application-code: 210ms)
+ GET /admin/manage 200 in 369ms (next.js: 4ms, proxy.ts: 4ms, application-code: 361ms)
+ GET /admin/manage 200 in 345ms (next.js: 4ms, proxy.ts: 9ms, application-code: 332ms)
+ GET /admin/manage 200 in 293ms (next.js: 8ms, proxy.ts: 10ms, application-code: 275ms)
+ GET /admin/manage 200 in 323ms (next.js: 134ms, proxy.ts: 8ms, application-code: 180ms)
+ GET /admin/manage 200 in 396ms (next.js: 56ms, proxy.ts: 123ms, application-code: 216ms)
+ GET /admin/manage 200 in 396ms (next.js: 83ms, proxy.ts: 123ms, application-code: 189ms)
+ GET /admin/manage 200 in 367ms (next.js: 4ms, proxy.ts: 4ms, application-code: 359ms)
+ GET /admin/manage 200 in 343ms (next.js: 5ms, proxy.ts: 7ms, application-code: 331ms)
+ GET /admin/manage 200 in 367ms (next.js: 7ms, proxy.ts: 115ms, application-code: 245ms)
+ GET /admin/manage 200 in 286ms (next.js: 10ms, proxy.ts: 32ms, application-code: 243ms)
+ GET /admin/manage 200 in 285ms (next.js: 36ms, proxy.ts: 36ms, application-code: 212ms)
+ GET /admin/manage 200 in 285ms (next.js: 129ms, proxy.ts: 35ms, application-code: 121ms)
+ GET /admin/manage 200 in 209ms (next.js: 4ms, proxy.ts: 4ms, application-code: 200ms)
+ GET /admin/manage 200 in 203ms (next.js: 4ms, proxy.ts: 8ms, application-code: 191ms)
+ GET /admin/manage 200 in 204ms (next.js: 7ms, proxy.ts: 11ms, application-code: 186ms)
+ GET /admin/manage 200 in 252ms (next.js: 11ms, proxy.ts: 32ms, application-code: 209ms)
+ GET /admin/manage 200 in 252ms (next.js: 34ms, proxy.ts: 33ms, application-code: 185ms)
+ GET /admin/manage 200 in 252ms (next.js: 57ms, proxy.ts: 36ms, application-code: 159ms)
+ GET /admin/manage 200 in 247ms (next.js: 5ms, proxy.ts: 22ms, application-code: 220ms)
+ GET /admin/manage 200 in 229ms (next.js: 5ms, proxy.ts: 34ms, application-code: 190ms)
+ GET /admin/manage 200 in 226ms (next.js: 7ms, proxy.ts: 59ms, application-code: 160ms)
+ GET /admin/manage 200 in 199ms (next.js: 5ms, proxy.ts: 36ms, application-code: 158ms)
+ GET /admin/manage 200 in 197ms (next.js: 31ms, proxy.ts: 35ms, application-code: 131ms)
+ GET /admin/manage 200 in 172ms (next.js: 55ms, proxy.ts: 10ms, application-code: 108ms)
+ GET /admin/manage 200 in 251ms (next.js: 5ms, proxy.ts: 4ms, application-code: 242ms)
+ GET /admin/manage 200 in 251ms (next.js: 4ms, proxy.ts: 31ms, application-code: 217ms)
+ GET /admin/manage 200 in 236ms (next.js: 7ms, proxy.ts: 9ms, application-code: 220ms)
+ GET /admin/manage 200 in 256ms (next.js: 9ms, proxy.ts: 32ms, application-code: 215ms)
+ GET /admin/manage 200 in 258ms (next.js: 29ms, proxy.ts: 35ms, application-code: 194ms)
+ GET /admin/manage 200 in 260ms (next.js: 69ms, proxy.ts: 34ms, application-code: 156ms)
+ GET /admin/manage 200 in 216ms (next.js: 6ms, proxy.ts: 4ms, application-code: 206ms)
+ GET /admin/manage 200 in 214ms (next.js: 4ms, proxy.ts: 40ms, application-code: 170ms)
+ GET /admin/manage 200 in 220ms (next.js: 6ms, proxy.ts: 35ms, application-code: 179ms)
+ GET /admin/manage 200 in 218ms (next.js: 10ms, proxy.ts: 31ms, application-code: 177ms)
+ GET /admin/manage 200 in 219ms (next.js: 35ms, proxy.ts: 31ms, application-code: 152ms)
+ GET /admin/manage 200 in 222ms (next.js: 62ms, proxy.ts: 34ms, application-code: 126ms)
+ GET /admin/manage 200 in 224ms (next.js: 4ms, proxy.ts: 4ms, application-code: 215ms)
+ GET /admin/manage 200 in 224ms (next.js: 5ms, proxy.ts: 46ms, application-code: 172ms)
+ GET /admin/manage 200 in 213ms (next.js: 7ms, proxy.ts: 37ms, application-code: 169ms)
+ GET /admin/manage 200 in 206ms (next.js: 10ms, proxy.ts: 31ms, application-code: 165ms)
+ GET /admin/manage 200 in 206ms (next.js: 32ms, proxy.ts: 31ms, application-code: 143ms)
+ GET /admin/manage 200 in 210ms (next.js: 61ms, proxy.ts: 35ms, application-code: 114ms)
+ GET /admin/manage 200 in 222ms (next.js: 4ms, proxy.ts: 3ms, application-code: 214ms)
+ GET /admin/manage 200 in 224ms (next.js: 5ms, proxy.ts: 36ms, application-code: 182ms)
+ GET /admin/manage 200 in 224ms (next.js: 7ms, proxy.ts: 36ms, application-code: 181ms)
+ GET /admin/manage 200 in 219ms (next.js: 45ms, proxy.ts: 8ms, application-code: 166ms)
+ GET /admin/manage 200 in 218ms (next.js: 68ms, proxy.ts: 7ms, application-code: 143ms)
+ GET /admin/manage 200 in 222ms (next.js: 61ms, proxy.ts: 45ms, application-code: 116ms)
+ GET /admin/manage 200 in 229ms (next.js: 5ms, proxy.ts: 6ms, application-code: 217ms)
+ GET /admin/manage 200 in 226ms (next.js: 4ms, proxy.ts: 37ms, application-code: 185ms)
+ GET /admin/manage 200 in 203ms (next.js: 17ms, proxy.ts: 12ms, application-code: 174ms)
+ GET /admin/manage 200 in 197ms (next.js: 58ms, proxy.ts: 18ms, application-code: 121ms)
+ GET /admin/manage 200 in 222ms (next.js: 34ms, proxy.ts: 18ms, application-code: 170ms)
+ GET /admin/manage 200 in 216ms (next.js: 19ms, proxy.ts: 83ms, application-code: 114ms)
+ GET /admin/manage 200 in 214ms (next.js: 4ms, proxy.ts: 4ms, application-code: 206ms)
+ GET /admin/manage 200 in 216ms (next.js: 5ms, proxy.ts: 39ms, application-code: 172ms)
+ GET /admin/manage 200 in 221ms (next.js: 6ms, proxy.ts: 35ms, application-code: 179ms)
+ GET /admin/manage 200 in 195ms (next.js: 35ms, proxy.ts: 10ms, application-code: 150ms)
+ GET /admin/manage 200 in 217ms (next.js: 38ms, proxy.ts: 33ms, application-code: 147ms)
+ GET /admin/manage 200 in 194ms (next.js: 8ms, proxy.ts: 62ms, application-code: 125ms)
+ GET /admin/manage 200 in 216ms (next.js: 5ms, proxy.ts: 6ms, application-code: 205ms)
+ GET /admin/manage 200 in 212ms (next.js: 5ms, proxy.ts: 43ms, application-code: 163ms)
+ GET /admin/manage 200 in 218ms (next.js: 6ms, proxy.ts: 36ms, application-code: 177ms)
+ GET /admin/manage 200 in 194ms (next.js: 32ms, proxy.ts: 11ms, application-code: 151ms)
+ GET /admin/manage 200 in 216ms (next.js: 37ms, proxy.ts: 32ms, application-code: 147ms)
+ GET /admin/manage 200 in 196ms (next.js: 30ms, proxy.ts: 39ms, application-code: 127ms)
+ GET /admin/manage 200 in 239ms (next.js: 4ms, proxy.ts: 4ms, application-code: 231ms)
+ GET /admin/manage 200 in 238ms (next.js: 5ms, proxy.ts: 50ms, application-code: 183ms)
+ GET /admin/manage 200 in 218ms (next.js: 6ms, proxy.ts: 37ms, application-code: 175ms)
+ GET /admin/manage 200 in 195ms (next.js: 48ms, proxy.ts: 11ms, application-code: 135ms)
+ GET /admin/manage 200 in 219ms (next.js: 38ms, proxy.ts: 49ms, application-code: 132ms)
+ GET /admin/manage 200 in 190ms (next.js: 31ms, proxy.ts: 53ms, application-code: 106ms)
+ GET /admin/manage 200 in 216ms (next.js: 4ms, proxy.ts: 5ms, application-code: 208ms)
+ GET /admin/manage 200 in 216ms (next.js: 9ms, proxy.ts: 30ms, application-code: 177ms)
+ GET /admin/manage 200 in 215ms (next.js: 6ms, proxy.ts: 34ms, application-code: 175ms)
+ GET /admin/manage 200 in 191ms (next.js: 33ms, proxy.ts: 11ms, application-code: 147ms)
+ GET /admin/manage 200 in 214ms (next.js: 40ms, proxy.ts: 31ms, application-code: 143ms)
+ GET /admin/manage 200 in 213ms (next.js: 41ms, proxy.ts: 66ms, application-code: 107ms)
+ GET /admin/manage 200 in 220ms (next.js: 4ms, proxy.ts: 5ms, application-code: 210ms)
+ GET /admin/manage 200 in 220ms (next.js: 11ms, proxy.ts: 28ms, application-code: 181ms)
+ GET /admin/manage 200 in 218ms (next.js: 6ms, proxy.ts: 35ms, application-code: 177ms)
+ GET /admin/manage 200 in 235ms (next.js: 39ms, proxy.ts: 35ms, application-code: 161ms)
+ GET /admin/manage 200 in 234ms (next.js: 36ms, proxy.ts: 39ms, application-code: 160ms)
+ GET /admin/manage 200 in 235ms (next.js: 38ms, proxy.ts: 68ms, application-code: 128ms)
+ GET /admin/manage 200 in 226ms (next.js: 6ms, proxy.ts: 6ms, application-code: 215ms)
+ GET /admin/manage 200 in 222ms (next.js: 20ms, proxy.ts: 31ms, application-code: 171ms)
+ GET /admin/manage 200 in 181ms (next.js: 8ms, proxy.ts: 36ms, application-code: 138ms)
+ GET /admin/manage 200 in 185ms (next.js: 37ms, proxy.ts: 11ms, application-code: 137ms)
+ GET /admin/manage 200 in 208ms (next.js: 34ms, proxy.ts: 39ms, application-code: 135ms)
+ GET /admin/manage 200 in 183ms (next.js: 33ms, proxy.ts: 39ms, application-code: 111ms)
+ GET /admin/manage 200 in 220ms (next.js: 5ms, proxy.ts: 6ms, application-code: 209ms)
+ GET /admin/manage 200 in 220ms (next.js: 9ms, proxy.ts: 32ms, application-code: 178ms)
+ GET /admin/manage 200 in 192ms (next.js: 11ms, proxy.ts: 36ms, application-code: 146ms)
+ GET /admin/manage 200 in 199ms (next.js: 22ms, proxy.ts: 35ms, application-code: 141ms)
+ GET /admin/manage 200 in 220ms (next.js: 34ms, proxy.ts: 46ms, application-code: 139ms)
+ GET /admin/manage 200 in 198ms (next.js: 33ms, proxy.ts: 47ms, application-code: 118ms)
+ GET /admin/manage 200 in 152ms (next.js: 5ms, proxy.ts: 5ms, application-code: 142ms)
+ GET /admin/manage 200 in 148ms (next.js: 7ms, proxy.ts: 41ms, application-code: 101ms)
+ GET /admin/manage 200 in 113ms (next.js: 10ms, proxy.ts: 36ms, application-code: 67ms)
+ GET /admin/manage 200 in 104ms (next.js: 32ms, proxy.ts: 35ms, application-code: 36ms)
+✓ Finished writing to filesystem cache in 21.7s
+✓ Finished filesystem cache database compaction in 11.0s
+ GET /admin/manage 200 in 425ms (next.js: 56ms, proxy.ts: 60ms, application-code: 308ms)
+ GET /admin/manage 200 in 168ms (next.js: 48ms, proxy.ts: 34ms, application-code: 86ms)
+✓ Finished filesystem cache database compaction in 11.3s
+✓ Compiled in 1678ms
+○ Compiling /settings ...
+ GET /settings 200 in 31.7s (next.js: 30.7s, proxy.ts: 4ms, application-code: 1027ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+ GET /settings 200 in 562ms (next.js: 3ms, proxy.ts: 4ms, application-code: 555ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+✓ Finished writing to filesystem cache in 72s
+ GET /settings 200 in 1487ms (next.js: 415ms, proxy.ts: 4ms, application-code: 1069ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+✓ Finished writing to filesystem cache in 92s
+✓ Finished filesystem cache database compaction in 48s
+✓ Finished filesystem cache database compaction in 70s
+✓ Compiled in 28.7s
+ GET /settings 200 in 1951ms (next.js: 1707ms, proxy.ts: 191ms, application-code: 53ms)
+✓ Compiled in 2.8s
+ GET /settings 200 in 126ms (next.js: 54ms, proxy.ts: 37ms, application-code: 35ms)
+✓ Compiled in 11.5s
+ GET /settings 200 in 2.8s (next.js: 150ms, proxy.ts: 84ms, application-code: 2.6s)
+ GET /settings 200 in 3.0s (next.js: 174ms, proxy.ts: 84ms, application-code: 2.7s)
+ GET /settings 200 in 262ms (next.js: 114ms, proxy.ts: 90ms, application-code: 58ms)
+ GET /settings 200 in 104ms (next.js: 2ms, proxy.ts: 3ms, application-code: 99ms)
+ GET /settings 200 in 52ms (next.js: 23ms, proxy.ts: 4ms, application-code: 26ms)
+ GET /settings 200 in 51ms (next.js: 24ms, proxy.ts: 6ms, application-code: 21ms)
+ GET /settings 200 in 131ms (next.js: 3ms, proxy.ts: 4ms, application-code: 124ms)
+ GET /settings 200 in 78ms (next.js: 22ms, proxy.ts: 4ms, application-code: 52ms)
+ GET /settings 200 in 59ms (next.js: 27ms, proxy.ts: 6ms, application-code: 25ms)
+ GET /settings 200 in 192ms (next.js: 3ms, proxy.ts: 6ms, application-code: 183ms)
+ GET /settings 200 in 83ms (next.js: 24ms, proxy.ts: 38ms, application-code: 21ms)
+ GET /settings 200 in 225ms (next.js: 3ms, proxy.ts: 5ms, application-code: 218ms)
+ GET /settings 200 in 48ms (next.js: 22ms, proxy.ts: 5ms, application-code: 21ms)
+ GET /settings 200 in 195ms (next.js: 3ms, proxy.ts: 7ms, application-code: 185ms)
+ GET /settings 200 in 197ms (next.js: 3ms, proxy.ts: 38ms, application-code: 156ms)
+ GET /settings 200 in 64ms (next.js: 39ms, proxy.ts: 5ms, application-code: 20ms)
+ GET /settings 200 in 443ms (next.js: 3ms, proxy.ts: 5ms, application-code: 434ms)
+ GET /settings 200 in 304ms (next.js: 185ms, proxy.ts: 61ms, application-code: 58ms)
+ GET /settings 200 in 433ms (next.js: 20ms, proxy.ts: 6ms, application-code: 407ms)
+ GET /settings 200 in 352ms (next.js: 3ms, proxy.ts: 61ms, application-code: 288ms)
+ GET /settings 200 in 40ms (next.js: 5ms, proxy.ts: 6ms, application-code: 29ms)
+ GET /settings 200 in 86ms (next.js: 4ms, proxy.ts: 5ms, application-code: 78ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+✓ Compiled in 1336ms
+ GET /settings 200 in 127ms (next.js: 56ms, proxy.ts: 35ms, application-code: 36ms)
+✓ Compiled in 4s
+ GET /settings 200 in 245ms (next.js: 47ms, proxy.ts: 55ms, application-code: 143ms)
+ GET /settings 200 in 2.5s (next.js: 1500ms, proxy.ts: 34ms, application-code: 918ms)
+ GET /settings 200 in 425ms (next.js: 155ms, proxy.ts: 41ms, application-code: 230ms)
+ GET /settings 200 in 191ms (next.js: 47ms, proxy.ts: 72ms, application-code: 72ms)
+ GET /settings 200 in 240ms (next.js: 49ms, proxy.ts: 45ms, application-code: 147ms)
+ GET /settings 200 in 243ms (next.js: 60ms, proxy.ts: 6ms, application-code: 177ms)
+ GET /settings 200 in 41ms (next.js: 11ms, proxy.ts: 6ms, application-code: 23ms)
+ GET /settings 200 in 101ms (next.js: 27ms, proxy.ts: 31ms, application-code: 44ms)
+ GET /settings 200 in 102ms (next.js: 5ms, proxy.ts: 31ms, application-code: 65ms)
+ GET /settings 200 in 354ms (next.js: 6ms, proxy.ts: 10ms, application-code: 338ms)
+ GET /settings 200 in 104ms (next.js: 47ms, proxy.ts: 30ms, application-code: 26ms)
+ GET /settings 200 in 71ms (next.js: 6ms, proxy.ts: 11ms, application-code: 54ms)
+ GET /settings 200 in 68ms (next.js: 32ms, proxy.ts: 9ms, application-code: 27ms)
+ GET /settings 200 in 298ms (next.js: 4ms, proxy.ts: 68ms, application-code: 226ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+✓ Finished filesystem cache database compaction in 45s
+✓ Finished writing to filesystem cache in 61s
+ GET /settings 200 in 115ms (next.js: 41ms, proxy.ts: 39ms, application-code: 35ms)
+ GET /settings 200 in 682ms (next.js: 41ms, proxy.ts: 101ms, application-code: 540ms)
+ GET /settings 200 in 501ms (next.js: 3ms, proxy.ts: 4ms, application-code: 494ms)
+ GET /settings 200 in 9.0s (next.js: 6.0s, proxy.ts: 2.0s, application-code: 929ms)
+✓ Finished writing to filesystem cache in 84s
+✓ Finished filesystem cache database compaction in 25.2s
+✓ Compiled in 5s
+ GET /settings 200 in 163ms (next.js: 84ms, proxy.ts: 39ms, application-code: 40ms)
+ GET /settings 200 in 106ms (next.js: 34ms, proxy.ts: 6ms, application-code: 66ms)
+ GET /settings 200 in 2.7s (next.js: 1616ms, proxy.ts: 3ms, application-code: 1105ms)
+ GET /settings 200 in 47ms (next.js: 22ms, proxy.ts: 5ms, application-code: 20ms)
+ GET /settings 200 in 44ms (next.js: 20ms, proxy.ts: 5ms, application-code: 19ms)
+ GET /settings 200 in 202ms (next.js: 4ms, proxy.ts: 6ms, application-code: 192ms)
+ GET /settings 200 in 76ms (next.js: 24ms, proxy.ts: 7ms, application-code: 45ms)
+ GET /settings 200 in 173ms (next.js: 3ms, proxy.ts: 6ms, application-code: 164ms)
+ GET /settings 200 in 136ms (next.js: 3ms, proxy.ts: 5ms, application-code: 128ms)
+ GET /settings 200 in 92ms (next.js: 3ms, proxy.ts: 8ms, application-code: 81ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+ GET /settings 200 in 2.1s (next.js: 1894ms, proxy.ts: 9ms, application-code: 185ms)
+ GET /settings 200 in 131ms (next.js: 42ms, proxy.ts: 35ms, application-code: 54ms)
+ GET /settings 200 in 2.3s (next.js: 1857ms, proxy.ts: 9ms, application-code: 434ms)
+ GET /settings 200 in 212ms (next.js: 73ms, proxy.ts: 35ms, application-code: 104ms)
+ GET /settings 200 in 67ms (next.js: 5ms, proxy.ts: 7ms, application-code: 55ms)
+ GET /settings 200 in 147ms (next.js: 3ms, proxy.ts: 5ms, application-code: 139ms)
+ GET /settings 200 in 172ms (next.js: 25ms, proxy.ts: 5ms, application-code: 143ms)
+ GET /settings 200 in 202ms (next.js: 3ms, proxy.ts: 3ms, application-code: 195ms)
+ GET /settings 200 in 179ms (next.js: 26ms, proxy.ts: 6ms, application-code: 147ms)
+ GET /settings 200 in 199ms (next.js: 60ms, proxy.ts: 6ms, application-code: 133ms)
+ GET /settings 200 in 164ms (next.js: 6ms, proxy.ts: 31ms, application-code: 127ms)
+ GET /settings 200 in 140ms (next.js: 29ms, proxy.ts: 7ms, application-code: 104ms)
+ GET /settings 200 in 137ms (next.js: 49ms, proxy.ts: 6ms, application-code: 82ms)
+ GET /settings 200 in 50ms (next.js: 26ms, proxy.ts: 5ms, application-code: 20ms)
+ GET /settings 200 in 104ms (next.js: 3ms, proxy.ts: 3ms, application-code: 98ms)
+ GET /settings 200 in 79ms (next.js: 4ms, proxy.ts: 6ms, application-code: 69ms)
+ GET /settings 200 in 28ms (next.js: 2ms, proxy.ts: 4ms, application-code: 22ms)
+✓ Finished writing to filesystem cache in 63s
+✓ Finished writing to filesystem cache in 76s
+✓ Finished writing to filesystem cache in 108s
+✓ Finished filesystem cache database compaction in 21.3s
+ GET /settings 200 in 4.4s (next.js: 2.8s, proxy.ts: 1116ms, application-code: 443ms)
+ GET /settings 200 in 123ms (next.js: 42ms, proxy.ts: 34ms, application-code: 48ms)
+✓ Finished filesystem cache database compaction in 57s
+ GET /settings 200 in 166ms (next.js: 56ms, proxy.ts: 40ms, application-code: 70ms)
+✓ Finished filesystem cache database compaction in 11.0s
+ GET /settings 200 in 156ms (next.js: 44ms, proxy.ts: 76ms, application-code: 36ms)
+ GET /settings 200 in 135ms (next.js: 58ms, proxy.ts: 45ms, application-code: 32ms)
+✓ Finished filesystem cache database compaction in 34.0s
+ GET /settings 200 in 749ms (next.js: 4ms, proxy.ts: 5ms, application-code: 740ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <UserProvider>
+      <VoiceChatProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <CallWrapper>
+              <CallSocketProvider>
+                <CallProvider socket={null}>
+                  <LayoutWrapper>
+                    <Sidebar>
+                    <div
++                     className={"transition-all duration-300 pb-16 "}
+-                     className={"transition-all duration-300 lg:pl-72 "}
+                    >
+                    ...
+                  ...
+                  ...
+            ...
+          ...
+ 
+✓ Finished writing to filesystem cache in 104s
+✓ Finished filesystem cache database compaction in 39.5s
+✓ Finished filesystem cache database compaction in 49s
+✓ Finished filesystem cache database compaction in 23.8s
+✓ Finished filesystem cache database compaction in 62s

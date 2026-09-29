@@ -203,29 +203,39 @@ function describeCloudinaryError(xhr) {
     return `Upload failed${status}${detail ? `: ${detail}` : ""}`;
 }
 
-const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+import { getCloudName, getUploadPreset, noteUploadedBytes } from "@/components/Feed/mediaTargetStore";
+import useMediaTarget from "@/components/Feed/useMediaTarget";
 
 function uploadToCloudinary(file, { resourceType = "image", onProgress, onXhr } = {}) {
     return new Promise((resolve, reject) => {
-        if (!CLOUD_NAME || !UPLOAD_PRESET) {
+        // Read the target at CALL time, not at module load. A value captured
+        // when this file was first imported would be the site cloud forever, so a
+        // user who connected their own storage would keep uploading here.
+        const cloudName = getCloudName();
+        const uploadPreset = getUploadPreset();
+        if (!cloudName || !uploadPreset) {
             reject(new Error("Uploads are not configured on this deployment"));
             return;
         }
         const fd = new FormData();
         fd.append("file", file, file.name || "upload");
-        fd.append("upload_preset", UPLOAD_PRESET);
+        fd.append("upload_preset", uploadPreset);
         fd.append("folder", "anon-feed");
         fd.append("resource_type", resourceType);
         const xhr = new XMLHttpRequest();
-        xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`);
+        xhr.open("POST", `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`);
         xhr.timeout = UPLOAD_TIMEOUT_MS;
         xhr.onload = () => {
             onXhr?.(null);
             if (xhr.status !== 200) { reject(new Error(describeCloudinaryError(xhr))); return; }
             try {
-                const url = JSON.parse(xhr.responseText)?.secure_url;
-                if (url) resolve(url);
+                const result = JSON.parse(xhr.responseText);
+                const url = result?.secure_url;
+                if (url) {
+                    // Counted from the provider's own size, not the browser's.
+                    noteUploadedBytes(result.bytes || file.size);
+                    resolve(url);
+                }
                 else reject(new Error("Upload finished but returned no URL"));
             } catch {
                 reject(new Error("Upload returned a response that could not be read"));
@@ -977,6 +987,10 @@ function AnnouncementBanner({ announcement, onDismiss, onEdit }) {
  * Group chat
  * ══════════════════════════════════════════════════════════════════════════ */
 export default function GroupChatBox({ groupId, user, onBack, group, onLeave }) {
+    // The upload helper above is module-level, so the resolved target is
+    // published here rather than passed down. Without this call the store would
+    // be empty and every group attachment would go to the site cloud.
+    useMediaTarget({ enabled: !!user?.username });
     const { showToast } = useToast();
     const { startGroupCall } = useCall();
     const router = useRouter();

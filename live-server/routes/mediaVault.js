@@ -152,5 +152,15 @@ function cloudinaryReadyValues(conn) {
     return { cloudName: c.cloudName, uploadPreset: c.uploadPreset, verifiedAt: c.verifiedAt || null };
 }
 
+// ── Google Drive sub-router ───────────────────────────────────────────────
+//
+// Mounted from HERE rather than as a second `app.use("/api/media-vault", ...)`
+// in server.js. Two mounts of the same prefix is valid Express — unmatched
+// paths fall through — but it reads like an oversight and it is the kind of
+// thing someone eventually "fixes" by deleting the wrong line. One mount point,
+// one place that owns the prefix, and the Drive paths keep their stable
+// `/api/media-vault/drive/*` URLs because the parent mount supplies the prefix.
+router.use(require("./mediaVaultDrive"));
+
 module.exports = router;
 module.exports.SITE_TIER_QUOTA_BYTES = SITE_TIER_QUOTA_BYTES;

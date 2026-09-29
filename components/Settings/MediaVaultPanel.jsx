@@ -23,6 +23,19 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
+import { useSearchParams } from "next/navigation";
+
+function Notice({ tone = "gray", children }) {
+    if (!children) return null;
+    const cls = tone === "error"
+        ? "text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/60"
+        : "text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/60";
+    return (
+        <p className={`text-[11px] border rounded-lg px-2.5 py-2 ${cls}`} role="status">
+            {children}
+        </p>
+    );
+}
 
 function gb(bytes) {
     if (!Number.isFinite(bytes)) return "—";
@@ -58,8 +71,86 @@ function UsageBar({ usedBytes, quotaBytes }) {
     );
 }
 
+/**
+ * Google Drive, as a picker rather than a destination.
+ *
+ * The honest framing, which the copy depends on: Drive is the *other* direction
+ * from Cloudinary. Nothing is uploaded anywhere — the user picks videos that are
+ * already in their Drive and this site keeps only a file reference. The catch is
+ * stated plainly rather than discovered later: a file has to be shared for the
+ * embed to work, so the link is shareable to anyone who has it.
+ */
+function DriveSection({ drive, onChanged }) {
+    const [busy, setBusy] = useState(false);
+    const [err, setErr] = useState("");
+
+    const start = async () => {
+        setBusy(true);
+        setErr("");
+        try {
+            const res = await fetch("/api/media-vault/drive/auth?picker=1", { credentials: "include" });
+            const body = await res.json();
+            if (!res.ok) throw new Error(body.error || "Could not start Google sign-in");
+            // A top-level navigation, because Google does not send CORS headers
+            // and the popup route is blocked by some browsers.
+            window.location.href = body.url;
+        } catch (e) {
+            setErr(e.message || "Could not start Google sign-in");
+            setBusy(false);
+        }
+    };
+
+    const disconnect = async () => {
+        setBusy(true);
+        try {
+            await fetch("/api/media-vault/drive", { method: "DELETE", credentials: "include" });
+            await onChanged();
+        } catch (e) {
+            setErr(e.message || "Could not disconnect");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    if (!drive?.configured) return null; // server has no Google credentials
+
+    return (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-3">
+            <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                    <p className="text-xs font-bold text-gray-800 dark:text-gray-100">Post from Google Drive</p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                        {drive.connected
+                            ? `Connected${drive.email ? ` as ${drive.email}` : ""}. Nothing is uploaded — videos stay in your Drive.`
+                            : "Pick videos that are already in your Drive. Nothing is uploaded or copied."}
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={drive.connected ? disconnect : start}
+                    disabled={busy}
+                    className="shrink-0 text-[11px] px-2.5 py-1.5 min-h-[32px] rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+                >
+                    {busy ? "…" : drive.connected ? "Disconnect" : "Connect"}
+                </button>
+            </div>
+            {drive.connected && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2">
+                    A video must be shared (“anyone with the link”) for it to play here. Anyone
+                    holding that link can watch it.
+                </p>
+            )}
+            {err && <p className="text-[11px] text-red-500 mt-1" role="alert">{err}</p>}
+        </div>
+    );
+}
+
 export default function MediaVaultPanel({ className = "" }) {
     const { user } = useUser();
+    // The Drive callback redirects back here with a result, so the outcome has
+    // to be read from the URL rather than kept in component state.
+    const searchParams = useSearchParams();
+    const driveResult = searchParams?.get("drive");
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -67,6 +158,17 @@ export default function MediaVaultPanel({ className = "" }) {
     const [preset, setPreset] = useState("");
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [drive, setDrive] = useState(null);
+
+    // The Drive section has its own status, but it lives in the same panel, so
+    // the two are loaded together and refreshed together.
+    const loadDrive = useCallback(async () => {
+        try {
+            const res = await fetch("/api/media-vault/drive/status", { credentials: "include" });
+            if (!res.ok) return;
+            setDrive(await res.json());
+        } catch { /* Drive is optional; a failure hides the section */ }
+    }, []);
 
     const load = useCallback(async () => {
         try {
@@ -83,8 +185,8 @@ export default function MediaVaultPanel({ className = "" }) {
 
     useEffect(() => {
         if (!user?.username) return;
-        (async () => { await load(); })();
-    }, [load, user?.username]);
+        (async () => { await load(); await loadDrive(); })();
+    }, [load, loadDrive, user?.username]);
 
     const connect = async () => {
         setSaving(true);
@@ -131,6 +233,14 @@ export default function MediaVaultPanel({ className = "" }) {
 
     return (
         <div className={`space-y-3 ${className}`}>
+            {driveResult === "connected" && (
+                <Notice>Google Drive connected.</Notice>
+            )}
+            {driveResult === "error" && (
+                <Notice tone="error">
+                    {searchParams?.get("reason") || "Google Drive could not be connected."}
+                </Notice>
+            )}
             <div>
                 <h3 className="text-sm font-bold text-gray-800 dark:text-gray-100">Your media storage</h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
@@ -243,6 +353,8 @@ export default function MediaVaultPanel({ className = "" }) {
             )}
 
             {error && connected && <p className="text-[11px] text-red-500" role="alert">{error}</p>}
+
+            <DriveSection drive={drive} onChanged={async () => { await load(); await loadDrive(); }} />
         </div>
     );
 }

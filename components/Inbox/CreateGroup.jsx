@@ -3,11 +3,13 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useToast } from "@/context/ToastContext";
 
-const CLOUDINARY_UPLOAD = `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`;
-const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+import { getCloudName, getUploadPreset, noteUploadedBytes } from "@/components/Feed/mediaTargetStore";
+import useMediaTarget from "@/components/Feed/useMediaTarget";
 
 export default function CreateGroup({ user, onClose, onCreated }) {
     const { showToast } = useToast();
+    // Publishes the resolved storage target for the avatar upload above.
+    useMediaTarget({ enabled: !!user?.username });
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [selectedMembers, setSelectedMembers] = useState([]);
@@ -53,10 +55,13 @@ export default function CreateGroup({ user, onClose, onCreated }) {
         try {
             const formData = new FormData();
             formData.append("file", file);
-            formData.append("upload_preset", UPLOAD_PRESET);
-            const res = await fetch(CLOUDINARY_UPLOAD, { method: "POST", body: formData });
+            formData.append("upload_preset", getUploadPreset());
+            // Resolved per call, not baked in at module load, so a group avatar
+            // lands in the same place the rest of this user's media does.
+            const res = await fetch(`https://api.cloudinary.com/v1_1/${getCloudName()}/image/upload`, { method: "POST", body: formData });
             const data = await res.json();
             if (data.secure_url) {
+                noteUploadedBytes(data.bytes || file.size);
                 setAvatarUrl(data.secure_url);
             } else {
                 showToast("Upload failed", "error");

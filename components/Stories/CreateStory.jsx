@@ -3,13 +3,15 @@
 import { useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import { useToast } from "@/context/ToastContext";
+import { getCloudName, getUploadPreset, noteUploadedBytes } from "@/components/Feed/mediaTargetStore";
+import useMediaTarget from "@/components/Feed/useMediaTarget";
 
-const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-const BG_COLORS = ["#1a1a2e", "#16213e", "#0f3460", "#533483", "#e94560", "#1b1b2f", "#162447", "#1f4068", "#1b1b2f", "#4a0e4e"];
+const BG_COLORS = ["#1a1a2d", "#16213e", "#0f3460", "#533483", "#e94560", "#1b1b2f", "#162447", "#1f4068", "#1b1b2f", "#4a0e4e"];
 
 export default function CreateStory({ onClose }) {
     const { user } = useUser();
+    // Stories go wherever this user's media goes.
+    useMediaTarget({ enabled: !!user?.username });
     const { showToast } = useToast();
     const [mode, setMode] = useState("text");
     const [text, setText] = useState("");
@@ -24,15 +26,22 @@ export default function CreateStory({ onClose }) {
         new Promise((resolve, reject) => {
             const fd = new FormData();
             fd.append("file", file);
-            fd.append("upload_preset", UPLOAD_PRESET);
+            fd.append("upload_preset", getUploadPreset());
             fd.append("folder", "anon-feed");
             const xhr = new XMLHttpRequest();
-            
+
             // Store XHR in ref so we can abort it
             abortControllerRef.current = xhr;
-            
-            xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`);
-            xhr.onload = () => xhr.status === 200 ? resolve(JSON.parse(xhr.responseText).secure_url) : reject(new Error("Upload failed"));
+
+            xhr.open("POST", `https://api.cloudinary.com/v1_1/${getCloudName()}/image/upload`);
+            xhr.onload = () => {
+                if (xhr.status !== 200) { reject(new Error("Upload failed")); return; }
+                try {
+                    const result = JSON.parse(xhr.responseText);
+                    noteUploadedBytes(result.bytes || file.size);
+                    resolve(result.secure_url);
+                } catch { reject(new Error("Upload response could not be read")); }
+            };
             xhr.onerror = () => reject(new Error("Network error"));
             xhr.onabort = () => reject(new Error("Upload cancelled"));
             xhr.send(fd);
