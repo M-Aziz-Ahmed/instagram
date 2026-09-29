@@ -201,9 +201,94 @@ function growthPercent(current, previous) {
     return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
+// Event types that count as a click on a post, for the top-posts roll-up.
+const POST_CLICK_TYPES = ["post_click", "post_profile_click", "post_link_click", "post_hashtag_click"];
+
+// Pipeline for the per-post counts behind /analytics/posts.
+//
+// Kept here so it can be unit-tested: every clause is a classification decision
+// about which event type means what, and getting one wrong silently mislabels a
+// column rather than throwing.
+function postCountsPipeline(match) {
+    return [
+        { $match: match },
+        {
+            $group: {
+                _id: "$postId",
+                impressions: { $sum: { $cond: [{ $eq: ["$type", "post_impression"] }, 1, 0] } },
+                clicks: { $sum: { $cond: [{ $in: ["$type", POST_CLICK_TYPES] }, 1, 0] } },
+                shares: { $sum: { $cond: [{ $eq: ["$type", "post_share"] }, 1, 0] } },
+            },
+        },
+        // Any interaction implies the post was rendered, so the viewer set below
+        // is taken over every post_* event rather than impressions only.
+        { $sort: { impressions: -1, clicks: -1 } },
+    ];
+}
+
+// Pipeline for the distinct-viewer ("reach") set behind /analytics/posts.
+//
+// THE TRAP THIS EXISTS TO DOCUMENT: reach is a set of distinct viewers, and the
+// test for "does this event have a viewer" has to be built from real BOOLEANS.
+//
+// The natural-looking version is wrong:
+//     $or: [{ $ifNull: ["$userId", false] }, { $ifNull: ["$sessionId", false] }]
+// $or tests the TRUTHINESS of its operands, and Mongo coerces "" to TRUE. So an
+// event with an empty sessionId satisfied the test and was added to the set as
+// the literal key "|", inflating reach by one for every such event.
+//
+// Also note $nin is a query operator and does not exist in an aggregation
+// expression; the aggregation spelling of "is neither empty nor missing" is
+// $not + $in.
+//
+// The key is session-first, deliberately. Keying on userId looks more like
+// "unique people", but a visitor who signs in partway through a session then
+// produces an anonymous event and a userId event for the same browser, and
+// reach counts them twice. A session is also the unit the client already
+// de-duplicates impressions against (utils/postAnalytics.js), so this matches
+// how the event stream was actually produced.
+function viewerSetPipeline(match) {
+    return [
+        { $match: match },
+        {
+            $group: {
+                _id: "$postId",
+                viewers: {
+                    $addToSet: {
+                        $cond: [
+                            { $or: [
+                                { $not: { $in: [{ $ifNull: ["$sessionId", ""] }, ["", null]] } },
+                                { $not: { $in: [{ $ifNull: ["$userId", ""] }, ["", null]] } },
+                            ] },
+                            { $concat: [
+                                { $cond: [
+                                    { $not: { $in: [{ $ifNull: ["$sessionId", ""] }, ["", null]] } },
+                                    { $ifNull: ["$sessionId", ""] },
+                                    // No session (a server-side or logged-out
+                                    // write): fall back to the account.
+                                    { $ifNull: ["$userId", ""] },
+                                ] },
+                                // Prefixed so a session id can never collide with
+                                // a user id.
+                                { $cond: [
+                                    { $not: { $in: [{ $ifNull: ["$sessionId", ""] }, ["", null]] } },
+                                    "", "u:",
+                                ] },
+                            ] },
+                            "$$REMOVE",
+                        ],
+                    },
+                },
+            },
+        },
+    ];
+}
+
+
 module.exports = {
     pad, dayKey, bucketKey, buckets, labelForKey,
     bucketCounts, bucketDistinct, toSeries,
     deviceBreakdown, growthPercent,
     mapCountryRollup, mapRegionRollup, mapCityRollup, backfillCountryCoords,
+    POST_CLICK_TYPES, postCountsPipeline, viewerSetPipeline,
 };

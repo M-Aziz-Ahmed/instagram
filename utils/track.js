@@ -57,6 +57,11 @@ function parseDevice() {
     return { type, os, browser };
 }
 
+// Exported so utils/postAnalytics.js reports the same device shape on per-post
+// events. Two copies of these regexes would drift, and a drift shows up as two
+// different device splits for the same visitor.
+export { parseDevice };
+
 let deviceLoaded = false;
 let deviceInfo = { type: "", os: "", browser: "" };
 

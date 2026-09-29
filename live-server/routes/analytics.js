@@ -4,6 +4,7 @@ const Post = require("../models/post");
 const User = require("../models/user");
 const AnalyticsEvent = require("../models/analyticsEvent");
 const { optionalAuth } = require("../middleware/auth");
+const { resolveLocation } = require("../lib/geo");
 
 const router = express.Router();
 
@@ -18,17 +19,61 @@ const POST_EVENTS = new Set([
     "share",
 ]);
 
+const DEVICE_TYPES = ["mobile", "tablet", "desktop", "bot", ""];
+
+// Normalise the client-reported device the same way the /api/track beacon does,
+// so one visitor can't produce two different device shapes depending on which
+// endpoint saw them first.
+function shapeDevice(d) {
+    return {
+        type: DEVICE_TYPES.includes(d?.type) ? d.type : "",
+        os: typeof d?.os === "string" ? d.os.slice(0, 40) : "",
+        browser: typeof d?.browser === "string" ? d.browser.slice(0, 40) : "",
+    };
+}
+
+function shapeLocation(loc) {
+    return {
+        country: loc?.country || "",
+        countryCode: loc?.countryCode || "",
+        region: loc?.region || "",
+        city: loc?.city || "",
+        lat: loc?.lat ?? null,
+        lon: loc?.lon ?? null,
+        tz: loc?.tz || "",
+    };
+}
+
 // POST /post-event — record that a post was seen or interacted with.
 //
 // Same privacy rules as the general /api/track beacon: the viewer is taken from
 // the session, never from the body, and failures are swallowed so analytics can
 // never break the page that reported them.
+//
+// Location and device are recorded here for the same reason the beacon records
+// them. Post events are the highest-volume thing in the collection — a single
+// feed scroll emits a dozen impressions — so when they were stored bare they
+// inflated "Events" and the growth chart while being permanently invisible to
+// the globe, the device mix and every geo roll-up. The two numbers on the admin
+// analytics page disagreed by exactly that gap.
 router.post("/post-event", optionalAuth, async (req, res) => {
     try {
-        const { postId, event, sessionId, meta } = req.body || {};
+        const { postId, event, sessionId, meta, device } = req.body || {};
 
         if (!mongoose.isValidObjectId(postId)) return res.status(400).json({ error: "Invalid postId" });
         if (!POST_EVENTS.has(event)) return res.status(400).json({ error: "Invalid event" });
+
+        // Same /24 network cache the beacon uses, so a visitor already counted
+        // once costs a map hit rather than another outbound provider call.
+        // Kick it off before the validation-heavy work so it overlaps.
+        const locationPromise = resolveLocation(req).catch(() => null);
+
+        let resolved = null;
+        try {
+            resolved = await locationPromise;
+        } catch {
+            resolved = null;
+        }
 
         await AnalyticsEvent.create({
             type: `post_${event}`,
@@ -36,10 +81,12 @@ router.post("/post-event", optionalAuth, async (req, res) => {
             userId: req.userId || null,
             sessionId: typeof sessionId === "string" ? sessionId.slice(0, 64) : "",
             meta: typeof meta === "string" ? meta.slice(0, 120) : "",
+            device: shapeDevice(device),
+            location: shapeLocation(resolved?.location),
         });
 
         res.status(201).json({ ok: true });
-    } catch (err) {
+    } catch (error) {
         // A failed analytics write must not surface to the caller.
         res.status(200).json({ ok: false });
     }

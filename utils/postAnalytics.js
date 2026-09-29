@@ -12,6 +12,8 @@
 // Fire-and-forget throughout: reporting must never delay or break rendering.
 // ─────────────────────────────────────────────────────────────
 
+import { parseDevice } from "./track";
+
 const ENDPOINT = "/api/analytics/post-event";
 const STORE_KEY = "at_pse";
 const DEDUPE_TTL_MS = 6 * 60 * 60 * 1000; // half a day is plenty for "did they see it"
@@ -73,13 +75,34 @@ function postIdOf(postId) {
     return /^[a-f\d]{24}$/i.test(id) ? id : "";
 }
 
+// Parsed once per page load. Shared with utils/track.js so the beacon and the
+// per-post events report an identical device shape for the same visitor — two
+// copies of these regexes would drift, and a drift surfaces as two different
+// device splits for one person.
+let deviceLoaded = false;
+let deviceInfo = null;
+
+function device() {
+    if (!deviceLoaded) {
+        deviceInfo = parseDevice();
+        deviceLoaded = true;
+    }
+    return deviceInfo;
+}
+
 function send(postId, event, meta) {
     const id = postIdOf(postId);
     if (!id) return;
     if (typeof window === "undefined") return;
     if (alreadySeen(`${id}:${event}`)) return;
 
-    const body = JSON.stringify({ postId: id, event, sessionId: sessionId(), meta: meta || "" });
+    const body = JSON.stringify({
+        postId: id,
+        event,
+        sessionId: sessionId(),
+        meta: meta || "",
+        device: device(),
+    });
 
     try {
         if (navigator.sendBeacon) {

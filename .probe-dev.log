@@ -2723,3 +2723,6 @@ https://react.dev/link/hydration-mismatch
 ✓ Finished filesystem cache database compaction in 49s
 ✓ Finished filesystem cache database compaction in 23.8s
 ✓ Finished filesystem cache database compaction in 62s
+✓ Finished writing to filesystem cache in 113s
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)

@@ -555,7 +555,9 @@ router.post("/ads/:id/track", async (req, res) => {
 });
 
 // GET /analytics
-router.get("/analytics", async (req, res) => {
+// Admin-only: this rollup reports every user, every post and the site-wide
+// leaderboards, so it was readable by anyone who asked for it.
+router.get("/analytics", requireAdmin, async (req, res) => {
     try {
         const totalUsers = await User.countDocuments();
         const totalPosts = await Post.countDocuments();
@@ -748,16 +750,24 @@ router.get("/analytics/locations", requireAdmin, async (req, res) => {
         };
 
         // The three levels the globe drills through. Each returns rows that are
-        // already aggregated and capped â€” the only thing that scales with size.
-        const [countries, regions, cities, total] = await Promise.all([
+        // already aggregated and capped — the only thing that scales with size.
+        // The last three are the geo-coverage denominator, so the page can say
+        // what share of tracked events were placeable and what the rest were.
+        const [countries, regions, cities, total, totalEvents, unlocated] = await Promise.all([
             AnalyticsEvent.aggregate([
                 { $match: match },
                 {
                     $group: {
                         _id: "$location.countryCode",
                         name: { $first: "$location.country" },
-                        lat: { $first: "$location.lat" },
-                        lon: { $first: "$location.lon" },
+                        // Centroid of the points actually seen, not $first. With no
+                        // $sort ahead of the group, $first returns whichever document
+                        // the server happened to read first, so a country dot could be
+                        // plotted wherever one arbitrary visitor happened to be.
+                        // $avg also skips nulls, so a few coordinate-less events
+                        // cannot drag the fix toward zero.
+                        lat:  { $avg: "$location.lat" },
+                        lon:  { $avg: "$location.lon" },
                         count: { $sum: 1 },
                     },
                 },
@@ -772,11 +782,11 @@ router.get("/analytics/locations", requireAdmin, async (req, res) => {
                             country: "$location.countryCode",
                             region: "$location.region",
                         },
-                        name: { $first: "$location.region" },
+                        name:    { $first: "$location.region" },
                         country: { $first: "$location.country" },
-                        lat: { $first: "$location.lat" },
-                        lon: { $first: "$location.lon" },
-                        count: { $sum: 1 },
+                        lat:     { $avg: "$location.lat" },
+                        lon:     { $avg: "$location.lon" },
+                        count:   { $sum: 1 },
                     },
                 },
                 { $sort: { count: -1 } },
@@ -791,18 +801,25 @@ router.get("/analytics/locations", requireAdmin, async (req, res) => {
                             region: "$location.region",
                             city: "$location.city",
                         },
-                        name: { $first: "$location.city" },
-                        region: { $first: "$location.region" },
+                        name:        { $first: "$location.city" },
+                        region:      { $first: "$location.region" },
                         countryName: { $first: "$location.country" },
-                        lat: { $first: "$location.lat" },
-                        lon: { $first: "$location.lon" },
-                        count: { $sum: 1 },
+                        lat:         { $avg: "$location.lat" },
+                        lon:         { $avg: "$location.lon" },
+                        count:       { $sum: 1 },
                     },
                 },
                 { $sort: { count: -1 } },
                 { $limit: 2000 },
             ]).allowDiskUse(true),
             AnalyticsEvent.countDocuments(match),
+            AnalyticsEvent.countDocuments({ createdAt: { $gte: from } }),
+            AnalyticsEvent.aggregate([
+                { $match: { createdAt: { $gte: from }, "location.countryCode": { $in: ["", null] } } },
+                { $group: { _id: "$type", count: { $sum: 1 } } },
+                { $sort: { count: -1 } },
+                { $limit: 8 },
+            ]).allowDiskUse(true),
         ]);
 
         const countryList = countries.map(A.mapCountryRollup);
@@ -816,10 +833,103 @@ router.get("/analytics/locations", requireAdmin, async (req, res) => {
             regions: regionList,
             cities: cityList,
             totalLocated: total,
+            // Reported alongside the located count because the two are easy to
+            // mistake for each other: the "Events" stat card counts every event
+            // in the period, this counts only the ones geo could place. Showing
+            // the denominator and what is missing from it is the difference
+            // between "the globe is broken" and "these events have no location".
+            totalEvents,
+            locatedShare: totalEvents > 0 ? Number(((total / totalEvents) * 100).toFixed(1)) : 0,
+            unlocatedByType: unlocated.map((r) => ({ type: r._id || "unknown", count: r.count })),
         });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ error: "Failed to fetch location analytics" });
+    }
+});
+
+// /analytics/posts?days=30&limit=20&sort=impressions — site-wide top posts.
+//
+// These events have been recorded (and indexed, see models/analyticsEvent.js)
+// since per-post tracking shipped, but nothing ever aggregated them outside the
+// per-creator endpoint, which only ever looks at one author's own posts. This
+// is the missing site-wide read.
+//
+// Reach is a distinct-viewer count, which needs an $addToSet, and an $addToSet
+// over every event in the window is proportional to traffic — the one thing the
+// locations roll-up above was rewritten to avoid. So the counts are grouped
+// first (cheap, no set), reduced to the top N ids, and only those N are asked
+// for their viewer sets. Memory then scales with the size of the leaderboard
+// rather than with the size of the window. Both pipelines live in
+// analyticsHelpers.js so their classification rules stay unit-tested.
+const POST_SORTABLE = ["impressions", "reach", "clicks", "shares", "likes"];
+
+router.get("/analytics/posts", requireAdmin, async (req, res) => {
+    try {
+        const days = Math.max(1, Math.min(parseInt(req.query.days, 10) || 30, 365));
+        const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 20, 100));
+        const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const postMatch = { createdAt: { $gte: from }, postId: { $ne: null } };
+
+        const counts = await AnalyticsEvent.aggregate([
+            ...A.postCountsPipeline(postMatch),
+            { $limit: limit * 4 }, // over-fetch, so a `likes` sort can still fill the board
+        ]).allowDiskUse(true);
+
+        if (!counts.length) return res.json({ days, sort: "impressions", posts: [] });
+
+        const ids = counts.map((c) => c._id);
+        const viewerRows = await AnalyticsEvent.aggregate(
+            A.viewerSetPipeline({ ...postMatch, postId: { $in: ids } }),
+        ).allowDiskUse(true);
+
+        const reachByPost = new Map(viewerRows.map((r) => [String(r._id), r.viewers.length]));
+        const docs = await Post.find({ _id: { $in: ids } })
+            .select("sender text imageUrl likes commentCount timeStamp isRemoved")
+            .lean();
+        const docById = new Map(docs.map((d) => [String(d._id), d]));
+
+        let posts = counts
+            .map((c) => {
+                const d = docById.get(String(c._id));
+                if (!d) return null; // deleted post, or removed from the collection
+                const impressions = c.impressions;
+                const clicks = c.clicks;
+                return {
+                    id: d._id,
+                    sender: d.sender,
+                    text: d.text?.slice(0, 120) || "",
+                    imageUrl: d.imageUrl || "",
+                    timeStamp: d.timeStamp,
+                    isRemoved: !!d.isRemoved,
+                    impressions,
+                    clicks,
+                    shares: c.shares,
+                    reach: reachByPost.get(String(c._id)) || 0,
+                    likes: d.likes?.length || 0,
+                    // commentCount is the authoritative total; `comments` is only
+                    // a bounded window of the most recent ones.
+                    comments: d.commentCount || 0,
+                    // Same caveat as the per-creator view: likes/comments are
+                    // lifetime while impressions only cover the window, so a CTR
+                    // built from both can exceed 100%.
+                    clickThroughRate: impressions > 0
+                        ? Number(((clicks / impressions) * 100).toFixed(2))
+                        : null,
+                };
+            })
+            .filter(Boolean);
+
+        // `likes` is a field on the post, not on the event, so it can only be
+        // applied after the posts have been loaded. Validated against a list
+        // rather than interpolated into the pipeline.
+        const sort = POST_SORTABLE.includes(req.query.sort) ? req.query.sort : "impressions";
+        posts.sort((a, b) => (b[sort] || 0) - (a[sort] || 0) || b.impressions - a.impressions);
+
+        return res.json({ days, sort, posts: posts.slice(0, limit) });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Failed to fetch post analytics" });
     }
 });
 

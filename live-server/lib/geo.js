@@ -114,16 +114,23 @@ function remember(map, key, entry, max) {
 async function lookup(network) {
     if (!network) return null;
 
+    // The provider is called with the masked network's first address, which for
+    // a private range is something like 192.168.1.0 — an address that can never
+    // geolocate to anything. Bailing here rather than asking keeps those calls
+    // out of the request budget, which matters because the free tier this
+    // defaults to allows only 45 requests a minute and a throttle is negative-
+    // cached for an hour (see NEGATIVE_TTL_MS). Wasting quota on addresses that
+    // were always going to fail starves the real ones.
+    const probe = network.replace(/\/(24|64)$/, "");
+    if (!isRoutable(probe)) return null;
+
     const hit = cache.get(network);
     if (hit && hit.expiresAt > Date.now()) return hit.value;
 
     const pending = inflight.get(network);
     if (pending) return pending;
 
-    // The provider wants a bare IP, not the masked network.
-    const ip = network.replace(/\/(24|64)$/, "");
-
-    const promise = fetchLocation(ip)
+    const promise = fetchLocation(probe)
         .then((value) => {
             remember(cache, network, {
                 value,
