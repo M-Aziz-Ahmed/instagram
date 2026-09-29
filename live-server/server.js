@@ -3833,6 +3833,10 @@ app.use("/api/track", readLimiter, require("./routes/events"));
 // because it needs the exact address, must be authenticated, and is throttled
 // far harder — see routes/presence.js.
 app.use("/api/presence", readLimiter, require("./routes/presence"));
+// The user's own media storage. Authenticated and flag-gated; every route
+// resolves where the caller's media should be written rather than accepting a
+// target from the client.
+app.use("/api/media-vault", readLimiter, require("./routes/mediaVault"));
 // Other routes use apiLimiter
 // NOTE: /api/feed (routes/feed.js) was removed. It registered no handlers at
 // all — only unused helpers — and getRecommendedPosts() referenced an undefined

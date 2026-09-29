@@ -27,6 +27,10 @@ const DEFAULT_FLAGS = {
     // the one messaging feature that lets a stranger start a thread with you,
     // so it is the one most likely to need killing in a hurry.
     invites: true,
+    // User-owned media storage. Its own switch because it changes where every
+    // upload in the app is written, so it is the one that must be able to be
+    // turned off without a deploy if the provider flow misbehaves.
+    mediaVault: true,
 };
 
 // Flags a client is allowed to read. Anything not listed here stays

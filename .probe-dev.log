@@ -2187,3 +2187,9 @@ https://react.dev/link/hydration-mismatch
 ✓ Finished filesystem cache database compaction in 12.3s
  GET /admin/manage 200 in 181ms (next.js: 3ms, proxy.ts: 6ms, application-code: 172ms)
  GET /admin/manage 200 in 126ms (next.js: 4ms, proxy.ts: 4ms, application-code: 118ms)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+[browser] [VoiceChat] Connection error: xhr poll error (utils/logInterceptor.js:45:14)
+✓ Finished writing to filesystem cache in 64s
+✓ Finished filesystem cache database compaction in 32.5s
+✓ Finished filesystem cache database compaction in 12.4s
+✓ Compiled in 3s
