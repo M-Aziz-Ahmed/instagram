@@ -99,5 +99,16 @@ $manifest = @{
     (New-Object System.Text.UTF8Encoding($false))
 )
 
+# The prune above deletes every installer belonging to another version, which leaves
+# the download page's available.json advertising files that no longer exist, so
+# /download 404s. Regenerate it from what is actually on disk. CI's merge step writes
+# this file too, but only when it runs, which is not the local Windows release path.
+Push-Location $RepoRoot
+try {
+    node tools/gen-available-json.mjs
+    if ($LASTEXITCODE -ne 0) { throw "tools/gen-available-json.mjs failed" }
+}
+finally { Pop-Location }
+
 Write-Host "Published to $outDir :"
 Get-ChildItem $outDir | ForEach-Object { Write-Host "  $($_.Name) ($([math]::Round($_.Length/1KB)) KB)" }

@@ -2,14 +2,16 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { gradePronunciation, speechMatch } from "@/utils/speechMatch";
 
 const MAX_HEARTS = 5;
 
-// TTS warm-up budget. /api/tts allows 30 requests per minute per IP, so 20 phrases
-// spaced 400ms apart finishes in ~8s and leaves headroom for the learner clicking
-// through cards while the warm-up is still running.
-const PREFETCH_MAX = 20;
-const PREFETCH_GAP_MS = 400;
+// TTS warm-up budget. /api/tts allows 30 requests per minute per IP, so phrases are
+// spaced far enough apart that a whole lesson's vocabulary can be warmed in the
+// background without ever tripping the limiter - the learner should never wait on a
+// button because the warm-up itself got throttled.
+const PREFETCH_MAX = 60;
+const PREFETCH_GAP_MS = 2400;
 
 export default function LessonPlayer() {
     const { courseId, lessonId } = useParams();
@@ -780,27 +782,6 @@ function Gloss({ text }) {
     return <span className="block text-xs font-semibold text-gray-400 dark:text-gray-500 mt-0.5 tracking-wide" dir="ltr">{text}</span>;
 }
 
-function normalizeSpeech(s) {
-    return (s || "")
-        .toLowerCase()
-        .replace(/[.,!?;:""''„“”‘’—–()]/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-}
-
-function speechMatch(heard, expect) {
-    const h = normalizeSpeech(heard);
-    const e = normalizeSpeech(expect);
-    if (!h) return false;
-    if (!e) return true;
-    if (h === e) return true;
-    if (h.includes(e) || e.includes(h)) return true;
-    const hw = h.split(" ");
-    const ew = e.split(" ");
-    const overlap = hw.filter((w) => ew.includes(w)).length;
-    return overlap / ew.length >= 0.7;
-}
-
 function speechRecAvailable() {
     return typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
@@ -1387,11 +1368,15 @@ function PronounceCard({ q, rtl, hearts, hurt, onCheck }) {
     const [sttBusy, setSttBusy] = useState(false);
     const [heard, setHeard] = useState("");
     const [source, setSource] = useState("");
+    const [unclear, setUnclear] = useState(false);
     const finalizedRef = useRef(false);
 
     const item = items[Math.min(idx, items.length - 1)];
     const doneAll = results.length === items.length;
     const allOk = doneAll && results.every(Boolean);
+    // A result exists for the current word only once it has actually been graded. An
+    // unclear attempt sets `heard` without recording one, and must not advance.
+    const recorded = results.length > idx;
 
     useEffect(() => {
         if (doneAll && !finalizedRef.current) {
@@ -1405,20 +1390,35 @@ function PronounceCard({ q, rtl, hearts, hurt, onCheck }) {
         setSttBusy(true);
         setHeard("");
         setSource("");
+        setUnclear(false);
         captureSpeech(item.t, q.hl, (r) => {
             setSttBusy(false);
-            if (r && r.text) {
-                setHeard(r.text);
-                setSource(r.source === "native" ? "desktop" : "browser");
-                const ok = speechMatch(r.text, item.t);
-                setResults((rs) => [...rs, ok]);
-                if (!ok) hurt(1);
-            } else {
+            if (!r || !r.text) {
                 // Speech recognition unavailable → self-check mode: the learner
                 // pronounces it aloud and confirms. Keeps pronunciation lessons
                 // usable on any device.
                 setSource("self");
                 setResults((rs) => [...rs, true]);
+                return;
+            }
+            setHeard(r.text);
+            setSource(r.source === "native" ? "desktop" : "browser");
+
+            const { outcome, heart } = gradePronunciation({
+                heard: r.text,
+                expect: item.t,
+                confidence: r.confidence || 0,
+            });
+
+            if (outcome === "correct") {
+                setResults((rs) => [...rs, true]);
+            } else if (outcome === "wrong") {
+                setResults((rs) => [...rs, false]);
+                hurt(1);
+            } else {
+                // The recogniser guessed rather than heard. Let the learner try again
+                // instead of spending a heart on a microphone problem.
+                setUnclear(true);
             }
         });
     };
@@ -1428,6 +1428,7 @@ function PronounceCard({ q, rtl, hearts, hurt, onCheck }) {
             setIdx(idx + 1);
             setHeard("");
             setSource("");
+            setUnclear(false);
         }
     };
 
@@ -1474,9 +1475,15 @@ function PronounceCard({ q, rtl, hearts, hurt, onCheck }) {
                                 )}
                             </button>
                             <p className="text-xs font-bold text-gray-400">
-                                {sttBusy ? "Listening…" : heard ? (source === "self" ? "Said it yourself — nice! ✓" : `Heard: “${heard}”`) : "Tap the mic & speak"}
+                                {sttBusy
+                                    ? "Listening…"
+                                    : unclear
+                                      ? "We didn’t catch that clearly — no heart lost, try again"
+                                      : heard
+                                        ? (source === "self" ? "Said it yourself — nice! ✓" : `Heard: “${heard}”`)
+                                        : "Tap the mic & speak"}
                             </p>
-                            {heard && (
+                            {recorded && (
                                 <button onClick={nextItem} className="mt-1 w-full max-w-xs py-3 rounded-2xl bg-[#58cc02] text-white font-extrabold text-sm hover:bg-[#46a302]">
                                     {source === "self" ? "I SAID IT — NEXT →" : "NEXT →"}
                                 </button>

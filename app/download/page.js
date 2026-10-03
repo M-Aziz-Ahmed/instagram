@@ -72,9 +72,13 @@ export default function DownloadPage() {
     if (inTauri || dismissed) return null;
 
     // Fallback before CI has published available.json: keep the Windows button
-    // working through the existing route handler.
+    // working through the existing route handler. That handler re-reads the
+    // installer list on every request instead of trusting available.json, so Windows
+    // keeps working even if the manifest has gone stale - which it used to, after a
+    // local release pruned the file the manifest still pointed at.
     const urlFor = (id) => {
-        if (available) return bestDownloadUrl(available, id);
+        const url = bestDownloadUrl(available, id);
+        if (url) return url;
         return id === "windows" ? "/api/downloads/desktop" : "";
     };
 
