@@ -61,6 +61,8 @@ mobile/ios/App/App/GoogleService-Info.plist
 desktop/node_modules
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
+# Staged by tools/prepare-desktop.mjs: the standalone Next server + node.exe.
+desktop/src-tauri/resources/
 
 # mobile (Capacitor) scaffold
 mobile/node_modules

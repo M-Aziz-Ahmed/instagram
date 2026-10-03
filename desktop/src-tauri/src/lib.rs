@@ -5,6 +5,220 @@ use tauri::{
 };
 use std::sync::{Arc, Mutex};
 
+// ─── Embedded Next server ─────────────────────────────────────────────────────
+//
+// The installer carries a standalone Next build plus a Node runtime, staged by
+// tools/prepare-desktop.mjs. The UI is served from loopback; the /api and /sio
+// traffic it proxies onward to the shared live server behaves exactly as it does
+// for the web build, so nothing about the backend changes.
+const SIDECAR_PORT: u16 = 3210;
+
+struct SidecarState {
+    child: Mutex<Option<std::process::Child>>,
+    /// Windows only. Holding this handle for the lifetime of the app is what keeps
+    /// the sidecar alive; the OS reaps it the moment the handle closes.
+    #[cfg(windows)]
+    job: Mutex<Option<std::os::windows::io::OwnedHandle>>,
+}
+
+/// Put the sidecar in a Job Object flagged kill-on-close.
+///
+/// Without this, force-quitting the app from Task Manager leaves the server running
+/// and still holding the port, so the next launch silently serves the previous
+/// build. A Job Object makes the kernel clean up on any exit path, crash included.
+/// Failure is not fatal: the explicit kill in stop_sidecar still covers a clean quit.
+#[cfg(windows)]
+fn attach_kill_on_close(child: &std::process::Child) -> Option<std::os::windows::io::OwnedHandle> {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+
+    unsafe {
+        let raw = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if raw.is_null() {
+            return None;
+        }
+        let job = OwnedHandle::from_raw_handle(raw as HANDLE);
+
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let ok = SetInformationJobObject(
+            raw,
+            JobObjectExtendedLimitInformation,
+            std::ptr::addr_of!(info).cast(),
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        );
+        if ok == 0 {
+            CloseHandle(raw);
+            return None;
+        }
+
+        if AssignProcessToJobObject(raw, child.as_raw_handle() as HANDLE) == 0 {
+            // Fails if the app is already inside a job that forbids nesting. Give up
+            // quietly and rely on the normal shutdown path.
+            CloseHandle(raw);
+            return None;
+        }
+        Some(job)
+    }
+}
+
+/// Tauri's resource_dir comes back as a Windows verbatim path (`\\?\D:\...`).
+/// Node cannot resolve one: realpathSync strips the prefix, ends up with the bare
+/// drive `D:`, and aborts with EISDIR before the script is ever loaded. Windows
+/// APIs understand the prefix but most child processes do not, so it is removed
+/// before the path is handed to Node.
+fn strip_verbatim(path: std::path::PathBuf) -> std::path::PathBuf {
+    #[cfg(windows)]
+    {
+        if let Some(text) = path.to_str() {
+            if let Some(rest) = text.strip_prefix(r"\\?\") {
+                // A verbatim UNC path is \\?\UNC\server\share; the plain form is \\server\share.
+                return match rest.strip_prefix(r"UNC\") {
+                    Some(unc) => std::path::PathBuf::from(format!(r"\\{unc}")),
+                    None => std::path::PathBuf::from(rest),
+                };
+            }
+        }
+    }
+    path
+}
+
+/// Locate a bundled resource. Verified layout is a flat copy under the resource
+/// dir; some bundlers nest resources one level deeper by target triple, so that is
+/// kept as a fallback rather than assumed.
+fn resolve_resource(app: &tauri::AppHandle, rel: &str) -> Option<std::path::PathBuf> {
+    let base = strip_verbatim(app.path().resource_dir().ok()?);
+    let flat = base.join(rel);
+    if flat.exists() {
+        return Some(flat);
+    }
+    let arch = match std::env::consts::ARCH {
+        "x86_64" => "x64",
+        "aarch64" => "arm64",
+        other => other,
+    };
+    let os = match std::env::consts::OS {
+        "windows" => "win",
+        "macos" => "darwin",
+        other => other,
+    };
+    let nested = base.join(format!("{arch}-{os}")).join(rel);
+    if nested.exists() {
+        return Some(nested);
+    }
+    None
+}
+
+/// Wait until the sidecar accepts connections. Listening is the signal we need:
+/// once the socket is bound, Next has already parsed its config and mounted routes.
+fn wait_until_listening(port: u16, timeout: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    while std::time::Instant::now() < deadline {
+        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(150));
+    }
+    false
+}
+
+/// Where the UI is served from when the bundled server cannot be started. Falling
+/// back keeps the app usable instead of showing a dead window.
+const REMOTE_FALLBACK_URL: &str = "https://anontweet.vercel.app";
+
+fn spawn_sidecar(app: &tauri::AppHandle) -> bool {
+    let (Some(node), Some(server)) = (
+        resolve_resource(app, "bin/node.exe"),
+        resolve_resource(app, "app/server.js"),
+    ) else {
+        eprintln!(
+            "sidecar assets missing; run `node tools/prepare-desktop.mjs` before building the app"
+        );
+        return false;
+    };
+
+    let mut cmd = std::process::Command::new(&node);
+    cmd.arg(&server)
+        .current_dir(server.parent().unwrap_or(&server))
+        // 127.0.0.1 keeps the UI server off the network; nothing but this app's own
+        // webview should be able to reach it.
+        .env("PORT", SIDECAR_PORT.to_string())
+        .env("HOSTNAME", "127.0.0.1")
+        .env("NODE_ENV", "production")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+
+    // Without this the child would flash a console window on every launch.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    match cmd.spawn() {
+        Ok(child) => {
+            #[cfg(windows)]
+            let job = attach_kill_on_close(&child);
+            let started = wait_until_listening(SIDECAR_PORT, std::time::Duration::from_secs(30));
+            let state: tauri::State<'_, Arc<SidecarState>> = app.state();
+            *state.child.lock().unwrap() = Some(child);
+            #[cfg(windows)]
+            {
+                *state.job.lock().unwrap() = job;
+            }
+            started
+        }
+        Err(e) => {
+            eprintln!("failed to spawn sidecar: {e}");
+            false
+        }
+    }
+}
+
+/// Start the bundled server off the main thread, then point the window at it.
+///
+/// The window is created before setup() runs and would otherwise begin loading
+/// the loopback URL before anything is listening, so it is created hidden and
+/// only revealed once there is something to show.
+fn start_sidecar(app: &tauri::AppHandle) {
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        let local = spawn_sidecar(&handle);
+        let target = if local {
+            format!("http://127.0.0.1:{SIDECAR_PORT}")
+        } else {
+            eprintln!("falling back to {REMOTE_FALLBACK_URL}");
+            REMOTE_FALLBACK_URL.to_string()
+        };
+        if let Some(win) = handle.get_webview_window("main") {
+            if let Ok(url) = Url::parse(&target) {
+                let _ = win.navigate(url);
+            }
+            let _ = win.show();
+            let _ = win.set_focus();
+        }
+    });
+}
+
+fn stop_sidecar(app: &tauri::AppHandle) {
+    // Clone the Arc out of the state, and bind the child to its own statement, so
+    // neither the State guard nor the MutexGuard is alive when the process handle
+    // is moved out.
+    let inner = app.state::<Arc<SidecarState>>().inner().clone();
+    let taken = inner.child.lock().unwrap().take();
+    if let Some(mut child) = taken {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
 fn show_main(app: &tauri::AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.show();
@@ -16,6 +230,7 @@ fn show_main(app: &tauri::AppHandle) {
 /// WebView2 teardown hang, so we first point it at a local blank page, request
 /// a normal exit, and keep a watchdog that force-exits if teardown stalls.
 fn quit_app(app: &tauri::AppHandle) {
+    stop_sidecar(app);
     let bs: tauri::State<'_, Arc<BrowserState>> = app.state();
     if let Some(label) = bs.active_label.lock().unwrap().clone() {
         if let Some(w) = app.get_webview_window(&label) {
@@ -497,8 +712,25 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(Arc::new(ToastState { counter: Mutex::new(0), active_toasts: Mutex::new(Vec::new()) }))
         .manage(Arc::new(BrowserState { counter: Mutex::new(0), active_label: Mutex::new(None) }))
+        .manage(Arc::new(SidecarState {
+            child: Mutex::new(None),
+            #[cfg(windows)]
+            job: Mutex::new(None),
+        }))
         .setup(|app| {
             #[cfg(desktop)] { let _ = app.handle().plugin(tauri_plugin_updater::Builder::new().build()); }
+
+            // `tauri dev` loads devUrl (the Next dev server on :3000) and the bundled
+            // server is not running, so reveal the window immediately. Release builds
+            // wait for the sidecar and fall back to the remote URL if it never binds.
+            if cfg!(debug_assertions) {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.show();
+                    let _ = win.set_focus();
+                }
+            } else {
+                start_sidecar(app.handle());
+            }
 
             let show_i = MenuItem::with_id(app, "show", "Show AnonTweet", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -541,11 +773,14 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_awn, event| {
+        .run(|awn, event| {
             // Hard-exit once the loop is done so WebView2 teardown can never
             // freeze the app and make Quit appear broken. (Windows close
             // first; if that itself stalls, quit_app's watchdog force-exits.)
             if let RunEvent::Exit = event {
+                // The child would otherwise outlive us and hold port 3210, which
+                // makes the next launch fail to bind.
+                stop_sidecar(awn);
                 std::process::exit(0);
             }
         });

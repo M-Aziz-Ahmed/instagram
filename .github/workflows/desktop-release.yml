@@ -18,10 +18,24 @@ on:
   workflow_dispatch:
   push:
     branches: [master]
+    # The desktop bundle now ships the built web app, so any change to the UI or to
+    # the server config has to rebuild the installers too. Without these paths a UI
+    # change would reach Vercel but never reach desktop users.
     paths:
       - "desktop/**"
       - ".github/workflows/desktop-release.yml"
       - "tools/merge-updater-manifest.py"
+      - "tools/prepare-desktop.mjs"
+      - "tools/scan-staged-secrets.mjs"
+      - "next.config.mjs"
+      - "proxy.js"
+      - "package.json"
+      - "package-lock.json"
+      - "app/**"
+      - "components/**"
+      - "context/**"
+      - "utils/**"
+      - "public/**"
 
 permissions:
   contents: write
@@ -76,11 +90,23 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: desktop/package-lock.json
+          cache-dependency-path: |
+            desktop/package-lock.json
+            package-lock.json
+
+      - name: Install root web app dependencies
+        # The desktop bundle embeds the built Next server, so the root deps (next,
+        # react, tailwind) are required here, not just desktop's CLI tooling.
+        run: npm ci
 
       - name: Install desktop JS tooling
         working-directory: desktop
         run: npm ci
+
+      - name: Stage bundled web app + Node runtime
+        # Produces desktop/src-tauri/resources/{app,bin}, which bundle.resources in
+        # tauri.conf.json points at. Both are gitignored, so this cannot be skipped.
+        run: node tools/prepare-desktop.mjs
 
       - name: Disable updater artifacts for unsigned (key-less) builds
         if: env.HAS_TAURI_SIGNING_KEY != 'true'

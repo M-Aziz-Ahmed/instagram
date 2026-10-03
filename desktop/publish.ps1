@@ -17,6 +17,18 @@ if (-not $Password) { $Password = (Get-Content (Join-Path $keyDir "anontweet.pas
 $env:TAURI_SIGNING_PRIVATE_KEY = (Get-Content $keyPath -Raw).Trim()
 $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = $Password
 
+Write-Host "Staging the bundled web app (standalone Next build + Node runtime)..."
+# The installer now carries the whole Next server plus a Node runtime that serve the
+# UI from 127.0.0.1, so those have to exist before tauri build reads them out of
+# bundle.resources. They are gitignored, so a fresh clone cannot skip this.
+$RepoRoot = (Resolve-Path "..").Path
+Push-Location $RepoRoot
+try {
+    node tools/prepare-desktop.mjs
+    if ($LASTEXITCODE -ne 0) { throw "tools/prepare-desktop.mjs failed" }
+}
+finally { Pop-Location }
+
 Write-Host "Building signed Tauri bundles..."
 npx tauri build
 if ($LASTEXITCODE -ne 0) { throw "tauri build failed" }
@@ -26,6 +38,7 @@ $version = $conf.version
 
 $releaseDir = Join-Path (Resolve-Path "src-tauri") "target/release/bundle"
 $outDir = Join-Path (Resolve-Path "..") "public/downloads/desktop"
+$manifestPath = Join-Path $outDir "latest.json"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
 $setup = Get-ChildItem (Join-Path $releaseDir "nsis") -Filter "*x64-setup.exe" |
@@ -57,8 +70,11 @@ $pubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
 # Merge into the existing manifest instead of overwriting it, so platform
 # entries published by CI for this version (linux-x86_64, darwin-*) survive.
+# $manifestPath is resolved above, next to $outDir, because it is read here.
 $existing = $null
-try { $existing = Get-Content $manifestPath -Raw | ConvertFrom-Json } catch {}
+if (Test-Path $manifestPath) {
+    try { $existing = Get-Content $manifestPath -Raw | ConvertFrom-Json } catch {}
+}
 $platforms = @{}
 if ($existing -and $existing.platforms) {
     foreach ($p in $existing.platforms.PSObject.Properties) {
@@ -77,7 +93,6 @@ $manifest = @{
     platforms = $platforms
 }
 
-$manifestPath = Join-Path $outDir "latest.json"
 [System.IO.File]::WriteAllText(
     $manifestPath,
     ($manifest | ConvertTo-Json -Depth 5),

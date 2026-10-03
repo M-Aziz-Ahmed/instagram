@@ -43,7 +43,7 @@ dependencies = [
 
 [[package]]
 name = "anontweet"
-version = "0.2.67"
+version = "0.2.68"
 dependencies = [
  "serde",
  "serde_json",
@@ -53,6 +53,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-updater",
  "urlencoding",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

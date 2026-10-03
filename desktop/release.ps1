@@ -105,7 +105,7 @@ Write-Host "==> Committing and pushing to origin/master..." -ForegroundColor Cya
 git -C $RepoRoot add -A
 if ($LASTEXITCODE -ne 0) { throw "git add failed" }
 
-$gitNotes = if ($newVersion -and $newVersion -ne $current) { "release v$newVersion" } else { "ui" }
+$gitNotes = if ($newVersion -and $newVersion -ne $currentVer) { "release v$newVersion" } else { "ui" }
 if ($Notes -and $Notes -ne "Automatic update with bug fixes and improvements.") {
     $gitNotes = "$gitNotes - $Notes"
 }

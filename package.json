@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "desktop:prepare": "node tools/prepare-desktop.mjs",
+    "desktop:scan-secrets": "node tools/scan-staged-secrets.mjs",
     "lint": "eslint",
     "test": "npm run test:globe && npm run test:globeMap && npm run test:worldData && npm run test:rollup && npm run test:postRollup && npm run test:geo && npm run test:translate && npm run test:toxic && npm run test:safety && npm run test:games && npm run test:invites && npm run test:invitePayload && npm run test:subscriberLocation && npm run test:mediaVault && npm run test:mediaVaultWiring",
     "test:globe": "node components/Admin/globeProjection.test.mjs",

@@ -1,6 +1,6 @@
 [package]
 name = "anontweet"
-version = "0.2.67"
+version = "0.2.68"
 description = "AnonTweet desktop companion"
 authors = ["AnonTweet"]
 edition = "2021"
@@ -21,6 +21,16 @@ tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 urlencoding = "2"
+
+# Already present transitively via tauri; listed directly for the Job Object that
+# reaps the embedded server when the app is killed instead of quit.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
 
 [profile.release]
 codegen-units = 1

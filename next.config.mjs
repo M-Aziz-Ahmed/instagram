@@ -1,7 +1,14 @@
 export default (phase, { defaultConfig }) => {
     const liveTarget = process.env.NEXT_PUBLIC_LIVE_SERVER_URL || "https://anontweet.duckdns.org";
 
+    // The desktop app ships the whole Next server inside the installer and runs it
+    // as a local sidecar, so it needs the self-contained `standalone` output. Static
+    // export is not an option: rewrites, headers and the dynamic routes all need a
+    // real server. Gated behind DESKTOP_BUILD so the Vercel build stays identical.
+    const isDesktopBuild = process.env.DESKTOP_BUILD === "1";
+
     return {
+        ...(isDesktopBuild ? { output: "standalone" } : {}),
         images: {
             remotePatterns: [
                 {
@@ -31,7 +38,9 @@ export default (phase, { defaultConfig }) => {
             ],
         },
         allowedDevOrigins: ['39.62.217.128','0.0.0.0','dad-phrases-removable-car.trycloudflare.com'],
-        productionBrowserSourceMaps: true,
+        // Browser source maps roughly double the shipped JS. Vercel uses them for
+        // error reporting, so they stay on there and off for the desktop bundle.
+        productionBrowserSourceMaps: !isDesktopBuild,
         async headers() {
             return [
                 {
