@@ -70,9 +70,25 @@ async function build() {
 // The standalone server deliberately does not copy these two directories; without
 // them every page renders unstyled and every asset 404s.
 async function collectAssets() {
-    await fs.cp(publicDir, path.join(standalone, "public"), { recursive: true });
+    // Clear the destinations first. fs.cp merges into whatever is already there, so a
+    // stale public/downloads from an earlier run would survive the filter below and
+    // keep inflating every later build.
+    const publicDest = path.join(standalone, "public");
+    const staticDest = path.join(standalone, ".next", "static");
+    await fs.rm(publicDest, { recursive: true, force: true });
+    await fs.rm(staticDest, { recursive: true, force: true });
+
+    await fs.cp(publicDir, publicDest, {
+        recursive: true,
+        // public/downloads holds the published desktop installers, which grow by tens
+        // of megabytes per release. Copying them in would embed every previous
+        // installer inside the next one, recursively. The desktop app does not serve
+        // them: it updates through the Tauri updater, which reads latest.json from
+        // the web host.
+        filter: (src) => path.basename(src) !== "downloads",
+    });
     await fs.mkdir(path.join(standalone, ".next"), { recursive: true });
-    await fs.cp(staticDir, path.join(standalone, ".next", "static"), { recursive: true });
+    await fs.cp(staticDir, staticDest, { recursive: true });
 }
 
 async function stage() {

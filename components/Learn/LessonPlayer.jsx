@@ -5,6 +5,12 @@ import { useRouter, useParams } from "next/navigation";
 
 const MAX_HEARTS = 5;
 
+// TTS warm-up budget. /api/tts allows 30 requests per minute per IP, so 20 phrases
+// spaced 400ms apart finishes in ~8s and leaves headroom for the learner clicking
+// through cards while the warm-up is still running.
+const PREFETCH_MAX = 20;
+const PREFETCH_GAP_MS = 400;
+
 export default function LessonPlayer() {
     const { courseId, lessonId } = useParams();
     const router = useRouter();
@@ -61,6 +67,19 @@ export default function LessonPlayer() {
         })();
         return () => { alive = false; };
     }, [courseId, lessonId]);
+
+    // Warm the TTS cache for this lesson's vocabulary as soon as the questions land.
+    // Speaking a word otherwise waits on a full round-trip to Google, which costs
+    // seconds from any client not sitting next to Google's edge — notably the desktop
+    // build, which serves /api/tts from the user's own machine. A lesson's words are
+    // known up front, so that wait can happen while the learner is still reading the
+    // first card instead of on the button press.
+    useEffect(() => {
+        if (!questions?.length) return;
+        const lang = lesson?.hl;
+        if (!lang) return;
+        prefetchTtsTexts(collectSpeakableTexts(questions), lang);
+    }, [lesson?.hl, questions]);
 
     const hurt = useCallback((n = 1) => {
         setHearts((h) => {
@@ -508,6 +527,54 @@ function speakWeb(text, lang, onend) {
 // is why mobile browsers played nothing. There is deliberately no cross-origin
 // Google fallback any more: it is unreachable from WebViews and mobile
 // browsers, so retrying it only masked the real failure with more silence.
+// Every phrase a lesson can ask to be spoken. The card types each keep their target
+// text somewhere different, and a story also speaks whole sentences, so all of them
+// are gathered rather than guessing from the visible card alone.
+function collectSpeakableTexts(questions) {
+    const out = [];
+    const push = (v) => {
+        const t = typeof v === "string" ? v : v?.t;
+        if (typeof t === "string" && t.trim()) out.push(t.trim());
+    };
+    for (const q of questions || []) {
+        (q.items || []).forEach(push);
+        (q.bank || []).forEach(push);
+        if (Array.isArray(q.options)) q.options.forEach(push);
+        push(q);
+        for (const s of q.story?.sentences || []) push(s);
+        for (const w of q.story?.words || []) push(w);
+    }
+    // The relay rejects a single request over 300 chars and allows 30 per minute per
+    // IP, so keep the list short, deduped and in lesson order.
+    const seen = new Set();
+    return out
+        .filter((t) => {
+            if (t.length > 300) return false;
+            const k = t.toLowerCase();
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+        })
+        .slice(0, PREFETCH_MAX);
+}
+
+// Warm the relay in the background. Staggered so a long lesson cannot burst past the
+// rate limiter, which would leave the learner's own click throttled rather than warm.
+// Failures are ignored on purpose: a cold word is exactly what the relay is for.
+function prefetchTtsTexts(texts, lang) {
+    if (typeof window === "undefined" || !texts.length) return;
+    texts.forEach((text, i) => {
+        setTimeout(() => {
+            try {
+                fetch(`/api/tts?${new URLSearchParams({ lang: lang || "en", text })}`, {
+                    credentials: "same-origin",
+                    priority: "low",
+                }).catch(() => {});
+            } catch {}
+        }, PREFETCH_GAP_MS * i);
+    });
+}
+
 function playAudioStream(text, lang, onend) {
     const params = new URLSearchParams({ lang: lang || "en", text });
     const audio = new Audio(`/api/tts?${params.toString()}`);
