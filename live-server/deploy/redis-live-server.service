@@ -1,0 +1,43 @@
+# Redis service for a multi-instance live-server.
+#
+#   sudo cp redis-live-server.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now redis-live-server
+#   sudo systemctl status redis-live-server
+#
+# Requires /etc/redis/redis.conf (see redis.conf in this directory).
+
+[Unit]
+Description=Redis (AnonTweet live-server event bus)
+Documentation=https://redis.io/docs/latest/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/redis-server /etc/redis/redis.conf
+ExecStop=/usr/bin/redis-cli -a $REDISCLI_AUTH shutdown
+Restart=always
+RestartSec=2
+
+# The Redis data directory holds only a snapshot cache; nothing here is
+# irreplaceable, so keep this service tightly sandboxed.
+User=redis
+Group=redis
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/redis /var/log/redis
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+# pub/sub must never be swapped out to disk.
+MemoryDenyWriteExecute=false
+
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

@@ -13,6 +13,18 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 
 const { Chess } = require("chess.js");
+const { initRedis } = require("./lib/redis");
+const { attachSocketAdapter } = require("./lib/socketAdapter");
+const { startSingletonInterval } = require("./lib/singleton");
+
+// A desktop-bundled instance ("sidecar") shares Mongo and Redis with the central
+// server but must not act like an operator's machine: it does not spawn the local
+// reverse proxy, does not publish scheduled or bot posts, and does not run the
+// WarEra tracker. Every desktop instance would otherwise bind :80/:443, publish the
+// same scheduled posts N times, and point a third-party tracker at its API from
+// every install.
+const SIDECAR_MODE = process.env.SIDECAR_MODE === "1";
+
 const LiveStream = require("./models/liveStream");
 const Community = require("./models/community");
 const ChessGame = require("./models/chessGame");
@@ -226,17 +238,25 @@ if (!process.env.MONGODB_URI) {
 }
 const MONGODB_URI = process.env.MONGODB_URI;
 
+// Pool sizing is per process, so it multiplies by the number of live-server
+// instances. The old fixed 50/10 assumed exactly one process on one box; with a
+// desktop instance per user, 100 installs would try to hold 1,000-5,000 connections
+// and Mongo would start refusing them. Sidecars therefore use a small lazy pool and
+// the central host keeps the larger default. Both are overridable for unusual loads.
+const POOL_MAX = Number(process.env.MONGO_POOL_MAX) || (SIDECAR_MODE ? 5 : 50);
+const POOL_MIN = Number(process.env.MONGO_POOL_MIN) || (SIDECAR_MODE ? 0 : 10);
+
 mongoose.connect(MONGODB_URI, {
-    maxPoolSize: 50,
-    minPoolSize: 10,
+    maxPoolSize: POOL_MAX,
+    minPoolSize: POOL_MIN,
     serverSelectionTimeoutMS: 30000,
     socketTimeoutMS: 45000,
     family: 4,
     readPreference: "primaryPreferred",
     readConcern: { level: "majority" },
 }).then(() => {
-    console.log("[DB] MongoDB connected (pool: 50)");
-    logSystem("db_connected", { message: "MongoDB connected (pool: 50)" });
+    console.log(`[DB] MongoDB connected (pool: ${POOL_MAX}/${POOL_MIN})`);
+    logSystem("db_connected", { message: `MongoDB connected (pool: ${POOL_MAX}/${POOL_MIN})` });
 }).catch((err) => {
     console.error("[DB] MongoDB connection failed:", err.message);
     logSystem("db_connection_failed", { level: "error", message: `MongoDB connection failed: ${err.message}` });
@@ -3918,34 +3938,57 @@ app.use("/api", require("./routes/social"));
 app.use("/api/bots", apiLimiter, require("./routes/bots"));
 
 // ── Scheduled Posts Publisher ───────────────────────────────────
+// Runs on exactly one instance. See lib/singleton.js: with several live-server
+// processes each would publish the same scheduled posts.
 const { publishScheduledPosts } = require("./routes/posts");
-setInterval(async () => {
+startSingletonInterval("scheduled-posts", 60000, async () => {
     const count = await publishScheduledPosts();
     if (count > 0) console.log(`[Scheduler] Published ${count} scheduled post(s)`);
-}, 60000);
+}, { enabled: !SIDECAR_MODE });
 
 // ── Bot Auto-Poster ────────────────────────────────────────────
 const { runBotPosts } = require("./routes/bots");
-setInterval(async () => {
+startSingletonInterval("bot-posts", 60000, async () => {
     const count = await runBotPosts();
     if (count > 0) console.log(`[Bots] Auto-posted ${count} bot post(s)`);
-}, 60000);
+}, { enabled: !SIDECAR_MODE });
 
 // ── Start ───────────────────────────────────────────────────────
 initStockfish().catch(() => {});
 
-// Start Caddy reverse proxy if available
+// The bundled Caddy reverse proxy binds 80/443 for the central host. A desktop
+// instance must never try: those ports belong to the machine's real server, and
+// binding them would fail or conflict.
 const caddyPath = path.join(__dirname, "caddy.exe");
-if (fs.existsSync(caddyPath)) {
+if (!SIDECAR_MODE && fs.existsSync(caddyPath)) {
     const { spawn } = require("child_process");
     const caddy = spawn(caddyPath, ["run"], { cwd: __dirname, stdio: "ignore", detached: true });
     caddy.unref();
     console.log("[Caddy] Reverse proxy started (443 → " + PORT + ")");
 }
 
-server.listen(PORT, () => {
-    console.log(`[Live Server] Running on port ${PORT}`);
-    console.log(`[Live Server] CORS allowed: ${CORS_ORIGIN}`);
-    logSystem("server_started", { message: `Live server started on port ${PORT}`, meta: { port: PORT, cors: CORS_ORIGIN } });
+// Redis is optional but load-bearing once more than one instance exists: the socket
+// adapter needs it for cross-instance delivery. Attach it before accepting
+// connections so no client races an unclustered io.
+async function boot() {
+    await initRedis();
+    await attachSocketAdapter(io);
+
+    server.listen(PORT, () => {
+        console.log(`[Live Server] Running on port ${PORT}`);
+        console.log(`[Live Server] CORS allowed: ${CORS_ORIGIN}`);
+        logSystem("server_started", { message: `Live server started on port ${PORT}`, meta: { port: PORT, cors: CORS_ORIGIN } });
+    });
+
+    // The WarEra tracker is a third-party site harvester that polls another game's
+    // API and auto-messages its players. It is a single-operator tool: running it
+    // from every user's desktop would mean every install hammering that API.
+    if (!SIDECAR_MODE) {
+        initWarEraTracker();
+    }
+}
+
+boot().catch((err) => {
+    console.error("[Live Server] boot failed:", err);
+    process.exit(1);
 });
-initWarEraTracker();

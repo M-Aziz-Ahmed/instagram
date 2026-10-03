@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@consumet/extensions": "^1.8.8",
+    "@socket.io/redis-adapter": "^8.3.0",
     "chess.js": "^1.4.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

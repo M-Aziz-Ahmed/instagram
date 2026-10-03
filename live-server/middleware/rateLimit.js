@@ -1,35 +1,16 @@
 const rateLimit = require("express-rate-limit");
 const { RedisStore } = require("rate-limit-redis");
 const jwt = require("jsonwebtoken");
-const { createClient } = require("redis");
+const { getRedis, initRedis } = require("../lib/redis");
 
 // ── Redis client (with graceful fallback to in-memory) ──────────
-let redisClient = null;
-let redisReady = false;
-
-async function initRedis() {
-    const url = process.env.REDIS_URL || "redis://localhost:6379";
-    try {
-        redisClient = createClient({ url, socket: { connectTimeout: 3000, reconnectStrategy: (retries) => Math.min(retries * 200, 5000) } });
-        redisClient.on("error", (err) => {
-            if (redisReady) console.warn("[Redis] Connection lost, falling back to memory:", err.message);
-            redisReady = false;
-        });
-        redisClient.on("ready", () => {
-            redisReady = true;
-            console.log("[Redis] Connected for rate limiting");
-        });
-        await redisClient.connect();
-    } catch (err) {
-        console.warn("[Redis] Not available, using in-memory rate limiting:", err.message);
-        redisReady = false;
-    }
-}
-
+// The connection itself is owned by lib/redis so the Socket.IO adapter can share it
+// rather than opening a second set of connections to the same server.
 initRedis();
 
 function makeRedisStore(prefix) {
-    if (!redisReady || !redisClient) return undefined;
+    const redisClient = getRedis();
+    if (!redisClient) return undefined;
     return new RedisStore({
         sendCommand: (...args) => redisClient.sendCommand(args),
         prefix: `ratelimit:${prefix}:`,
