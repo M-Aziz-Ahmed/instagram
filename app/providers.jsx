@@ -13,6 +13,7 @@ import ServiceWorkerBridge from "@/components/Notifications/ServiceWorkerBridge"
 import FcmPushBridge from "@/components/FcmPushBridge";
 import AutoUpdater from "@/components/Updates/AutoUpdater";
 import TauriDesktopDiagnostics from "@/components/Tauri/TauriDesktopDiagnostics";
+import ServerStatusBanner from "@/components/ServerStatusBanner";
 import { useEffect } from "react";
 import { installLogInterceptor } from "@/utils/logInterceptor";
 import { installPopupGuard } from "@/utils/popupGuard";
@@ -87,6 +88,7 @@ export default function Providers({ children }) {
                                     {children}
                                 </CallWrapper>
                                 <OnlineStatusTracker />
+                                <ServerStatusBanner />
                                 <PushNotificationManager />
                                 <ServiceWorkerBridge />
                                 <FcmPushBridge />
