@@ -3958,9 +3958,11 @@ initStockfish().catch(() => {});
 
 // The bundled Caddy reverse proxy binds 80/443 for the central host. A desktop
 // instance must never try: those ports belong to the machine's real server, and
-// binding them would fail or conflict.
+// binding them would fail or conflict. On Linux the system Caddy in deploy/Caddyfile
+// fronts the process instead, and NO_LOCAL_PROXY suppresses this entirely.
 const caddyPath = path.join(__dirname, "caddy.exe");
-if (!SIDECAR_MODE && fs.existsSync(caddyPath)) {
+const localProxyAllowed = !SIDECAR_MODE && process.env.NO_LOCAL_PROXY !== "1";
+if (localProxyAllowed && fs.existsSync(caddyPath)) {
     const { spawn } = require("child_process");
     const caddy = spawn(caddyPath, ["run"], { cwd: __dirname, stdio: "ignore", detached: true });
     caddy.unref();

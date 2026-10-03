@@ -1,0 +1,67 @@
+[Unit]
+Description=AnonTweet live-server (Express + Socket.IO + Mongoose)
+Documentation=file:///opt/anontweet-live-server/deploy/README.md
+After=network-online.target mongodb.service redis-live-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=anontweet
+Group=anontweet
+WorkingDirectory=/opt/anontweet-live-server
+
+# node server.js  (not the npm wrapper: start.ps1 starts coturn in WSL, which does
+# not exist on a Linux host, and the Caddy reverse proxy is handled separately below)
+ExecStart=/usr/bin/node server.js
+
+# node resolves relative paths against cwd; server.js reads .env from its own
+# directory via dotenv, so the working directory above is required.
+Restart=always
+# Give the process time to drain in-flight sockets and close the Mongo pool.
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+Environment=NODE_ENV=production
+Environment=PORT=3001
+# The bundled caddy.exe is Windows-only. A Linux host is fronted by the system Caddy
+# in deploy/Caddyfile instead, which is why server.js is run with SIDECAR_MODE unset
+# but the local proxy disabled explicitly.
+Environment=NO_LOCAL_PROXY=1
+
+# Journald, not the log files in ./logs - those are rotated by logService.js and
+# would double-write.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=anontweet-live
+
+# ── Hardening ────────────────────────────────────────────────────────────────
+# The process only needs to read its own directory and write nothing on disk.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=false
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# WebRTC media never flows through this process - it only relays SDP/ICE - so the
+# socket needs no privileges and no large buffers.
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,44 @@
+# Caddy in front of the live-server.
+#
+#   sudo cp Caddyfile /etc/caddy/Caddyfile
+#   sudo caddy validate --config /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# Replaces the bundled caddy.exe, which is Windows-only. Keep read_timeout long
+# enough for Socket.IO: the default 5m is shorter than some WebRTC ICE gathering
+# windows, and a timed-out upgrade shows up in the client as a silent call drop.
+
+anontweet.duckdns.org {
+	encode zstd gzip
+
+	# Socket.IO needs this or long-lived connections are cut mid-call.
+	transport http {
+		read_timeout 24h
+		write_timeout 24h
+	}
+
+	# Trust the proxy chain so req.ip is the real client. The live-server sets
+	# `trust proxy: 1`, which matches exactly one hop - this one.
+	header_up X-Real-IP {remote_host}
+	header_up X-Forwarded-For {remote_host}
+	header_up X-Forwarded-Proto {scheme}
+
+	# Pass WebSocket upgrades straight through. Caddy proxies them natively; do not
+	# add a buffering reverse_proxy in front of this or upgrades will be swallowed.
+	reverse_proxy 127.0.0.1:3001 {
+		# Unbuffered: /api/tts streams audio and Socket.IO emits in bursts.
+		flush_interval -1
+	}
+
+	log {
+		output file /var/log/caddy/anontweet.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+}
+
+# Plain HTTP is redirected rather than served, so nothing ever answers on :80.
+:80 {
+	redir https://{host}{uri} permanent
+}
