@@ -121,6 +121,40 @@ function collectCourseItems(course) {
     return { vocab, phrases };
 }
 
+// Everything the learner has been introduced to by the time they reach `lessonId`,
+// in course order: the lesson's own words plus every earlier lesson's.
+//
+// Questions used to draw on collectCourseItems(), which is the union of the whole
+// course. A lesson with fewer than six words therefore asked about vocabulary from
+// lessons the learner had not opened yet - which is both confusing and unfair, and
+// it is why the same words kept reappearing across lessons. Restricting correct
+// answers to material already taught keeps a lesson self-consistent with its own
+// "First, let's learn" card, while still allowing earlier words to come back for
+// review.
+//
+// If the lesson cannot be located, fall back to the course union rather than
+// returning nothing.
+function collectTaughtItems(course, lessonId) {
+    const vocab = [];
+    const phrases = [];
+    const sections = course.chapters || course.units || [];
+    let found = false;
+
+    for (const chapter of sections) {
+        const lessons = chapter.steps ? chapter.steps.flatMap((s) => s.lessons) : (chapter.lessons || []);
+        for (const lesson of lessons) {
+            if (found) break;
+            vocab.push(...(lesson.vocab || []));
+            phrases.push(...(lesson.phrases || []));
+            if (lesson.id === lessonId) found = true;
+        }
+        if (found) break;
+    }
+
+    if (!found) return collectCourseItems(course);
+    return { vocab, phrases };
+}
+
 const uniqTargets = (items) => [...new Map(items.map((v) => [v.t, v])).values()];
 const uniqEnglish = (items) => [...new Map(items.map((v) => [v.e, v])).values()];
 
@@ -156,9 +190,13 @@ function buildPracticeQuestions(langId, langMeta, course, lesson, stage = 1) {
     const rng = mulberry32(hashCode(`${langId}:${lesson.id}`));
     const spaced = langMeta.spaced !== false;
     const all = collectCourseItems(course);
+    // Correct answers may only come from what has been taught by this point. The
+    // full course union is still used for distractor options, where an unseen word
+    // is a perfectly good wrong answer.
+    const taught = collectTaughtItems(course, lesson.id);
     const localVocab = lesson.vocab || [];
     const localPhrases = lesson.phrases || [];
-    const pool = localVocab.length >= 6 ? localVocab : all.vocab;
+    const pool = localVocab.length >= 6 ? localVocab : taught.vocab.length ? taught.vocab : all.vocab;
 
     const questions = [];
     let qi = 0;
@@ -169,7 +207,7 @@ function buildPracticeQuestions(langId, langMeta, course, lesson, stage = 1) {
     //    BEFORE any question presupposes it — no more "you're expected to know
     //    请 on day one".
     if (stage <= 2) {
-        const teachSrc = localVocab.length ? localVocab : localPhrases.length ? localPhrases : all.vocab;
+        const teachSrc = localVocab.length ? localVocab : localPhrases.length ? localPhrases : (taught.vocab.length ? taught.vocab : all.vocab);
         const teachItems = uniqEnglish(teachSrc).slice(0, 6).map((w) => ({
             e: w.e, t: w.t, emoji: w.emoji || "", gloss: w.gloss || "",
         }));
@@ -200,7 +238,7 @@ function buildPracticeQuestions(langId, langMeta, course, lesson, stage = 1) {
     }
 
     // 2) select reverse: What does "<target>" mean → english options
-    const s2src = localPhrases.length ? localPhrases : localVocab.length ? localVocab : all.vocab;
+    const s2src = localPhrases.length ? localPhrases : localVocab.length ? localVocab : (taught.vocab.length ? taught.vocab : all.vocab);
     const s2 = sample(rng, s2src, 2);
     for (const item of s2) {
         const { options, emojis, glosses, correctIndex } = pickDistractors(rng, item, uniqEnglish(pool), 3, "e");
@@ -215,7 +253,9 @@ function buildPracticeQuestions(langId, langMeta, course, lesson, stage = 1) {
 
     // 3) wordbank: build "<english>" in target language from chips
     if (spaced) {
-        const wpSrc = localPhrases.length ? localPhrases : all.phrases;
+        // Same rule as the pool: never make the learner assemble a phrase from a
+        // lesson they have not reached yet.
+        const wpSrc = localPhrases.length ? localPhrases : (taught.phrases.length ? taught.phrases : all.phrases);
         const wp = sample(rng, wpSrc, 2);
         for (let i = 0; i < 2 && wp[i]; i++) {
             const phrase = wp[i];
@@ -256,7 +296,7 @@ function buildPracticeQuestions(langId, langMeta, course, lesson, stage = 1) {
     }
 
     // 5) match: pair up translations
-    const matchPool = localVocab.length ? localVocab : all.vocab;
+    const matchPool = localVocab.length ? localVocab : (taught.vocab.length ? taught.vocab : all.vocab);
     const pairCount = Math.min(6, Math.max(3, Math.floor(matchPool.length / 2)));
     const pairs = sample(rng, matchPool, pairCount);
     questions.push({
@@ -267,8 +307,8 @@ function buildPracticeQuestions(langId, langMeta, course, lesson, stage = 1) {
     });
 
     // 6) listen: speak target, choose English meaning
-    const lsSrc = localPhrases.length ? localPhrases : localVocab.length ? localVocab : all.vocab;
-    const ls = sample(rng, lsSrc, 1)[0] || sample(rng, all.vocab, 1)[0];
+    const lsSrc = localPhrases.length ? localPhrases : localVocab.length ? localVocab : (taught.vocab.length ? taught.vocab : all.vocab);
+    const ls = sample(rng, lsSrc, 1)[0] || sample(rng, pool, 1)[0];
     const { options, emojis, glosses, correctIndex } = pickDistractors(rng, ls, uniqEnglish(pool), 3, "e");
     questions.push({
         id: `q${qi++}`,
@@ -283,7 +323,7 @@ function buildPracticeQuestions(langId, langMeta, course, lesson, stage = 1) {
     //    difficulty 1 on (pronunciation from the very first chapter); deeper
     //    steps add a second sentence. The client falls back to a speaker +
     //    self-check when speech recognition is unavailable.
-    const speakSrc = localPhrases.length ? localPhrases : localVocab.length ? localVocab : all.vocab;
+    const speakSrc = localPhrases.length ? localPhrases : localVocab.length ? localVocab : (taught.vocab.length ? taught.vocab : all.vocab);
     const s3 = sample(rng, uniqEnglish(speakSrc), Math.min(stage >= 5 ? 2 : 1, new Set(speakSrc.map((i) => i.e)).size));
     for (const item of s3) {
         questions.push({
@@ -307,14 +347,19 @@ function buildPracticeQuestions(langId, langMeta, course, lesson, stage = 1) {
 function buildStoryQuestions(langId, langMeta, course, lesson) {
     const rng = mulberry32(hashCode(`${langId}:${lesson.id}:story`));
     const all = collectCourseItems(course);
+    const taught = collectTaughtItems(course, lesson.id);
     const phrases = uniqEnglish(lesson.phrases || []);
     const vocab = uniqEnglish(lesson.vocab || []);
     const allPhrases = uniqEnglish(all.phrases);
+    // Fallback for the story's vocabulary strip. Reading words the learner has not
+    // reached yet in a lesson meant to teach by immersion is the same problem as
+    // asking about them in a quiz, so stop at the taught-so-far window.
+    const taughtWords = uniqEnglish(taught.vocab);
     const allWords = uniqEnglish(all.vocab);
 
     const nSentences = Math.min(3, Math.max(1, phrases.length || 0));
     const sentences = sample(rng, phrases, nSentences).map((p) => ({ e: p.e, t: p.t, gloss: p.gloss || "" }));
-    const wordsShown = sample(rng, vocab.length ? vocab : allWords, 3).map((w) => ({
+    const wordsShown = sample(rng, vocab.length ? vocab : (taughtWords.length ? taughtWords : allWords), 3).map((w) => ({
         e: w.e, t: w.t, emoji: w.emoji || "", gloss: w.gloss || "",
     }));
 
@@ -482,4 +527,7 @@ module.exports = {
     HEARTS_REFILL_COST, STREAK_FREEZE_COST, STREAK_REPAIR_COST, TIP_FRIEND_COST, COMEBACK_BONUS_GEMS,
     todayKey, seasonKey, regenHearts, levelFromXp, levelProgress,
     buildQuestions, buildDailyQuests, checkAchievements, ACHIEVEMENTS, maxHearts: () => MAX_HEARTS,
+    // Exported for learnScope.test.js, which asserts the taught-so-far window is
+    // really bounded by the lesson rather than the whole course.
+    collectTaughtItems, collectCourseItems,
 };
