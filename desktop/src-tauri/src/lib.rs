@@ -639,18 +639,64 @@ try {
   if (-not $engine) { "UNSUPPORTED"; exit }
 
   $phrase = [string]$p.expect
-  $gb = New-Object System.Speech.Recognition.GrammarBuilder
-  $choice = New-Object System.Speech.Recognition.Choices
-  if ($phrase) { $choice.Add($phrase) }
-  foreach ($w in ($phrase -split ' ')) { if ($w) { $choice.Add($w) } }
-  $gb.Append($choice)
-  $grammar = New-Object System.Speech.Recognition.Grammar($gb)
-  $engine.LoadGrammar($grammar)
+
+  # Build a *sequence* grammar, not a flat choice list.
+  #
+  # The old grammar put the whole sentence and each individual word into one Choices
+  # set appended once, so every alternative was a single atomic token. A learner
+  # speaking a sentence almost never gets the whole clause into one recognition
+  # window - they pause, or the engine latches onto a fragment - and then nothing
+  # in the grammar matched, so nothing came back and the attempt looked ignored.
+  # Repeating a one-word rule lets any prefix, suffix or subset of the phrase be
+  # recognised, and the caller's fuzzy matcher decides whether it was close enough.
+  $words = @($phrase -split '\s+' | Where-Object { $_ })
   $engine.SetInputToDefaultAudioDevice()
+
+  if ($words.Count -eq 0) {
+    # Nothing recognisable to build from; fall back to free-form dictation.
+    $engine.LoadGrammar((New-Object System.Speech.Recognition.DictationGrammar))
+  } else {
+    $any = New-Object System.Speech.Recognition.Choices
+    foreach ($w in $words) { $any.Add($w) }
+
+    # Append(count, min, max) repeats the rule, so any 1..N run of the allowed words
+    # is a valid utterance. Verified this overload exists - GrammarBuilder has no
+    # SetRepetition method, and calling one threw.
+    $maxRepeat = [Math]::Min($words.Count + 4, 25)
+    $seq = New-Object System.Speech.Recognition.GrammarBuilder
+    $seq.Append($any, 1, $maxRepeat)
+    try { $engine.LoadGrammar((New-Object System.Speech.Recognition.Grammar($seq))) } catch {}
+
+    # A dictation grammar alongside matters for accented speech: the constrained
+    # grammar can reject an otherwise clear attempt at a word the learner pronounces
+    # differently, and returning nothing is worse than returning a guess the caller
+    # can fuzzy-match or discard on confidence.
+    try { $engine.LoadGrammar((New-Object System.Speech.Recognition.DictationGrammar)) } catch {}
+  }
+
   $timeout = [int]$(if ($p.timeoutMs) { $p.timeoutMs } else { 8000 })
-  $result = $engine.Recognize([TimeSpan]::FromMilliseconds($timeout))
-  if ($result) {
-    "RESULT::$($result.Text)|$($result.Confidence)"
+  $sb = New-Object System.Text.StringBuilder
+  $seen = 0
+  $best = $null
+  $deadline = (Get-Date).AddMilliseconds($timeout)
+  while ((Get-Date) -lt $deadline) {
+    $remaining = $deadline - (Get-Date)
+    if ($remaining.TotalMilliseconds -lt 200) { break }
+    $r = $engine.Recognize([TimeSpan]::FromMilliseconds([Math]::Min(1200, $remaining.TotalMilliseconds)))
+    if (-not $r) { continue }
+    $text = ([string]$r.Text).Trim()
+    if (-not $text) { continue }
+    $seen++
+    if ($best -eq $null -or $r.Confidence -gt $best.Confidence) { $best = $r }
+    # Keep listening for a short tail so a sentence can be picked up as more than
+    # one fragment, but only while the learner is still producing words.
+    if ($seen -ge 1 -and $sb.Length -gt 0) { [void]$sb.Append(' ') }
+    [void]$sb.Append($text)
+    if ($sb.Length -gt 240) { break }
+  }
+
+  if ($sb.Length -gt 0) {
+    "RESULT::$($sb.ToString().Trim())|$(if ($best) { $best.Confidence } else { 0 })"
   } else {
     "EMPTY::"
   }

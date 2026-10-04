@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { gradePronunciation, speechMatch } from "@/utils/speechMatch";
+import { gradePronunciation } from "@/utils/speechMatch";
 
 const MAX_HEARTS = 5;
 
@@ -742,14 +742,21 @@ function captureSpeech(expect, lang, onResult) {
     };
 
     if (isDesktop()) {
-        invokeTauri("recognize_speech", { expect, lang: (lang || "en").split("-")[0], timeoutMs: 8000 }).then((res) => {
+        // A sentence needs a longer window than a word: the learner pauses, and the
+        // engine latches on to fragments rather than the whole clause at once.
+        const text = String(expect || "");
+        const words = text.trim().split(/\s+/).filter(Boolean).length;
+        const timeoutMs = Math.min(2000 + words * 700, 15000);
+        invokeTauri("recognize_speech", { expect: text, lang: (lang || "en").split("-")[0], timeoutMs }).then((res) => {
             if (res && typeof res.text === "string" && res.text) {
                 finish({ text: res.text, confidence: res.confidence || 0, source: "native" });
             } else {
                 finish(null); // unavailable / nothing heard within the window
             }
         }).catch(() => finish(null));
-        guard = setTimeout(() => finish(null), 11000);
+        // Keep the JS guard comfortably above the native window so the native result
+        // wins the race instead of being discarded as a timeout.
+        guard = setTimeout(() => finish(null), timeoutMs + 4000);
         return () => {};
     }
 
@@ -810,7 +817,8 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
     const [checked, setChecked] = useState(false);
     const [correct, setCorrect] = useState(false);
     const [heard, setHeard] = useState("");
-    const [srStatus, setSrStatus] = useState("idle"); // idle | listening | heard | unsupported
+    const [heardConfidence, setHeardConfidence] = useState(0);
+    const [srStatus, setSrStatus] = useState("idle"); // idle | listening | heard | unclear | unsupported
     const recRef = useRef(null);
 
     const applyResult = (isCorrect) => {
@@ -842,6 +850,7 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
                 recRef.current = null;
                 if (r && r.text) {
                     setHeard(r.text);
+                    setHeardConfidence(r.confidence || 0);
                     setSrStatus("heard");
                 } else {
                     setSrStatus((s) => (s === "heard" ? s : "idle"));
@@ -865,8 +874,9 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
             r.interimResults = false;
             r.maxAlternatives = 1;
             r.onresult = (e) => {
-                const t = e.results?.[0]?.[0]?.transcript || "";
-                if (t) setHeard(t);
+                const alt = e.results?.[0]?.[0];
+                const t = alt?.transcript || "";
+                if (t) { setHeard(t); setHeardConfidence(alt?.confidence || 0); }
                 setSrStatus("heard");
                 stopRec();
             };
@@ -891,7 +901,27 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
             applyResult(expected === actual);
         } else if (q.type === "speak") {
             const supported = canListen();
-            applyResult(supported ? speechMatch(heard, q.expect) : true);
+            if (!supported) {
+                // No recogniser on this surface: self-check, do not pretend to grade.
+                applyResult(true);
+            } else if (!heard.trim()) {
+                // Nothing was transcribed. Grading that as incorrect punishes a
+                // microphone or recognition failure as if the learner got it wrong,
+                // so let them try again rather than spending the attempt.
+                setSrStatus("idle");
+                return;
+            } else {
+                const { outcome, heart } = gradePronunciation({
+                    heard,
+                    expect: q.expect,
+                    confidence: heardConfidence || 0,
+                });
+                if (outcome === "unclear-retry") {
+                    setSrStatus("unclear");
+                    return;
+                }
+                applyResult(outcome === "correct");
+            }
         }
     };
 
@@ -927,7 +957,10 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
             ? answer.trim().length > 0
             : q.type === "speak"
             ? canListen()
-                ? heard.trim().length > 0 || srStatus !== "listening"
+                ? // Require something to grade. Checking an empty transcript used to
+                  // fail the question outright, charging the learner for a mic that
+                  // never picked anything up.
+                  heard.trim().length > 0
                 : true
             : false;
 
@@ -1113,7 +1146,13 @@ function QuestionCard({ q, rtl, hl, hearts, hurt, onCheck }) {
                                     )}
                                 </button>
                                 <p className="text-xs font-bold text-gray-400">
-                                    {srStatus === "listening" ? "Listening…" : srStatus === "heard" ? `You said: “${heard}”` : "Tap & speak"}
+                                    {srStatus === "listening"
+                                        ? "Listening…"
+                                        : srStatus === "heard"
+                                          ? `You said: “${heard}”`
+                                          : srStatus === "unclear"
+                                            ? "We didn’t catch that clearly — no heart lost, tap to try again"
+                                            : "Tap & speak"}
                                 </p>
                             </div>
                         ) : (
