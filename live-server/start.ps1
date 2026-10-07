@@ -103,15 +103,24 @@ try {
     if (-not $distro) {
         Write-Host "[start] No WSL distribution; skipping the local coturn service." -ForegroundColor Yellow
     } else {
-        $status = wsl -u root bash -c "systemctl is-active coturn 2>/dev/null" 2>$null
-        if ($status -ne "active") {
+        $status = (wsl -u root bash -c "systemctl is-active coturn 2>/dev/null" 2>$null | Out-String).Trim()
+        if ($status -notmatch '^active$') {
             Write-Host "[start] Starting coturn (TURN relay) in WSL..." -ForegroundColor Cyan
-            wsl -u root bash -c "systemctl start coturn 2>&1" 2>$null
+            wsl -u root bash -c "systemctl start coturn 2>&1" 2>$null | Out-Null
+            $status = (wsl -u root bash -c "systemctl is-active coturn 2>/dev/null" 2>$null | Out-String).Trim()
         }
-        Write-Host "[start] Local coturn in WSL: $status" -ForegroundColor Yellow
+        # WSL reports a missing hypervisor as a multi-paragraph block on stdout
+        # even with stderr discarded, so only the first line is echoed. Dumping
+        # the whole thing buries the useful startup output.
+        $first = ($status -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
+        if ($first -and $first -ne "active") {
+            Write-Host "[start] Local coturn in WSL unavailable: $first" -ForegroundColor Yellow
+        } else {
+            Write-Host "[start] Local coturn in WSL: active" -ForegroundColor Green
+        }
     }
 } catch {
-    Write-Host "[start] Could not manage coturn in WSL: $_" -ForegroundColor Yellow
+    Write-Host "[start] Could not manage coturn in WSL: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
 # 3) Launch the Node live-server in the foreground.

@@ -381,7 +381,7 @@ const canUploadVideo = user?.canUploadVideo === true;
         // scrollIntoView aligns the element's scroll-margin edge to the top of
         // the viewport and would otherwise park the first line of the composer
         // underneath the header. sm: the header grows to h-14.
-        <div id="compose" className="border-b border-gray-200 dark:border-gray-800 p-4 scroll-mt-[calc(3rem+env(safe-area-inset-top))] sm:scroll-mt-[calc(3.5rem+env(safe-area-inset-top))]">
+        <div id="compose" className="border-b border-gray-200 dark:border-gray-800 p-4 scroll-mt-[calc(3rem+env(safe-area-inset-top,0px))] sm:scroll-mt-[calc(3.5rem+env(safe-area-inset-top,0px))]">
             {/* `min-w-0` on both levels. This is a flex item with `flex-1`, and
                 without `min-w-0` its automatic minimum size is its min-content
                 width — so any child with intrinsic width (a media preview, the

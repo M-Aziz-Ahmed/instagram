@@ -2282,7 +2282,7 @@ export default function GroupChatBox({ groupId, user, onBack, group, onLeave }) 
         // header visually starts at the top of the screen.
         <div className="flex flex-col h-full relative safe-bottom">
             {/* Header */}
-            <div className="flex items-center gap-2 px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0">
+            <div className="flex items-center gap-2 px-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0">
                 <button onClick={onBack} className="p-2.5 -ml-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors" aria-label="Back">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 text-gray-600 dark:text-gray-400">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />

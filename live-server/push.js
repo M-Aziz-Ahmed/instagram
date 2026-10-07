@@ -20,18 +20,69 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
 
 // Firebase Cloud Messaging → native mobile app (Capacitor shell).
 let messaging = null;
+
+/**
+ * Read the service account from either an inline JSON blob or a path to a file.
+ *
+ * The inline form is the one that breaks. A service account pasted out of the
+ * Firebase console arrives as a JavaScript object literal, and the two failures
+ * that actually occur are a doubled outer brace (a second paste layer, or a
+ * templating helper that wrapped it) and single-quoted keys. Both are invalid
+ * JSON and both failed at "position 1", which is a completely unhelpful place to
+ * look when the real problem is somewhere in the middle of a 500-character blob
+ * — and it cost the native app its closed-app notifications while web push kept
+ * working, so nothing looked broken.
+ *
+ * So the doubled-brace form is unwrapped rather than rejected, and anything
+ * still unparseable is reported with the actual offset. Using
+ * FIREBASE_SERVICE_ACCOUNT_PATH with a real .json file remains the robust option
+ * and sidesteps .env quoting entirely.
+ */
+function parseServiceAccount(raw) {
+    const trimmed = raw.trim();
+
+    // A filesystem path, not inline JSON.
+    if (!trimmed.startsWith("{")) return require(trimmed);
+
+    // `{{ ... }}` -> `{ ... }`, but only when it really is doubled, so a valid
+    // single-brace object whose first *value* is an object is left alone.
+    let candidate = trimmed;
+    if (candidate.startsWith("{{") && candidate.endsWith("}}")) {
+        candidate = candidate.slice(1, -1).trim();
+    }
+
+    try {
+        return JSON.parse(candidate);
+    } catch (err) {
+        throw new Error(
+            `${err.message} — the value looks like a JS object literal rather than JSON. ` +
+            `Check for a doubled outer brace ({{...}}), single-quoted keys, or a trailing comma. ` +
+            `Prefer setting FIREBASE_SERVICE_ACCOUNT_PATH to a .json file instead.`
+        );
+    }
+}
 const fcmConfig = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
 if (fcmConfig) {
     try {
         const { initializeApp, credential } = require("firebase-admin");
         const admin = { initializeApp, credential };
-        const serviceAccount = fcmConfig.trim().startsWith("{") ? JSON.parse(fcmConfig) : require(fcmConfig);
+        const serviceAccount = parseServiceAccount(fcmConfig);
         admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
         messaging = admin;
         console.log("[PUSH] FCM configured — native app closed-notifications enabled");
     } catch (err) {
         messaging = null;
         console.error("[PUSH] FCM init error (native app push DISABLED):", err.message);
+        // This silently cost the mobile app its closed-app notifications while
+        // the only other symptom was web push still working, so nothing looked
+        // broken. Say which value is at fault and what is wrong with it.
+        console.error("[PUSH]   variable : FIREBASE_SERVICE_ACCOUNT" + (process.env.FIREBASE_SERVICE_ACCOUNT ? "" : "_PATH"));
+        console.error("[PUSH]   looks like: a JavaScript object literal, not JSON. Common causes:");
+        console.error("[PUSH]     - double braces  {{ \"type\": ... }}   -> remove one layer");
+        console.error("[PUSH]     - single quotes  { 'type': ... }      -> use double quotes");
+        console.error("[PUSH]     - trailing comma after the last field");
+        console.error("[PUSH]   or point FIREBASE_SERVICE_ACCOUNT_PATH at a .json FILE instead, which");
+        console.error("[PUSH]   sidesteps .env quoting entirely.");
     }
 } else {
     console.warn("[PUSH] FCM not configured — native app closed-notifications DISABLED (set FIREBASE_SERVICE_ACCOUNT or FIREBASE_SERVICE_ACCOUNT_PATH in live-server/.env)");

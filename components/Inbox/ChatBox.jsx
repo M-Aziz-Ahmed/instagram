@@ -179,16 +179,25 @@ export default function ChatBox({ onBack, recipient, recipientUser, archived = f
         // above the header — a blank strip the height of the notch. The inset has
         // to be absorbed by the header's own `padding-top` instead, so the
         // header's background fills it and the header visually starts at the top
-        // of the screen. It is spelled `pt-[calc(0.75rem+env(...))]` rather than
-        // `.safe-top` on purpose: `.safe-*` are unlayered rules in globals.css and
+        // of the screen. The inset is combined with the rem size inside a single
+        // padding arbitrary value rather than applied via `.safe-top` on
+        // purpose: `.safe-*` are unlayered rules in globals.css and
         // would beat a layered `py-*`, so `safe-top` + `py-3` on one element means
         // padding-top is env() alone and the row collapses to nothing wherever
         // the inset is 0. Adding the two together in one calc sidesteps that
         // entirely, and it is what every other header in the app does.
+        //
+        // NB: the literal utility name is deliberately NOT written out in this
+        // comment. Tailwind v4 scans raw source text for class-like candidates
+        // and does not strip comments first, so a quoted padding utility
+        // containing a truncated env() here was collected as a real candidate and
+        // then failed to compile — that was the long-standing "1 warning while
+        // optimizing generated CSS" on every build. Describe the utility in prose
+        // instead of quoting it.
         <div className="flex flex-col h-full safe-bottom">
 
             {/* ── Header ──────────────────────────────────────────────────── */}
-            <header className="sticky top-0 z-20 flex items-center gap-2 px-3 md:px-6 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3 md:pt-[calc(1rem+env(safe-area-inset-top))] md:pb-4 border-b border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-950">
+            <header className="sticky top-0 z-20 flex items-center gap-2 px-3 md:px-6 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-3 md:pt-[calc(1rem+env(safe-area-inset-top,0px))] md:pb-4 border-b border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-950">
 
                 {onBack && (
                     <button
