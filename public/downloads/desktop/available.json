@@ -1,12 +1,12 @@
 {
-  "version": "0.2.77",
+  "version": "0.2.78",
   "files": {
     "linux-x86_64": [
       "AnonTweet-0.2.9-1.x86_64.rpm"
     ],
     "windows-x86_64": [
-      "AnonTweet_0.2.77_x64-setup.exe",
-      "AnonTweet_0.2.77_x64_en-US.msi"
+      "AnonTweet_0.2.78_x64-setup.exe",
+      "AnonTweet_0.2.78_x64_en-US.msi"
     ]
   }
 }
