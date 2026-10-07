@@ -2274,14 +2274,15 @@ export default function GroupChatBox({ groupId, user, onBack, group, onLeave }) 
         // whatever further ancestor happened to be relative — so it floated
         // somewhere unrelated to the chat pane.
         //
-        // `safe-top` / `safe-bottom` live here, on the column, for the same
-        // reason as in ChatBox: they are unlayered rules in globals.css and so
-        // would DELETE a same-side `py-*` on the header or composer wherever the
-        // inset is 0 (i.e. on every desktop). On the column they just displace
-        // the whole pane out from under the status bar and the home indicator.
-        <div className="flex flex-col h-full relative safe-top safe-bottom">
+        // `safe-bottom` lives here on the column; `safe-top` does not, for the
+        // same reason as in ChatBox. Padding on the COLUMN displaces the whole
+        // pane, so the status-bar inset rendered as an unstyled band above the
+        // header — the blank gap the user reported. The header absorbs it in its
+        // own `padding-top` below, so its background fills the strip and the
+        // header visually starts at the top of the screen.
+        <div className="flex flex-col h-full relative safe-bottom">
             {/* Header */}
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0">
+            <div className="flex items-center gap-2 px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0">
                 <button onClick={onBack} className="p-2.5 -ml-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors" aria-label="Back">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 text-gray-600 dark:text-gray-400">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
@@ -2552,18 +2553,29 @@ export default function GroupChatBox({ groupId, user, onBack, group, onLeave }) 
                 </div>
             )}
 
-            {/* Composer */}
-            <div className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-3 shrink-0">
+            {/* Composer. `max-h` + `overflow-y-auto` matches the fix in ChatBox: this
+                wrapper is `shrink-0` inside a fixed-height, `overflow-hidden`
+                column, and the rows stacked inside it (attachment chips, reply
+                and link previews, poll, code mode, plus three banner rows) were
+                uncapped. Attaching files grew the composer until the message
+                list hit zero height and the rest was clipped off the bottom of
+                the screen. The message list above is already `flex-1 min-h-0`,
+                so it yields the space first; the cap catches what is left. */}
+            <div className="max-h-[60dvh] shrink-0 overflow-y-auto overscroll-contain border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-3">
                 {/* Unified attachment tray. The single image preview that used
                     to live here became this row: every attachment is a chip with
                     its own progress, error and remove button, so "remove the
                     second file" is possible at all. */}
                 {queue.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2">
+                    /* One scrolling strip, not a wrapping grid — each chip is
+                       44px tall, so wrapping made composer height scale with the
+                       attachment count and pushed the send button off the bottom
+                       of a phone. Same reasoning as the fix in Input.jsx. */
+                    <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain scrollbar-hide pb-0.5 mb-2">
                         {queue.map((item) => (
                             <div
                                 key={item.id}
-                                className="relative flex items-center gap-2 pl-1.5 py-1 pr-1 min-h-[44px] bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 max-w-full sm:max-w-[220px]"
+                                className="relative shrink-0 flex items-center gap-2 pl-1.5 py-1 pr-1 min-h-[44px] bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 w-[190px] sm:w-[220px]"
                             >
                                 <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
                                     {(() => {
@@ -2869,12 +2881,21 @@ export default function GroupChatBox({ groupId, user, onBack, group, onLeave }) 
 
                     {/* The one popover: one container, one rail, one panel. */}
                     {trayVisible && (
+                        /* The bare panels (emoji/GIF) mount a 340px picker, and a
+                           360px container minus the 48px rail left only 312px, so
+                           part of the picker was clipped by `overflow-hidden`. The
+                           rail also needs `overflow-y-auto`: seven 40px items is
+                           ~300px and `max-h` is a dvh fraction, so the bottom
+                           buttons were unreachable in landscape or with the
+                           keyboard open. Same fix as in Input.jsx. */
                         <div
-                            className={`absolute bottom-full left-0 mb-2 z-50 flex items-stretch overflow-hidden w-[min(360px,calc(100vw-2rem))] max-h-[min(62dvh,400px)] ${
-                                barePanel ? "" : `${PANEL_CHROME} rounded-2xl`
+                            className={`absolute bottom-full left-0 mb-2 z-50 flex items-stretch overflow-hidden max-h-[min(62dvh,400px)] ${
+                                barePanel
+                                    ? "w-[min(400px,calc(100vw-2rem))]"
+                                    : `w-[min(360px,calc(100vw-2rem))] ${PANEL_CHROME} rounded-2xl`
                             }`}
                         >
-                            <div className="shrink-0 w-12 flex flex-col items-center gap-0.5 p-1 border-r border-gray-100 dark:border-gray-800">
+                            <div className="shrink-0 w-12 flex flex-col items-center gap-0.5 p-1 overflow-y-auto border-r border-gray-100 dark:border-gray-800">
                                 {TRAY_ITEMS.map((item) => (
                                     <button
                                         key={item.id}

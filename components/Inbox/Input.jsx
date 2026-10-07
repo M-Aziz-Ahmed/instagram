@@ -1364,11 +1364,19 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                 button, progress bar and error, so "remove the second file" is
                 possible at all. */}
             {queue.length > 0 && (
-                <div className="flex flex-wrap gap-2">
+                /* A single scrolling strip, not a wrapping grid. Each chip is
+                   44px tall, so `flex-wrap` made the composer's height a function
+                   of the attachment count — ten files was four rows, ~200px, all
+                   of it inside a `shrink-0` composer in a fixed-height column, and
+                   that is what shoved the send button off the bottom of a phone.
+                   `nowrap` + `overflow-x-auto` pins it to one row at any count and
+                   the chips scroll sideways instead; each is `shrink-0` so it
+                   keeps its intrinsic width rather than being squashed. */
+                <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain scrollbar-hide pb-0.5">
                     {queue.map((item) => (
                         <div
                             key={item.id}
-                            className="relative flex items-center gap-2 pl-1.5 py-1 pr-1 min-h-[44px] bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 max-w-full sm:max-w-[220px]"
+                            className="relative shrink-0 flex items-center gap-2 pl-1.5 py-1 pr-1 min-h-[44px] bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 w-[190px] sm:w-[220px]"
                         >
                             <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
                                 {(() => {
@@ -1727,12 +1735,26 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                     by hand and any new tool would have needed a fourth boolean
                     and a third pair of setters. */}
                 {trayVisible && (
+                    /* Width differs for the bare panels (emoji/GIF): those mount a
+                       picker that is 340px wide, and inside a 360px container minus
+                       the 48px rail only 312px was left for it, so ~28px was
+                       clipped by the container's `overflow-hidden` — the emoji grid
+                       lost its right-hand column. Sizing the container to fit the
+                       rail + picker resolves it without touching the pickers.
+
+                       The rail is `overflow-y-auto` because there are seven items at
+                       40px each (~300px) and `max-h` is a dvh fraction: on a
+                       landscape phone, or with the keyboard open, 62dvh can fall
+                       below 300px and the bottom rail buttons used to be cut off with
+                       no way to scroll to them. */
                     <div
-                        className={`absolute bottom-full left-0 mb-2 z-50 flex items-stretch overflow-hidden w-[min(360px,calc(100vw-2rem))] max-h-[min(62dvh,400px)] ${
-                            barePanel ? "" : `${PANEL_CHROME} rounded-2xl`
+                        className={`absolute bottom-full left-0 mb-2 z-50 flex items-stretch overflow-hidden max-h-[min(62dvh,400px)] ${
+                            barePanel
+                                ? "w-[min(400px,calc(100vw-2rem))]"
+                                : `w-[min(360px,calc(100vw-2rem))] ${PANEL_CHROME} rounded-2xl`
                         }`}
                     >
-                        <div className={`shrink-0 w-12 flex flex-col items-center gap-0.5 p-1 ${barePanel ? "border-r border-gray-100 dark:border-gray-800" : "border-r border-gray-100 dark:border-gray-800"}`}>
+                        <div className="shrink-0 w-12 flex flex-col items-center gap-0.5 p-1 overflow-y-auto border-r border-gray-100 dark:border-gray-800">
                             {TRAY_ITEMS.map((item) => (
                                 <button
                                     key={item.id}

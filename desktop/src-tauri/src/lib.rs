@@ -114,22 +114,105 @@ fn resolve_resource(app: &tauri::AppHandle, rel: &str) -> Option<std::path::Path
     None
 }
 
-/// Wait until the sidecar accepts connections. Listening is the signal we need:
-/// once the socket is bound, Next has already parsed its config and mounted routes.
-fn wait_until_listening(port: u16, timeout: std::time::Duration) -> bool {
+/// Ask the sidecar for `/` and report whether it answered with something other
+/// than a server error.
+///
+/// A bare `TcpStream::connect` is not a readiness signal on its own. It returns
+/// true the moment the socket is bound, which is *before* Next has compiled and
+/// mounted its routes — and the first real request is then the one paying for
+/// every chunk read, config parse and route mount. On a cold first launch that
+/// is seconds, and it is precisely when the user is staring at the window.
+fn probe_once(port: u16) -> bool {
+    use std::io::{Read, Write};
+    use std::net::{SocketAddr, TcpStream};
+    use std::time::Duration;
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(1500)) else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(1500)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(1500)));
+
+    let request = format!(
+        "GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\nUser-Agent: anontweet-sidecar-probe\r\nAccept: */*\r\n\r\n"
+    );
+    if stream.write_all(request.as_bytes()).is_err() {
+        return false;
+    }
+
+    // Only the status line is needed. `Connection: close` means the server ends
+    // the body and closes, so a bounded read is enough and cannot hang.
+    let mut head = [0u8; 64];
+    let Ok(n) = stream.read(&mut head) else {
+        return false;
+    };
+    let head = String::from_utf8_lossy(&head[..n]);
+    let mut parts = head.split_whitespace();
+    let version_ok = matches!(parts.next(), Some("HTTP/1.1" | "HTTP/1.0"));
+    let served = parts
+        .next()
+        .and_then(|code| code.parse::<u16>().ok())
+        .is_some_and(|code| (200..500).contains(&code));
+    version_ok && served
+}
+
+/// Poll `probe_once` until the sidecar serves `/`, or the timeout expires.
+fn wait_until_serving(port: u16, timeout: std::time::Duration) -> bool {
     let deadline = std::time::Instant::now() + timeout;
-    while std::time::Instant::now() < deadline {
-        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+    loop {
+        if probe_once(port) {
             return true;
         }
-        std::thread::sleep(std::time::Duration::from_millis(150));
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
     }
-    false
 }
 
 /// Where the UI is served from when the bundled server cannot be started. Falling
 /// back keeps the app usable instead of showing a dead window.
 const REMOTE_FALLBACK_URL: &str = "https://anontweet.vercel.app";
+
+/// Open the sidecar's log file, or null if it cannot be created. Never fatal —
+/// losing the log is preferable to refusing to start.
+fn log_file(app: &tauri::AppHandle) -> std::process::Stdio {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let Ok(dir) = app.path().app_log_dir() else {
+        return Stdio::null();
+    };
+    if std::fs::create_dir_all(&dir).is_err() {
+        return Stdio::null();
+    }
+    let path = dir.join("sidecar.log");
+    match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        Ok(mut file) => {
+            // Mark each launch so the tail is attributable when several sessions
+            // are interleaved in one file.
+            let _ = writeln!(file, "\n=== launch {} ===", log_stamp());
+            Stdio::from(file)
+        }
+        Err(_) => Stdio::null(),
+    }
+}
+
+/// Timestamp for the log separator. Kept dependency-free and coarse: it only has
+/// to be unique enough to tell launches apart in a text file.
+fn log_stamp() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    secs.to_string()
+}
 
 fn spawn_sidecar(app: &tauri::AppHandle) -> bool {
     let (Some(node), Some(server)) = (
@@ -151,8 +234,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> bool {
         .env("HOSTNAME", "127.0.0.1")
         .env("NODE_ENV", "production")
         .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null());
+        // stderr goes to a log file rather than /dev/null. A sidecar that fails to
+        // boot used to be indistinguishable from one that is merely slow, and the
+        // only symptom was a localhost error page with nothing to diagnose it from.
+        .stderr(log_file(app));
 
     // Without this the child would flash a console window on every launch.
     #[cfg(windows)]
@@ -166,7 +251,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> bool {
         Ok(child) => {
             #[cfg(windows)]
             let job = attach_kill_on_close(&child);
-            let started = wait_until_listening(SIDECAR_PORT, std::time::Duration::from_secs(30));
+            let started = wait_until_serving(SIDECAR_PORT, std::time::Duration::from_secs(45));
             let state: tauri::State<'_, Arc<SidecarState>> = app.state();
             *state.child.lock().unwrap() = Some(child);
             #[cfg(windows)]
@@ -182,11 +267,54 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> bool {
     }
 }
 
-/// Start the bundled server off the main thread, then point the window at it.
+/// Point the window at `target` and reveal it, retrying a few times.
 ///
-/// The window is created before setup() runs and would otherwise begin loading
-/// the loopback URL before anything is listening, so it is created hidden and
-/// only revealed once there is something to show.
+/// The window's configured URL is now the bundled `index.html` placeholder rather
+/// than the loopback address. That matters: Tauri builds config windows *before*
+/// `setup()` runs, and WebView2 issues its first navigation synchronously at
+/// webview creation, so any URL in the config pointing at a port nothing is
+/// listening on yet is guaranteed to render a connection-refused page before a
+/// single line of our code executes. There is no way to fix that ordering from
+/// here, so the config now names a local asset that always loads and this
+/// function does the real navigation once there is a server to navigate to.
+///
+/// `reload()` is deliberately not used for the first navigation: the webview is
+/// sitting on the local placeholder, so `navigate` is a genuine cross-document
+/// navigation rather than a re-request for the URL that already failed. That
+/// distinction was the difference between "loads by itself" and "needs a manual
+/// hard reload" on first open.
+fn load_target(app: &tauri::AppHandle, target: &str) {
+    let Some(win) = app.get_webview_window("main") else {
+        return;
+    };
+    let Ok(url) = Url::parse(target) else {
+        eprintln!("could not parse target url: {target}");
+        return;
+    };
+
+    let mut attempts = 0;
+    loop {
+        match win.navigate(url.clone()) {
+            Ok(()) => break,
+            Err(e) => {
+                attempts += 1;
+                // A navigation can fail for transient reasons (the webview is
+                // still settling the placeholder, the profile is being set up).
+                // Bounded retries, then give up rather than spin.
+                if attempts >= 5 {
+                    eprintln!("navigation to {target} failed after {attempts} attempts: {e}");
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(600));
+            }
+        }
+    }
+
+    let _ = win.show();
+    let _ = win.set_focus();
+}
+
+/// Start the bundled server off the main thread, then point the window at it.
 fn start_sidecar(app: &tauri::AppHandle) {
     let handle = app.clone();
     std::thread::spawn(move || {
@@ -194,16 +322,10 @@ fn start_sidecar(app: &tauri::AppHandle) {
         let target = if local {
             format!("http://127.0.0.1:{SIDECAR_PORT}")
         } else {
-            eprintln!("falling back to {REMOTE_FALLBACK_URL}");
+            eprintln!("sidecar unavailable; falling back to {REMOTE_FALLBACK_URL}");
             REMOTE_FALLBACK_URL.to_string()
         };
-        if let Some(win) = handle.get_webview_window("main") {
-            if let Ok(url) = Url::parse(&target) {
-                let _ = win.navigate(url);
-            }
-            let _ = win.show();
-            let _ = win.set_focus();
-        }
+        load_target(&handle, &target);
     });
 }
 
@@ -766,14 +888,19 @@ pub fn run() {
         .setup(|app| {
             #[cfg(desktop)] { let _ = app.handle().plugin(tauri_plugin_updater::Builder::new().build()); }
 
-            // `tauri dev` loads devUrl (the Next dev server on :3000) and the bundled
-            // server is not running, so reveal the window immediately. Release builds
-            // wait for the sidecar and fall back to the remote URL if it never binds.
-            if cfg!(debug_assertions) {
-                if let Some(win) = app.get_webview_window("main") {
-                    let _ = win.show();
-                    let _ = win.set_focus();
-                }
+            // The window's configured URL is a local placeholder asset, so nothing
+            // is loading until we say so. Both build flavours therefore go through
+            // the same path: decide on a target, then navigate.
+            //
+            // Debug builds prefer a `next dev` on :3000 if one is already running,
+            // which is the only thing `tauri dev` is good for. `devUrl` is null in
+            // the config precisely because it could not be relied on — an explicit
+            // window URL overrides it, so it was dead config that misdescribed what
+            // the window loads. Probing :3000 first also means a debug build no
+            // longer shows a connection-refused page when no dev server is up.
+            if cfg!(debug_assertions) && probe_once(3000) {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || load_target(&handle, "http://localhost:3000"));
             } else {
                 start_sidecar(app.handle());
             }

@@ -382,7 +382,13 @@ const canUploadVideo = user?.canUploadVideo === true;
         // the viewport and would otherwise park the first line of the composer
         // underneath the header. sm: the header grows to h-14.
         <div id="compose" className="border-b border-gray-200 dark:border-gray-800 p-4 scroll-mt-[calc(3rem+env(safe-area-inset-top))] sm:scroll-mt-[calc(3.5rem+env(safe-area-inset-top))]">
-            <div className="flex gap-3">
+            {/* `min-w-0` on both levels. This is a flex item with `flex-1`, and
+                without `min-w-0` its automatic minimum size is its min-content
+                width — so any child with intrinsic width (a media preview, the
+                storage meter) could push the column wider than the viewport. The
+                overflow did not show as a scrollbar: `html, body` carry
+                `overflow-x: hidden` (globals.css), so it was clipped instead. */}
+            <div className="flex gap-3 min-w-0">
                 <div
                     className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-sm select-none mt-0.5"
                     style={{ backgroundColor: user?.color ?? "#94a3b8" }}
@@ -394,7 +400,7 @@ const canUploadVideo = user?.canUploadVideo === true;
                     )}
                 </div>
 
-                <div className="flex-1 flex flex-col gap-3">
+                <div className="flex-1 min-w-0 flex flex-col gap-3">
                     {videoError && (
                         <p className="text-xs text-red-500 dark:text-red-400">{videoError}</p>
                     )}
@@ -406,7 +412,7 @@ const canUploadVideo = user?.canUploadVideo === true;
                                 controls
                                 muted
                                 playsInline
-                                className="w-full max-h-[320px] object-contain"
+                                className="w-full max-h-[min(45dvh,320px)] object-contain"
                             />
                             {!posting && (
                                 <button
@@ -459,42 +465,64 @@ const canUploadVideo = user?.canUploadVideo === true;
                         submitting={posting}
                     />
 
+                    {/* The preview block.
+
+                       Two things were broken here and both showed up the moment
+                       a file was attached.
+
+                       `max-h` + `overflow-y-auto` on the scroller — ten previews
+                       in a 2-col grid at `max-h-48` is five rows, ~965px, plus
+                       the add-cell. The composer grew taller than the viewport,
+                       so on a phone the Post button ended up below the fold and
+                       under the fixed BottomNav with no way to scroll to it.
+                       Capping the block keeps the whole composer on screen; the
+                       thumbnails scroll inside it instead.
+
+                       `relative` on the WRAPPER, not the scroller — the progress
+                       bar is `absolute bottom-0 left-0 right-0`. With no
+                       positioned ancestor it resolved against the viewport and
+                       drew a full-screen-wide bar pinned to the bottom of the
+                       phone. Anchoring it to the wrapper also keeps it pinned to
+                       the composer's bottom edge while the thumbnails scroll,
+                       which is the point of a progress bar. */}
                     {previews.length > 0 && (
-                        <div className={`rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 ${previews.length > 1 ? "grid grid-cols-2 gap-1" : ""}`}>
-                            {previews.map((src, idx) => (
-                                <div key={idx} className="relative">
-                                    <img src={src} alt={`Preview ${idx + 1}`} className={`w-full object-contain bg-gray-50 dark:bg-gray-800 ${previews.length === 1 ? "max-h-80" : "max-h-48"}`} />
-                                    {!posting && (
-                                        <button
-                                            onClick={() => removeImage(idx)}
-                                            aria-label="Remove image"
-                                            className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center hover:bg-black/80 transition-colors"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                                strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
+                        <div className="relative">
+                            <div className={`rounded-2xl border border-gray-200 dark:border-gray-700 max-h-[min(50dvh,24rem)] overflow-y-auto overscroll-contain ${previews.length > 1 ? "grid grid-cols-2 gap-1" : ""}`}>
+                                {previews.map((src, idx) => (
+                                    <div key={idx} className="relative">
+                                        <img src={src} alt={`Preview ${idx + 1}`} className={`w-full object-contain bg-gray-50 dark:bg-gray-800 ${previews.length === 1 ? "max-h-80" : "max-h-48"}`} />
+                                        {!posting && (
+                                            <button
+                                                onClick={() => removeImage(idx)}
+                                                aria-label="Remove image"
+                                                className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center hover:bg-black/80 transition-colors"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                                    strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                                {!posting && previews.length < 10 && imageFiles.length < 10 && (
+                                    <button
+                                        onClick={() => fileRef.current?.click()}
+                                        className="flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors min-h-[80px] sm:min-h-[120px]"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-gray-400">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                        </svg>
+                                    </button>
+                                )}
+                            </div>
                             {posting && uploadProgress > 0 && uploadProgress < 100 && (
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-700 col-span-full">
+                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-700 overflow-hidden rounded-b-2xl">
                                     <div
                                         className="h-full bg-blue-500 transition-all duration-200"
                                         style={{ width: `${uploadProgress}%` }}
                                     />
                                 </div>
-                            )}
-                            {!posting && previews.length < 10 && imageFiles.length < 10 && (
-                                <button
-                                    onClick={() => fileRef.current?.click()}
-                                    className="flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors min-h-[120px]"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-gray-400">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                                    </svg>
-                                </button>
                             )}
                         </div>
                     )}
@@ -634,7 +662,28 @@ const canUploadVideo = user?.canUploadVideo === true;
                         />
                     )}
 
-                    <div className="flex items-center justify-between p-1 border-t border-gray-100 dark:border-gray-800">
+                    {/* Storage hint. This used to live INSIDE the toolbar row,
+                        between the icon strip and the Post button, which is
+                        where it did the most damage: the row is a non-wrapping
+                        `justify-between` flex line and the hint is a
+                        non-wrapping flex line of its own, so the moment media was
+                        staged (the hint renders nothing until then) it would
+                        claim 70-240px of a ~200px-wide toolbar and shove the
+                        `shrink-0` Post button off the right edge — where
+                        `body { overflow-x: hidden }` clipped it, so it was
+                        simply gone. Its own doc comment said "one line, above
+                        the toolbar"; that is now literally true, and it gets the
+                        full column width to lay out in. */}
+                    {media.status && (
+                        <div className="-mb-2">
+                            <StorageHint
+                                media={media}
+                                hasMedia={imageFiles.length > 0 || !!video || previews.some((u) => !u.includes("media.giphy.com"))}
+                            />
+                        </div>
+                    )}
+
+                    <div className="relative flex items-center justify-between gap-1 p-1 border-t border-gray-100 dark:border-gray-800">
                         {/* scrollbar-hide so the overflow below `sm` is at least
                         discoverable. Seven controls plus the Post button need
                         ~290px and the strip gets ~188px at 320px, so the
@@ -645,7 +694,14 @@ const canUploadVideo = user?.canUploadVideo === true;
                         spacing below `sm` is already at its tightest (gap-0.5 =
                         2px, p-1.5 on the icons), so what is left to give is the
                         Post button's horizontal padding, dropped from px-3 to
-                        px-2 while it shows nothing but the word "Post". */}
+                        px-2 while it shows nothing but the word "Post".
+
+                        This strip scrolls on x, which forces `overflow-y` to
+                        `auto` as well — so it also acts as a containing block for
+                        the absolutely-positioned Emoji/GIF panels further down,
+                        which are 340px wide and were being clipped by it. `sticky
+                        top-0` on each panel pins them to the strip's top edge so
+                        they stay reachable while it scrolls. */}
                     <div className="flex items-center gap-0.5 sm:gap-1 relative overflow-x-auto scrollbar-hide flex-1 min-w-0">
                             <button
                                 onClick={() => { setShowEmoji(!showEmoji); setShowGif(false); }}
@@ -759,46 +815,44 @@ const canUploadVideo = user?.canUploadVideo === true;
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
                                 </svg>
                             </button>
-                            {showEmoji && (
-                                <div className="absolute bottom-full left-0 mb-2 z-30">
-                                    <EmojiPicker
-                                        onEmojiSelect={(emoji) => setText(prev => prev + emoji)}
-                                        onClose={() => setShowEmoji(false)}
-                                    />
-                                </div>
-                            )}
-                            {showGif && (
-                                <div className="absolute bottom-full left-0 mb-2 z-30 max-h-[50dvh]">
-                                    <GifPicker
-                                        onSelect={(url) => {
-                                            // GIFs live in the same `previews`
-                                            // list as picked images; the submit
-                                            // path distinguishes them by their
-                                            // giphy URL. `setPreview` never
-                                            // existed, so picking a GIF threw.
-                                            setPreviews(prev => (prev.length < 10 ? [...prev, url] : prev));
-                                            setShowGif(false);
-                                        }}
-                                        onClose={() => setShowGif(false)}
-                                    />
-                                </div>
-                            )}
-                        </div>
+                            </div>
+
+                        {/* Emoji and GIF panels. These are siblings of the icon
+                            strip above, not children of it: that strip is
+                            `overflow-x-auto`, and a non-visible overflow-x forces
+                            overflow-y to compute to `auto` too, so a 340px-wide
+                            panel anchored inside it was being clipped to the
+                            strip's ~60px scroll width. Anchored to the toolbar row
+                            (which is `relative` and does not clip) they open at
+                            full width, and they no longer scroll away sideways
+                            when the strip does. */}
+                        {showEmoji && (
+                            <div className="absolute bottom-full left-0 mb-2 z-30">
+                                <EmojiPicker
+                                    onEmojiSelect={(emoji) => setText(prev => prev + emoji)}
+                                    onClose={() => setShowEmoji(false)}
+                                />
+                            </div>
+                        )}
+                        {showGif && (
+                            <div className="absolute bottom-full left-0 mb-2 z-30 max-h-[50dvh]">
+                                <GifPicker
+                                    onSelect={(url) => {
+                                        // GIFs live in the same `previews`
+                                        // list as picked images; the submit
+                                        // path distinguishes them by their
+                                        // giphy URL. `setPreview` never
+                                        // existed, so picking a GIF threw.
+                                        setPreviews(prev => (prev.length < 10 ? [...prev, url] : prev));
+                                        setShowGif(false);
+                                    }}
+                                    onClose={() => setShowGif(false)}
+                                />
+                            </div>
+                        )}
 
                         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFile} />
                 <input ref={videoRef} type="file" accept="video/*" className="hidden" onChange={handleVideo} />
-
-                        {/* Where the upload will land, and how much is left.
-                            Deliberately small and only rendered once the status
-                            call has resolved — a spinner next to the composer
-                            would be noise, and the fallback silently uses the
-                            site storage in the meantime. */}
-                        {media.status && (
-                            <StorageHint
-                                media={media}
-                                hasMedia={imageFiles.length > 0 || !!video || previews.some((u) => !u.includes("media.giphy.com"))}
-                            />
-                        )}
 
                         <button
                             onClick={handlePost}

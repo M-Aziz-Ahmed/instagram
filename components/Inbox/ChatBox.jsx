@@ -169,17 +169,26 @@ export default function ChatBox({ onBack, recipient, recipientUser, archived = f
     }
 
     return (
-        // `safe-top` / `safe-bottom` live HERE, on the column, not on the header
-        // and composer. The app is a `black-translucent` PWA, so in standalone
-        // mode the web view extends under the status bar and the home indicator.
-        // `.safe-*` are unlayered rules in globals.css, so they BEAT a same-side
-        // `py-*` utility — putting one on the header or the composer would have
-        // deleted their own vertical padding wherever the inset is 0. On the
-        // column they simply displace the whole thread, which is what is wanted.
-        <div className="flex flex-col h-full safe-top safe-bottom">
+        // `safe-bottom` stays on the column: it only needs to lift the composer
+        // clear of the home indicator, and there is no background up there to
+        // paint.
+        //
+        // `safe-top` used to live here too, and that is what produced the gap the
+        // user reported: padding on the COLUMN displaces the whole thread, so the
+        // status-bar inset rendered as an unstyled band of `<main>`'s background
+        // above the header — a blank strip the height of the notch. The inset has
+        // to be absorbed by the header's own `padding-top` instead, so the
+        // header's background fills it and the header visually starts at the top
+        // of the screen. It is spelled `pt-[calc(0.75rem+env(...))]` rather than
+        // `.safe-top` on purpose: `.safe-*` are unlayered rules in globals.css and
+        // would beat a layered `py-*`, so `safe-top` + `py-3` on one element means
+        // padding-top is env() alone and the row collapses to nothing wherever
+        // the inset is 0. Adding the two together in one calc sidesteps that
+        // entirely, and it is what every other header in the app does.
+        <div className="flex flex-col h-full safe-bottom">
 
             {/* ── Header ──────────────────────────────────────────────────── */}
-            <header className="sticky top-0 z-20 flex items-center gap-2 px-3 md:px-6 py-3 md:py-4 border-b border-gray-200 dark:border-gray-800 shrink-0 bg-white/95 dark:bg-gray-950/95 backdrop-blur">
+            <header className="sticky top-0 z-20 flex items-center gap-2 px-3 md:px-6 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3 md:pt-[calc(1rem+env(safe-area-inset-top))] md:pb-4 border-b border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-950">
 
                 {onBack && (
                     <button
@@ -333,12 +342,30 @@ export default function ChatBox({ onBack, recipient, recipientUser, archived = f
             </header>
 
             {/* ── Messages ────────────────────────────────────────────────── */}
-            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-4">
+            <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 md:px-4 py-3 md:py-4">
                 <Chat key={recipient} pendingMessage={pendingMessage} recipient={recipient} recipientUser={recipientUser} scrollContainerRef={scrollContainerRef} setReplyingTo={setReplyingTo} isTyping={isTyping} isRecording={isRecording} />
             </div>
 
             {/* ── Input ───────────────────────────────────────────────────── */}
-            <div className="px-3 md:px-4 py-2.5 md:py-3 border-t border-gray-200 dark:border-gray-800 shrink-0">
+            {/* `min-h-0` on the message list above and a `max-h` here are the two
+                halves of "the composer must never push itself off screen".
+
+                This wrapper is `shrink-0` inside a fixed-height column
+                (`h-full` under `overflow-hidden` on the Inbox root), and the
+                composer inside it stacks up to a dozen optional rows — attachment
+                chips, reply preview, link preview, poll, voice note, location,
+                code mode, banners. Nothing capped it, so it just kept growing: the
+                message list absorbed all of it down to zero height, and then the
+                overflow was clipped outright by the ancestor `overflow-hidden`.
+                The send button and the attach tray went off the bottom of the
+                screen with no scrollbar to reach them.
+
+                `max-h` gives the composer a ceiling at just over half the
+                viewport, and `overflow-y-auto` means anything past that scrolls
+                within the composer instead of vanishing. The messages keep the
+                other half — and because that column is `flex-1 min-h-0` it can
+                shrink to nothing gracefully rather than forcing the overflow. */}
+            <div className="max-h-[60dvh] shrink-0 overflow-y-auto overscroll-contain px-3 md:px-4 py-2.5 md:py-3 border-t border-gray-200 dark:border-gray-800">
                 <Input key={recipient} onMessageSent={(msg) => setPendingMessage(msg)} recipient={recipient} replyingTo={replyingTo} setReplyingTo={setReplyingTo} />
             </div>
         </div>

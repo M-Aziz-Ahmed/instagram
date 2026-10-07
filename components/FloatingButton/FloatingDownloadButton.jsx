@@ -13,13 +13,6 @@ export default function FloatingDownloadButton() {
         if (localStorage.getItem(DOWNLOAD_STORE) === "1") setDismissed(true);
     }, []);
 
-    const handleDismiss = () => {
-        setDismissed(true);
-        try {
-            localStorage.setItem(DOWNLOAD_STORE, "1");
-        } catch {}
-    };
-
     // Only show download button in web browser, not in Tauri desktop app
     // Tauri app has its own update mechanism via AutoUpdater
     const inTauri = typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
@@ -28,9 +21,13 @@ export default function FloatingDownloadButton() {
     if (dismissed) return null;
 
     return (
+        // `hidden lg:flex` — phones already have an install affordance (Add to Home
+        // Screen), and this FAB sits at bottom-6/right-6, which is inside the
+        // BottomNav's band (h-16, fixed, z-30) once the safe-area inset is added.
+        // It was landing on top of the nav and reading as part of it.
         <div
             onClick={() => router.push("/download")}
-            className="fixed bottom-6 right-6 z-50 flex items-center gap-2 cursor-pointer hover:transform hover:scale-105 transition-transform"
+            className="hidden lg:flex fixed bottom-6 right-6 z-50 items-center gap-2 cursor-pointer hover:transform hover:scale-105 transition-transform"
         >
             <div
                 className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/20"
