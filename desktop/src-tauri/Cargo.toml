@@ -1,6 +1,6 @@
 [package]
 name = "anontweet"
-version = "0.2.75"
+version = "0.2.76"
 description = "AnonTweet desktop companion"
 authors = ["AnonTweet"]
 edition = "2021"

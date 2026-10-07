@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useRef, useCallback, useEffect } from "react";
 import { useUser } from "./UserContext";
-import { ICE_SERVERS } from "@/utils/iceServers";
+import { ICE_SERVERS, turnRelayMissing, logIceFailure as logIceFailureImpl } from "@/utils/iceServers";
 import { startIncomingRing, startOutgoingRing, stopRing, unlockCallAudio } from "@/utils/callSound";
 import { showBackgroundNotification } from "@/utils/systemNotification";
 import { hasActivePushSubscription } from "@/utils/notifications";
@@ -27,14 +27,45 @@ export function CallProvider({ children, socket }) {
     const ringTimeout = useRef(null);
     // Buffered incoming offer until the callee accepts the call
     const pendingOfferRef = useRef(null); // { callId, from, sdp }
-    // Buffered ICE candidates for a peer connection that doesn't exist yet
+    // Buffered ICE candidates for a peer connection that doesn't exist yet, or
+    // exists but has no remote description to attach them to.
     const candidateBufferRef = useRef({}); // { from: [candidate] }
+    // Grace timers for "disconnected", and in-flight ICE-restart guards, keyed
+    // by peer so one flaky peer cannot tear the whole call down.
+    const disconnectTimersRef = useRef({});
+    const restartTimersRef = useRef({});
+    // Connections whose `negotiationneeded` arrived too early and is waiting for
+    // the signalling stack to go quiet, so the event is not lost.
+    const negotiationPendingRef = useRef(new Set());
+    // Why the call failed, when it did. Without this the only symptom of a dead
+    // relay is an indefinite "Connecting…".
+    const [connectionError, setConnectionError] = useState(null);
     // callIds already rebuilt from the server, so a re-render or a second route
     // into the same call cannot re-arm the ring tone over the top of the user
     // having already declined it.
     const hydratedCallRef = useRef(null);
 
-    // Keep ref in sync
+    // Keep ref in sync.
+    //
+    // `setCallState` alone is not enough, and relying on the effect alone was a
+    // real bug: `call:incoming` and the caller's `call:signal` offer are emitted
+    // back-to-back, so they can arrive in the same batch on one socket. The
+    // handler for `call:incoming` calls setCallState, and React has not re-rendered
+    // yet when the handler for the offer runs in the same task — so the offer saw
+    // a null callState, judged it "another/unknown call", and dropped it. The
+    // callee's screen rang, they pressed Accept, and there was no offer to answer:
+    // the call hung on "Connecting…" with no error anywhere.
+    //
+    // So `applyCallState` writes the ref in the same synchronous turn as the
+    // state update, and every write goes through it. The effect is kept only as
+    // a backstop.
+    const applyCallState = useCallback((next) => {
+        const value = typeof next === "function" ? next(callStateRef.current) : next;
+        callStateRef.current = value;
+        setCallState(value);
+        return value;
+    }, []);
+
     useEffect(() => { callStateRef.current = callState; }, [callState]);
     useEffect(() => { videoOnRef.current = videoOn; }, [videoOn]);
 
@@ -78,17 +109,97 @@ export function CallProvider({ children, socket }) {
             try { pc.close(); } catch {}
         });
         peerConnections.current = {};
+        Object.values(disconnectTimersRef.current).forEach(clearTimeout);
+        disconnectTimersRef.current = {};
+        restartTimersRef.current = {};
+        negotiationPendingRef.current.clear();
         stopLocalStream();
         setRemoteStreams({});
-        setCallState(null);
+        applyCallState(null);
         setIsMuted(false);
         setIsDeafened(false);
         setVideoOn(false);
         setIsLoudspeaker(false);
+        setConnectionError(null);
         if (ringTimeout.current) clearTimeout(ringTimeout.current);
         pendingOfferRef.current = null;
         candidateBufferRef.current = {};
-    }, [stopLocalStream]);
+    }, [stopLocalStream, applyCallState]);
+
+    // ── ICE plumbing ─────────────────────────────────────────────────────────
+    //
+    // `addIceCandidate` rejects unless a remote description is already set, and
+    // candidates routinely arrive first: the peer's `setLocalDescription` starts
+    // gathering before its answer has finished travelling. The old code added
+    // them straight away whenever a PC happened to exist and swallowed the
+    // rejection with `.catch(() => {})`, so every early candidate was discarded
+    // permanently — and the answer branch, the one place a late candidate was
+    // likely to land on a caller, never drained the buffer at all.
+    //
+    // On a normal network the surviving srflx/host candidates are enough to
+    // connect, so this stayed invisible. Behind a restrictive NAT the relay
+    // candidate is the ONLY route, so losing exactly those is what made the call
+    // hang for some users and work for everyone else.
+    const flushIceBuffer = useCallback(async (peerUsername) => {
+        const buffered = candidateBufferRef.current[peerUsername];
+        const pc = peerConnections.current[peerUsername];
+        if (!buffered || !buffered.length) return;
+        candidateBufferRef.current[peerUsername] = [];
+        if (!pc || pc.signalingState === "closed") return;
+        for (const cand of buffered) {
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(cand));
+            } catch {}
+        }
+    }, []);
+
+    const logIceFailure = useCallback((label, pc, err) => {
+        logIceFailureImpl(label, pc, err);
+        // Surface the real cause instead of leaving the user on "Connecting…".
+        setConnectionError(
+            turnRelayMissing()
+                ? "Could not connect. No TURN relay is configured, so calls cannot connect from networks that block direct peer-to-peer traffic."
+                : "Could not connect. Both peers may be behind a network that blocks direct connections, or the TURN relay is unreachable."
+        );
+    }, []);
+
+    const offerIceRestart = useCallback(async (pc, peerUsername) => {
+        const cs = callStateRef.current;
+        if (!cs || !socket) return;
+        try {
+            const offer = await pc.createOffer({ iceRestart: true });
+            await pc.setLocalDescription(offer);
+            if (pc.localDescription) {
+                socket.emit("call:signal", {
+                    callId: cs.callId,
+                    to: peerUsername,
+                    signal: { type: "offer", sdp: pc.localDescription },
+                });
+            }
+        } catch (e) {
+            logIceFailure(`ice-restart ${peerUsername}`, pc, e);
+        }
+    }, [socket, logIceFailure]);
+
+    const attemptIceRestart = useCallback((pc, peerUsername) => {
+        if (restartTimersRef.current[peerUsername] || pc.signalingState === "closed") return;
+        restartTimersRef.current[peerUsername] = true;
+        offerIceRestart(pc, peerUsername).finally(() => {
+            delete restartTimersRef.current[peerUsername];
+        });
+    }, [offerIceRestart]);
+
+    const scheduleDisconnectRecovery = useCallback((pc, peerUsername) => {
+        if (disconnectTimersRef.current[peerUsername]) return;
+        disconnectTimersRef.current[peerUsername] = setTimeout(() => {
+            delete disconnectTimersRef.current[peerUsername];
+            // Still down after the grace period: escalate to a real ICE restart
+            // rather than deleting the peer, which left the UI with no way back.
+            if (pc.connectionState === "disconnected") {
+                attemptIceRestart(pc, peerUsername);
+            }
+        }, 5000);
+    }, [attemptIceRestart]);
 
     const createPeerConnection = useCallback((peerUsername, stream, isInitiator) => {
         const pc = new RTCPeerConnection(ICE_SERVERS);
@@ -123,23 +234,47 @@ export function CallProvider({ children, socket }) {
         pc.onconnectionstatechange = () => {
             if (pc.connectionState === "connected") {
                 // Transition the UI out of "Connecting..." as soon as media can flow.
-                setCallState(prev => prev ? { ...prev, status: "active" } : prev);
-                // Drain any candidates that arrived before this PC was answerable.
-                const buffered = candidateBufferRef.current[peerUsername] || [];
-                candidateBufferRef.current[peerUsername] = [];
-                buffered.forEach(cand => pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {}));
-            } else if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-                setRemoteStreams(prev => {
-                    const n = { ...prev };
-                    delete n[peerUsername];
-                    return n;
-                });
+                applyCallState(prev => prev ? { ...prev, status: "active" } : prev);
+                setConnectionError(null);
+                flushIceBuffer(peerUsername);
+            } else if (pc.connectionState === "failed") {
+                // Genuinely unrecoverable as-is: try one ICE restart, which
+                // re-gathers candidates. This is the path that rescues a call
+                // whose network changed mid-call (switching Wi-Fi <-> cellular),
+                // and it is also the only recovery the call path had at all —
+                // VoiceChat has the same ladder, but calls never did.
+                attemptIceRestart(pc, peerUsername);
+            } else if (pc.connectionState === "disconnected") {
+                // "disconnected" is usually a transient blip and recovers on its
+                // own within seconds. Deleting the remote stream here destroyed
+                // the peer UI and left nothing to restore it, so a one-packet
+                // network hiccup ended the call visually for both sides. Start
+                // a grace timer instead, and only give up if it never returns.
+                scheduleDisconnectRecovery(pc, peerUsername);
             }
         };
 
         // Renegotiation handler for adding/removing tracks (video toggle, screen share)
         pc.onnegotiationneeded = async () => {
-            if (pc.signalingState !== "stable") return;
+            // An event that arrives while we are not `stable` is DROPPED, and
+            // unlike `negotiationneeded` it does not re-fire on its own. Two
+            // peers toggling video at the same moment both hit this, each kept
+            // their own added track, and the connection ended up with mismatched
+            // m-lines: video negotiated on one side only. Deferring until the
+            // stack is stable keeps the event instead of losing it.
+            if (pc.signalingState !== "stable") {
+                if (negotiationPendingRef.current.has(pc)) return;
+                negotiationPendingRef.current.add(pc);
+                const wait = async () => {
+                    for (let i = 0; i < 100 && pc.signalingState !== "stable"; i++) {
+                        await new Promise((r) => setTimeout(r, 50));
+                    }
+                    negotiationPendingRef.current.delete(pc);
+                    if (pc.signalingState === "stable") pc.onnegotiationneeded?.();
+                };
+                wait();
+                return;
+            }
             const cs = callStateRef.current;
             if (!cs || !socket) return;
             try {
@@ -152,11 +287,13 @@ export function CallProvider({ children, socket }) {
                         signal: { type: "offer", sdp: pc.localDescription },
                     });
                 }
-            } catch {}
+            } catch (e) {
+                logIceFailure(`renegotiate ${peerUsername}`, pc, e);
+            }
         };
 
         return pc;
-    }, [socket]);
+    }, [socket, applyCallState, flushIceBuffer, attemptIceRestart, scheduleDisconnectRecovery, logIceFailure]);
 
     const startCall = useCallback(async (recipient, callType = "audio", groupId = null) => {
         if (!user || !socket) return;
@@ -174,7 +311,7 @@ export function CallProvider({ children, socket }) {
             recipients: [recipient],
             status: "ringing",
         };
-        setCallState(cs);
+        applyCallState(cs);
 
         // Give up ringing if the callee never answers (e.g. offline).
         ringTimeout.current = setTimeout(() => {
@@ -203,7 +340,7 @@ export function CallProvider({ children, socket }) {
             to: recipient,
             signal: { type: "offer", sdp: pc.localDescription },
         });
-    }, [user, socket, getLocalStream, createPeerConnection, cleanup]);
+    }, [user, socket, getLocalStream, createPeerConnection, cleanup, applyCallState]);
 
     const startGroupCall = useCallback(async (recipients, callType = "audio") => {
         if (!user || !socket || !recipients.length) return;
@@ -221,7 +358,7 @@ export function CallProvider({ children, socket }) {
             recipients,
             status: "ringing",
         };
-        setCallState(cs);
+        applyCallState(cs);
 
         // Manage ringing timeout for the whole group call
         ringTimeout.current = setTimeout(() => {
@@ -251,7 +388,7 @@ export function CallProvider({ children, socket }) {
                 signal: { type: "offer", sdp: pc.localDescription },
             });
         }
-    }, [user, socket, getLocalStream, createPeerConnection, cleanup]);
+    }, [user, socket, getLocalStream, createPeerConnection, cleanup, applyCallState]);
 
     const acceptCall = useCallback(async (callId) => {
         if (!user || !socket) return;
@@ -262,7 +399,7 @@ export function CallProvider({ children, socket }) {
         const stream = await getLocalStream(true, video);
         if (!stream) return;
 
-        setCallState(prev => prev ? { ...prev, status: "connecting" } : null);
+        applyCallState(prev => prev ? { ...prev, status: "connecting" } : null);
 
         socket.emit("call:accept", { callId, username: user.username });
 
@@ -270,8 +407,21 @@ export function CallProvider({ children, socket }) {
         // were still ringing. Establish the peer connection only now that the
         // user actually accepted.
         const pending = pendingOfferRef.current;
-        if (pending && pending.callId === callId) {
-            pendingOfferRef.current = null;
+        if (!pending || pending.callId !== callId) {
+            // Accepted with no offer in hand. This happens when the callee was
+            // offline when the caller sent it: socket.io relays to a room the
+            // callee has not joined yet and does not replay the offer when they
+            // connect, so there is nothing to answer. Previously the UI just sat
+            // on "Connecting…" — and the 45s ring timeout cannot rescue it
+            // because it only fires while status is "ringing". So ask the caller
+            // to send a fresh one, which it can do since it is still holding its
+            // peer connection.
+            socket.emit("call:offer-missed", { callId, username: user.username });
+            return;
+        }
+
+        pendingOfferRef.current = null;
+        {
             const { from, sdp } = pending;
             const local = localStreamRef.current || stream;
             let pc = peerConnections.current[from];
@@ -291,14 +441,12 @@ export function CallProvider({ children, socket }) {
                     signal: { type: "answer", sdp: pc.localDescription },
                 });
 
-                const buffered = candidateBufferRef.current[from] || [];
-                candidateBufferRef.current[from] = [];
-                for (const cand of buffered) {
-                    try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch {}
-                }
-            } catch {}
+                await flushIceBuffer(from);
+            } catch (e) {
+                logIceFailure(`accept ${from}`, pc, e);
+            }
         }
-    }, [user, socket, getLocalStream, createPeerConnection]);
+    }, [user, socket, getLocalStream, createPeerConnection, applyCallState, flushIceBuffer, logIceFailure]);
 
     const rejectCall = useCallback(() => {
         const cs = callStateRef.current;
@@ -319,7 +467,7 @@ export function CallProvider({ children, socket }) {
     // so even if both fire the user sees one.
     const beginRinging = useCallback((call, { notify = true } = {}) => {
         if (callStateRef.current) return; // Already in a call
-        setCallState({
+        applyCallState({
             callId: call.callId,
             type: call.type || (call.groupId ? "group" : "1:1"),
             callType: call.callType,
@@ -344,7 +492,7 @@ export function CallProvider({ children, socket }) {
                 rejectCall();
             }
         }, 30000);
-    }, [rejectCall]);
+    }, [rejectCall, applyCallState]);
 
     // Rebuild ringing state for a call the user opened from its notification.
     //
@@ -498,9 +646,11 @@ export function CallProvider({ children, socket }) {
                 if (!stream) return;
 
                 let pc = peerConnections.current[from];
-                // Reuse existing PC if it's established (connected/completed) for renegotiation
-                // Only close if PC is closed/failed
-                if (pc && (pc.signalingState === "closed" || pc.connectionState === "failed" || pc.connectionState === "disconnected")) {
+                // Reuse an established PC for renegotiation. Only a closed or
+                // genuinely failed connection is replaced — "disconnected" is
+                // often transient, and this used to close the PC and tear down
+                // a call over a momentary blip.
+                if (pc && (pc.signalingState === "closed" || pc.connectionState === "failed")) {
                     try { pc.close(); } catch {}
                     pc = null;
                 }
@@ -520,38 +670,76 @@ export function CallProvider({ children, socket }) {
                         signal: { type: "answer", sdp: pc.localDescription },
                     });
 
-                    const buffered = candidateBufferRef.current[from] || [];
-                    candidateBufferRef.current[from] = [];
-                    for (const cand of buffered) {
-                        try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch {}
-                    }
-                } catch {}
+                    await flushIceBuffer(from);
+                } catch (e) {
+                    logIceFailure(`answer ${from}`, pc, e);
+                }
 
                 // Only transition into "connecting" during initial call setup;
                 // a renegotiation (video toggle) must not regress an active call.
-                setCallState(prev => prev && prev.status === "ringing" ? { ...prev, status: "connecting" } : prev);
+                applyCallState(prev => prev && prev.status === "ringing" ? { ...prev, status: "connecting" } : prev);
             } else if (signal.type === "answer") {
-                // We received an answer to our offer
+                // We received an answer to our offer.
                 const pc = peerConnections.current[from];
                 if (pc && pc.signalingState === "have-local-offer") {
-                    await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-                    setCallState(prev => prev && prev.status === "ringing" ? { ...prev, status: "connecting" } : prev);
+                    try {
+                        await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                    } catch (e) {
+                        logIceFailure(`set answer ${from}`, pc, e);
+                        return;
+                    }
+                    // The caller is the side most likely to hold a buffered
+                    // candidate by this point, and this branch had no drain at
+                    // all — so a candidate that arrived before the answer was
+                    // added into a connection with no remote description,
+                    // rejected, and was silently dropped for good.
+                    await flushIceBuffer(from);
+                    applyCallState(prev => prev && prev.status === "ringing" ? { ...prev, status: "connecting" } : prev);
                 }
             } else if (signal.type === "candidate") {
+                if (!signal.candidate || !from) return;
                 const pc = peerConnections.current[from];
-                if (pc && signal.candidate && pc.signalingState !== "closed") {
-                    await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch(() => {});
-                } else if (signal.candidate && from) {
-                    // No PC yet (we haven't accepted) — buffer until accept creates it.
+                // Only add directly when there is a remote description to add it
+                // to. Otherwise buffer it — the old code added it anyway and
+                // threw the candidate away when the add failed.
+                if (pc && pc.remoteDescription && pc.signalingState !== "closed") {
+                    try {
+                        await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+                    } catch {
+                        // A malformed or stale candidate is not fatal; the rest
+                        // of the pair set can still connect.
+                    }
+                } else {
                     if (!candidateBufferRef.current[from]) candidateBufferRef.current[from] = [];
                     candidateBufferRef.current[from].push(signal.candidate);
                 }
             }
         };
 
+        // The callee accepted but never received our offer (they were offline when it
+        // was sent). Re-offer from the peer connection we already hold, which is
+        // exactly the state the first offer was created from.
+        const handleOfferMissed = async (data) => {
+            const cs = callStateRef.current;
+            if (!cs || cs.callId !== data.callId) return;
+            const peer = data.username;
+            const pc = peerConnections.current[peer];
+            if (!pc || pc.signalingState === "closed") return;
+            try {
+                const offer = await pc.createOffer({ iceRestart: true });
+                await pc.setLocalDescription(offer);
+                socket.emit("call:signal", {
+                    callId: cs.callId,
+                    to: peer,
+                    signal: { type: "offer", sdp: pc.localDescription },
+                });
+            } catch (e) {
+                logIceFailure(`re-offer ${peer}`, pc, e);
+            }
+        };
+
         const handleAccepted = (data) => {
-            // Someone accepted the call
-            setCallState(prev => {
+            applyCallState(prev => {
                 if (prev && prev.caller === user?.username && prev.status === "ringing") {
                     return { ...prev, status: "connecting" };
                 }
@@ -561,7 +749,7 @@ export function CallProvider({ children, socket }) {
 
         const handleRejected = (data) => {
             // Someone rejected
-            setCallState(prev => {
+            applyCallState(prev => {
                 if (prev && data.callId === prev.callId) {
                     // If all recipients rejected, end the call
                     if (prev.recipients.length === 1) {
@@ -610,6 +798,7 @@ export function CallProvider({ children, socket }) {
         socket.on("call:incoming", handleIncoming);
         socket.on("call:signal", handleSignal);
         socket.on("call:accepted", handleAccepted);
+        socket.on("call:offer-missed", handleOfferMissed);
         socket.on("call:rejected", handleRejected);
         socket.on("call:ended", handleEnded);
         socket.on("call:cancelled", handleCancelled);
@@ -621,6 +810,7 @@ export function CallProvider({ children, socket }) {
             socket.off("call:incoming", handleIncoming);
             socket.off("call:signal", handleSignal);
             socket.off("call:accepted", handleAccepted);
+            socket.off("call:offer-missed", handleOfferMissed);
             socket.off("call:rejected", handleRejected);
             socket.off("call:ended", handleEnded);
             socket.off("call:cancelled", handleCancelled);
@@ -628,7 +818,7 @@ export function CallProvider({ children, socket }) {
             socket.off("call:mute", handleMute);
             socket.off("call:video-toggle", handleVideoToggle);
         };
-    }, [socket, user?.username, getLocalStream, createPeerConnection, cleanup, rejectCall, beginRinging]);
+    }, [socket, user?.username, getLocalStream, createPeerConnection, cleanup, rejectCall, beginRinging, applyCallState, flushIceBuffer, logIceFailure, offerIceRestart]);
 
     // Cleanup on unmount
     useEffect(() => {
@@ -640,6 +830,7 @@ export function CallProvider({ children, socket }) {
 
     const value = {
         callState, localStream, remoteStreams, isMuted, isDeafened, videoOn, isLoudspeaker,
+        connectionError,
         startCall, startGroupCall, acceptCall, rejectCall, endCall,
         toggleMute, toggleDeafen, toggleVideo, toggleLoudspeaker, cleanup,
     };

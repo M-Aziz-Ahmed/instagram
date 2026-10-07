@@ -3527,6 +3527,7 @@ io.on("connection", async (socket) => {
     // Map<callId, Set<socketId>> + Map<callId, recipient usernames[]>
     if (!io._callRooms) io._callRooms = new Map();
     if (!io._callRecipients) io._callRecipients = new Map();
+    if (!io._callCallers) io._callCallers = new Map();
 
     socket.on("call:initiate", async (data) => {
         // data: { callId, caller, recipients: string[], callType: "audio"|"video", groupId?: string }
@@ -3535,6 +3536,10 @@ io.on("connection", async (socket) => {
         // Track this call room
         io._callRooms.set(callId, new Set([socket.id]));
         io._callRecipients.set(callId, recipients || []);
+        // Remember who placed the call, so `call:offer-missed` can be relayed
+        // back to the initiator alone rather than guessed from the recipient
+        // list (which for a 1:1 does not contain them at all).
+        io._callCallers.set(callId, [caller]);
         // Join the socket into the call room
         socket.join(`call:${callId}`);
         // Notify each recipient
@@ -3603,6 +3608,7 @@ io.on("connection", async (socket) => {
         const recips = io._callRecipients?.get(callId) || [];
         recips.forEach(r => io.to(r).emit("call:cancelled", { callId }));
         io._callRecipients?.delete(callId);
+        io._callCallers?.delete(callId);
         try {
             const CallSession = require("../models/callSession").default || require("../models/callSession");
             CallSession.updateOne({ callId }, { status: "ended", endedAt: new Date() }).catch(() => {});
@@ -3614,6 +3620,23 @@ io.on("connection", async (socket) => {
         const { callId, to, signal } = data;
         if (!callId || !to || !signal) return;
         io.to(to).emit("call:signal", { callId, from: socket.data.username, signal });
+    });
+
+    // A callee that accepted but never received the offer (they were offline when
+    // it was sent) reports the miss so the caller re-offers. Without this the
+    // callee sat on "Connecting…" indefinitely, because nothing tells either
+    // side that the first offer was delivered to nobody.
+    socket.on("call:offer-missed", (data) => {
+        const { callId } = data || {};
+        if (!callId) return;
+        const recips = io._callRecipients?.get(callId) || [];
+        const callers = io._callCallers?.get(callId) || [];
+        const target = callers.length ? callers : recips.filter((r) => r !== socket.data.username);
+        // Relay to the caller(s) of this call only.
+        target.forEach((r) => {
+            io.to(r).emit("call:offer-missed", { callId, username: socket.data.username });
+        });
+        io._callCallers?.delete(callId);
     });
 
     socket.on("call:mute", (data) => {
@@ -3809,6 +3832,7 @@ io.on("connection", async (socket) => {
                         const recips = io._callRecipients?.get(callId) || [];
                         recips.forEach(r => io.to(r).emit("call:cancelled", { callId }));
                         io._callRecipients?.delete(callId);
+        io._callCallers?.delete(callId);
                         try { const CallSession = require("./models/callSession"); CallSession.updateOne({ callId }, { status: "ended", endedAt: new Date() }).catch(() => {}); } catch (e) {}
                     }
                 }

@@ -11,6 +11,9 @@ export default function useAnalytics({ granularity = "day", days = 30, locationD
         devices: null,
         locations: null,
         loading: true,
+        // Why the location panel is empty, when it is empty because the request
+        // failed rather than because there is nothing to show.
+        errors: {},
     });
     const flagRef = useRef(0);
 
@@ -18,18 +21,50 @@ export default function useAnalytics({ granularity = "day", days = 30, locationD
         const flag = ++flagRef.current;
         setState((s) => ({ ...s, loading: true }));
         const q = `?granularity=${encodeURIComponent(g || "day")}&days=${d || 30}`;
+
+        // Report what actually came back rather than flattening every non-2xx
+        // into `null`.
+        //
+        // This is what made the globe look broken when it was merely unreachable:
+        // a 401, a 502 from the live-server, or a network failure all became
+        // `null`, and the page then rendered "No location data yet." — a claim
+        // about the DATA, made because the REQUEST failed. The admin was told
+        // they had no users on the map when in fact nobody had asked the
+        // database. The distinction is the whole point of the panel.
+        const get = async (url) => {
+            try {
+                const res = await fetch(url);
+                if (res.ok) return { data: await res.json(), error: null };
+                return { data: null, error: `Request failed (${res.status})` };
+            } catch (e) {
+                return { data: null, error: e?.message ? `Network error: ${e.message}` : "Network error" };
+            }
+        };
+
         try {
             const [overview, growth, devices, locations] = await Promise.all([
-                fetch("/api/admin/analytics/overview").then((r) => (r.ok ? r.json() : null)),
-                fetch(`/api/admin/analytics/growth${q}`).then((r) => (r.ok ? r.json() : null)),
-                fetch(`/api/admin/analytics/devices?days=${ld || 30}`).then((r) => (r.ok ? r.json() : null)),
-                fetch(`/api/admin/analytics/locations?days=${ld || 30}`).then((r) => (r.ok ? r.json() : null)),
+                get("/api/admin/analytics/overview"),
+                get(`/api/admin/analytics/growth${q}`),
+                get(`/api/admin/analytics/devices?days=${ld || 30}`),
+                get(`/api/admin/analytics/locations?days=${ld || 30}`),
             ]);
             if (flag !== flagRef.current) return;
-            setState({ overview, growth, devices, locations, loading: false });
+            const errors = {};
+            if (overview.error) errors.overview = overview.error;
+            if (growth.error) errors.growth = growth.error;
+            if (devices.error) errors.devices = devices.error;
+            if (locations.error) errors.locations = locations.error;
+            setState({
+                overview: overview.data,
+                growth: growth.data,
+                devices: devices.data,
+                locations: locations.data,
+                loading: false,
+                errors,
+            });
         } catch {
             if (flag !== flagRef.current) return;
-            setState((s) => ({ ...s, loading: false }));
+            setState((s) => ({ ...s, loading: false, errors: { locations: "Could not reach the server" } }));
         }
     }, []);
 

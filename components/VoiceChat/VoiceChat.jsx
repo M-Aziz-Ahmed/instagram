@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useUser } from "@/context/UserContext";
 import { useVoiceChat } from "@/context/VoiceChatContext";
 import MusicPanel from "./MusicPanel";
-import { ICE_SERVERS, RELAY_ONLY_ICE_SERVERS } from "@/utils/iceServers";
+import { ICE_SERVERS, RELAY_ONLY_ICE_SERVERS, logIceFailure, turnRelayMissing } from "@/utils/iceServers";
 
 // Fixed per-bar heights rather than Math.random(): randomising during render
 // is impure (breaks hydration and the React Compiler). `animationDelay` still
@@ -218,6 +218,10 @@ export default function VoiceChat({ isOpen, onClose }) {
     const [notification, setNotification] = useState(null);
     const [micError, setMicError] = useState(null);
     const [audioBlocked, setAudioBlocked] = useState(false);
+    // Set once the relay-only retry has also failed, which means there is no
+    // path left to that peer. Shown in the channel so the reason a voice
+    // channel is one-sided is visible instead of guessed at.
+    const [relayFailed, setRelayFailed] = useState(false);
     // Seed from the socket's current state instead of a synchronous
     // `setSocketConnected(socket.connected)` in the effect (the React lint rule
     // bans setState directly in an effect body). Every later change flows
@@ -921,6 +925,14 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
                         relayPc.onconnectionstatechange = () => {
                             if (relayPc.connectionState === "closed") {
                                 pcsRef.current.delete(p.username);
+                            } else if (relayPc.connectionState === "failed") {
+                                // The relay-only retry failed too. This is the
+                                // point where "their network is awkward" becomes
+                                // "there is no relay", and the two need different
+                                // fixes, so say which one it is rather than
+                                // leaving the user with a silent channel.
+                                logIceFailure(`relay fallback ${p.username}`, relayPc);
+                                setRelayFailed(true);
                             }
                         };
 
@@ -1525,6 +1537,18 @@ const createPeerConnections = useCallback(async (channelParticipants) => {
                     </svg>
                     Tap for sound
                 </button>
+            )}
+
+            {/* The relay-only retry failed, so there is no network path to at
+                least one person in this channel. This is the difference between
+                "their Wi-Fi is odd" and "this deployment has no TURN relay",
+                and only one of them is fixable by the operator. */}
+            {relayFailed && (
+                <div className="mx-3 mb-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-200 shrink-0">
+                    {turnRelayMissing()
+                        ? "No TURN relay is configured, so voice cannot reach people on networks that block direct peer-to-peer connections."
+                        : "Could not reach everyone in this channel through the TURN relay. It may be down."}
+                </div>
             )}
 
             {/* Controls. `safe-bottom` lives on the sheet itself

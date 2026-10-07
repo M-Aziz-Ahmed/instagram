@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCall } from "@/context/CallContext";
 import { useUser } from "@/context/UserContext";
 
@@ -82,12 +82,7 @@ function LocalVideo({ localStream, videoOn }) {
 
 function RemoteVideo({ username, stream, loudspeaker, fill }) {
     const ref = useRef(null);
-    useEffect(() => {
-        if (ref.current && stream) {
-            ref.current.srcObject = stream;
-        }
-        applyAudioRoute(ref.current, loudspeaker);
-    }, [stream, loudspeaker]);
+    const { blocked, retry } = usePlayableMedia(ref, stream, loudspeaker);
 
     const hasVideo = stream?.getVideoTracks().length > 0 && stream.getVideoTracks().some(t => t.enabled);
 
@@ -103,28 +98,105 @@ function RemoteVideo({ username, stream, loudspeaker, fill }) {
                 </div>
             )}
             {!fill && <span className="absolute bottom-2 left-2 text-xs text-white bg-black/50 px-2 py-0.5 rounded-full">{username}</span>}
+            {blocked && (
+                <span className="absolute top-2 left-2 text-[10px] font-bold text-amber-300 bg-black/70 px-2 py-1 rounded-full">
+                    Tap for sound
+                </span>
+            )}
         </div>
     );
 }
 
 // Plays remote audio for audio-only calls (no visible video element needed).
-function RemoteAudio({ stream, loudspeaker }) {
+// Renders nothing but the element itself; whether playback is blocked is
+// surfaced once by `CallModal`, which sees every peer's state together.
+function RemoteAudio({ stream, loudspeaker, onBlockedChange }) {
     const ref = useRef(null);
-    useEffect(() => {
-        if (ref.current && stream) {
-            ref.current.srcObject = stream;
-        }
-        applyAudioRoute(ref.current, loudspeaker);
-    }, [stream, loudspeaker]);
+    const { blocked } = usePlayableMedia(ref, stream, loudspeaker, onBlockedChange);
     return <audio ref={ref} autoPlay playsInline />;
+}
+
+/**
+ * Attach a MediaStream to a media element and actually start it.
+ *
+ * `autoPlay` alone is not enough, and relying on it was the reason remote audio
+ * was inaudible:
+ *
+ *  - Browsers block autoplay until the page has seen a user gesture, and they
+ *    report that only through the REJECTED promise from `play()`. An `autoPlay`
+ *    attribute with no `play()` call has no rejection to catch, so the element
+ *    sat silently and nothing ever retried it.
+ *  - On the desktop app the very first thing a user does is tap "call", which
+ *    grants the gesture — but a call *received* over a background push has no
+ *    gesture at all, which is precisely the case where you most need to hear
+ *    the ringing and the person who picked up.
+ *
+ * So we call `play()`, catch the rejection, and retry on the next tap. The
+ * `<audio>` sink in particular used to unmount the moment anyone turned a
+ * camera on (including you), which tore down the only element guaranteed to be
+ * unmuted and left audio depending on a `<video>` element that had no gesture
+ * handling at all. `CallModal` now keeps both mounted.
+ */
+function usePlayableMedia(ref, stream, loudspeaker, onBlockedChange) {
+    const [blocked, setBlocked] = useState(false);
+    const retryRef = useRef(null);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (!el || !stream) return;
+        el.srcObject = stream;
+        applyAudioRoute(el, loudspeaker);
+
+        let cancelled = false;
+        const attempt = async () => {
+            try {
+                await el.play();
+                if (!cancelled) setBlocked(false);
+            } catch {
+                // Blocked by the autoplay policy. Remember how to retry.
+                if (!cancelled) {
+                    setBlocked(true);
+                    retryRef.current = attempt;
+                }
+            }
+        };
+        attempt();
+
+        return () => { cancelled = true; };
+        // `ref` is a stable useRef box, so it is deliberately not a dependency;
+        // the effect keys off the stream and the chosen output device.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [stream, loudspeaker]);
+
+    useEffect(() => { onBlockedChange?.(blocked); }, [blocked, onBlockedChange]);
+
+    // One passive, one-shot gesture hook, armed only while playback is blocked.
+    useEffect(() => {
+        if (!blocked) return;
+        const unlock = () => { retryRef.current?.(); };
+        window.addEventListener("pointerdown", unlock, { passive: true, once: true });
+        window.addEventListener("touchstart", unlock, { passive: true, once: true });
+        window.addEventListener("click", unlock, { passive: true, once: true });
+        return () => {
+            window.removeEventListener("pointerdown", unlock);
+            window.removeEventListener("touchstart", unlock);
+            window.removeEventListener("click", unlock);
+        };
+    }, [blocked]);
+
+    return { blocked, retry: () => retryRef.current?.() };
 }
 
 export default function CallModal() {
     const {
         callState, localStream, remoteStreams, isMuted, isDeafened, videoOn, isLoudspeaker,
+        connectionError,
         acceptCall, rejectCall, endCall, toggleMute, toggleDeafen, toggleVideo, toggleLoudspeaker,
     } = useCall();
     const { user } = useUser();
+    // Whether any peer's audio element is waiting on a user gesture before it
+    // will make a sound. Reported by whichever sink last changed state.
+    const [audioBlocked, setAudioBlocked] = useState(false);
 
     if (!callState) return null;
 
@@ -182,11 +254,48 @@ export default function CallModal() {
                                     ? (isIncoming ? `Incoming ${callType} call...` : "Ringing...")
                                     : "Connecting..."}
                             </p>
+                            {/* Why the call stalled. Without this the only symptom
+                                * of an unreachable TURN relay or a dropped
+                                * connection was an indefinite "Connecting…", which
+                                * is indistinguishable from "still ringing". */}
+                            {connectionError && (
+                                <p className="mt-4 max-w-sm rounded-lg bg-red-950/60 border border-red-900/60 px-3 py-2 text-xs text-red-300">
+                                    {connectionError}
+                                </p>
+                            )}
                         </>
                     )}
 
                     {status === "active" && (
                         <div className="w-full h-full">
+                            {/* Remote audio output.
+                                *
+                                * This is deliberately OUTSIDE the showVideo branch.
+                                * It used to live inside the audio-only `else`, so the
+                                * moment anyone turned a camera on — including you,
+                                * via your own camera button — every `<audio>` element
+                                * unmounted and the only remaining audio path became
+                                * the `<video>` element inside the grid. Toggling your
+                                * own camera could therefore silence the other person.
+                                * `<audio>` has no autoplay-gesture plumbing that React
+                                * guarantees, so keeping one sink per peer permanently
+                                * mounted is what makes the audio survive.
+                                *
+                                * A `<video>` with a MediaStream carrying audio is
+                                * still audible, so the grid is left as-is and this is
+                                * additive rather than a replacement: two elements on
+                                * the same stream is not double audio, the second one
+                                * is what the browser uses for routing.
+                                */}
+                            {Object.entries(remoteStreams).map(([username, stream]) => (
+                                <RemoteAudio
+                                    key={`audio-${username}`}
+                                    stream={stream}
+                                    loudspeaker={isLoudspeaker}
+                                    onBlockedChange={setAudioBlocked}
+                                />
+                            ))}
+
                             {showVideo ? (
                                 <VideoGrid
                                     remoteStreams={remoteStreams}
@@ -196,16 +305,22 @@ export default function CallModal() {
                                     type={type}
                                 />
                             ) : (
-                                <div className="flex flex-col items-center justify-center h-full">
-                                    {/* Remote audio output */}
-                                    {Object.entries(remoteStreams).map(([username, stream]) => (
-                                        <RemoteAudio key={username} stream={stream} loudspeaker={isLoudspeaker} />
-                                    ))}
+<div className="flex flex-col items-center justify-center h-full">
                                 <div className="w-20 h-20 rounded-full bg-gray-800 flex items-center justify-center text-white text-2xl font-bold mb-4">
                                         {type === "1:1" ? (displayName[0]?.toUpperCase() || "?") : `${Object.keys(remoteStreams).length + 1}`}
                                     </div>
                                     <p className="text-white font-medium">{type === "1:1" ? displayName : `${Object.keys(remoteStreams).length + 1} participants`}</p>
                                 </div>
+                            )}
+
+                            {/* The browser refused to start audio without a
+                                * gesture — most often a call opened from a
+                                * background push notification, which has no
+                                * interaction of its own. */}
+                            {audioBlocked && (
+                                <p className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/80 px-3 py-1.5 text-xs font-semibold text-amber-300">
+                                    Tap anywhere for sound
+                                </p>
                             )}
                         </div>
                     )}

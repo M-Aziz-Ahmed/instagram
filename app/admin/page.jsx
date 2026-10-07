@@ -11,7 +11,7 @@ const GROWTH_KEYS = [
 ];
 
 export default function AdminDashboard() {
-    const { overview, growth, devices, locations, loading } = useAnalytics();
+    const { overview, growth, devices, locations, loading, errors } = useAnalytics();
 
     if (loading || !overview) {
         return (
@@ -81,7 +81,15 @@ export default function AdminDashboard() {
                 <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5">
                     <h3 className="font-bold text-sm text-gray-900 dark:text-gray-100 mb-1">Top countries</h3>
                     <p className="text-xs text-gray-400 mb-4">Events by visitor country</p>
-                    {!locations?.countries?.length ? (
+                    {/* Distinguish "we asked and there is nothing" from "we never
+                        * got an answer". These read identically otherwise, and the
+                        * second one sends the admin looking for a data problem that
+                        * is actually a failed request. */}
+                    {errors?.locations ? (
+                        <p className="text-sm text-red-500 text-center py-8">
+                            Could not load locations — {errors.locations}
+                        </p>
+                    ) : !locations?.countries?.length ? (
                         <p className="text-sm text-gray-400 text-center py-8">No location data yet.</p>
                     ) : (
                         <div className="space-y-2">
@@ -124,6 +132,12 @@ export default function AdminDashboard() {
                 <div className="mx-auto" style={{ maxWidth: 640 }}>
                     <Globe countries={globeCountries} regions={globeRegions} cities={globeCities} width={640} height={440} />
                 </div>
+                {errors?.locations && (
+                    <p className="mt-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/60 px-3 py-2 text-xs text-red-600 dark:text-red-300">
+                        Location data could not be loaded ({errors.locations}). The map below is empty because
+                        the request failed, not because anyone is missing from it.
+                    </p>
+                )}
                 <DashboardGeoCoverage locations={locations} />
             </div>
         </div>

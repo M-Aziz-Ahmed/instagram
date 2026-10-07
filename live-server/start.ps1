@@ -1,52 +1,117 @@
 # Pre-start helper for the AnonTweet live-server.
-# Ensures the coturn TURN relay (running inside WSL2) is up before launching
-# the Node live-server, so WebRTC voice/video relay works end-to-end.
+#
+# Verifies that a WebRTC TURN relay is reachable BEFORE launching the Node
+# live-server, because a missing relay is the single most common cause of
+# "calls work for me but not for my users". Direct peer-to-peer connectivity
+# succeeds on an ordinary network via STUN, so the problem only shows up for
+# people behind a symmetric NAT, a corporate firewall, a mobile carrier or any
+# network that blocks UDP — which is precisely the population you hear about.
+#
+# The relay is whatever the client is actually configured to use. Historically
+# that was a coturn process inside WSL2, which made this check fail on any
+# machine where WSL2 cannot start (virtualization disabled in firmware) and,
+# worse, meant the check only ever validated the self-hosted relay — a hosted
+# one configured via NEXT_PUBLIC_TURN_URLS was never verified at all.
 #
 # Run via: npm run start  (see package.json "start" script)
 
 $ErrorActionPreference = "Continue"
 
-# 1) Make sure the WSL distro is running.
+# Read the same env the client bundle was built from, so this reports on the
+# relay users will actually try rather than on an assumption.
+function Get-RelayConfig {
+    $envFile = Join-Path (Split-Path -Parent $PSScriptRoot) ".env"
+    $vals = @{}
+    if (Test-Path -LiteralPath $envFile) {
+        foreach ($line in Get-Content -LiteralPath $envFile) {
+            if ($line -match '^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$') {
+                # An already-exported variable wins, as it does for Next.js.
+                if (-not $vals.ContainsKey($Matches[1])) { $vals[$Matches[1]] = $Matches[2].Trim('"', "'") }
+            }
+        }
+    }
+    foreach ($k in @("NEXT_PUBLIC_TURN_URL","NEXT_PUBLIC_TURN_URLS","NEXT_PUBLIC_TURN_USER","NEXT_PUBLIC_TURN_CRED")) {
+        $live = [Environment]::GetEnvironmentVariable($k)
+        if ($live) { $vals[$k] = $live }
+    }
+    $urls = @()
+    foreach ($k in @("NEXT_PUBLIC_TURN_URLS","NEXT_PUBLIC_TURN_URL")) {
+        if ($vals[$k]) {
+            $urls += $vals[$k] -split '[,\s]+' | Where-Object { $_ -and $_ -ne "change-me-in-env" }
+        }
+    }
+    return @{
+        Urls  = @($urls | Select-Object -Unique)
+        User  = $vals["NEXT_PUBLIC_TURN_USER"]
+        Cred  = $vals["NEXT_PUBLIC_TURN_CRED"]
+    }
+}
+
+# Test a `turns:host:port` / `turn:host:port` URL from Windows, with no WSL and
+# no coturn tooling. A TLS handshake succeeding proves the relay is up AND
+# serving a certificate; a connect succeeding proves only that the port is open.
+function Test-RelayEndpoint {
+    param([string]$Url)
+    $m = [regex]::Match($Url, '^(turns?|stuns?):(?:[^@]+@)?([^:/]+)(?::(\d+))?')
+    if (-not $m.Success) { return $false }
+    $hostName = $m.Groups[2].Value
+    $port = if ($m.Groups[3].Value) { [int]$m.Groups[3].Value } elseif ($m.Groups[1].Value -like '*s') { 5349 } else { 3478 }
+    try {
+        $c = New-Object System.Net.Sockets.TcpClient
+        $task = $c.ConnectAsync($hostName, $port)
+        if (-not $task.Wait(4000)) { $c.Close(); return $false }
+        if (-not $c.Connected) { $c.Close(); return $false }
+        $c.Close()
+        return $true
+    } catch {
+        return $false
+    }
+}
+
 $turnReady = $false
+$relay = Get-RelayConfig
+
+if ($relay.Urls.Count -eq 0) {
+    Write-Host "[start] WARNING: no TURN relay is configured (NEXT_PUBLIC_TURN_URLS is empty)." -ForegroundColor Yellow
+    Write-Host "[start] Calls and voice will work on ordinary networks but FAIL where UDP is" -ForegroundColor Yellow
+    Write-Host "[start] blocked. Set NEXT_PUBLIC_TURN_URLS to a hosted relay to fix it." -ForegroundColor Yellow
+} else {
+    Write-Host "[start] Checking $($relay.Urls.Count) configured TURN relay endpoint(s)..." -ForegroundColor Cyan
+    $up = @($relay.Urls | Where-Object { Test-RelayEndpoint $_ })
+    if ($up.Count -gt 0) {
+        $turnReady = $true
+        foreach ($u in $up) { Write-Host "[start] TURN reachable: $u" -ForegroundColor Green }
+        foreach ($u in ($relay.Urls | Where-Object { $up -notcontains $_ })) {
+            Write-Host "[start] TURN UNREACHABLE: $u" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "[start] ERROR: every configured TURN relay is unreachable:" -ForegroundColor Red
+        foreach ($u in $relay.Urls) { Write-Host "[start]   - $u" -ForegroundColor Red }
+        Write-Host "[start] Users behind a firewall or symmetric NAT will not be able to" -ForegroundColor Red
+        Write-Host "[start] connect. Start anyway? (y/N)" -ForegroundColor Red
+        if ((Read-Host) -notmatch '^(y|yes)$') { exit 1 }
+        Write-Host "[start] Continuing without a working TURN relay, as requested." -ForegroundColor Yellow
+    }
+}
+
+# Local coturn inside WSL is no longer a hard requirement. It is still started
+# when it is genuinely available, because a relay on the same box as the
+# signalling server is the cheapest one to run — but its absence is a note, not
+# a failure, since the client may be pointed at a hosted relay instead.
 try {
     $distro = wsl -l -q 2>$null | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
     if (-not $distro) {
-        # This used to be a yellow note and then carry on. WSL is frequently not
-        # installed at all, and starting live-server with no TURN relay looks fine
-        # until calls fail behind a restrictive firewall, corporate network or VPN,
-        # where there is no peer-to-peer path to fall back to. Make it loud.
-        Write-Host "[start] ERROR: no WSL distribution, so coturn cannot start." -ForegroundColor Red
-        Write-Host "[start] The TURN relay will be MISSING and calls/voice will fail" -ForegroundColor Red
-        Write-Host "[start] on restrictive networks. Start anyway? (y/N)" -ForegroundColor Red
-        $go = Read-Host
-        if ($go -notmatch '^(y|yes)$') { exit 1 }
-        Write-Host "[start] Continuing without a TURN relay, as requested." -ForegroundColor Yellow
+        Write-Host "[start] No WSL distribution; skipping the local coturn service." -ForegroundColor Yellow
     } else {
-        # 2) Ensure coturn is running inside WSL (systemd-managed, idempotent).
         $status = wsl -u root bash -c "systemctl is-active coturn 2>/dev/null" 2>$null
         if ($status -ne "active") {
             Write-Host "[start] Starting coturn (TURN relay) in WSL..." -ForegroundColor Cyan
-            wsl -u root bash -c "systemctl start coturn 2>&1; sleep 2; systemctl is-active coturn" 2>$null
-        } else {
-            Write-Host "[start] coturn already active in WSL." -ForegroundColor Green
+            wsl -u root bash -c "systemctl start coturn 2>&1" 2>$null
         }
-
-        # Quick reachability check of the TURN TLS port.
-        $ok = wsl -u root bash -c "turnutils_uclient -p 8443 -u anonturn -w I_hateyou2 -y 127.0.0.1 >/dev/null 2>&1 && echo OK || echo FAIL" 2>$null
-        if ($ok -match "OK") {
-            Write-Host "[start] TURN relay verified reachable on :8443." -ForegroundColor Green
-            $turnReady = $true
-        } else {
-            Write-Host "[start] WARNING: TURN relay self-test failed. Check 'wsl -u root systemctl status coturn'." -ForegroundColor Yellow
-        }
+        Write-Host "[start] Local coturn in WSL: $status" -ForegroundColor Yellow
     }
 } catch {
     Write-Host "[start] Could not manage coturn in WSL: $_" -ForegroundColor Yellow
-}
-
-if (-not $turnReady) {
-    Write-Host "[start] TURN relay is NOT ready. Direct peer-to-peer calls still work on" -ForegroundColor Yellow
-    Write-Host "[start] ordinary networks; calls will fail where UDP is blocked." -ForegroundColor Yellow
 }
 
 # 3) Launch the Node live-server in the foreground.

@@ -22,18 +22,14 @@ import {
     DEG, LABEL_HALO, TILT, ZOOM_BAND_MAX,
     clampDeg, paintBasemap, project, unproject,
 } from "./globeMap";
+import {
+    ZOOM_MIN, ZOOM_MAX, Z_REGIONS, Z_CITIES, MAX_DOTS,
+    tierForZoom, floorForZoom, applyVisibilityFloor, placeableCandidates,
+} from "./globeVisibility";
 
-const ZOOM_MIN = 0.7;
-const ZOOM_MAX = 40;   // deep enough to isolate a single town
-const Z_REGIONS = 1.6; // zoom at which country dots give way to state/region dots
-const Z_CITIES = 4.5;  // zoom at which region dots give way to city/town dots
-
-// Below a place's event count drops under this zoom-dependent floor it is
-// hidden, so zooming in progressively reveals smaller towns.
-const minVisibleCount = (z) => Math.max(1, Math.round(60 / (z * z)));
-// Cap on dots actually drawn per frame; keeps the canvas cheap regardless of
-// how many distinct places exist.
-const MAX_DOTS = 420;
+// ZOOM_MIN / ZOOM_MAX / Z_REGIONS / Z_CITIES / MAX_DOTS are imported from
+// globeVisibility.js, which keeps the draw loop and the tests on one source of
+// truth for the thresholds.
 export default function Globe({
     countries = [],
     regions = [],
@@ -121,17 +117,14 @@ export default function Globe({
         // Which tier of place do we draw? Zoomed out → countries, then
         // states/regions, then cities/towns. Each tier only holds places big
         // enough to be meaningful at that zoom.
-        const tier = z >= Z_CITIES ? "city" : z >= Z_REGIONS ? "region" : "country";
+        const tier = tierForZoom(z);
         const source = tier === "city" ? cities : tier === "region" ? regions : countries;
-        const minCount = tier === "country" ? 1 : minVisibleCount(z);
 
         // Cull by projecting: keep anything that actually lands on screen.
-        // This is exact, so dots never vanish from a region they belong to and
-        // the "cities" count in the footer always matches what is drawn.
+        // This is exact, so dots never vanish from a region they belong to.
         const candidates = [];
         for (const pt of source || []) {
             if (typeof pt?.lat !== "number" || typeof pt?.lon !== "number") continue;
-            if (tier !== "country" && (pt.count || 1) < minCount) continue;
             const p = project(pt.lon, pt.lat, yaw, pitch, cx, cy, R);
             if (!p) continue;
             if (p.sx < -40 || p.sx > cw + 40 || p.sy < -40 || p.sy > ch + 40) continue;
@@ -141,7 +134,7 @@ export default function Globe({
         // Biggest first, then keep the cap — so when there are more places than
         // we can draw, the ones that survive are the ones that matter.
         candidates.sort((a, b) => (b.pt.count || 1) - (a.pt.count || 1));
-        const shown = candidates.slice(0, MAX_DOTS);
+        const shown = applyVisibilityFloor(candidates, floorForZoom(tier, z));
 
         const col = tier === "country" ? "163, 230, 53" : tier === "region" ? "168, 85, 247" : "59, 130, 246";
         const baseR0 = tier === "country" ? 2 : tier === "region" ? 1.8 : 1.6;
@@ -363,8 +356,22 @@ export default function Globe({
         setSelected(s.hover || null);
     };
 
-    const tier = zoom >= Z_CITIES ? "city" : zoom >= Z_REGIONS ? "region" : "country";
-    const tierCount = tier === "city" ? (cities || []).length : tier === "region" ? (regions || []).length : (countries || []).length;
+    const tier = tierForZoom(zoom);
+    // What the footer reports has to match what the canvas draws, or "12 cities"
+    // next to an empty map reads as a bug even when it is correct. This used to
+    // be the raw array length, which ignored the event-count floor entirely — so
+    // it routinely claimed far more places than survived it. Report the number
+    // that actually passes the floor at this zoom instead.
+    //
+    // Rotation and viewport culling still hide some of these at any instant
+    // (the far side of the sphere is not visible by design), which the draw
+    // loop accounts for and this cannot — so this is the count of places on the
+    // globe, not of pixels currently lit.
+    const tierSource = tier === "city" ? cities : tier === "region" ? regions : countries;
+    const tierCount = applyVisibilityFloor(
+        placeableCandidates(tierSource),
+        floorForZoom(tier, zoom),
+    ).length;
 
     return (
         <div className="relative select-none" style={{ width, height }}>
