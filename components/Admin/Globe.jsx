@@ -446,8 +446,8 @@ export default function Globe({
             {/* mode hint */}
             <div className="absolute bottom-2 left-3 text-[11px] text-gray-300 dark:text-gray-500 font-medium">
                 {tier === "country" && `🌍 countries · ${tierCount} with data · zoom ${zoom.toFixed(2)}`}
-                {tier === "region" && `🗺️ states / regions · ${tierCount} · ≥ ${minVisibleCount(zoom)} events · zoom ${zoom.toFixed(2)}`}
-                {tier === "city" && `📍 cities / towns · ${tierCount} · ≥ ${minVisibleCount(zoom)} events · zoom ${zoom.toFixed(2)}`}
+                {tier === "region" && `🗺️ states / regions · ${tierCount} · ≥ ${floorForZoom(tier, zoom)} events · zoom ${zoom.toFixed(2)}`}
+                {tier === "city" && `📍 cities / towns · ${tierCount} · ≥ ${floorForZoom(tier, zoom)} events · zoom ${zoom.toFixed(2)}`}
                 <span className="hidden sm:inline"> · drag to spin</span>
                 <span className="hidden md:inline"> · scroll or +/− to zoom · double-click to dive in</span>
             </div>

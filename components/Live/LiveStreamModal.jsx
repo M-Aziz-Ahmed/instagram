@@ -5,6 +5,8 @@ import { useUser } from "@/context/UserContext";
 import { io } from "socket.io-client";
 import { ICE_SERVERS } from "@/utils/iceServers";
 import { getSocketConfig } from "@/utils/socketClient";
+import { translateItem } from "@/utils/translateApi";
+import { languageName } from "@/utils/languages";
 
 const MAX_BITRATE = 8000;
 
@@ -449,17 +451,10 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
             return;
         }
         setTranslatingIdx(idx);
-        try {
-            const res = await fetch("/api/translate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text, target: "en" }),
-            });
-            const data = await res.json();
-            if (data.translatedText) {
-                setTranslations((prev) => ({ ...prev, [idx]: data.translatedText }));
-            }
-        } catch {}
+        const translated = await translateItem(text, user?.language || "en");
+        if (translated) {
+            setTranslations((prev) => ({ ...prev, [idx]: translated }));
+        }
         setTranslatingIdx(null);
     };
 
@@ -930,7 +925,7 @@ export default function LiveStreamModal({ streamId: initialStreamId, hostUsernam
                                     </button>
                                     <button onClick={() => translateMessage(i, msg.text)}
                                         className={`p-1.5 rounded-full transition-colors ${translations[i] ? "bg-blue-500/20 text-blue-300" : "hover:bg-white/10 text-white/50 hover:text-white"}`}
-                                        title={translations[i] ? "Hide translation" : "Translate"}>
+                                        title={translations[i] ? "Hide translation" : `Translate to ${languageName(user?.language || "en")}`}>
                                         {translatingIdx === i ? (
                                             <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white/80 rounded-full animate-spin" />
                                         ) : (

@@ -2553,15 +2553,11 @@ export default function GroupChatBox({ groupId, user, onBack, group, onLeave }) 
                 </div>
             )}
 
-            {/* Composer. `max-h` + `overflow-y-auto` matches the fix in ChatBox: this
-                wrapper is `shrink-0` inside a fixed-height, `overflow-hidden`
-                column, and the rows stacked inside it (attachment chips, reply
-                and link previews, poll, code mode, plus three banner rows) were
-                uncapped. Attaching files grew the composer until the message
-                list hit zero height and the rest was clipped off the bottom of
-                the screen. The message list above is already `flex-1 min-h-0`,
-                so it yields the space first; the cap catches what is left. */}
-            <div className="max-h-[60dvh] shrink-0 overflow-y-auto overscroll-contain border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-3">
+            {/* Composer. overflow-visible so the attach tray (absolute bottom-full)
+                is not clipped by this container. The max-h guard lives inside the
+                composer itself around the stacked rows; the input row stays outside
+                that inner scroll so the tray is always reachable. */}
+            <div className="shrink-0 overflow-visible border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-3">
                 {/* Unified attachment tray. The single image preview that used
                     to live here became this row: every attachment is a chip with
                     its own progress, error and remove button, so "remove the

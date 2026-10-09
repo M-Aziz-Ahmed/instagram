@@ -121,7 +121,7 @@ export default function ImportDataButton({
                         fixed bottom-4 right-4 z-50 animate-toast-in
                         px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium
                         flex items-center gap-2 min-w-[280px] max-w-md
-                        ${type === "success" ? "bg-green-600" : type === "error" ? "bg-red-600" : "bg-blue-600"}
+                        ${toast.type === "success" ? "bg-green-600" : toast.type === "error" ? "bg-red-600" : "bg-blue-600"}
                     `}
                     role="alert"
                 >

@@ -508,7 +508,7 @@ const canUploadVideo = user?.canUploadVideo === true;
                                 {!posting && previews.length < 10 && imageFiles.length < 10 && (
                                     <button
                                         onClick={() => fileRef.current?.click()}
-                                        className="flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors min-h-[80px] sm:min-h-[120px]"
+                                        className="flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors min-h-[80px] sm:min-h-[120px] touch-manipulation"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-gray-400">
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -852,7 +852,7 @@ const canUploadVideo = user?.canUploadVideo === true;
                         )}
 
                         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFile} />
-                <input ref={videoRef} type="file" accept="video/*" className="hidden" onChange={handleVideo} />
+                        <input ref={videoRef} type="file" accept="video/*" className="hidden" onChange={handleVideo} />
 
                         <button
                             onClick={handlePost}

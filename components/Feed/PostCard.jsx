@@ -844,17 +844,10 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
             return;
         }
         setTranslatingIdx(postId);
-        try {
-            const res = await fetch("/api/translate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text, target: user?.language || "en" }),
-            });
-            const data = await res.json();
-            if (data.translatedText) {
-                setTranslations((prev) => ({ ...prev, [postId]: data.translatedText }));
-            }
-        } catch {}
+        const translated = await translateItem(text, user?.language || "en");
+        if (translated) {
+            setTranslations((prev) => ({ ...prev, [postId]: translated }));
+        }
         setTranslatingIdx(null);
     };
 
@@ -870,15 +863,11 @@ export default function PostCard({ post: initialPost, onDelete, onHashtag, serve
             if (!text || user.username === sender) return;
             if (ref.current || translations[id]) return;
             ref.current = true;
-            fetch("/api/translate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text, target }),
-            }).then((r) => r.json()).then((data) => {
-                if (data.translatedText && data.translatedText !== text) {
-                    setTranslations((prev) => ({ ...prev, [id]: data.translatedText }));
+            translateItem(text, target).then((translated) => {
+                if (translated) {
+                    setTranslations((prev) => ({ ...prev, [id]: translated }));
                 }
-            }).catch(() => {});
+            });
         };
 
         tryTranslate(post._id, post.text, post.sender, autoTranslatedRef);

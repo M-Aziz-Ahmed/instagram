@@ -9,39 +9,15 @@
 // Codes are the ones the upstream translator accepts, which is also what
 // `user.language` stores (live-server/models/user.js). `zh-CN`/`zh-TW` are kept
 // distinct because the difference is the whole point for a Chinese speaker.
+//
+// The data lives in languages.json rather than inline here because the live
+// server has to validate `user.language` on write (routes/auth.js) and it is
+// CommonJS — it cannot import this ES module. Two copies of a list whose whole
+// purpose is to be authoritative is the drift this file exists to prevent.
 
-export const LANGUAGES = [
-    { code: "en",    name: "English",        native: "English" },
-    { code: "es",    name: "Spanish",        native: "Español" },
-    { code: "fr",    name: "French",         native: "Français" },
-    { code: "de",    name: "German",         native: "Deutsch" },
-    { code: "pt",    name: "Portuguese",     native: "Português" },
-    { code: "it",    name: "Italian",        native: "Italiano" },
-    { code: "ja",    name: "Japanese",       native: "日本語" },
-    { code: "ko",    name: "Korean",         native: "한국어" },
-    { code: "zh-CN", name: "Chinese (Simplified)", native: "中文 (简体)" },
-    { code: "zh-TW", name: "Chinese (Traditional)", native: "中文 (繁體)" },
-    { code: "ar",    name: "Arabic",         native: "العربية" },
-    { code: "hi",    name: "Hindi",          native: "हिन्दी" },
-    { code: "ru",    name: "Russian",        native: "Русский" },
-    { code: "tr",    name: "Turkish",        native: "Türkçe" },
-    { code: "vi",    name: "Vietnamese",     native: "Tiếng Việt" },
-    { code: "th",    name: "Thai",           native: "ไทย" },
-    { code: "pl",    name: "Polish",         native: "Polski" },
-    { code: "nl",    name: "Dutch",          native: "Nederlands" },
-    { code: "sv",    name: "Swedish",        native: "Svenska" },
-    { code: "id",    name: "Indonesian",     native: "Bahasa Indonesia" },
-    { code: "ms",    name: "Malay",          native: "Bahasa Melayu" },
-    { code: "uk",    name: "Ukrainian",      native: "Українська" },
-    { code: "cs",    name: "Czech",          native: "Čeština" },
-    { code: "ro",    name: "Romanian",       native: "Română" },
-    { code: "el",    name: "Greek",          native: "Ελληνικά" },
-    { code: "he",    name: "Hebrew",         native: "עברית" },
-    { code: "fi",    name: "Finnish",        native: "Suomi" },
-    { code: "no",    name: "Norwegian",      native: "Norsk" },
-    { code: "da",    name: "Danish",         native: "Dansk" },
-    { code: "hu",    name: "Hungarian",      native: "Magyar" },
-];
+import LANGUAGES_DATA from "./languages.json";
+
+export const LANGUAGES = LANGUAGES_DATA;
 
 const BY_CODE = new Map(LANGUAGES.map((l) => [l.code, l]));
 

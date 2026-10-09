@@ -374,7 +374,12 @@ export default function ChatBox({ onBack, recipient, recipientUser, archived = f
                 within the composer instead of vanishing. The messages keep the
                 other half — and because that column is `flex-1 min-h-0` it can
                 shrink to nothing gracefully rather than forcing the overflow. */}
-            <div className="max-h-[60dvh] shrink-0 overflow-y-auto overscroll-contain px-3 md:px-4 py-2.5 md:py-3 border-t border-gray-200 dark:border-gray-800">
+            {/* overflow-visible so the attach tray (absolute bottom-full inside
+                Input) is not clipped by this container. The max-h guard lives
+                inside Input itself around the stacked attachment/preview rows;
+                the input row and tray are outside that inner scroll so they
+                stay reachable at any composer height. */}
+            <div className="shrink-0 overflow-visible px-3 md:px-4 py-2.5 md:py-3 border-t border-gray-200 dark:border-gray-800">
                 <Input key={recipient} onMessageSent={(msg) => setPendingMessage(msg)} recipient={recipient} replyingTo={replyingTo} setReplyingTo={setReplyingTo} />
             </div>
         </div>

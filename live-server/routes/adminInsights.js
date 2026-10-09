@@ -157,7 +157,7 @@ router.get("/funnel", requireAdmin, async (req, res) => {
             return res.json({ steps: [], windowDays: days, cohortSize: 0, truncated: false, note: "No signups in this window, so there is no cohort to follow." });
         }
 
-        const capped = usernames.slice(0, SCAN_CAP);
+        const capped = cohortUsers.slice(0, SCAN_CAP).map((u) => u.username);
         const [posts, comments] = await Promise.all([
             Post.find({ sender: { $in: capped }, timeStamp: { $gte: since } }).select("sender").limit(SCAN_CAP).lean(),
             // The comment query had NO date filter, so an account that commented

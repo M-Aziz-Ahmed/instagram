@@ -11,6 +11,7 @@ import AudioPlayer from "@/components/shared/AudioPlayer";
 import RichText from "@/components/Feed/RichText";
 import LinkPreviewCard from "@/components/shared/LinkPreviewCard";
 import ForwardModal from "./ForwardModal";
+import { translateItem, translateItems } from "@/utils/translateApi";
 
 const RECALL_WINDOW_MS = 60 * 1000;
 
@@ -1370,17 +1371,10 @@ const router = useRouter();
             return;
         }
         setTranslatingIdx(idx);
-        try {
-            const res = await fetch("/api/translate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text, target: user?.language || "en" }),
-            });
-            const data = await res.json();
-            if (data.translatedText) {
-                setTranslations((prev) => ({ ...prev, [idx]: data.translatedText }));
-            }
-        } catch {}
+        const translated = await translateItem(text, user?.language || "en");
+        if (translated) {
+            setTranslations((prev) => ({ ...prev, [idx]: translated }));
+        }
         setTranslatingIdx(null);
     };
 
@@ -1438,15 +1432,11 @@ const router = useRouter();
         toTranslate.forEach((msg) => autoTranslatingRef.current.add(msg._id));
 
         const items = toTranslate.map((msg) => ({ id: msg._id, text: msg.text }));
-        fetch("/api/translate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ batch: items, target: user?.language || "en" }),
-        }).then((r) => r.json()).then((data) => {
-            if (data.results) {
-                setTranslations((prev) => ({ ...prev, ...data.results }));
+        translateItems(items, user?.language || "en").then((results) => {
+            if (Object.keys(results).length) {
+                setTranslations((prev) => ({ ...prev, ...results }));
             }
-        }).catch(() => {});
+        });
     }, [messages, user?.autoTranslate, user?.language, username]);
 
     const [hasMore, setHasMore] = useState(false);

@@ -9,9 +9,14 @@ const { canUploadVideo } = require("../lib/videoUpload");
 const { logAuth } = require("../logService");
 const { isValidPin, hashPin, verifyPin } = require("../utils/pin");
 const { ensureInviteCode, creditReferral } = require("../lib/invites");
+const LANGUAGES = require("../../utils/languages.json");
 
 const router = express.Router();
 const MAX_AGE = 31536000000;
+
+// The catalog the settings picker renders, and the only set of codes accepted as
+// a translation target. Kept as JSON so the client reads the same file.
+const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
 
 function generateCode() {
     return String(Math.floor(100000 + Math.random() * 900000));
@@ -475,7 +480,12 @@ router.patch("/profile", verifyToken, async (req, res) => {
             avatarColor: avatarColor || "#3b82f6",
         };
         if (avatarUrl !== undefined) update.avatarUrl = avatarUrl;
-        if (language) update.language = language;
+        // Only a code from the shared catalog is accepted. `language` is
+        // interpolated straight into the upstream translator URL, and the route
+        // silently coerces anything it does not recognise to "en" — so storing an
+        // arbitrary string here does not fail loudly, it just quietly translates
+        // the reader's whole feed into the wrong language later.
+        if (LANGUAGE_CODES.has(language)) update.language = language;
         if (autoTranslate !== undefined) update.autoTranslate = autoTranslate;
 
         const user = await User.findByIdAndUpdate(req.userId, update, { returnDocument: 'after' })

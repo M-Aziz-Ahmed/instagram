@@ -571,10 +571,22 @@ router.patch("/:id/messages", verifyToken, async (req, res) => {
         const username = me?.username;
         if (!username) return res.status(401).json({ error: "Unauthorized" });
 
-        const group = await GroupChat.findById(id).select("members").lean();
+        // `permissions` was not selected here, so `group.permissions` was always
+        // undefined and the `whoCanPin: "admin"` restriction below could never
+        // match — pinning was open to every member in every group regardless of
+        // what the group had been configured to allow. The admin flag was also
+        // never computed in this handler; it only short-circuited by accident,
+        // because the undefined permission check stopped the expression first.
+        const group = await GroupChat.findById(id).select("members permissions").lean();
         if (!group) return res.status(404).json({ error: "Group not found" });
         const isMember = (group.members || []).some((m) => (m.username || m) === username);
         if (!isMember) return res.status(403).json({ error: "Not a member of this group" });
+        // Group admin, not site admin: `whoCanPin` is a per-group setting, and the
+        // role lives on the membership row. Matches the pattern used by the other
+        // handlers in this file.
+        const isGroupAdmin =
+            (group.members || []).some((m) => (m.username || m) === username && m.role === "admin")
+            || group.creator === username;
 
         if (action === "read") {
             await GroupMessage.updateMany(
@@ -654,7 +666,7 @@ router.patch("/:id/messages", verifyToken, async (req, res) => {
             const msg = await GroupMessage.findOne({ _id: messageId, groupId: id });
             if (!msg) return res.status(404).json({ error: "Message not found" });
             if (msg.deleted) return res.status(400).json({ error: "Cannot pin a deleted message" });
-            if (action === "pin" && group.permissions?.whoCanPin === "admin" && !isAdmin) {
+            if (action === "pin" && group.permissions?.whoCanPin === "admin" && !isGroupAdmin) {
                 return res.status(403).json({ error: "Only admins can pin messages in this group" });
             }
             msg.pinned = action === "pin";

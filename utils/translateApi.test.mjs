@@ -15,7 +15,13 @@
 //
 // Run with: npm run test:translate
 
+import { createRequire } from "node:module";
 import { BATCH_SEP, MAX_BATCH_ITEMS, MAX_BATCH_CHARS } from "./translateApi.js";
+
+// createRequire, not a bare JSON import: an ESM JSON import needs an import
+// attribute that a plain `node` run rejects. The bundler does not care — this is
+// only about how the test file is loaded.
+const LANGUAGES = createRequire(import.meta.url)("./languages.json");
 
 // Mirrors of the server-side rules. Intentionally duplicated: the point is to
 // assert the two agree, so importing the server's copy would prove nothing.
@@ -94,6 +100,15 @@ check("query injection rejected", targetLang("en&foo=bar"), "en");
 check("path traversal rejected", targetLang("../../etc/passwd"), "en");
 check("empty falls back to en", targetLang(""), "en");
 check("non-string falls back to en", targetLang(null), "en");
+
+// ── Every catalog code must survive targetLang ─────────────────────────────
+//
+// `user.language` is one of these codes (live-server/routes/auth.js now
+// rejects anything outside the catalog) and it is handed straight to
+// `targetLang`. A code the picker offers but the validator would reject is a
+// language that silently translates into English for every user who picks it.
+const rejected = LANGUAGES.map((l) => l.code).filter((code) => targetLang(code) !== code);
+check("every offered language passes targetLang", rejected, []);
 
 // ── Client/server batch limits agree ───────────────────────────────────────
 ok(`batch item cap is positive (${MAX_BATCH_ITEMS})`, MAX_BATCH_ITEMS > 0);

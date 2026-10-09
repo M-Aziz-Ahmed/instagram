@@ -1308,6 +1308,12 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
 
     return (
         <div className="flex flex-col gap-2 w-full max-w-full">
+            {/* Stacked optional rows (banners, attachments, previews, hints).
+                Capped here so they cannot push the input row off screen — the
+                outer ChatBox/GroupChatBox wrapper is now overflow-visible so
+                the attach tray (absolute bottom-full on the input row below)
+                can break out of the composer bounds. */}
+            <div className="flex flex-col gap-2 max-h-[45dvh] overflow-y-auto overscroll-contain">
             {/* Offline / queued */}
             {(!online || queuedCount > 0) && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
@@ -1580,6 +1586,8 @@ export default function Input({ onMessageSent, recipient, replyingTo, setReplyin
                         )}
                 </div>
             )}
+
+            </div>{/* end scrollable optional rows */}
 
             {/* Enter-mode hint, first use only */}
             {showHint && (

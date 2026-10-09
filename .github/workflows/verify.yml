@@ -1,0 +1,50 @@
+name: verify
+
+# Lint and tests on every push and pull request.
+#
+# This exists because of a bug that shipped to production: moving the globe's
+# zoom helpers into a separate module left two footer labels still calling a
+# function that had been deleted. The page compiled, `next build` succeeded, and
+# the desktop release pipeline published installers — none of them look at
+# identifiers — and the admin globe threw "minVisibleCount is not defined" on
+# every render of the region and city tiers, which is exactly when you zoom in.
+#
+# `no-undef` now covers the "called a function that no longer exists" case, and
+# this workflow is what makes sure it stays covered. It gates on lint errors and
+# test failures only; warnings are reported but do not fail the job.
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        # `--max-warnings` is deliberately not set: this repo has a large
+        # pre-existing warning backlog, and failing on it would mean nobody
+        # ever runs this again. Errors are what must not ship.
+        run: npx eslint components app context utils live-server --quiet
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

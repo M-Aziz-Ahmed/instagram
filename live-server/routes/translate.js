@@ -16,11 +16,13 @@ const MAX_BATCH_ITEMS = 40;
 const MAX_BATCH_CHARS = 8000;
 
 // Items are stitched into one upstream request and split back apart, so the
-// batch needs a delimiter. The default is kept for existing callers (Inbox/Chat
-// does not send one), but a client that translates arbitrary user text — post
-// comments — can contain any character sequence, including the delimiter itself,
-// which would shift every subsequent result onto the wrong comment. So the
-// client supplies a separator it generated and knows cannot occur.
+// batch needs a delimiter. The default is only a fallback for a client that
+// sends none, because a client that translates arbitrary user text — post
+// comments, chat messages — can contain any character sequence, including the
+// delimiter itself, which would shift every subsequent result onto the wrong
+// item. So the client supplies a separator it generated and knows cannot
+// occur. Everything in the app now goes through utils/translateApi.js, which
+// always sends BATCH_SEP.
 const DEFAULT_SEP = "\n===SPLIT===\n";
 
 function normalizeSep(sep) {

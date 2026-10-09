@@ -13,6 +13,13 @@
 //
 // `utils/translate.js` is therefore dead code. This module is the only supported
 // entry point.
+//
+// Every translate affordance in the app goes through here — PostCard, Chat,
+// GroupChatBox and LiveStreamModal. Hand-rolled `fetch("/api/translate")` calls
+// bypassed `translateItem`'s guard that drops a translation identical to the
+// source, which rendered a duplicate line under text already in the reader's
+// language, and bypassed `translateItems`' chunking, which made the server 413
+// on a long conversation.
 
 // Batch limits, mirrored from live-server/routes/translate.js. The server is the
 // authority and will 413 past these, but chunking here keeps a 200-comment post
