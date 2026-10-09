@@ -21,7 +21,7 @@ import { BATCH_SEP, MAX_BATCH_ITEMS, MAX_BATCH_CHARS } from "./translateApi.js";
 // createRequire, not a bare JSON import: an ESM JSON import needs an import
 // attribute that a plain `node` run rejects. The bundler does not care — this is
 // only about how the test file is loaded.
-const LANGUAGES = createRequire(import.meta.url)("./languages.json");
+const LANGUAGES = createRequire(import.meta.url)("../live-server/lib/languages.json");
 
 // Mirrors of the server-side rules. Intentionally duplicated: the point is to
 // assert the two agree, so importing the server's copy would prove nothing.
@@ -109,6 +109,46 @@ check("non-string falls back to en", targetLang(null), "en");
 // language that silently translates into English for every user who picks it.
 const rejected = LANGUAGES.map((l) => l.code).filter((code) => targetLang(code) !== code);
 check("every offered language passes targetLang", rejected, []);
+
+// ── The live-server must not reach outside its own directory ───────────────
+//
+// live-server ships as a self-contained unit: deploy/bootstrap.sh rsyncs
+// live-server/ to /opt/anontweet-live-server and runs `npm ci` there. A
+// require that climbs out (`../../utils/...`) resolves fine in this repo and
+// throws MODULE_NOT_FOUND on the deployed host, which kills the process at boot
+// because server.js requires every route eagerly. Nothing in the repo catches
+// that, and `npm run build` does not touch the live-server at all — so the
+// whole site goes down while every check is green.
+//
+// This is not hypothetical: auth.js required the language catalog from ../../utils
+// and passed lint, build and the rest of this suite.
+const { readdirSync, readFileSync } = await import("node:fs");
+const { join, relative } = await import("node:path");
+
+const LIVE_SERVER = join(import.meta.dirname, "..", "live-server");
+const ESCAPING = [];
+
+(function walk(dir) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === "node_modules" || entry.name === "logs" || entry.name === "deploy") continue;
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) { walk(full); continue; }
+        if (!entry.name.endsWith(".js")) continue;
+        for (const [i, line] of readFileSync(full, "utf8").split("\n").entries()) {
+            // `require("../../x")` and `require("../../../x")` — two or more
+            // `..` segments. One `..` is just a sibling inside live-server.
+            if (/require\(\s*["'][.]{2}\/[.]{2}\//.test(line)) {
+                ESCAPING.push(`${relative(LIVE_SERVER, full)}:${i + 1}`);
+            }
+        }
+    }
+})(LIVE_SERVER);
+
+check(
+    `live-server has no requires escaping its directory (${ESCAPING.length} found)`,
+    ESCAPING,
+    []
+);
 
 // ── Client/server batch limits agree ───────────────────────────────────────
 ok(`batch item cap is positive (${MAX_BATCH_ITEMS})`, MAX_BATCH_ITEMS > 0);

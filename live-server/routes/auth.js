@@ -9,7 +9,7 @@ const { canUploadVideo } = require("../lib/videoUpload");
 const { logAuth } = require("../logService");
 const { isValidPin, hashPin, verifyPin } = require("../utils/pin");
 const { ensureInviteCode, creditReferral } = require("../lib/invites");
-const LANGUAGES = require("../../utils/languages.json");
+const LANGUAGES = require("../lib/languages.json");
 
 const router = express.Router();
 const MAX_AGE = 31536000000;

@@ -10,12 +10,22 @@
 // `user.language` stores (live-server/models/user.js). `zh-CN`/`zh-TW` are kept
 // distinct because the difference is the whole point for a Chinese speaker.
 //
-// The data lives in languages.json rather than inline here because the live
-// server has to validate `user.language` on write (routes/auth.js) and it is
-// CommonJS — it cannot import this ES module. Two copies of a list whose whole
-// purpose is to be authoritative is the drift this file exists to prevent.
+// The data lives in live-server/lib/languages.json rather than inline here
+// because the live server has to validate `user.language` on write
+// (routes/auth.js) and it is CommonJS — it cannot import this ES module. Two
+// copies of a list whose whole purpose is to be authoritative is the drift
+// this file exists to prevent.
+//
+// The file lives under live-server/ rather than here on purpose. live-server is
+// deployed as a self-contained unit (deploy/bootstrap.sh rsyncs that directory
+// to /opt/anontweet-live-server), so anything it requires has to travel with
+// it — a `../../utils/...` require from the server resolves fine in this repo
+// and throws MODULE_NOT_FOUND in production, taking the whole server down at
+// boot rather than failing one request.
+//
+// utils/translateApi.test.mjs asserts the two stay in agreement.
 
-import LANGUAGES_DATA from "./languages.json";
+import LANGUAGES_DATA from "../live-server/lib/languages.json";
 
 export const LANGUAGES = LANGUAGES_DATA;
 
